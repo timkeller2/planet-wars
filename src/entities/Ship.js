@@ -364,7 +364,7 @@ export class Ship {
 
     if (this.maxHealth > 0 && !this.isAmoeba) {
       if (this.bombs === undefined) {
-        this.bombs = this.maxHealth;
+        this.bombs = this.maxHealth / 5;
         this.bombReloadTimer = 0;
       }
       
@@ -373,9 +373,9 @@ export class Ship {
           let healRate = (deltaTime / 60000) * 2;
           this.health = Math.min(this.maxHealth, this.health + healRate);
         }
-        this.fuel = Math.min(this.maxHealth, (this.fuel || 0) + (deltaTime / 1000) / 10);
+        this.fuel = Math.min(this.maxHealth / 5, (this.fuel || 0) + (deltaTime / 1000) / 10);
         
-        if (this.bombs < this.maxHealth && friendlyWellPlanet) {
+        if (this.bombs < (this.maxHealth / 5) && friendlyWellPlanet) {
           this.bombReloadTimer += deltaTime / 1000;
           if (this.bombReloadTimer >= 5) {
             this.bombReloadTimer = 0;

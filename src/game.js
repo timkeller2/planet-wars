@@ -391,7 +391,7 @@ export class Game {
           const ship = new Ship(this.nextShipId++, source.x, source.y, target, source.owner);
           ship.maxHealth = health * 5;
           ship.health = health * 5;
-          ship.fuel = health * 5;
+          ship.fuel = health;
           ship.speed = Math.max(5, ship.speed - 10 - health);
           if (!source.owner.cruiserStyle) {
             const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
@@ -557,7 +557,7 @@ export class Game {
           const ship = new Ship(this.nextShipId++, source.x, source.y, null, source.owner, targetX, targetY);
           ship.maxHealth = health * 5;
           ship.health = health * 5;
-          ship.fuel = health * 5;
+          ship.fuel = health;
           ship.speed = Math.max(5, ship.speed - 10 - health);
           if (!source.owner.cruiserStyle) {
             const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
