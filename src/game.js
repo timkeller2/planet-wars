@@ -1012,8 +1012,26 @@ export class Game {
                   }
                   const attackRange = effectiveRange + planet.radius;
                   if (dx*dx+dy*dy <= attackRange*attackRange) {
-                    this.sendShipsToSpace(planet, s.x, s.y, false, null, false, true, true, false);
-                    break;
+                    let launchCost = planet.owner ? 10 + (planet.owner.planetCount || 0) : 10;
+                    if (planet.owner) {
+                      const techBonus = Math.floor(Math.sqrt(planet.owner.techScore || 0));
+                      launchCost = Math.max(0, launchCost - techBonus);
+                    }
+                    if (planet.ships >= launchCost + 1) {
+                      const remainingShips = planet.ships - launchCost;
+                      let shipsToSend = Math.max(3, Math.floor(remainingShips * 0.1));
+                      shipsToSend = Math.min(shipsToSend, remainingShips);
+                      if (planet.rampageEvent) {
+                        const minReserve = planet.maxShips * 0.75;
+                        if (remainingShips - shipsToSend < minReserve) {
+                          shipsToSend = Math.floor(remainingShips - minReserve);
+                        }
+                      }
+                      if (shipsToSend > s.health) {
+                        this.sendShipsToSpace(planet, s.x, s.y, false, null, false, true, true, false);
+                        break;
+                      }
+                    }
                   }
                 }
               }
