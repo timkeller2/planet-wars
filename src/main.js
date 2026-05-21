@@ -2456,15 +2456,12 @@ window.addEventListener('DOMContentLoaded', () => {
             const rawTech = ownerPlayer.techScore || 0;
             const rawExp = ownerPlayer.expScore || 0;
             const shipExp = s.expScore || 0;
-            const shrugChance = Math.min(90, Math.floor((0.50 + s.maxHealth * 0.03 + rawExp * 0.01 + rawTech * 0.01 + shipExp * 0.01) * 100));
-            const bombBonus = (s.bombs && s.bombs > 0) ? (s.bombs * 3) : 0;
-            const hitChanceValue = 10 + rawTech + rawExp + shipExp + s.maxHealth * 5 + bombBonus;
-            
-            if (shrugChance >= 90 && hitChanceValue >= 100) {
+            const localXPBonus = 0.5 * Math.sqrt(s.expScore || 0);
+            if (localXPBonus > 20) {
               ctx.save();
               const starX = s.x + size * 0.6;
               const starY = s.y - size * 0.6;
-              const starR = 3.5 * cameraZoom;
+              const starR = 0.7 * cameraZoom;
               ctx.translate(starX, starY);
               ctx.beginPath();
               for (let i = 0; i < 5; i++) {
@@ -2475,7 +2472,7 @@ window.addEventListener('DOMContentLoaded', () => {
               ctx.fillStyle = 'gold';
               ctx.fill();
               ctx.strokeStyle = '#000';
-              ctx.lineWidth = 0.5 * cameraZoom;
+              ctx.lineWidth = 0.1 * cameraZoom;
               ctx.stroke();
               ctx.restore();
             }
@@ -2484,7 +2481,7 @@ window.addEventListener('DOMContentLoaded', () => {
               ctx.save();
               const boltX = s.x - size * 0.6;
               const boltY = s.y - size * 0.6;
-              const boltSize = 4 * cameraZoom;
+              const boltSize = 0.8 * cameraZoom;
               ctx.translate(boltX, boltY);
               ctx.beginPath();
               ctx.moveTo(0, -boltSize);
@@ -2497,7 +2494,7 @@ window.addEventListener('DOMContentLoaded', () => {
               ctx.fillStyle = '#0f0';
               ctx.fill();
               ctx.strokeStyle = '#000';
-              ctx.lineWidth = 0.5 * cameraZoom;
+              ctx.lineWidth = 0.1 * cameraZoom;
               ctx.stroke();
               ctx.restore();
             }
