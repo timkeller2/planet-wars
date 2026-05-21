@@ -256,7 +256,7 @@ export class Ship {
           
           shotsFired++;
           
-          if (Math.random() < (hitChance / 2)) {
+          if (Math.random() < (this.isAmoeba ? (hitChance / 2) : hitChance)) {
             p.ships -= 1;
             if (p.ships < 0) p.ships = 0;
             else if (this.isAmoeba) {
