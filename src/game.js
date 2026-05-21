@@ -993,52 +993,7 @@ export class Game {
     
     for (const planet of this.planets) {
         planet.update(deltaTime, this.planets, this.settings);
-        if (!planet.owner || planet.owner.isAI) {
-          planet.scrambleTimer = (planet.scrambleTimer || 0) + deltaTime / 1000;
-          if (planet.scrambleTimer >= 15) {
-            planet.scrambleTimer = 0;
-            if (planet.ships > 30) {
-              for (const s of this.ships) {
-                if (s.isCruiser && s.owner !== planet.owner && s.active) {
-                  const dx = s.x - planet.x; const dy = s.y - planet.y;
-                  const laserTechBonus = s.owner ? (0.01 * Math.sqrt(s.owner.techScore || 0)) : 0;
-                  const rawExp = s.owner ? (s.owner.expScore || 0) : 0;
-                  const shipExp = s.expScore || 0;
-                  const xpRangeBonus = (rawExp + shipExp) * 0.005;
-                  const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
-                  let effectiveRange = baseDogfightRange * 1.5;
-                  if (s.bombs > 0) {
-                    effectiveRange += baseDogfightRange * 1.5;
-                  }
-                  const attackRange = effectiveRange + planet.radius;
-                  if (dx*dx+dy*dy <= attackRange*attackRange) {
-                    let launchCost = planet.owner ? 10 + (planet.owner.planetCount || 0) : 10;
-                    if (planet.owner) {
-                      const techBonus = Math.floor(Math.sqrt(planet.owner.techScore || 0));
-                      launchCost = Math.max(0, launchCost - techBonus);
-                    }
-                    if (planet.ships >= launchCost + 1) {
-                      const remainingShips = planet.ships - launchCost;
-                      let shipsToSend = Math.max(3, Math.floor(remainingShips * 0.1));
-                      shipsToSend = Math.min(shipsToSend, remainingShips);
-                      if (planet.rampageEvent) {
-                        const minReserve = planet.maxShips * 0.75;
-                        if (remainingShips - shipsToSend < minReserve) {
-                          shipsToSend = Math.floor(remainingShips - minReserve);
-                        }
-                      }
-                      if (shipsToSend > s.health) {
-                        this.sendShipsToSpace(planet, s.x, s.y, false, null, false, true, true, false);
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+    }
     
     for (const ship of this.ships) {
       if (ship.targetPlanet && ship.targetPlanet.dead) {
