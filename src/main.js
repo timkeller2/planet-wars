@@ -2003,13 +2003,14 @@ window.addEventListener('DOMContentLoaded', () => {
             else if (hs.maxHealth <= 45) shipClass = "Battleship";
             lines.push({ label: 'Ship Class', value: shipClass, color: '#aaf' });
             lines.push({ label: 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
-            let munitionsDisplay = (hs.bombs || 0).toFixed(2).replace(/\.00$/, '');
-            if (hs.bombs !== undefined && hs.bombs < hs.maxHealth && hs.bombReloadTimer !== undefined) {
+            const maxBombs = Math.floor(hs.maxHealth / 5);
+            let munitionsDisplay = Math.floor(hs.bombs || 0) + ' / ' + maxBombs;
+            if (hs.bombs !== undefined && hs.bombs < (hs.maxHealth / 5) && hs.bombReloadTimer !== undefined) {
               const progress = Math.floor((hs.bombReloadTimer / 5) * 100);
               munitionsDisplay += ` (+${progress}%)`;
             }
             lines.push({ label: 'Munitions', value: munitionsDisplay, color: '#ffa' });
-            lines.push({ label: 'Fuel Level', value: Math.floor(hs.fuel || 0) + ' / ' + hs.maxHealth, color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
+            lines.push({ label: 'Fuel Level', value: Math.floor(hs.fuel || 0) + ' / ' + Math.floor(hs.maxHealth / 5), color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
             const rawTech = hsOwner.techScore || 0;
             const rawExp = hsOwner.expScore || 0;
             const shipExp = hs.expScore || 0;
