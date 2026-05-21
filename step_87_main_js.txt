@@ -1,0 +1,43 @@
+Created At: 2026-05-19T21:45:08Z
+Completed At: 2026-05-19T21:45:08Z
+File Path: `file:///S:/dist/antigravity/planet%20wars/src/main.js`
+Total Lines: 2598
+Total Bytes: 105236
+Showing lines 1096 to 1130
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1096:   canvas.addEventListener('mousemove', (event) => {
+1097:     if (isDraggingCamera) {
+1098:       const dx = event.clientX - lastCameraDragX;
+1099:       const dy = event.clientY - lastCameraDragY;
+1100:       lastCameraDragX = event.clientX;
+1101:       lastCameraDragY = event.clientY;
+1102: 
+1103:       const mapWidth = serverState ? (serverState.width || 1920) : 1920;
+1104:       const mapHeight = serverState ? (serverState.height || 1620) : 1620;
+1105:       const scaleX = canvas.width / mapWidth;
+1106:       const scaleY = canvas.height / mapHeight;
+1107:       const finalScale = Math.min(scaleX, scaleY) * cameraZoom;
+1108: 
+1109:       cameraPanX += dx / finalScale;
+1110:       cameraPanY += dy / finalScale;
+1111:     }
+1112: 
+1113:     // Always update hover state and lasso
+1114:     const rect = canvas.getBoundingClientRect();
+1115:     handlePointerMove(event.clientX - rect.left, event.clientY - rect.top);
+1116: 
+1117:     const now = Date.now();
+1118:     if (now - lastMouseEmitTime > 5000) {
+1119:       lastMouseEmitTime = now;
+1120:       socket.emit('resetAFK');
+1121:       if (afkWarningOverlay && !afkWarningOverlay.classList.contains('hidden')) {
+1122:         afkWarningOverlay.classList.add('hidden');
+1123:       }
+1124:     }
+1125:   });
+1126: 
+1127:   window.addEventListener('mouseup', (event) => {
+1128:     if (mouseTimeout) {
+1129:       clearTimeout(mouseTimeout);
+1130:       mouseTimeout = null;
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

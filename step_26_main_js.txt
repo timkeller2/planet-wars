@@ -1,0 +1,59 @@
+Created At: 2026-05-19T21:38:03Z
+Completed At: 2026-05-19T21:38:03Z
+File Path: `file:///S:/dist/antigravity/planet%20wars/index.html`
+Total Lines: 311
+Total Bytes: 29033
+Showing lines 1 to 311
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: <!doctype html>
+2: <html lang="en">
+3:   <head>
+4:     <meta charset="UTF-8" />
+5:     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+6:     <title>Planet Wars</title>
+7:     <link rel="stylesheet" href="/style.css">
+8:     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+9:   </head>
+10:   <body>
+11:     <div id="ui-layer">
+12:       <div id="start-screen" class="screen">
+13:         <h1 class="glow-title">PLANET WARS</h1>
+14:         <input type="text" id="player-name-input" class="cyber-input" placeholder="Enter your name" maxlength="16" />
+15:         <div id="setup-options-container" class="options" style="margin-top: 15px; text-align: left; color: #0ff; font-family: 'Orbitron', sans-serif; display: none; flex-direction: column; gap: 10px; pointer-events: auto !important;">
+16:           <label style="cursor: pointer; display: flex; align-items: center;">
+17:             <input type="number" id="ai-count-input" value="7" min="0" max="50" style="width: 50px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+18:             AI Players
+19:           </label>
+20:           <label style="cursor: pointer;"><input type="checkbox" id="fog-of-war-checkbox" style="margin-right: 10px;" /> Enable Fog of War</label>
+21:           <label style="cursor: pointer;"><input type="checkbox" id="music-checkbox" style="margin-right: 10px;" checked /> Enable Background Music</label>
+22:    
+<truncated 26902 bytes>
+net. It targets the smallest neutral with &gt;150 cap (or largest overall). It gets <strong>+300% bonus ships</strong> and produces at 3× rate. Rampage planets slowly decay in capacity until captured.</li>
+285:             </ul>
+286:           </div>
+287: 
+288:           <!-- OTHER -->
+289:           <div id="help-topic-other" class="help-page hidden">
+290:             <ul>
+291:               <li><strong>Fog of War:</strong> Optional. You can only see within your gravity wells and ship radar. Previously discovered planets appear as silhouettes.</li>
+292:               <li><strong>AFK Protection:</strong> After 3 minutes of inactivity, your empire is handed to an AI.</li>
+293:               <li><strong>Map Layout:</strong> Default 60 planets. Sizes: Mega-Super (300 cap), Super (250), Large (150–180), Medium (120–150), Small (75–115), Tiny (53–74). Huge maps get more super planets.</li>
+294:               <li><strong>Configurable Settings:</strong> AI count, fog of war, production speed (0.5×–3×), hazard level (0–4×), map size (800–3200), and planet count — all set from the start screen.</li>
+295:               <li><strong>Leaderboard:</strong> Shows players ranked by total capacity. 🧪 = √Tech bonus %. 🎯 = √Exp×0.5 bonus %. 🪐 = capacity (% of galaxy).</li>
+296:               <li><strong>Player Name:</strong> Your name is saved locally and remembered between sessions.</li>
+297:             </ul>
+298:           </div>
+299: 
+300:           <!-- BACK BUTTON (hidden on index) -->
+301:           <div id="help-back-container" style="display: none; margin-top: 15px;">
+302:             <button id="help-back-btn" class="cyber-btn" style="padding: 5px 15px; font-size: 1rem;">&lt; BACK TO INDEX</button>
+303:           </div>
+304:         </div>
+305:       </div>
+306:     </div>
+307:     <canvas id="gameCanvas"></canvas>
+308:     <script type="module" src="/src/main.js"></script>
+309:   </body>
+310: </html>
+311: 
+The above content shows the entire, complete file contents of the requested file.

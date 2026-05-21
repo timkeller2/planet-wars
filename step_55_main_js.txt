@@ -1,0 +1,94 @@
+Created At: 2026-05-19T21:41:45Z
+Completed At: 2026-05-19T21:41:46Z
+File Path: `file:///S:/dist/antigravity/planet%20wars/src/main.js`
+Total Lines: 2598
+Total Bytes: 105236
+Showing lines 1020 to 1105
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1020:         }
+1021:       }
+1022:     }
+1023:   }
+1024: 
+1025:   let mouseTimeout = null;
+1026:   let mouseDownStartX = 0;
+1027:   let mouseDownStartY = 0;
+1028: 
+1029:   canvas.addEventListener('mousedown', (event) => {
+1030:     const cPos = getCanvasPos(event);
+1031:     const posX = cPos.x;
+1032:     const posY = cPos.y;
+1033:     if (event.button === 1) { // Middle click = pan only
+1034:       if (mouseTimeout) {
+1035:         clearTimeout(mouseTimeout);
+1036:         mouseTimeout = null;
+1037:       }
+1038:       lasso.active = false;
+1039:       isDraggingCamera = true;
+1040:       lastCameraDragX = event.clientX;
+1041:       lastCameraDragY = event.clientY;
+1042:       return;
+1043:     }
+1044: 
+1045:     if (event.button !== 0 && event.button !== 2) return;
+1046: 
+1047:     mouseDownStartX = posX;
+1048:     mouseDownStartY = posY;
+1049:     lastCameraDragX = event.clientX;
+1050:     lastCameraDragY = event.clientY;
+1051:     isDraggingCamera = false; // Reset stale drag state
+1052: 
+1053:     handlePointerDown(posX, posY, event.shiftKey, false, event.button);
+1054: 
+1055:     if (event.button === 0) {
+1056:       if (event.shiftKey) {
+1057:         // Shift + Left Click = Lasso
+1058:         isDraggingCamera = false;
+1059:         const serverPos = getMouseServerPos(posX, posY);
+1060:         lasso.active = true;
+1061:         lasso.startX = serverPos.x;
+1062:         lasso.startY = serverPos.y;
+1063:         lasso.endX = serverPos.x;
+1064:         lasso.endY = serverPos.y;
+1065:       } else {
+1066:         // Left click = pan
+1067:         isDraggingCamera = true;
+1068:       }
+1069:     }
+1070:   });
+1071: 
+1072:   document.addEventListener('contextmenu', e => e.preventDefault());
+1073: 
+1074:   canvas.addEventListener('wheel', (event) => {
+1075:     event.preventDefault();
+1076:     const rect = canvas.getBoundingClientRect();
+1077:     const mouseX = event.clientX - rect.left;
+1078:     const mouseY = event.clientY - rect.top;
+1079: 
+1080:     const oldServerPos = getMouseServerPos(mouseX, mouseY);
+1081: 
+1082:     const zoomFactor = 1.1;
+1083:     if (event.deltaY < 0) {
+1084:       cameraZoom *= zoomFactor;
+1085:     } else {
+1086:       cameraZoom /= zoomFactor;
+1087:     }
+1088:     cameraZoom = Math.max(0.2, Math.min(cameraZoom, 5.0));
+1089: 
+1090:     const newServerPos = getMouseServerPos(mouseX, mouseY);
+1091:     cameraPanX += (newServerPos.x - oldServerPos.x);
+1092:     cameraPanY += (newServerPos.y - oldServerPos.y);
+1093:   }, { passive: false });
+1094: 
+1095:   let lastMouseEmitTime = 0;
+1096:   canvas.addEventListener('mousemove', (event) => {
+1097:     if (isDraggingCamera) {
+1098:       const dx = event.clientX - lastCameraDragX;
+1099:       const dy = event.clientY - lastCameraDragY;
+1100:       lastCameraDragX = event.clientX;
+1101:       lastCameraDragY = event.clientY;
+1102: 
+1103:       const mapWidth = serverState ? (serverState.width || 1920) : 1920;
+1104:       const mapHeight = serverState ? (serverState.height || 1620) : 1620;
+1105:       const scaleX = canvas.width / mapWidth;
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

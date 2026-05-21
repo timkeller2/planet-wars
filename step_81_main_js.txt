@@ -1,0 +1,44 @@
+Created At: 2026-05-19T21:45:02Z
+Completed At: 2026-05-19T21:45:02Z
+File Path: `file:///S:/dist/antigravity/planet%20wars/src/main.js`
+Total Lines: 2598
+Total Bytes: 105236
+Showing lines 710 to 745
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+710:           bestPlanet = planet;
+711:         }
+712:       }
+713:     }
+714:     return bestPlanet;
+715:   }
+716: 
+717:   function getCanvasPos(event) {
+718:     if (!event.target) return { x: event.clientX, y: event.clientY };
+719:     const rect = event.target.getBoundingClientRect();
+720:     const scaleX = canvas.width / rect.width;
+721:     const scaleY = canvas.height / rect.height;
+722:     
+723:     // Fallback to offsetX/Y if scaling produces strange offsets on some devices
+724:     if (event.offsetX !== undefined && event.offsetY !== undefined) {
+725:        return {
+726:          x: event.offsetX * scaleX,
+727:          y: event.offsetY * scaleY
+728:        };
+729:     }
+730: 
+731:     return {
+732:       x: (event.clientX - rect.left) * scaleX,
+733:       y: (event.clientY - rect.top) * scaleY
+734:     };
+735:   }
+736: 
+737:   function getMouseServerPos(x, y) {
+738:     const mapWidth = serverState ? (serverState.width || 1920) : 1920;
+739:     const mapHeight = serverState ? (serverState.height || 1620) : 1620;
+740:     const scaleX = canvas.width / mapWidth;
+741:     const scaleY = canvas.height / mapHeight;
+742:     const baseScale = Math.min(scaleX, scaleY);
+743:     const finalScale = baseScale * cameraZoom;
+744:     const centerServerX = mapWidth / 2 - cameraPanX;
+745:     const centerServerY = mapHeight / 2 - cameraPanY;
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

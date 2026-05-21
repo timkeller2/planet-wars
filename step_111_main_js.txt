@@ -1,0 +1,23 @@
+Created At: 2026-05-19T21:47:39Z
+Completed At: 2026-05-19T21:47:39Z
+File Path: `file:///S:/dist/antigravity/planet%20wars/search.cjs`
+Total Lines: 15
+Total Bytes: 451
+Showing lines 1 to 15
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: const fs = require('fs');
+2: const content = fs.readFileSync('src/main.js', 'utf8');
+3: const lines = content.split('\n');
+4: 
+5: const keywords = ['getCanvasPos', 'getMouseServerPos', 'mousedown', 'mousemove', 'wheel', 'touchstart', 'touchmove'];
+6: 
+7: keywords.forEach(keyword => {
+8:   console.log(`=== Matches for "${keyword}": ===`);
+9:   lines.forEach((line, idx) => {
+10:     if (line.includes(keyword)) {
+11:       console.log(`${idx + 1}: ${line.trim()}`);
+12:     }
+13:   });
+14: });
+15: 
+The above content shows the entire, complete file contents of the requested file.

@@ -1,0 +1,94 @@
+Created At: 2026-05-19T21:41:48Z
+Completed At: 2026-05-19T21:41:48Z
+File Path: `file:///S:/dist/antigravity/planet%20wars/src/main.js`
+Total Lines: 2598
+Total Bytes: 105236
+Showing lines 1106 to 1250
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1106:       const scaleY = canvas.height / mapHeight;
+1107:       const finalScale = Math.min(scaleX, scaleY) * cameraZoom;
+1108: 
+1109:       cameraPanX += dx / finalScale;
+1110:       cameraPanY += dy / finalScale;
+1111:     }
+1112: 
+1113:     // Always update hover state and lasso
+1114:     const rect = canvas.getBoundingClientRect();
+1115:     handlePointerMove(event.clientX - rect.left, event.clientY - rect.top);
+1116: 
+1117:     const now = Date.now();
+1118:     if (now - lastMouseEmitTime > 5000) {
+1119:       lastMouseEmitTime = now;
+1120:       socket.emit('resetAFK');
+1121:       if (afkWarningOverlay && !afkWarningOverlay.classList.contains('hidden')) {
+1122:         afkWarningOverlay.classList.add('hidden');
+1123:       }
+1124:     }
+1125:   });
+1126: 
+1127:   window.addEventListener('mouseup', (event) => {
+1128:     if (mouseTimeout) {
+1129:       clearTimeout(mouseTimeout);
+1130:       mouseTimeout = null;
+1131:     }
+1132:     isDraggingCamera = false;
+1133:     if (event.button === 1 || event.button === 2) {
+1134:       lasso.active = false;
+1135:       return;
+1136:     }
+1137:     handlePointerUp(event);
+1138:   });
+1139: 
+1140:   let touchTimeout = null;
+1141:   canvas.addEventListener('touchstart', (event) => {
+1142:     event.preventDefault(); // Prevent double-firing with simulated mouse events
+1143:     const rect = canvas.getBoundingClientRect();
+1144:     if (event.touches.length === 2) {
+1145:       if (touchTimeout) {
+1146:         clearTimeout(touchTimeout);
+1147:         touchTimeout = null;
+1148:       }
+114
+<truncated 2537 bytes>
+
+1211:       lastPinchMidY = mid.y;
+1212: 
+1213:       const mapWidth = serverState ? (serverState.width || 1920) : 1920;
+1214:       const mapHeight = serverState ? (serverState.height || 1620) : 1620;
+1215:       const scaleX = canvas.width / mapWidth;
+1216:       const scaleY = canvas.height / mapHeight;
+1217:       const finalScale = Math.min(scaleX, scaleY) * cameraZoom;
+1218: 
+1219:       cameraPanX += dx / finalScale;
+1220:       cameraPanY += dy / finalScale;
+1221: 
+1222:       return;
+1223:     }
+1224: 
+1225:     if (event.touches.length === 1 && !initialPinchDistance) {
+1226:       if (touchTimeout) {
+1227:         const dx = event.touches[0].clientX - lastCameraDragX;
+1228:         const dy = event.touches[0].clientY - lastCameraDragY;
+1229:         if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+1230:           clearTimeout(touchTimeout);
+1231:           touchTimeout = null;
+1232:         }
+1233:       }
+1234: 
+1235:       if (isDraggingCamera) {
+1236:         const dx = event.touches[0].clientX - lastCameraDragX;
+1237:         const dy = event.touches[0].clientY - lastCameraDragY;
+1238:         lastCameraDragX = event.touches[0].clientX;
+1239:         lastCameraDragY = event.touches[0].clientY;
+1240: 
+1241:         const mapWidth = serverState ? (serverState.width || 1920) : 1920;
+1242:         const mapHeight = serverState ? (serverState.height || 1620) : 1620;
+1243:         const scaleX = canvas.width / mapWidth;
+1244:         const scaleY = canvas.height / mapHeight;
+1245:         const finalScale = Math.min(scaleX, scaleY) * cameraZoom;
+1246: 
+1247:         cameraPanX += dx / finalScale;
+1248:         cameraPanY += dy / finalScale;
+1249:       } else if (lasso.active) {
+1250:         handlePointerMove(event.touches[0].clientX - rect.left, event.touches[0].clientY - rect.top);
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

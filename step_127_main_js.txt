@@ -1,0 +1,83 @@
+Created At: 2026-05-19T21:48:23Z
+Completed At: 2026-05-19T21:48:23Z
+File Path: `file:///C:/Users/tim/.gemini/antigravity/brain/2d3a686c-bf5b-47db-93f7-ebc4fe1e0e9e/implementation_plan.md`
+Total Lines: 175
+Total Bytes: 6950
+Showing lines 1 to 175
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: # Implementation Plan - Coordinate Scale Fixes
+2: 
+3: This plan outlines the technical steps to resolve coordinate offset, drag-pan slippage, and zoom centering issues in the Planet Wars canvas viewport on High DPI (Retina) displays, mobile devices, and scaled browser environments.
+4: 
+5: ---
+6: 
+7: ## User Review Required
+8: 
+9: > [!IMPORTANT]
+10: > The fixes will only modify the client-side interaction layer in [src/main.js](file:///S:/dist/antigravity/planet%20wars/src/main.js). The server-side simulation remains untouched and fully compatible.
+11: 
+12: ---
+13: 
+14: ## Proposed Changes
+15: 
+16: We will refactor the coordinate projection and viewport interaction handlers inside `src/main.js` to ensure uniform mapping between CSS pixels, logical canvas pixels, and map coordinates.
+17: 
+18: ### 1. Pointer Coordinate Projection Refactoring
+19: 
+20: #### [MODIFY] [main.js](file:///S:/dist/antigravity/planet%20wars/src/main.js)
+21: 
+22: We will modify the coordinate translation helpers to make them entirely self-contained, robust against external elements, and suitable for both mouse and touch input.
+23: 
+24: ##### A. Refactor `getCanvasPos`
+25: Instead of taking a full DOM `event` and relying on `event.target`, `getCanvasPos` will directly accept `clientX` and `clientY` coordinates. It will always scale the relative offset using `canvas.getBoundingClientRect()`:
+26: ```javascript
+27: function getCanvasPos(clientX, clientY) {
+28:   const rect = canvas.getBoundingClientRect();
+29:   const scaleX = canvas.width / rect.width;
+30:   const
+<truncated 4192 bytes>
+ rect.width;
+133:     const cssToCanvasY = canvas.height / rect.height;
+134: 
+135:     if (event.touches.length === 2 && initialPinchDistance) {
+136:       const currentDistance = getPinchDistance(event.touches);
+137:       const mid = getPinchMidpoint(event.touches);
+138:       ...
+139:       // Calculate Pan based on mid-point movement
+140:       const dx = mid.x - lastPinchMidX;
+141:       const dy = mid.y - lastPinchMidY;
+142:       ...
+143:       cameraPanX += dx / finalScale;
+144:       cameraPanY += dy / finalScale;
+145:       return;
+146:     }
+147: 
+148:     if (event.touches.length === 1 && !initialPinchDistance) {
+149:       ...
+150:       if (isDraggingCamera) {
+151:         const dx = event.touches[0].clientX - lastCameraDragX;
+152:         const dy = event.touches[0].clientY - lastCameraDragY;
+153:         lastCameraDragX = event.touches[0].clientX;
+154:         lastCameraDragY = event.touches[0].clientY;
+155:         ...
+156:         cameraPanX += (dx * cssToCanvasX) / finalScale;
+157:         cameraPanY += (dy * cssToCanvasY) / finalScale;
+158:       } else if (lasso.active) {
+159:         const cPos = getCanvasPos(event.touches[0].clientX, event.touches[0].clientY);
+160:         handlePointerMove(cPos.x, cPos.y);
+161:       }
+162:     }
+163:   });
+164: ```
+165: 
+166: ---
+167: 
+168: ## Verification Plan
+169: 
+170: ### Manual Verification
+171: 1. Load the game in a mobile simulator and on a standard desktop browser.
+172: 2. Drag-pan the camera at different browser zoom levels (e.g. 75%, 100%, 150%) and verify that the canvas moves perfectly in sync with the mouse pointer without slipping.
+173: 3. Centered Zooming: Hover the mouse over a specific planet, zoom in/out with the mouse wheel, and verify that the planet stays centered directly under the pointer.
+174: 4. Box Selection: Use Shift + Drag lasso on desktop and holding lasso on touch, and verify that the highlighted region matches the pointer box perfectly.
+175: 
+The above content shows the entire, complete file contents of the requested file.

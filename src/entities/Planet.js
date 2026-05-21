@@ -1,0 +1,166 @@
+export class Planet {
+  constructor(id, x, y, radius, owner, initialShips) {
+    this.id = id;
+    this.x = x;
+    this.y = y;
+    this.radius = radius;
+    this.owner = owner; // Player object or null
+    this.ships = initialShips;
+
+    this.maxShips = Math.max(60, this.radius * 4);
+    this.productionProgress = 0;
+    this.capacityProgress = 0;
+    this.sacrificedShips = 0;
+    
+    this.name = this.generatePlanetName();
+  }
+
+  generatePlanetName() {
+    const prefixes = ['Aero', 'Zeta', 'Cor', 'Magna', 'Vel', 'Hel', 'Ceti', 'Gliese', 'Kepler', 'Altair', 'Vega', 'Sirius', 'Rigel', 'Deneb', 'Procyon', 'Lira', 'Orion', 'Cygnus', 'Lyra', 'Draco', 'Andro', 'Cassio', 'Ursa', 'Tauri', 'Leo'];
+    const suffixes = [' Prime', ' Alpha', ' Beta', ' Gamma', ' Delta', ' Epsilon', ' Major', ' Minor', ' I', ' II', ' III', ' IV', ' V', ' X', ' Z', ' Station', ' Outpost', ' Haven', ' Core', ' Abyss'];
+    
+    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const hasSuffix = Math.random() > 0.3; // 70% chance to have a suffix
+    
+    if (hasSuffix) {
+      const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+      return prefix + suffix;
+    }
+    
+    return prefix;
+  }
+
+  setRadius(newRadius) {
+    this.radius = newRadius;
+    this.maxShips = Math.max(60, this.radius * 4);
+  }
+
+  increaseMaxShips(amount = 1) {
+    this.maxShips += amount;
+    this.radius = this.maxShips / 4;
+  }
+
+  decreaseMaxShips(amount = 1) {
+    this.maxShips -= amount;
+    this.radius = this.maxShips / 4;
+    this.capacityDecreaseEvent = true;
+  }
+
+  update(deltaTime, allPlanets, settings) {
+    if (this.owner) {
+      if (this.ships < this.maxShips || (this.owner && this.owner.isAI)) {
+        const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
+        const lowPopMultiplier = Math.min(1.0, 0.10 + 0.02 * Math.max(0, this.ships - 5));
+        const effectiveMaxShips = this.rampageBoost ? this.maxShips * 3 : this.maxShips;
+        const prodDivisor = 100 / (settings?.productionMultiple || 1.0);
+        let effectiveRate = (Math.max(10, effectiveMaxShips - this.ships) / prodDivisor) * (1 + techBonus) * lowPopMultiplier;
+        if (this.homeworldOf === this.owner.id) {
+          effectiveRate *= 2;
+        }
+        if (!this.owner.isAI) {
+          if (effectiveRate > 1.0) {
+            effectiveRate = 1.0 + ((effectiveRate - 1.0) / 3);
+          }
+        }
+        this.productionProgress += effectiveRate * (deltaTime / 1000);
+        if (this.productionProgress >= 1) {
+          let newShips = Math.floor(this.productionProgress);
+          this.ships += newShips;
+          this.productionProgress -= newShips;
+        }
+      } else {
+        this.productionProgress = 0;
+      }
+    } else {
+      this.productionProgress = 0;
+    }
+
+    // Increase max capacity and tech score if full
+    if (this.owner && this.ships >= this.maxShips) {
+      const timeToIncrease = this.maxShips / 10;
+      this.capacityProgress += (deltaTime / 1000);
+      if (this.capacityProgress >= timeToIncrease) {
+        if (this.rampageEvent) {
+          this.decreaseMaxShips(1);
+          if (this.maxShips < 55) this.dead = true;
+        } else {
+          const increaseAmount = this.homeworldOf ? 2 : 1;
+          this.increaseMaxShips(increaseAmount);
+          if (this.owner && allPlanets) {
+            let galacticCapacity = 0;
+            for (const p of allPlanets) {
+              galacticCapacity += p.maxShips;
+            }
+            const capacityPercent = galacticCapacity > 0 ? ((this.owner.totalCapacity || 0) / galacticCapacity) * 100 : 0;
+            const failChance = capacityPercent * 2;
+            if (Math.random() * 100 >= failChance) {
+              const increaseAmount = this.isResearch ? 2 : 1;
+              this.owner.techScore = (this.owner.techScore || 0) + increaseAmount;
+              if (this.isResearch) {
+                this.techDoubleIncreaseEvent = true;
+              } else {
+                this.techIncreaseEvent = true;
+              }
+            } else if (this.isResearch) {
+              this.owner.techScore = (this.owner.techScore || 0) + 1;
+              this.techIncreaseEvent = true;
+            }
+          }
+        }
+        this.capacityProgress -= timeToIncrease;
+      }
+    } else {
+      this.capacityProgress = 0;
+    }
+
+    if (this.justAssigned) {
+      this.justAssignedTimer = (this.justAssignedTimer || 0) + deltaTime;
+      if (this.justAssignedTimer > 1000) {
+        this.justAssigned = false;
+        this.justAssignedTimer = 0;
+      }
+    }
+
+    // Rampage event is persistent until captured.
+  }
+
+  draw(ctx, isSelected) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+
+    if (this.owner) {
+      ctx.fillStyle = this.owner.color;
+      ctx.shadowColor = this.owner.color;
+      ctx.shadowBlur = 15;
+    } else {
+      ctx.fillStyle = '#555';
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.fill();
+
+    if (isSelected) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    // Reset shadow
+    ctx.shadowBlur = 0;
+
+    // Draw ship count backdrop pill
+    const text = `${Math.floor(this.ships)} / ${this.maxShips}`;
+    ctx.font = `bold ${Math.max(10, this.radius * 0.45)}px Orbitron`;
+    const textWidth = ctx.measureText(text).width;
+
+    ctx.fillStyle = 'rgba(17, 11, 11, 0.6)';
+    const pillHeight = Math.max(14, this.radius * 0.55);
+    ctx.fillRect(this.x - textWidth / 2 - 6, this.y - pillHeight / 2, textWidth + 12, pillHeight);
+
+    ctx.fillStyle = '#000';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, this.x, this.y);
+  }
+}

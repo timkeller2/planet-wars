@@ -1,0 +1,29 @@
+Created At: 2026-05-19T21:45:04Z
+Completed At: 2026-05-19T21:45:04Z
+File Path: `file:///S:/dist/antigravity/planet%20wars/src/main.js`
+Total Lines: 2598
+Total Bytes: 105236
+Showing lines 55 to 75
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+55:   let lastPinchMidY = 0;
+56: 
+57:   function getPinchDistance(touches) {
+58:     const dx = touches[0].clientX - touches[1].clientX;
+59:     const dy = touches[0].clientY - touches[1].clientY;
+60:     return Math.sqrt(dx * dx + dy * dy);
+61:   }
+62: 
+63:   function getPinchMidpoint(touches, rect) {
+64:     return {
+65:       x: (touches[0].clientX + touches[1].clientX) / 2 - rect.left,
+66:       y: (touches[0].clientY + touches[1].clientY) / 2 - rect.top
+67:     };
+68:   }
+69: 
+70:   let lasso = { active: false, startX: 0, startY: 0, endX: 0, endY: 0 };
+71:   let starfieldEnabled = false;
+72:   let hoveredPlanet = null;
+73:   let hoveredShip = null;
+74: 
+75:   // UI Elements
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

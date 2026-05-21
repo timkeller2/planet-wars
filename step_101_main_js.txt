@@ -1,0 +1,81 @@
+Created At: 2026-05-19T21:47:30Z
+Completed At: 2026-05-19T21:47:30Z
+File Path: `file:///S:/dist/antigravity/planet%20wars/src/main.js`
+Total Lines: 2460
+Total Bytes: 99449
+Showing lines 1050 to 1200
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1050:       return;
+1051:     }
+1052: 
+1053:     selectedShips = [];
+1054:     if (!serverState || !localPlayer) return;
+1055: 
+1056:     for (const ship of serverState.ships) {
+1057:       if (ship.ownerId === localPlayer.id && ship.active) {
+1058:         if (ship.x >= minX && ship.x <= maxX && ship.y >= minY && ship.y <= maxY) {
+1059:           selectedShips.push(ship);
+1060:         }
+1061:       }
+1062:     }
+1063: 
+1064:     selectedPlanets = [];
+1065:     for (const planet of serverState.planets) {
+1066:       if (planet.ownerId === localPlayer.id) {
+1067:         if (planet.x >= minX && planet.x <= maxX && planet.y >= minY && planet.y <= maxY) {
+1068:           selectedPlanets.push(planet);
+1069:         }
+1070:       }
+1071:     }
+1072:   }
+1073: 
+1074:   let mouseTimeout = null;
+1075:   let mouseDownStartX = 0;
+1076:   let mouseDownStartY = 0;
+1077: 
+1078:   canvas.addEventListener('mousedown', (event) => {
+1079:     const cPos = getCanvasPos(event.clientX, event.clientY);
+1080:     const posX = cPos.x;
+1081:     const posY = cPos.y;
+1082:     if (event.button === 1) { // Middle click = pan only
+1083:       if (mouseTimeout) {
+1084:         clearTimeout(mouseTimeout);
+1085:         mouseTimeout = null;
+1086:       }
+1087:       lasso.active = false;
+1088:       isDraggingCamera = true;
+1089:       lastCameraDragX = event.clientX;
+1090:       lastCameraDragY = event.clientY;
+1091:       return;
+1092:     }
+1093: 
+1094:     if (event.button !== 0 && event.button !== 2) return;
+1095: 
+1096:     mouseDownStartX = posX;
+1097:     mouseDownStartY = posY;
+1098:     lastCameraDr
+<truncated 3221 bytes>
+Factor = 1.2;
+1179:       if (event.key === '=' || event.key === '+') {
+1180:         cameraZoom *= zoomFactor;
+1181:       } else {
+1182:         cameraZoom /= zoomFactor;
+1183:       }
+1184:       cameraZoom = Math.max(0.2, Math.min(cameraZoom, 5.0));
+1185: 
+1186:       const newServerPos = getMouseServerPos(mouseX, mouseY);
+1187:       cameraPanX += (newServerPos.x - oldServerPos.x);
+1188:       cameraPanY += (newServerPos.y - oldServerPos.y);
+1189:     }
+1190:   });
+1191:   document.getElementById('btn-warp').addEventListener('click', () => { warpOrderNext = !warpOrderNext; });
+1192:   document.getElementById('btn-bomb').addEventListener('click', () => { bombOrderNext = bombOrderNext === 'eco' ? false : 'eco'; });
+1193:   document.getElementById('btn-bomb-ships').addEventListener('click', () => { bombOrderNext = bombOrderNext === 'ships' ? false : 'ships'; });
+1194:   document.getElementById('btn-fill').addEventListener('click', () => { fillModeNext = !fillModeNext; });
+1195:   document.getElementById('btn-scout').addEventListener('click', () => { scoutModeNext = !scoutModeNext; });
+1196:   document.getElementById('btn-interceptor').addEventListener('click', () => { interceptorOrderNext = !interceptorOrderNext; });
+1197:   document.getElementById('btn-cruiser').addEventListener('click', () => { cruiserOrderNext = !cruiserOrderNext; });
+1198:   document.getElementById('btn-speed-1').addEventListener('click', () => { speedModifierNext = speedModifierNext === 0.25 ? null : 0.25; });
+1199:   document.getElementById('btn-speed-2').addEventListener('click', () => { speedModifierNext = speedModifierNext === 0.50 ? null : 0.50; });
+1200:   const btnSpd3 = document.getElementById('btn-speed-3'); if (btnSpd3) btnSpd3.addEventListener('click', () => { speedModifierNext = speedModifierNext === 1.0 ? null : 1.0; });
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

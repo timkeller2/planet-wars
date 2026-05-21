@@ -1,0 +1,423 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body, html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #050510;
+  font-family: 'Rajdhani', sans-serif;
+  color: #fff;
+}
+
+canvas {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+}
+
+#ui-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(5, 5, 16, 0.85);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+  transition: opacity 0.5s ease;
+}
+
+.hidden, .hidden * {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+.glow-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 5rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 10px #0ff, 0 0 20px #0ff, 0 0 40px #0ff;
+  margin-bottom: 3rem;
+  letter-spacing: 0.2rem;
+  text-transform: uppercase;
+}
+
+.cyber-btn {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.5rem;
+  padding: 1rem 3rem;
+  background: transparent;
+  color: #0ff;
+  border: 2px solid #0ff;
+  border-radius: 5px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.1rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.3), inset 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
+.cyber-btn:hover {
+  background: rgba(0, 255, 255, 0.2);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.6), inset 0 0 20px rgba(0, 255, 255, 0.6);
+  text-shadow: 0 0 5px #fff;
+}
+
+#game-ui {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+#score-board {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 10, 20, 0.85);
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(5px);
+  min-width: 200px;
+  pointer-events: auto;
+  transition: all 0.3s ease;
+}
+
+#score-board.hidden {
+  display: none !important;
+}
+
+.action-btn-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 12px;
+  min-width: 44px;
+  border-radius: 5px;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.btn-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.score-entry {
+  font-size: 1.2rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-score {
+  color: #0ff;
+  text-shadow: 0 0 5px #0ff;
+}
+
+.ai-score {
+  color: #f0f;
+  text-shadow: 0 0 5px #f0f;
+}
+
+.pointer-auto {
+  pointer-events: auto !important;
+}
+
+.help-btn {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  width: 40px;
+  height: 40px;
+  background: rgba(0, 255, 255, 0.2);
+  border: 2px solid #0ff;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: "Orbitron", sans-serif;
+  font-size: 1.5rem;
+  color: #0ff;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+  transition: all 0.3s ease;
+  z-index: 100;
+}
+
+.help-btn:hover {
+  background: rgba(0, 255, 255, 0.5);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+  color: #fff;
+}
+
+.modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 200;
+  transition: opacity 0.3s ease;
+  pointer-events: auto;
+}
+
+.modal-content {
+  background: rgba(10, 10, 25, 0.95);
+  border: 1px solid #0ff;
+  border-radius: 10px;
+  padding: 30px;
+  width: 80%;
+  max-width: 600px;
+  box-shadow: 0 0 30px rgba(0, 255, 255, 0.2);
+  position: relative;
+  text-align: center;
+}
+
+.modal-content h2 {
+  font-family: "Orbitron", sans-serif;
+  color: #0ff;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.help-page.hidden {
+  display: none;
+}
+
+.help-index-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.help-topic-btn {
+  display: block;
+  width: 100%;
+  padding: 14px 20px;
+  background: rgba(0, 255, 255, 0.08);
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  border-radius: 8px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.05rem;
+  color: #0ff;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.25s ease;
+  letter-spacing: 0.5px;
+}
+
+.help-topic-btn:hover {
+  background: rgba(0, 255, 255, 0.2);
+  border-color: #0ff;
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.3), inset 0 0 8px rgba(0, 255, 255, 0.05);
+  transform: translateX(4px);
+}
+
+.modal-content ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+}
+
+.modal-content li {
+  margin-bottom: 12px;
+  line-height: 1.5;
+  font-size: 1rem;
+}
+
+.modal-content li ul {
+  margin-top: 6px;
+  padding-left: 16px;
+}
+
+.modal-content li ul li {
+  margin-bottom: 6px;
+  font-size: 0.95rem;
+}
+
+.modal-content strong {
+  color: #f0f;
+}
+
+.close-btn {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  font-size: 2rem;
+  color: #fff;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.close-btn:hover {
+  color: #f00;
+}
+
+.mid-restart-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 5px 15px;
+  background: rgba(0, 255, 255, 0.2);
+  border: 1px solid #0ff;
+  border-radius: 5px;
+  font-family: "Orbitron", sans-serif;
+  font-size: 1.2rem;
+  color: #0ff;
+  cursor: pointer;
+  box-shadow: 0 0 5px rgba(0, 255, 255, 0.3);
+  transition: all 0.3s ease;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.mid-restart-btn:hover {
+  background: rgba(0, 255, 255, 0.5);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.6);
+  color: #fff;
+}
+
+.cyber-input {
+  background: rgba(0, 20, 40, 0.7);
+  border: 1px solid #0ff;
+  border-radius: 4px;
+  color: #fff;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.5rem;
+  padding: 10px 20px;
+  margin-bottom: 20px;
+  text-align: center;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+}
+
+.cyber-input:focus {
+  outline: none;
+  border-color: #f0f;
+  box-shadow: 0 0 15px rgba(255, 0, 255, 0.5);
+}
+
+.player-names {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  pointer-events: none;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: bold;
+  font-size: 1.2rem;
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+}
+
+
+@keyframes blink-leader {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(0, 255, 255, 0.2); }
+  100% { background-color: transparent; }
+}
+
+.leader-row {
+  animation: blink-leader 1.5s infinite;
+  border-radius: 4px;
+  padding: 0 4px;
+  margin: -2px -4px;
+}
+
+#chat-container {
+  position: absolute;
+  bottom: 80px;
+  left: 20px;
+  width: 350px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: auto;
+}
+
+#chat-messages {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-shadow: 0 0 4px rgba(0,0,0,0.8);
+}
+
+#chat-messages::-webkit-scrollbar {
+  width: 5px;
+}
+
+#chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 255, 0.5);
+  border-radius: 5px;
+}
+
+#chat-input {
+  width: 100%;
+  font-size: 1.1rem;
+  padding: 8px 12px;
+  margin-bottom: 0;
+  background: rgba(10, 10, 20, 0.7);
+  transition: opacity 0.3s ease;
+}
+
+#chat-input.hidden {
+  display: none;
+}
+
+@keyframes chatFadeOut {
+  0% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { opacity: 0; display: none; }
+}
+
+.chat-msg {
+  animation: chatFadeOut 30s forwards;
+}
+
+.action-btn-active {
+  background: rgba(0, 255, 255, 0.25) !important;
+  border-color: #0ff !important;
+  color: #fff !important;
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.6), inset 0 0 8px rgba(0, 255, 255, 0.3) !important;
+  text-shadow: 0 0 5px #0ff;
+}

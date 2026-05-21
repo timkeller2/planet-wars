@@ -1,0 +1,110 @@
+Created At: 2026-05-19T21:39:53Z
+Completed At: 2026-05-19T21:39:53Z
+File Path: `file:///S:/dist/antigravity/planet%20wars/src/main.js`
+Total Lines: 2598
+Total Bytes: 105236
+Showing lines 341 to 1140
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+341:         size: Math.random() * 1.5 + 0.5,
+342:         alpha: Math.random() * 0.8 + 0.2
+343:       });
+344:     }
+345:   }
+346:   regenerateStars(1920, 1620);
+347: 
+348:   socket.on('assignedPlayer', (player) => {
+349:     localPlayer = player;
+350:   });
+351: 
+352:   socket.on('spectator', () => {
+353:     console.log("Joined as spectator");
+354:   });
+355: 
+356:   const afkWarningOverlay = document.getElementById('afk-warning');
+357:   const resetAfkBtn = document.getElementById('reset-afk-btn');
+358: 
+359:   socket.on('afkWarning', () => {
+360:     afkWarningOverlay.classList.remove('hidden');
+361:   });
+362: 
+363:   socket.on('afkConverted', () => {
+364:     afkWarningOverlay.classList.add('hidden');
+365:   });
+366: 
+367:   if (resetAfkBtn) {
+368:     resetAfkBtn.addEventListener('click', () => {
+369:       socket.emit('resetAFK');
+370:       afkWarningOverlay.classList.add('hidden');
+371:     });
+372:   }
+373: 
+374:   let lastPlanetCapacities = {};
+375:   let lastPlanetAssignments = {};
+376:   let lastPlanetRampages = {};
+377:   let lastPlanetStands = {};
+378:   let lastPlanetHomeworlds = {};
+379:   let planetShields = {};
+380:   let floatingAnimations = [];
+381:   let lastPlanetSpyRooted = {};
+382: 
+383:   const sounds = {
+384:     laser: new Audio('/laser.wav'),
+385:     explosion: new Audio('/explosion.wav'),
+386:     trumpet: new Audio('/trumpet.wav'),
+387:     rampage: new Audio('/rampage.wav')
+388:   };
+389:   sounds.laser.volume = 0.075;
+390:   sounds.explosion.volume = 0.3;
+391:   sounds.trumpet.volume = 0.6;
+392:
+<truncated 29196 bytes>
+newServerPos.y - oldServerPos.y);
+1093:   }, { passive: false });
+1094: 
+1095:   let lastMouseEmitTime = 0;
+1096:   canvas.addEventListener('mousemove', (event) => {
+1097:     if (isDraggingCamera) {
+1098:       const dx = event.clientX - lastCameraDragX;
+1099:       const dy = event.clientY - lastCameraDragY;
+1100:       lastCameraDragX = event.clientX;
+1101:       lastCameraDragY = event.clientY;
+1102: 
+1103:       const mapWidth = serverState ? (serverState.width || 1920) : 1920;
+1104:       const mapHeight = serverState ? (serverState.height || 1620) : 1620;
+1105:       const scaleX = canvas.width / mapWidth;
+1106:       const scaleY = canvas.height / mapHeight;
+1107:       const finalScale = Math.min(scaleX, scaleY) * cameraZoom;
+1108: 
+1109:       cameraPanX += dx / finalScale;
+1110:       cameraPanY += dy / finalScale;
+1111:     }
+1112: 
+1113:     // Always update hover state and lasso
+1114:     const rect = canvas.getBoundingClientRect();
+1115:     handlePointerMove(event.clientX - rect.left, event.clientY - rect.top);
+1116: 
+1117:     const now = Date.now();
+1118:     if (now - lastMouseEmitTime > 5000) {
+1119:       lastMouseEmitTime = now;
+1120:       socket.emit('resetAFK');
+1121:       if (afkWarningOverlay && !afkWarningOverlay.classList.contains('hidden')) {
+1122:         afkWarningOverlay.classList.add('hidden');
+1123:       }
+1124:     }
+1125:   });
+1126: 
+1127:   window.addEventListener('mouseup', (event) => {
+1128:     if (mouseTimeout) {
+1129:       clearTimeout(mouseTimeout);
+1130:       mouseTimeout = null;
+1131:     }
+1132:     isDraggingCamera = false;
+1133:     if (event.button === 1 || event.button === 2) {
+1134:       lasso.active = false;
+1135:       return;
+1136:     }
+1137:     handlePointerUp(event);
+1138:   });
+1139: 
+1140:   let touchTimeout = null;
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

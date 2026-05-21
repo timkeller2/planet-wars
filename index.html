@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Planet Wars</title>
+    <link rel="stylesheet" href="/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <div id="ui-layer">
+      <div id="start-screen" class="screen">
+        <h1 class="glow-title">PLANET WARS</h1>
+        <input type="text" id="player-name-input" class="cyber-input" placeholder="Enter your name" maxlength="16" />
+        <div id="setup-options-container" class="options" style="margin-top: 15px; text-align: left; color: #0ff; font-family: 'Orbitron', sans-serif; display: none; flex-direction: column; gap: 10px;">
+          <label style="cursor: pointer; display: flex; align-items: center;">
+            <input type="number" id="ai-count-input" value="7" min="0" max="50" style="width: 50px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            AI Players
+          </label>
+          <label style="cursor: pointer;"><input type="checkbox" id="fog-of-war-checkbox" style="margin-right: 10px;" /> Enable Fog of War</label>
+          <label style="cursor: pointer;"><input type="checkbox" id="music-checkbox" style="margin-right: 10px;" checked /> Enable Background Music</label>
+          <label style="cursor: pointer;"><input type="checkbox" id="starfield-checkbox" style="margin-right: 10px;" /> Enable Star Field</label>
+          <label style="cursor: pointer; display: flex; align-items: center;">
+            <select id="production-multiple-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
+              <option value="0.5">Grand Strategy: 0.5</option>
+              <option value="1.0" selected>Strategic: 1.0</option>
+              <option value="1.5">Normal: 1.5</option>
+              <option value="2.0">Snappy: 2.0</option>
+              <option value="3.0">Blitz: 3.0</option>
+              <option value="custom">Custom</option>
+            </select>
+            Production Speed
+          </label>
+          <label id="custom-production-multiple-container" style="display: none; cursor: pointer; align-items: center;">
+            <input type="number" id="production-multiple-input" value="1.0" step="0.1" min="0.1" max="10.0" style="width: 50px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            Custom Prod Multiple
+          </label>
+          <label style="cursor: pointer; display: flex; align-items: center;">
+            <select id="hazard-multiple-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
+              <option value="0">No Hazards: 0</option>
+              <option value="0.5">Light Hazards: 0.5</option>
+              <option value="1.0" selected>Normal Hazards: 1</option>
+              <option value="2.0">More Hazards: 2</option>
+              <option value="4.0">Lots of Hazards: 4</option>
+              <option value="custom">Custom</option>
+            </select>
+            Hazard Level
+          </label>
+          <label id="custom-hazard-multiple-container" style="display: none; cursor: pointer; align-items: center;">
+            <input type="number" id="hazard-multiple-input" value="1.0" step="0.1" min="0.0" max="10.0" style="width: 50px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            Custom Hazard Multiple
+          </label>
+          <label style="cursor: pointer; display: flex; align-items: center;">
+            <select id="map-size-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
+              <option value="800">Very Small: 800</option>
+              <option value="1200">Small: 1200</option>
+              <option value="1600" selected>Normal: 1600</option>
+              <option value="2000">Large: 2000</option>
+              <option value="2400">Very Large: 2400</option>
+              <option value="3200">Huge: 3200</option>
+              <option value="custom">Custom</option>
+            </select>
+            Map Size
+          </label>
+          <label id="custom-map-size-container" style="display: none; cursor: pointer; align-items: center;">
+            <input type="number" id="map-size-input" value="1600" min="500" max="10000" style="width: 60px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            Custom Map Size (XY)
+          </label>
+          <label style="cursor: pointer; display: flex; align-items: center;">
+            <input type="number" id="planet-count-input" value="50" min="10" max="1000" style="width: 60px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            Planet Count
+          </label>
+        </div>
+        <button id="start-btn" class="cyber-btn" style="margin-top: 30px; padding: 20px 60px; font-size: 2.2rem; box-shadow: 0 0 20px rgba(0, 255, 255, 0.5), inset 0 0 15px rgba(0, 255, 255, 0.4);">ENTER GAME</button>
+        <button id="setup-new-game-btn" class="cyber-btn" style="position: absolute; bottom: 20px; right: 20px; padding: 10px 20px; font-size: 0.9rem;">SET UP NEW GAME</button>
+      </div>
+      <div id="game-ui" class="hidden">
+        <div id="player-names-container" class="player-names"></div>
+        <div id="score-board">
+          <div id="leaderboard-header" style="font-weight: bold; font-family: 'Orbitron', sans-serif; color: #0ff; text-shadow: 0 0 5px #0ff; margin-bottom: 5px; border-bottom: 1px solid #0ff; padding-bottom: 5px; display: flex; justify-content: space-between;">
+            <span>LEADERBOARD</span>
+          </div>
+          <div id="leaderboard-columns" style="font-family: 'Rajdhani', sans-serif; font-size: 0.95rem; color: #aaa; display: flex; justify-content: space-between; gap: 5px; margin-bottom: 3px; padding-bottom: 2px; border-bottom: 1px dashed #555;">
+            <span style="width: 80px;">Name</span>
+            <span style="width: 65px; text-align: center;">🧪</span>
+            <span style="width: 45px; text-align: center;">🎯</span>
+            <span style="min-width: 40px; text-align: right;">🪐</span>
+          </div>
+          <div id="leaderboard-content" style="display: flex; flex-direction: column; gap: 4px;"></div>
+        </div>
+        <div id="chat-container">
+          <div id="chat-messages"></div>
+          <input type="text" id="chat-input" class="cyber-input hidden" placeholder="Transmit message..." maxlength="100" autocomplete="off" />
+        </div>
+        
+        <div id="action-buttons" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 30px; z-index: 100; pointer-events: auto;">
+          <div id="action-buttons-left" style="display: flex; gap: 10px;">
+            <button id="btn-speed-1" class="cyber-btn action-btn-icon" title="1/4 Speed (1)"><span class="btn-icon">🐢</span>1</button>
+            <button id="btn-speed-2" class="cyber-btn action-btn-icon" title="1/2 Speed (2)"><span class="btn-icon">🚶</span>2</button>
+            <button id="btn-speed-3" class="cyber-btn action-btn-icon" title="Normal Speed (3)"><span class="btn-icon">🏃</span>3</button>
+            <button id="btn-warp" class="cyber-btn action-btn-icon" title="Warp (W)"><span class="btn-icon">⚡</span>W</button>
+          </div>
+          <div id="action-buttons-right" style="display: flex; gap: 10px;">
+            <button id="btn-bomb" class="cyber-btn action-btn-icon" title="Bomb Eco (B)"><span class="btn-icon">💥</span>B</button>
+            <button id="btn-bomb-ships" class="cyber-btn action-btn-icon" title="Bomb Ships (Q)"><span class="btn-icon">💣</span>Q</button>
+            <button id="btn-fill" class="cyber-btn action-btn-icon" title="Fill Mode (F)"><span class="btn-icon">📥</span>F</button>
+            <button id="btn-scout" class="cyber-btn action-btn-icon" title="Scout Mode (S)"><span class="btn-icon">🔭</span>S</button>
+            <button id="btn-interceptor" class="cyber-btn action-btn-icon" title="Interceptor Mode (I)"><span class="btn-icon">🔺</span>I</button>
+            <button id="btn-cruiser" class="cyber-btn action-btn-icon" title="Cruiser Mode (C)"><span class="btn-icon">🛸</span>C</button>
+            <button id="btn-leaderboard" class="cyber-btn action-btn-icon" title="Leaderboard (L)"><span class="btn-icon">🏆</span>L</button>
+          </div>
+        </div>
+      </div>
+      <div id="end-screen" class="screen hidden">
+        <h1 id="end-title" class="glow-title"></h1>
+        <button id="restart-btn" class="cyber-btn">RESTART</button>
+      </div>
+
+      <div id="afk-warning" class="screen hidden" style="background: rgba(40, 0, 0, 0.9); z-index: 500;">
+        <h1 class="glow-title" style="color: #f00; text-shadow: 0 0 10px #f00, 0 0 20px #f00, 0 0 40px #f00;">INACTIVE WARNING</h1>
+        <p style="color: white; font-family: 'Orbitron', sans-serif; font-size: 1.5rem; margin-bottom: 2rem;">AI Takeover in 10 seconds...</p>
+        <button id="reset-afk-btn" class="cyber-btn" style="border-color: #f00; color: #f00; box-shadow: 0 0 10px rgba(255, 0, 0, 0.3), inset 0 0 10px rgba(255, 0, 0, 0.3);">I'M STILL HERE</button>
+      </div>
+      
+      <audio id="bg-music" src="/music.wav" loop preload="auto"></audio>
+      
+      <div id="help-btn" class="help-btn pointer-auto">?</div>
+      <div id="help-modal" class="modal hidden">
+        <div class="modal-content" style="max-height: 80vh; overflow-y: auto; text-align: left;">
+          <span id="close-help" class="close-btn">&times;</span>
+          <h2 id="help-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">How to Play</h2>
+
+          <!-- INDEX PAGE -->
+          <div id="help-index" class="help-page">
+            <div class="help-index-list">
+              <button class="help-topic-btn" data-topic="controls">🎮 Controls</button>
+              <button class="help-topic-btn" data-topic="victory">⚔️ Victory Conditions</button>
+              <button class="help-topic-btn" data-topic="planets">🪐 Planets &amp; Economy</button>
+              <button class="help-topic-btn" data-topic="ships">🚀 Ships &amp; Combat</button>
+              <button class="help-topic-btn" data-topic="cruisers">🛸 Cruisers &amp; Interceptors</button>
+              <button class="help-topic-btn" data-topic="hazards">⚡ Hazards</button>
+              <button class="help-topic-btn" data-topic="monsters">🧬 Space Amoebas</button>
+              <button class="help-topic-btn" data-topic="ai">🤖 AI &amp; Rampage</button>
+              <button class="help-topic-btn" data-topic="other">📡 Other</button>
+            </div>
+          </div>
+
+          <!-- CONTROLS -->
+          <div id="help-topic-controls" class="help-page hidden">
+            <ul>
+              <li><strong>Left-click:</strong> Select planets or ships. Click empty space to deselect.</li>
+              <li><strong>Left-click + Drag:</strong> Draw a lasso to box-select ships or planets. Hold <strong>Shift</strong> to add/remove from selection.</li>
+              <li><strong>Right-click:</strong> Issue orders! Right click an enemy to attack, a friendly planet to reinforce, or empty space to move ships there.</li>
+              <li><strong>Right-click Drag / Middle-click Drag:</strong> Pan the camera.</li>
+              <li><strong>Scroll Wheel / +/- keys:</strong> Zoom in and out.</li>
+              <li><strong>Arrow Keys:</strong> Pan the camera.</li>
+              <li><strong>Touch:</strong> Tap to select. One-finger drag to pan. Pinch to zoom.</li>
+              <li><strong>Enter:</strong> Open/send chat messages.</li>
+              <li><strong>Pause/Break:</strong> Pause the game.</li>
+              <li><strong>Speed Keys (1, 2, 3):</strong> Set fleet speed to 1/4, 1/2, or normal. Keys 2 and 3 also set the <em>default</em> speed for future launches.</li>
+              <li><strong>W — Warp:</strong> Toggle warp mode for the next launch.</li>
+              <li><strong>B — Bomb Eco:</strong> Launch eco bombers (requires 🚀 Military planet).</li>
+              <li><strong>Q — Bomb Ships:</strong> Launch ship bombers (requires 🚀 Military planet).</li>
+              <li><strong>F — Fill Mode:</strong> Send only enough ships to fill the target planet.</li>
+              <li><strong>S — Scout Mode:</strong> Send a small scouting party (10% of garrison, min 3).</li>
+              <li><strong>I — Interceptor:</strong> Launch fast interceptor ships (can be launched from any planet).</li>
+              <li><strong>C — Cruiser:</strong> Build a cruiser from a 🚀 Military planet or your Homeworld.</li>
+              <li><strong>L — Leaderboard:</strong> Toggle the leaderboard panel.</li>
+            </ul>
+          </div>
+
+          <!-- VICTORY CONDITIONS -->
+          <div id="help-topic-victory" class="help-page hidden">
+            <ul>
+              <li><strong>Elimination:</strong> Be the last player standing. All other players must lose every planet and ship.</li>
+              <li><strong>Tech Domination:</strong> Achieve a √Tech bonus of at least <strong>15%</strong> AND lead 2nd place by at least <strong>10 percentage points</strong>.</li>
+              <li><strong>Economic Domination:</strong> Control more than <strong>75%</strong> of the galaxy's total planet capacity.</li>
+              <li><strong>Player Elimination:</strong> Capturing a player's last planet eliminates them, awarding the conqueror <strong>+100 Exp</strong>.</li>
+            </ul>
+          </div>
+
+          <!-- PLANETS & ECONOMY -->
+          <div id="help-topic-planets" class="help-page hidden">
+            <ul>
+              <li><strong>Production:</strong> Owned planets auto-produce ships. Rate scales with how many ships the planet is missing, boosted by Tech Score. Human production above 1× is reduced by 1/3.</li>
+              <li><strong>Low Population Penalty:</strong> Planets below 50 ships suffer reduced production. Below 5 ships, production drops to just <strong>10%</strong>.</li>
+              <li><strong>Capacity Growth:</strong> Full planets slowly gain +1 max capacity. Homeworlds gain <strong>+2</strong>.</li>
+              <li><strong>Tech Score 🧪:</strong> Earned when planets sit at max capacity. Chance decreases as your economy grows. √Tech gives +1% per point to kill chance, speed, production, dogfighting, and lowers launch costs.</li>
+              <li><strong>Exp Score 🎯:</strong> Earned through combat (every 20 kills = +1 Exp). Eliminating a player or destroying a Homeworld awards <strong>+100 Exp</strong>. √Exp × 0.5 provides combat bonuses.</li>
+              <li><strong>Gravity Fields:</strong> Planets project gravity wells (radius = maxShips × 1.5, expanded by Tech/Exp). Friendly wells protect ships from attrition and allow cruiser healing/rearming. Gravity gives +1% kill bonus per 50 friendly capacity nearby, -1% per 50 enemy.</li>
+              <li><strong>Orbital Bombardment:</strong> Each defending ship killed has an <strong>8%</strong> chance to reduce max capacity by 1. Below 55 max capacity = <strong>planet destroyed!</strong></li>
+              <li><strong>Planet Explosion:</strong> Destroyed planets deal <strong>3d6 splash damage</strong> to all planets within 400px (reduced by 1 per 25px). Max capacity takes 1/3 of that. Military planet explosions deal <strong>3× damage</strong> in a <strong>600px</strong> radius. Chain reactions are possible!</li>
+              <li><strong>Sacrificial Upgrade:</strong> Sending ships to a full friendly planet sacrifices them. Every <strong>20 sacrificed = +1 max capacity</strong>.</li>
+              <li><strong>Capture Penalty:</strong> Capturing an owned planet costs <strong>-1 max capacity</strong>. Capturing a neutral has a <strong>40%</strong> chance to assign a special type.</li>
+              <li><strong>Homeworld 👑:</strong> Starting planet. 2× production, +2 capacity growth. Attacking or defending grants <strong>+15% combat bonus</strong> (human players only). Destroying one awards +100 Exp.</li>
+              <li><strong>Special Planet Types</strong> (30% chance on neutral capture):
+                <ul style="margin-top: 6px;">
+                  <li><strong>🧪 Research (10%):</strong> Earns +2 Tech per tick instead of +1.</li>
+                  <li><strong>🚀 Military (10%):</strong> Required to launch bomber runs and cruisers. Costs -1 max capacity per bombing launch.</li>
+                  <li><strong>⚡ Speed (10%):</strong> Ships launched gain +15 flat speed bonus.</li>
+                </ul>
+              </li>
+            </ul>
+          </div>
+
+          <!-- SHIPS & COMBAT -->
+          <div id="help-topic-ships" class="help-page hidden">
+            <ul>
+              <li><strong>Launch Cost:</strong> Each launch costs <strong>10 + your planet count − √Tech</strong> ships. Half the remaining garrison is sent. Invest in Tech to launch cheaply!</li>
+              <li><strong>Combat (Planet Attack):</strong> <strong>80%</strong> base kill chance, minus 1% per 5 defending ships, plus Tech/Exp/Gravity/Swarm modifiers. Minimum kill chance = attacker's Tech+Exp bonuses.</li>
+              <li><strong>Swarm Bonus:</strong> +1% kill chance per 10 friendly ships within 100px of the target.</li>
+              <li><strong>Homeworld &amp; Last Stand:</strong> +15% combat bonus when attacking or defending a Homeworld (human only). +15% Last Stand bonus defending your last planet. These do <strong>not</strong> apply to AI vs AI.</li>
+              <li><strong>Human vs Human:</strong> Defender gets +2% bonus per surviving AI player. Clear out the AI first!</li>
+              <li><strong>Dogfighting:</strong> Ships within 40px (expanded by Tech + Health) fire lasers each second. Base hit chance: (10 + Tech + Exp + ShipExp + maxHealth×5 + bombs×3) / 100. Interceptors get +5% bonus.</li>
+              <li><strong>Fleet Attrition:</strong> Every 4 seconds, one ship per fleet is destroyed (after a safe window based on Tech+Exp). Ships inside friendly gravity wells take 1/3 attrition.</li>
+              <li><strong>Deep Space Attrition:</strong> Individual ships in deep space take escalating damage the longer they fly, starting after a safe window of (√Tech + √Exp×0.5) / 2 seconds. Bombers take half attrition.</li>
+              <li><strong>Speed Modifiers (1/2/3):</strong> 1/4 speed gets a <strong>90%</strong> Saving Roll vs damage. 1/2 speed gets <strong>75%</strong>. Cruisers and Amoebas always survive rolls.</li>
+              <li><strong>Warp Drive (W):</strong> Adds (30 − your planet count, min 5) speed bonus. Each ship has a <strong>(50% − √Tech)%</strong> chance to explode on launch!</li>
+              <li><strong>Bombers (B/Q):</strong> Military 🚀 planets only. Sends 1/3 of fleet at speed 20. Costs -1 max capacity.
+                <ul style="margin-top: 6px;">
+                  <li><strong>B — Eco Bomb:</strong> 1d2 damage to planet <em>max capacity</em>.</li>
+                  <li><strong>Q — Ship Bomb:</strong> 1d4 damage to planet <em>garrison</em>.</li>
+                </ul>
+              </li>
+              <li><strong>Fill Mode (F):</strong> Send only enough to fill the target planet to max capacity.</li>
+              <li><strong>Scout Mode (S):</strong> Send 10% of garrison (min 3 ships).</li>
+              <li><strong>Hazard Combat Penalty:</strong> Nebulae reduce kill chance by intensity/4 %. Ion Storms reduce by intensity/2 % (modified by knowledge/tech).</li>
+            </ul>
+          </div>
+
+          <!-- CRUISERS & INTERCEPTORS -->
+          <div id="help-topic-cruisers" class="help-page hidden">
+            <ul>
+              <li><strong>Cruisers 🛸:</strong> Capital ships built from Military planets or Homeworlds (requires 60+ ships and 60+ max capacity). Press <strong>C</strong> to build.</li>
+              <li><strong>Cruiser Stats:</strong> Health = garrison/25. Cost = health×15 ships + health×2 max capacity. Speed decreases with health. They orbit enemy planets instead of landing.</li>
+              <li><strong>Multi-shot:</strong> Cruisers fire multiple laser shots per second equal to their current health, targeting enemy ships and planets.</li>
+              <li><strong>Bomb Sacs:</strong> Cruisers carry bombs equal to their max health. Each dogfight volley at planets consumes one bomb sac. Bombs reload at friendly gravity wells (1 per 10 seconds, consuming 1 garrison ship).</li>
+              <li><strong>Damage Resistance:</strong> Cruisers have a (50% + maxHealth×3%) chance to shrug off hits entirely, up to 80%.</li>
+              <li><strong>Healing:</strong> Cruisers heal slowly inside friendly gravity wells. Outside wells, they burn fuel; when fuel runs out, they take slow health decay and move at reduced speed.</li>
+              <li><strong>Planet Scramble:</strong> AI and neutral planets with 30+ ships will auto-launch interceptors at nearby enemy cruisers every 15 seconds.</li>
+              <li><strong>Interceptors 🔺:</strong> Fast ships (speed 40) with +5% dogfight bonus. Created by pressing <strong>I</strong> from a non-special planet (permanently marks it). Interceptors have <strong>50% penalty</strong> attacking planets but excel at killing ships in space.</li>
+              <li><strong>Interceptor Landing:</strong> Interceptors have a 30% chance to crash when landing on a friendly planet.</li>
+            </ul>
+          </div>
+
+          <!-- HAZARDS -->
+          <div id="help-topic-hazards" class="help-page hidden">
+            <ul>
+              <li><strong>Ion Storms ⚡:</strong> Moving hazards that drift across the map. New storms spawn roughly every 5 minutes. Intensity = 10d6 (capped by spawn count). Ships and planets inside take periodic damage.</li>
+              <li><strong>Ancient Minefields 💣:</strong> Stationary. Intensity = 12d6. Massive burst damage on entry, especially to fast ships. Ongoing damage to ships inside. Do <em>not</em> damage planets.</li>
+              <li><strong>Nebulae 🌫️:</strong> Stationary, 30% larger. Intensity = 10d8. Slow ships passing through, reduce combat effectiveness by intensity/4 %. No direct damage or entry burst.</li>
+              <li><strong>Damage Formula:</strong> Chance = (intensity − knowledge − (√Tech + √Exp)/2 − √ShipExp) / divisor. Higher stats = much safer.</li>
+              <li><strong>Knowledge:</strong> Increases when your planet gravity wells overlap a hazard (+1 per planet per 2 minutes). Directly reduces effective intensity.</li>
+              <li><strong>Speed &amp; Entry:</strong> Ships traveling faster than base speed (warp) take 3× entry damage from storms/minefields. Slow ships get Saving Rolls.</li>
+              <li><strong>Amoeba Immunity:</strong> Amoebas are immune to Ion Storm entry damage (but not minefields).</li>
+              <li><strong>Planet Erosion:</strong> Ion storms (not minefields) erode planet max capacity over time. Below 55 = destroyed! Last Stand gives +20 knowledge bonus.</li>
+              <li><strong>Visuals:</strong> Yellow ⚡ = Ion Storm. Blue 💣 = Minefield. Purple 🌫️ = Nebula.</li>
+            </ul>
+          </div>
+
+          <!-- SPACE AMOEBAS -->
+          <div id="help-topic-monsters" class="help-page hidden">
+            <ul>
+              <li><strong>Giant Space Amoebas 🧬:</strong> Alien creatures belonging to the "Monsters" faction. They wander the map attacking ships and bombarding planets.</li>
+              <li><strong>Amoeba Hive:</strong> The Monsters' homeworld. Spawns a new Amoeba every <strong>2 minutes</strong>. Initial Amoebas also spawn scattered across the map at game start (1 per 10 planets).</li>
+              <li><strong>Stats:</strong> Speed = 4d6 (varies per Amoeba). Health = 1–3 (random). Attack range = 50px. They fire dark green projectiles with yellow borders.</li>
+              <li><strong>Regeneration:</strong> Amoebas slowly heal over time (1 HP per minute). When reduced to 0 health, if maxHealth &gt; 0, they lose 1 maxHealth but fully regenerate — shrinking visually each time.</li>
+              <li><strong>Growth &amp; Splitting:</strong> Killing an enemy ship or bombarding a planet grants +1 maxHealth and +1 health (30-second cooldown). If maxHealth exceeds 4, the Amoeba <strong>splits</strong> into two smaller Amoebas (each with 2 HP).</li>
+              <li><strong>Bomb Sacs:</strong> Amoebas carry bomb sacs equal to their maxHealth. These regenerate naturally (1 per 60 seconds) without needing a friendly well.</li>
+              <li><strong>Combat Value:</strong> Killing an Amoeba awards <strong>10 × maxHealth Exp</strong> to the attacker — they're valuable targets!</li>
+              <li><strong>Wandering AI:</strong> Amoebas roam randomly toward planets. They attack any non-Monster ships in range and bombard unowned or enemy planets.</li>
+            </ul>
+          </div>
+
+          <!-- AI & RAMPAGE -->
+          <div id="help-topic-ai" class="help-page hidden">
+            <ul>
+              <li><strong>AI Spawning:</strong> AIs spawn gradually over the first few minutes. Count is configurable at game start (default 7).</li>
+              <li><strong>AI Aggression:</strong> AIs act more frequently as they grow (2s base interval, −200ms per planet, min 500ms). They prefer nearby weak targets.</li>
+              <li><strong>Defense Thresholds:</strong> AIs with fewer than 3 planets won't attack unless at 75% garrison. Large planets (150+ cap) are held at full capacity before attacking. AIs also consider nearby threats before launching.</li>
+              <li><strong>Overpopulation:</strong> AI planets with 160+ ships have a 10% chance every 10 seconds to launch at the weakest enemy planet.</li>
+              <li><strong>Dominant Player Targeting 🎯:</strong> Players exceeding 4,500 total capacity, leading by 200+ Tech Score, or having 2× capacity of 2nd place are marked — all AIs prioritize attacking them!</li>
+              <li><strong>Homeworld Priority:</strong> AIs have a 75% chance to prioritize recapturing their lost homeworld over other targets.</li>
+              <li><strong>Rampage Events:</strong> Every ~15 minutes (accelerating to min 6 minutes), a dormant AI awakens on a neutral planet. It targets the smallest neutral with &gt;150 cap (or largest overall). It gets <strong>+300% bonus ships</strong> and produces at 3× rate. Rampage planets slowly decay in capacity until captured.</li>
+            </ul>
+          </div>
+
+          <!-- OTHER -->
+          <div id="help-topic-other" class="help-page hidden">
+            <ul>
+              <li><strong>Fog of War:</strong> Optional. You can only see within your gravity wells and ship radar. Previously discovered planets appear as silhouettes.</li>
+              <li><strong>AFK Protection:</strong> After 3 minutes of inactivity, your empire is handed to an AI.</li>
+              <li><strong>Map Layout:</strong> Default 60 planets. Sizes: Mega-Super (300 cap), Super (250), Large (150–180), Medium (120–150), Small (75–115), Tiny (53–74). Huge maps get more super planets.</li>
+              <li><strong>Configurable Settings:</strong> AI count, fog of war, production speed (0.5×–3×), hazard level (0–4×), map size (800–3200), and planet count — all set from the start screen.</li>
+              <li><strong>Leaderboard:</strong> Shows players ranked by total capacity. 🧪 = √Tech bonus %. 🎯 = √Exp×0.5 bonus %. 🪐 = capacity (% of galaxy).</li>
+              <li><strong>Player Name:</strong> Your name is saved locally and remembered between sessions.</li>
+            </ul>
+          </div>
+
+          <!-- BACK BUTTON (hidden on index) -->
+          <div id="help-back-container" style="display: none; margin-top: 15px;">
+            <button id="help-back-btn" class="cyber-btn" style="padding: 5px 15px; font-size: 1rem;">&lt; BACK TO INDEX</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
