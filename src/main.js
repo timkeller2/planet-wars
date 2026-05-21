@@ -2267,7 +2267,7 @@ window.addEventListener('DOMContentLoaded', () => {
           if (s.isCruiser) {
             ctx.shadowBlur = 10;
             ctx.shadowColor = '#0ff';
-            ctx.arc(s.x, s.y, 25 * cameraZoom, 0, Math.PI * 2);
+            ctx.arc(s.x, s.y, 5 * cameraZoom, 0, Math.PI * 2);
             ctx.stroke();
             ctx.shadowBlur = 0;
             ctx.beginPath();
@@ -2332,7 +2332,7 @@ window.addEventListener('DOMContentLoaded', () => {
           ctx.restore();
           ctx.beginPath();
         } else if (s.isCruiser) {
-          const size = ((6 + (s.maxHealth || 0) * 1.0) / 2) * cameraZoom;
+          const size = (((6 + (s.maxHealth || 0) * 1.0) / 2) * cameraZoom) / 5;
           let angle = s.angle || 0;
           let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
           let style = ownerPlayer ? ownerPlayer.cruiserStyle : 'Klingon';
