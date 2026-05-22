@@ -47,13 +47,13 @@ export class AIController {
 
     const sourceCandidates = aiPlanets.filter(p => {
       if (p.ships <= 12) return false;
-      if (p.maxShips >= 150 && p.ships < p.maxShips * 2) return false;
-      if (aiPlanets.length < 3 && p.ships < p.maxShips * 0.75) return false;
+      if (p.rampageEvent && p.maxShips >= 150 && p.ships < p.maxShips * 2) return false;
+      if (aiPlanets.length < 4 && p.ships < p.maxShips * 0.75) return false;
       return true;
     });
     if (sourceCandidates.length === 0) return;
 
-    const reserveRatio = Math.max(0.15, 0.7 - (aiPlanets.length * 0.05));
+    const reserveRatio = Math.max(0.35, 0.7 - (aiPlanets.length * 0.05));
 
     const validSources = sourceCandidates.filter(p => {
       const shipsAfterLaunch = Math.floor((p.ships - 10) / 2);
@@ -75,7 +75,7 @@ export class AIController {
         }
       }
       
-      if (p.maxShips >= 150 && shipsAfterLaunch < p.maxShips) {
+      if (p.rampageEvent && p.maxShips >= 150 && shipsAfterLaunch < p.maxShips) {
         return false;
       }
       

@@ -188,7 +188,9 @@ async function bootstrap() {
       if (!game.settings) {
         game.settings = {
           fogOfWar: options && options.fogOfWar,
-          aiCount: options && options.aiCount !== undefined ? options.aiCount : 7,
+          smallEmpires: options && options.smallEmpires,
+          noRampagers: options && options.noRampagers,
+          aiCount: options && options.aiCount !== undefined ? options.aiCount : 5,
           productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
           mapSize: options && options.mapSize !== undefined ? options.mapSize : 1600,
           planetCount: options && options.planetCount !== undefined ? options.planetCount : 60,
@@ -209,12 +211,14 @@ async function bootstrap() {
       game.lastRestartTime = now;
       
       game.settings = { 
-        fogOfWar: options && options.fogOfWar,
-        aiCount: options && options.aiCount !== undefined ? options.aiCount : 7,
-        productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
-        mapSize: options && options.mapSize !== undefined ? options.mapSize : 1600,
-        planetCount: options && options.planetCount !== undefined ? options.planetCount : 60,
-        hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0
+          fogOfWar: options && options.fogOfWar,
+          smallEmpires: options && options.smallEmpires,
+          noRampagers: options && options.noRampagers,
+          aiCount: options && options.aiCount !== undefined ? options.aiCount : 5,
+          productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
+          mapSize: options && options.mapSize !== undefined ? options.mapSize : 1600,
+          planetCount: options && options.planetCount !== undefined ? options.planetCount : 60,
+          hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0
       };
       
       game.width = game.settings.mapSize;
@@ -509,7 +513,7 @@ async function bootstrap() {
         for (const s of fleet.ships) {
           if (s.maxHealth > 0) {
             const shipExpBonus = (s.expScore || 0) * 2;
-            let cruiserRadar = Math.min(250, 25 * s.maxHealth) + shipExpBonus;
+            let cruiserRadar = Math.min(250, 5 * s.maxHealth) + shipExpBonus;
             if (s.isWarp) cruiserRadar *= 0.25;
             if (cruiserRadar > maxCruiserRadar) maxCruiserRadar = cruiserRadar;
           }
@@ -703,8 +707,9 @@ async function bootstrap() {
     
   }, TICK_RATE);
 
-  server.listen(5173, () => {
-    console.log('Server running on http://localhost:5173');
+  const PORT = process.env.PORT || 5173;
+  server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
   });
 }
 

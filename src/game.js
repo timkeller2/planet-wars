@@ -135,9 +135,45 @@ export class Game {
         }
       }
       
-      player.planetCount = 1;
+      let assignedCount = 1;
+      let totalCapacity = targetPlanet.maxShips;
+      
+      if (player !== this.monsterPlayer && this.settings && this.settings.smallEmpires) {
+        const remainingNeutral = this.planets.filter(p => 
+          p !== targetPlanet && 
+          p.owner === null && 
+          !p.isSuperPlanet && 
+          !p.isResearch && 
+          !p.isMilitary && 
+          !p.isSpeedPlanet
+        );
+        remainingNeutral.sort((a, b) => a.maxShips - b.maxShips);
+        
+        const extraPlanets = remainingNeutral.slice(0, 2);
+        for (const ep of extraPlanets) {
+          ep.owner = player;
+          ep.ships = ep.maxShips;
+          ep.justAssigned = true;
+          ep.justAssignedTimer = 0;
+          
+          // Clear hazards from newly assigned planet
+          for (const storm of this.ionStorms) {
+            if (storm.type === 'minefield' || storm.type === 'nebula') {
+              const dx = ep.x - storm.x;
+              const dy = ep.y - storm.y;
+              if (dx * dx + dy * dy <= storm.radius * storm.radius) {
+                storm.knowledge[player.id] = (storm.knowledge[player.id] || 0) + 20;
+              }
+            }
+          }
+          assignedCount++;
+          totalCapacity += ep.maxShips;
+        }
+      }
+      
+      player.planetCount = assignedCount;
       player.needsPlanet = false;
-      player.totalCapacity = targetPlanet.maxShips;
+      player.totalCapacity = totalCapacity;
       player.isAlive = true;
       return true;
     }
@@ -659,8 +695,13 @@ export class Game {
     const validShips = shipIds.map(id => this.ships.find(s => s.id === id)).filter(s => s && s.owner && s.owner.id === player.id);
     for (const ship of validShips) {
       ship.targetPlanet = null;
-      ship.targetX = targetX + (Math.random() - 0.5) * 30;
-      ship.targetY = targetY + (Math.random() - 0.5) * 30;
+      if (ship.isCruiser) {
+        ship.targetX = targetX;
+        ship.targetY = targetY;
+      } else {
+        ship.targetX = targetX + (Math.random() - 0.5) * 30;
+        ship.targetY = targetY + (Math.random() - 0.5) * 30;
+      }
       if (speedModifier !== null) ship.speedModifier = speedModifier;
       if (isWarp) {
         if (!ship.isWarp) {
@@ -717,7 +758,9 @@ export class Game {
   update(deltaTime) {
     this.gameTime += deltaTime;
 
-    if (this.gameTime >= this.nextRampageTime) {
+    if (this.settings && this.settings.noRampagers) {
+      // No rampagers
+    } else if (this.gameTime >= this.nextRampageTime) {
       this.rampageInterval = Math.max(360000, this.rampageInterval - 180000);
       this.nextRampageTime = this.gameTime + this.rampageInterval;
       const unusedAIs = this.aiPlayers.filter(p => !this.planets.some(pl => pl.owner === p));
@@ -1003,17 +1046,21 @@ export class Game {
       ship.update(deltaTime, this.ships, this.explosions, this.planets, this.lasers, this.ionStorms, this.width);
         if (ship.needsSplit) {
           ship.needsSplit = false;
+          const triggerMax = ship.maxHealth;
           if (this.monsterPlayer) {
-            this.monsterPlayer.techScore = (this.monsterPlayer.techScore || 0) + 6;
-            this.monsterPlayer.expScore = (this.monsterPlayer.expScore || 0) + 6;
+            this.monsterPlayer.techScore = (this.monsterPlayer.techScore || 0) + triggerMax;
+            this.monsterPlayer.expScore = (this.monsterPlayer.expScore || 0) + triggerMax;
           }
+          const halfSize = Math.max(1, Math.floor(triggerMax / 2));
+          ship.maxHealth = halfSize;
+          ship.health = halfSize;
           const newAmoeba = new Ship(this.nextShipId++, ship.x, ship.y, null, this.monsterPlayer, ship.x + (Math.random() - 0.5) * 400, ship.y + (Math.random() - 0.5) * 400);
           newAmoeba.isAmoeba = true;
           let speed = 0;
           for (let d = 0; d < 4; d++) speed += Math.floor(Math.random() * 6) + 1;
           newAmoeba.speed = speed;
-          newAmoeba.maxHealth = 6;
-          newAmoeba.health = 6;
+          newAmoeba.maxHealth = halfSize;
+          newAmoeba.health = halfSize;
           this.ships.push(newAmoeba);
           ship.targetX = ship.x + (Math.random() - 0.5) * 400;
           ship.targetY = ship.y + (Math.random() - 0.5) * 400;
@@ -1067,6 +1114,23 @@ export class Game {
     for (let i = this.lasers.length - 1; i >= 0; i--) {
       this.lasers[i].age += deltaTime / 1000;
       if (this.lasers[i].age > this.lasers[i].duration) {
+        const laser = this.lasers[i];
+        if (laser.color === 'cruiser-projectile') {
+          if (laser.destroysDefender) {
+            if (laser.targetPlanetId !== undefined) {
+              const targetPlanet = this.planets.find(pl => pl.id === laser.targetPlanetId);
+              if (targetPlanet && targetPlanet.ships > 0) {
+                targetPlanet.ships -= 1;
+              }
+            }
+            this.explosions.push({
+              x: laser.endX,
+              y: laser.endY,
+              color: '#ffa500',
+              age: 0
+            });
+          }
+        }
         this.lasers.splice(i, 1);
       }
     }
@@ -1208,14 +1272,36 @@ export class Game {
     
     for (const laser of this.lasers) {
       const progress = laser.age / laser.duration;
-      this.ctx.beginPath();
-      this.ctx.moveTo(laser.startX, laser.startY);
-      this.ctx.lineTo(laser.endX, laser.endY);
-      this.ctx.strokeStyle = laser.color;
-      this.ctx.globalAlpha = 1 - progress;
-      this.ctx.lineWidth = 2;
-      this.ctx.stroke();
-      this.ctx.globalAlpha = 1.0;
+      if (laser.color === 'amoeba') {
+        const curX = laser.startX + (laser.endX - laser.startX) * progress;
+        const curY = laser.startY + (laser.endY - laser.startY) * progress;
+        this.ctx.beginPath();
+        this.ctx.arc(curX, curY, 4, 0, Math.PI * 2);
+        this.ctx.fillStyle = "rgba(0, 100, 0, 1)";
+        this.ctx.strokeStyle = "#ff0";
+        this.ctx.lineWidth = 1.5;
+        this.ctx.fill();
+        this.ctx.stroke();
+      } else if (laser.color === 'cruiser-projectile') {
+        const curX = laser.startX + (laser.endX - laser.startX) * progress;
+        const curY = laser.startY + (laser.endY - laser.startY) * progress;
+        this.ctx.beginPath();
+        this.ctx.arc(curX, curY, 1, 0, Math.PI * 2);
+        this.ctx.fillStyle = "#ff5500";
+        this.ctx.strokeStyle = "#ffff00";
+        this.ctx.lineWidth = 0.4;
+        this.ctx.fill();
+        this.ctx.stroke();
+      } else {
+        this.ctx.beginPath();
+        this.ctx.moveTo(laser.startX, laser.startY);
+        this.ctx.lineTo(laser.endX, laser.endY);
+        this.ctx.strokeStyle = laser.color;
+        this.ctx.globalAlpha = 1 - progress;
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+        this.ctx.globalAlpha = 1.0;
+      }
     }
     
     for (const ship of this.ships) {

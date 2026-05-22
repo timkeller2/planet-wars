@@ -18,6 +18,8 @@ export class Ship {
     this.angle = 0;
     this.fireCooldown = Math.random(); // Start randomly staggered
     this.isCruiser = false;
+    this.planetBombardTimer = 0;
+    this.combatCooldown = 0;
     this.bomberOffsetMag = 0; // Assigned in game.js during launch
     const endSpreadRadius = targetPlanet ? targetPlanet.radius / 2 : 25;
     this.bomberTargetOffsetX = (Math.random() - 0.5) * endSpreadRadius * 2;
@@ -35,15 +37,37 @@ export class Ship {
 
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth) {
     if (!this.active) return;
+
+    if (this.isAmoeba && this.pursueTarget) {
+      const pdx = this.pursueTarget.x - this.x;
+      const pdy = this.pursueTarget.y - this.y;
+      const pDistSq = pdx * pdx + pdy * pdy;
+      if (this.pursueTarget.active && pDistSq <= 250000) {
+        this.targetPlanet = null;
+        this.targetX = this.pursueTarget.x;
+        this.targetY = this.pursueTarget.y;
+      } else {
+        this.pursueTarget = null;
+      }
+    }
+
     if (this.hazardCooldown && this.hazardCooldown > 0) {
       this.hazardCooldown -= deltaTime;
+    }
+    if (this.planetBombardTimer && this.planetBombardTimer > 0) {
+      this.planetBombardTimer -= deltaTime / 1000;
+      if (this.planetBombardTimer < 0) this.planetBombardTimer = 0;
+    }
+    if (this.combatCooldown && this.combatCooldown > 0) {
+      this.combatCooldown -= deltaTime / 1000;
+      if (this.combatCooldown < 0) this.combatCooldown = 0;
     }
 
     this.flightTime += deltaTime / 1000;
 
     const techBonus = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
     const expBonus = this.owner ? 0.5 * Math.sqrt(this.owner.expScore || 0) : 0;
-    const safeTime = (techBonus + expBonus) / 2;
+    const safeTime = techBonus + expBonus;
 
     let friendlyWellPlanet = null;
     if (allPlanets && this.owner) {
@@ -88,21 +112,19 @@ export class Ship {
       }
     }
 
-    const laserTechBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
-    const rawTech = this.owner ? (this.owner.techScore || 0) : 0;
-    const rawExp = this.owner ? (this.owner.expScore || 0) : 0;
-    const shipExp = this.expScore || 0;
+    const laserTechBonus = 0.01 * techBonus;
+    const shipExpBonus = 0.5 * Math.sqrt(this.expScore || 0);
     
     // Range Calculation
     let effectiveRange = 40 * (1 + laserTechBonus);
     if (this.isAmoeba) {
       effectiveRange = 50;
     } else if (this.maxHealth > 0) {
-      const xpRangeBonus = (rawExp + shipExp) * 0.005;
+      const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
       const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
-      effectiveRange = baseDogfightRange * 1.5;
+      effectiveRange = baseDogfightRange * 1.10;
       if (this.bombs > 0) {
-        effectiveRange += baseDogfightRange * 1.5;
+        effectiveRange += baseDogfightRange * 0.10;
       }
     } else {
       const healthBonus = Math.floor(this.health);
@@ -115,18 +137,18 @@ export class Ship {
     if (this.maxHealth > 0 && !this.isAmoeba) {
       hitChance = 0.10;
       if (this.bombs > 0) hitChance += 0.10;
-      hitChance += (rawTech + rawExp + shipExp) / 100;
+      hitChance += (techBonus + expBonus + shipExpBonus) / 100;
     } else {
       const bombBonus = (this.bombs && this.bombs > 0) ? (this.bombs * 3) : 0;
       const interceptorBonus = this.isInterceptor ? 5 : 0;
-      hitChance = (10 + rawTech + rawExp + shipExp + this.maxHealth * 5 + interceptorBonus + bombBonus) / 100;
+      hitChance = (10 + techBonus + expBonus + shipExpBonus + this.maxHealth * 5 + interceptorBonus + bombBonus) / 100;
     }
     hitChance = Math.min(1.0, hitChance);
 
     // Rate of Fire (maxShots)
     let maxShots = 1;
     if (this.maxHealth > 0 && !this.isAmoeba) {
-      maxShots = Math.max(1, Math.floor((this.maxHealth + this.health) / 2));
+      maxShots = Math.max(1, Math.floor((this.maxHealth + this.health) / 6));
     } else if (this.maxHealth > 0) {
       maxShots = Math.max(1, Math.floor(this.health));
     }
@@ -136,7 +158,11 @@ export class Ship {
     this.fireCooldown -= (deltaTime / 1000);
     if (this.fireCooldown <= 0) {
       // Stagger shots: multi-shot ships fire 1 shot per sub-interval
-      this.fireCooldown = shotsPerVolley > 1 ? (1.0 / shotsPerVolley) : 1.0;
+      let cooldownMultiplier = 1.0;
+      if (this.maxHealth > 0 && !this.isAmoeba && this.bombs <= 0) {
+        cooldownMultiplier = 2.0;
+      }
+      this.fireCooldown = (shotsPerVolley > 1 ? (1.0 / shotsPerVolley) : 1.0) * cooldownMultiplier;
       maxShots = 1; // Fire only 1 shot per trigger
 
       const amoebaCount = allShips ? allShips.filter(s => s.active && s.isAmoeba).length : 1;
@@ -165,7 +191,7 @@ export class Ship {
         if (!this.volleyShotIndex) this.volleyShotIndex = 0;
         if (this.maxHealth > 0 && this.bombs > 0 && this.volleyShotIndex === 0 && !this.isAmoeba) {
           usedBomb = true;
-          this.bombs -= 0.25;
+          this.bombs -= 0.5;
           if (this.bombs < 0) this.bombs = 0;
         }
         this.volleyShotIndex = (this.volleyShotIndex + 1) % shotsPerVolley;
@@ -180,19 +206,31 @@ export class Ship {
         
         let finalHitChance = hitChance;
         if (this.maxHealth > 0 && !this.isAmoeba) {
-          if (targetData.distSq > (squaredRange / 4)) {
-            finalHitChance /= 2;
-          }
+          finalHitChance = Math.min(1.0, finalHitChance * 2);
         }
         
         if (Math.random() < finalHitChance) {
-          const damageDealt = enemyShip.takeDamage(explosions);
-          if (damageDealt && this.owner) {
-            // XP for damaging amoebas and cruisers
-            if (enemyShip.isAmoeba && enemyShip.maxHealth > 0) {
-              this.owner.addExperience(enemyShip.maxHealth / 2);
-            } else if (enemyShip.maxHealth > 0 && !enemyShip.isAmoeba) {
-              this.owner.addExperience(enemyShip.maxHealth / 2);
+          const damageDealt = enemyShip.takeDamage(explosions, this);
+          if (damageDealt) {
+            if (this.owner) {
+              // XP for damaging amoebas and cruisers
+              if (enemyShip.isAmoeba && enemyShip.maxHealth > 0) {
+                this.owner.addExperience(enemyShip.maxHealth / 2);
+              } else if (enemyShip.maxHealth > 0 && !enemyShip.isAmoeba) {
+                this.owner.addExperience(enemyShip.maxHealth / 2);
+              }
+            }
+            // If attacker is a cruiser, and target is a cruiser or amoeba, and target is not destroyed:
+            if (this.maxHealth > 0 && !this.isAmoeba) {
+              const isTargetCruiserOrAmoeba = enemyShip.isAmoeba || (enemyShip.maxHealth > 0);
+              if (isTargetCruiserOrAmoeba && enemyShip.active && explosions) {
+                explosions.push({
+                  x: enemyShip.x,
+                  y: enemyShip.y,
+                  color: enemyShip.owner ? enemyShip.owner.color : (enemyShip.isAmoeba ? 'amoeba' : '#fff'),
+                  age: 0
+                });
+              }
             }
           }
           // Defender XP when cruiser is attacked (hit or shrug)
@@ -208,10 +246,12 @@ export class Ship {
                 this.maxHealth += 1;
                 this.health += 1;
                 this.amoebaGrowCooldown = amoebaTimer;
-                if (this.maxHealth > 12) {
-                  this.maxHealth = 6;
-                  this.health = 6;
-                  this.needsSplit = true;
+                const techBonus = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
+                const threshold = Math.max(4, techBonus);
+                if (this.maxHealth >= threshold) {
+                  if (Math.random() < 0.5) {
+                    this.needsSplit = true;
+                  }
                 }
               }
             }
@@ -223,7 +263,8 @@ export class Ship {
             startX: this.x, startY: this.y,
             endX: enemyShip.x, endY: enemyShip.y,
             color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
-            age: 0, duration: usedBomb ? 0.6 : 0.2, width: usedBomb ? 8 : undefined
+            age: 0, duration: usedBomb ? 0.6 : 0.2, width: usedBomb ? 8 : undefined,
+            isAmoebaAttack: !!this.isAmoeba
           });
         }
         
@@ -233,65 +274,115 @@ export class Ship {
       }
 
       if (this.maxHealth > 0 && shotsFired < maxShots && allPlanets && this.bombs > 0) {
-        let validPlanets = [];
-        for (const p of allPlanets) {
-          if (p.owner === this.owner) continue;
-          if (this.isAmoeba && !p.owner && (this.amoebaGrowCooldown || 0) > 0) continue;
-          if (p.ships > p.maxShips / 2) {
-            const pdx = p.x - this.x;
-            const pdy = p.y - this.y;
-            const distSq = pdx * pdx + pdy * pdy;
-            const combinedRange = effectiveRange + p.radius;
-            if (distSq < combinedRange * combinedRange) {
-              validPlanets.push(p);
+        const isCruiser = !this.isAmoeba;
+        let enemyNearby = false;
+        if (isCruiser && allShips) {
+          const range300Sq = 300 * 300;
+          for (const otherShip of allShips) {
+            if (otherShip.active && otherShip.owner !== this.owner) {
+              const odx = otherShip.x - this.x;
+              const ody = otherShip.y - this.y;
+              if (odx * odx + ody * ody <= range300Sq) {
+                enemyNearby = true;
+                break;
+              }
             }
           }
         }
+        if (!isCruiser || (this.bombs >= 1 && (!this.planetBombardTimer || this.planetBombardTimer <= 0) && !enemyNearby)) {
+          let validPlanets = [];
+          for (const p of allPlanets) {
+            if (p.owner === this.owner) continue;
+            if (this.isAmoeba && !p.owner && (this.amoebaGrowCooldown || 0) > 0) continue;
+            if (p.ships > p.maxShips / 2) {
+              const pdx = p.x - this.x;
+              const pdy = p.y - this.y;
+              const distSq = pdx * pdx + pdy * pdy;
+              const combinedRange = effectiveRange + p.radius;
+              if (distSq < combinedRange * combinedRange) {
+                validPlanets.push(p);
+              }
+            }
+          }
 
-        let firedAtPlanet = false;
-        while (shotsFired < maxShots && validPlanets.length > 0) {
-          firedAtPlanet = true;
-          const targetIndex = Math.floor(Math.random() * validPlanets.length);
-          const p = validPlanets[targetIndex];
-          
-          shotsFired++;
-          
-          if (Math.random() < (this.isAmoeba ? (hitChance / 2) : hitChance)) {
-            p.ships -= 1;
-            if (p.ships < 0) p.ships = 0;
-            else if (this.isAmoeba) {
-                if (!this.amoebaGrowCooldown || this.amoebaGrowCooldown <= 0) {
-                  this.maxHealth += 1;
-                  this.health += 1;
-                  this.amoebaGrowCooldown = amoebaTimer;
-                  if (this.maxHealth > 12) {
-                    this.maxHealth = 6;
-                    this.health = 6;
-                    this.needsSplit = true;
+          let firedAtPlanet = false;
+          while (shotsFired < maxShots && validPlanets.length > 0) {
+            firedAtPlanet = true;
+            const targetIndex = Math.floor(Math.random() * validPlanets.length);
+            const p = validPlanets[targetIndex];
+            
+            shotsFired++;
+            
+            let destroyedDefender = false;
+            let finalPlanetHitChance = this.isAmoeba ? (hitChance / 2) : hitChance;
+            if (!this.isAmoeba && this.maxHealth > 0) {
+              finalPlanetHitChance = Math.min(1.0, finalPlanetHitChance * 2);
+            }
+            if (Math.random() < finalPlanetHitChance) {
+              if (p.ships > 0) {
+                if (isCruiser) {
+                  // For cruisers, delay decrementing p.ships until the explosion (arrival)
+                  destroyedDefender = true;
+                } else {
+                  p.ships -= 1;
+                  destroyedDefender = true;
+                }
+              }
+              if (this.isAmoeba) {
+                  if (!this.amoebaGrowCooldown || this.amoebaGrowCooldown <= 0) {
+                    this.maxHealth += 1;
+                    this.health += 1;
+                    this.amoebaGrowCooldown = amoebaTimer;
+                    const techBonus = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
+                    const threshold = Math.max(4, techBonus);
+                    if (this.maxHealth >= threshold) {
+                      if (Math.random() < 0.5) {
+                        this.needsSplit = true;
+                      }
+                    }
                   }
                 }
               }
+            if (lasers) {
+              if (isCruiser) {
+                lasers.push({
+                  startX: this.x, startY: this.y,
+                  endX: p.x + (Math.random() - 0.5) * p.radius, 
+                  endY: p.y + (Math.random() - 0.5) * p.radius,
+                  color: 'cruiser-projectile',
+                  age: 0, duration: 1.0, width: 8,
+                  destroysDefender: destroyedDefender,
+                  targetPlanetId: p.id
+                });
+              } else {
+                lasers.push({
+                  startX: this.x, startY: this.y,
+                  endX: p.x + (Math.random() - 0.5) * p.radius, 
+                  endY: p.y + (Math.random() - 0.5) * p.radius,
+                  color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
+                  age: 0, duration: 0.6, width: 8,
+                  isAmoebaAttack: !!this.isAmoeba
+                });
+              }
             }
-          if (lasers) {
-            lasers.push({
-              startX: this.x, startY: this.y,
-              endX: p.x + (Math.random() - 0.5) * p.radius, 
-              endY: p.y + (Math.random() - 0.5) * p.radius,
-              color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
-              age: 0, duration: 0.6, width: 8
-            });
           }
-        }
-        if (firedAtPlanet) {
-          this.bombs--;
+          if (firedAtPlanet) {
+            if (isCruiser) {
+              this.bombs--;
+              if (this.bombs < 0) this.bombs = 0;
+              this.planetBombardTimer = 2.0;
+            } else {
+              this.bombs--;
+            }
+          }
         }
       }
     }
     let destX = this.targetPlanet ? this.targetPlanet.x : this.targetX;
     let destY = this.targetPlanet ? this.targetPlanet.y : this.targetY;
 
-    const finalDestX = destX + (this.isBomber ? this.bomberTargetOffsetX : this.endOffsetX);
-    const finalDestY = destY + (this.isBomber ? this.bomberTargetOffsetY : this.endOffsetY);
+    const finalDestX = destX + (this.isCruiser ? 0 : (this.isBomber ? this.bomberTargetOffsetX : this.endOffsetX));
+    const finalDestY = destY + (this.isCruiser ? 0 : (this.isBomber ? this.bomberTargetOffsetY : this.endOffsetY));
 
     const totalDx = finalDestX - this.startX;
     const totalDy = finalDestY - this.startY;
@@ -355,7 +446,8 @@ export class Ship {
             endX: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
             endY: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
             color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
-            age: 0, duration: 0.2
+            age: 0, duration: 0.2,
+            isAmoebaAttack: !!this.isAmoeba
           });
         }
       }
@@ -370,16 +462,23 @@ export class Ship {
       
       if (this.inFriendlyWell) {
         if (this.health < this.maxHealth) {
-          let healRate = (deltaTime / 60000) * 2;
+          let healRate = (deltaTime / 60000) * 6;
           this.health = Math.min(this.maxHealth, this.health + healRate);
         }
-        this.fuel = Math.min(this.maxHealth / 5, (this.fuel || 0) + (deltaTime / 1000) / 10);
         
-        if (this.bombs < (this.maxHealth / 5) && friendlyWellPlanet) {
-          this.bombReloadTimer += deltaTime / 1000;
-          if (this.bombReloadTimer >= 5) {
-            this.bombReloadTimer = 0;
-            this.bombs++;
+        // Cruisers don't recover bombs or fuel while in warp
+        if (!this.isWarp) {
+          const recoveryRate = (this.combatCooldown && this.combatCooldown > 0) ? 0.5 : 1.0;
+          this.fuel = Math.min(this.maxHealth / 5, (this.fuel || 0) + ((deltaTime / 1000) / 10) * recoveryRate);
+          
+          if (this.bombs < (this.maxHealth / 5) && friendlyWellPlanet) {
+            const maxBombs = Math.floor(this.maxHealth / 5);
+            const reloadMultiplier = 0.5 * (1 + 0.1 * maxBombs);
+            this.bombReloadTimer += (deltaTime / 1000) * reloadMultiplier * recoveryRate;
+            if (this.bombReloadTimer >= 5) {
+              this.bombReloadTimer = 0;
+              this.bombs++;
+            }
           }
         }
       } else {
@@ -409,6 +508,9 @@ export class Ship {
     if (this.targetPlanet) {
       if (distance < this.targetPlanet.radius) {
         if (this.maxHealth > 0 && this.health >= 0) {
+          if (this.isWarp) {
+            this.isWarp = false;
+          }
           return;
         }
         // Reached destination planet
@@ -430,6 +532,13 @@ export class Ship {
       }
     } else {
       if (distance < 5) {
+        if (this.maxHealth > 0 && !this.isAmoeba) {
+          this.isWarp = false;
+        }
+        if (this.isCruiser) {
+          this.x = finalDestX;
+          this.y = finalDestY;
+        }
         if (this.isAmoeba && allPlanets && allPlanets.length > 0) {
           const target = allPlanets[Math.floor(Math.random() * allPlanets.length)];
           this.targetX = target.x + (Math.random() - 0.5) * 400;
@@ -561,6 +670,10 @@ export class Ship {
       this.insideHazards = currentHazards;
     }
 
+    if (this.maxHealth > 0 && !this.isAmoeba) {
+      effectiveSpeed *= (this.health + this.maxHealth) / (2 * this.maxHealth);
+    }
+
     const moveDistance = effectiveSpeed * (deltaTime / 1000);
     if (moveDistanceToDest > 0) {
       this.x += (dx / moveDistanceToDest) * moveDistance;
@@ -568,20 +681,44 @@ export class Ship {
     }
   }
 
-  takeDamage(explosions) {
+  takeDamage(explosions, attacker = null) {
     if (this.health >= 0) {
+      if (this.isAmoeba && attacker && attacker.active && attacker.owner !== this.owner) {
+        this.pursueTarget = attacker;
+        this.targetPlanet = null;
+        this.targetX = attacker.x;
+        this.targetY = attacker.y;
+        this.startX = this.x;
+        this.startY = this.y;
+      }
       if (this.maxHealth > 0) {
-        const rawExp = this.owner ? (this.owner.expScore || 0) : 0;
-        const rawTech = this.owner ? (this.owner.techScore || 0) : 0;
-        const shipExp = this.expScore || 0;
+        const techBonus = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
+        const expBonus = this.owner ? 0.5 * Math.sqrt(this.owner.expScore || 0) : 0;
+        const shipExpBonus = 0.5 * Math.sqrt(this.expScore || 0);
         let shrugChance = 0;
         if (!this.isAmoeba) {
-          shrugChance = Math.min(0.80, (this.maxHealth + rawTech + rawExp + shipExp) / 100);
+          shrugChance = Math.min(0.75, (this.maxHealth + (techBonus + expBonus + shipExpBonus)) / 100);
+          if ((this.bombs || 0) < 1) {
+            shrugChance /= 2;
+          }
         } else {
-          shrugChance = Math.min(0.90, 0.50 + this.maxHealth * 0.03 + rawExp * 0.01 + rawTech * 0.01 + shipExp * 0.01);
+          shrugChance = Math.min(0.90, 0.50 + this.maxHealth * 0.03 + (techBonus + expBonus + shipExpBonus) * 0.02);
         }
         if (Math.random() < shrugChance) {
           // Damage shrugged off
+          if (this.isAmoeba && explosions) {
+            const size = (6 + (this.maxHealth || 0) * 1.5);
+            const angle = Math.random() * Math.PI * 2;
+            const dist = Math.random() * size;
+            const offsetX = Math.cos(angle) * dist;
+            const offsetY = Math.sin(angle) * dist;
+            explosions.push({
+              x: this.x + offsetX,
+              y: this.y + offsetY,
+              color: 'amoeba-shrug',
+              age: 0
+            });
+          }
           return false;
         }
       }
@@ -594,6 +731,8 @@ export class Ship {
           this.health = -1;
         }
       }
+      const isCruiser = this.isCruiser || (this.maxHealth > 0 && !this.isAmoeba);
+      const isAmoeba = this.isAmoeba;
       if (this.health < 0) {
         this.active = false;
         if (explosions) {
@@ -604,6 +743,13 @@ export class Ship {
             age: 0
           });
         }
+      } else if ((isCruiser || isAmoeba) && explosions) {
+        explosions.push({
+          x: this.x,
+          y: this.y,
+          color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
+          age: 0
+        });
       }
       return true;
     }

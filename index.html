@@ -14,10 +14,12 @@
         <input type="text" id="player-name-input" class="cyber-input" placeholder="Enter your name" maxlength="16" />
         <div id="setup-options-container" class="options" style="margin-top: 15px; text-align: left; color: #0ff; font-family: 'Orbitron', sans-serif; display: none; flex-direction: column; gap: 10px;">
           <label style="cursor: pointer; display: flex; align-items: center;">
-            <input type="number" id="ai-count-input" value="7" min="0" max="50" style="width: 50px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            <input type="number" id="ai-count-input" value="5" min="0" max="50" style="width: 50px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
             AI Players
           </label>
           <label style="cursor: pointer;"><input type="checkbox" id="fog-of-war-checkbox" style="margin-right: 10px;" /> Enable Fog of War</label>
+          <label style="cursor: pointer;"><input type="checkbox" id="small-empires-checkbox" style="margin-right: 10px;" /> Small Empires</label>
+          <label style="cursor: pointer;"><input type="checkbox" id="no-rampagers-checkbox" style="margin-right: 10px;" /> No Rampagers</label>
           <label style="cursor: pointer;"><input type="checkbox" id="music-checkbox" style="margin-right: 10px;" checked /> Enable Background Music</label>
           <label style="cursor: pointer;"><input type="checkbox" id="starfield-checkbox" style="margin-right: 10px;" /> Enable Star Field</label>
           <label style="cursor: pointer; display: flex; align-items: center;">
@@ -108,6 +110,7 @@
             <button id="btn-interceptor" class="cyber-btn action-btn-icon" title="Interceptor Mode (I)"><span class="btn-icon">🔺</span>I</button>
             <button id="btn-cruiser" class="cyber-btn action-btn-icon" title="Cruiser Mode (C)"><span class="btn-icon">🛸</span>C</button>
             <button id="btn-leaderboard" class="cyber-btn action-btn-icon" title="Leaderboard (L)"><span class="btn-icon">🏆</span>L</button>
+            <button id="help-btn" class="cyber-btn action-btn-icon" title="Help (?)"><span class="btn-icon">❓</span>?</button>
           </div>
         </div>
       </div>
@@ -124,7 +127,6 @@
       
       <audio id="bg-music" src="/music.wav" loop preload="auto"></audio>
       
-      <div id="help-btn" class="help-btn pointer-auto">?</div>
       <div id="help-modal" class="modal hidden">
         <div class="modal-content" style="max-height: 80vh; overflow-y: auto; text-align: left;">
           <span id="close-help" class="close-btn">&times;</span>
@@ -154,7 +156,15 @@
               <li><strong>Right-click Drag / Middle-click Drag:</strong> Pan the camera.</li>
               <li><strong>Scroll Wheel / +/- keys:</strong> Zoom in and out.</li>
               <li><strong>Arrow Keys:</strong> Pan the camera.</li>
-              <li><strong>Touch:</strong> Tap to select. One-finger drag to pan. Pinch to zoom.</li>
+              <li><strong>Touch Controls (Mobile):</strong>
+                <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
+                  <li><strong>Selection:</strong> Quick tap on a planet or cruiser to select/deselect it.</li>
+                  <li><strong>Issue Commands:</strong> Tap and **hold for 450ms** on an enemy planet or empty space to attack or move (marked by a floating <em>COMMAND ISSUED</em> neon text). This prevents accidental selections from clearing when ordering attacks!</li>
+                  <li><strong>View Stats (Tooltips):</strong> Touch down or slowly slide your finger over a planet, cruiser, or space amoeba to display its detailed status overlay.</li>
+                  <li><strong>Camera Pan:</strong> Drag your finger quickly (>10px) to slide the camera (automatically hides tooltips to keep the view clean).</li>
+                  <li><strong>Pinch to Zoom:</strong> Two-finger pinch to zoom in/out smoothly.</li>
+                </ul>
+              </li>
               <li><strong>Enter:</strong> Open/send chat messages.</li>
               <li><strong>Pause/Break:</strong> Pause the game.</li>
               <li><strong>Speed Keys (1, 2, 3):</strong> Set fleet speed to 1/4, 1/2, or normal. Keys 2 and 3 also set the <em>default</em> speed for future launches.</li>
@@ -166,6 +176,7 @@
               <li><strong>I — Interceptor:</strong> Launch fast interceptor ships (can be launched from any planet).</li>
               <li><strong>C — Cruiser:</strong> Build a cruiser from a 🚀 Military planet or your Homeworld.</li>
               <li><strong>L — Leaderboard:</strong> Toggle the leaderboard panel.</li>
+              <li><strong>Help Button ❓:</strong> Open this How-to-Play help index (integrated into the bottom-right action buttons panel for instant touch accessibility).</li>
             </ul>
           </div>
 
@@ -213,7 +224,7 @@
               <li><strong>Human vs Human:</strong> Defender gets +2% bonus per surviving AI player. Clear out the AI first!</li>
               <li><strong>Dogfighting:</strong> Ships within 40px (expanded by Tech + Health) fire lasers each second. Base hit chance: (10 + Tech + Exp + ShipExp + maxHealth×5 + bombs×3) / 100. Interceptors get +5% bonus.</li>
               <li><strong>Fleet Attrition:</strong> Every 4 seconds, one ship per fleet is destroyed (after a safe window based on Tech+Exp). Ships inside friendly gravity wells take 1/3 attrition.</li>
-              <li><strong>Deep Space Attrition:</strong> Individual ships in deep space take escalating damage the longer they fly, starting after a safe window of (√Tech + √Exp×0.5) / 2 seconds. Bombers take half attrition.</li>
+              <li><strong>Deep Space Attrition:</strong> Individual ships in deep space take escalating damage the longer they fly, starting after a safe window of (√Tech + √Exp×0.5) seconds. Bombers take half attrition.</li>
               <li><strong>Speed Modifiers (1/2/3):</strong> 1/4 speed gets a <strong>90%</strong> Saving Roll vs damage. 1/2 speed gets <strong>75%</strong>. Cruisers and Amoebas always survive rolls.</li>
               <li><strong>Warp Drive (W):</strong> Adds (30 − your planet count, min 5) speed bonus. Each ship has a <strong>(50% − √Tech)%</strong> chance to explode on launch!</li>
               <li><strong>Bombers (B/Q):</strong> Military 🚀 planets only. Sends 1/3 of fleet at speed 20. Costs -1 max capacity.
@@ -231,12 +242,13 @@
           <!-- CRUISERS & INTERCEPTORS -->
           <div id="help-topic-cruisers" class="help-page hidden">
             <ul>
-              <li><strong>Cruisers 🛸:</strong> Capital ships built from Military planets or Homeworlds (requires 60+ ships and 60+ max capacity). Press <strong>C</strong> to build.</li>
+              <li><strong>Cruisers 🛸:</strong> Capital ships built from Military planets or Homeworlds (requires 60+ ships and 60+ max capacity). Press <strong>C</strong> to build. Cruisers render at double the standard graphic size and move perfectly centered to the clicked destination coordinates.</li>
               <li><strong>Cruiser Stats:</strong> Health = garrison/25. Cost = health×15 ships + health×2 max capacity. Speed decreases with health. They orbit enemy planets instead of landing.</li>
               <li><strong>Multi-shot:</strong> Cruisers fire multiple laser shots per second equal to their current health, targeting enemy ships and planets.</li>
-              <li><strong>Bomb Sacs:</strong> Cruisers carry bombs equal to 1/5 of their max health. Each dogfight volley at planets consumes one bomb sac. Bombs reload at friendly gravity wells (1 per 5 seconds).</li>
-              <li><strong>Damage Resistance:</strong> Cruisers have a (50% + maxHealth×3%) chance to shrug off hits entirely, up to 80%.</li>
+              <li><strong>Bomb Sacs:</strong> Cruisers carry bombs equal to 1/5 of their max health. Each dogfight volley at planets consumes one bomb sac. Bombs reload at friendly gravity wells (base rate of 1 per 10 seconds, but reload rate increases by +10% per max bomb capability).</li>
+              <li><strong>Armor Deflection (Damage Resistance):</strong> Cruisers have a base chance to completely shrug off incoming damage equal to <strong>(Max Health + √Tech + √Exp × 0.5 + √ShipExp × 0.5)%</strong> (capped at <strong>75%</strong>). However, if their bomb sacs are completely empty (0), this deflection chance is <strong>cut in half</strong>. Keep them armed!</li>
               <li><strong>Healing:</strong> Cruisers heal slowly inside friendly gravity wells. Outside wells, they burn fuel; when fuel runs out, they take slow health decay and move at reduced speed.</li>
+              <li><strong>Bombardment Threat Safety:</strong> Cruisers will automatically <strong>suspend planetary bombardment</strong> if there is any active enemy ship or wild Space Amoeba within a <strong>300px</strong> radius, switching their weapon systems entirely to defensive engagement.</li>
               <li><strong>Interceptors 🔺:</strong> Fast ships (speed 40) with +5% dogfight bonus. Created by pressing <strong>I</strong> from a non-special planet (permanently marks it). Interceptors have <strong>50% penalty</strong> attacking planets but excel at killing ships in space.</li>
               <li><strong>Interceptor Landing:</strong> Interceptors have a 30% chance to crash when landing on a friendly planet.</li>
             </ul>
@@ -262,9 +274,9 @@
             <ul>
               <li><strong>Giant Space Amoebas 🧬:</strong> Alien creatures belonging to the "Monsters" faction. They wander the map attacking ships and bombarding planets.</li>
               <li><strong>Amoeba Hive:</strong> The Monsters' homeworld. Spawns a new Amoeba every <strong>2 minutes</strong>. Initial Amoebas also spawn scattered across the map at game start (1 per 10 planets).</li>
-              <li><strong>Stats:</strong> Speed = 4d6 (varies per Amoeba). Health = 1–3 (random). Attack range = 50px. They fire dark green projectiles with yellow borders.</li>
-              <li><strong>Regeneration:</strong> Amoebas slowly heal over time (1 HP per minute). When reduced to 0 health, if maxHealth &gt; 0, they lose 1 maxHealth but fully regenerate — shrinking visually each time.</li>
-              <li><strong>Growth &amp; Splitting:</strong> Killing an enemy ship or bombarding a planet grants +1 maxHealth and +1 health (30-second cooldown). If maxHealth exceeds 4, the Amoeba <strong>splits</strong> into two smaller Amoebas (each with 2 HP).</li>
+              <li><strong>Stats:</strong> Speed = 4d6 (varies per Amoeba). Health = 1–3 (random). Attack range = 50px. Amoebas render at double the standard graphic size and attack targets or planets with a beautiful, custom-designed organic green plasma particle spray animation.</li>
+              <li><strong>Regeneration &amp; Armor:</strong> Amoebas slowly heal over time (1 HP per minute). They possess incredibly thick shields/hides, giving them a 50% + 3% per Max Health + 2% per Tech/Exp modifier chance to completely deflect hits (capped at <strong>90%</strong>). When shrugging damage, a mini green shrug-ripple animation triggers at a randomized coordinate within the visual boundary of the Amoeba. When reduced to 0 health, if maxHealth &gt; 0, they lose 1 maxHealth but fully regenerate — shrinking visually each time.</li>
+              <li><strong>Growth &amp; Splitting:</strong> Killing an enemy ship or bombarding a planet grants +1 maxHealth and +1 health (30-second cooldown). If its maxHealth reaches the splitting threshold (Math.max(4, techBonus)), it has a 50% chance to split into two smaller Amoebas, each taking half of the parent's maxHealth and health. Splitting also feeds the Monster faction, adding experience and tech score equal to the parent's pre-split maxHealth!</li>
               <li><strong>Bomb Sacs:</strong> Amoebas carry bomb sacs equal to their maxHealth. These regenerate naturally (1 per 60 seconds) without needing a friendly well.</li>
               <li><strong>Combat Value:</strong> Killing an Amoeba awards <strong>10 × maxHealth Exp</strong> to the attacker — they're valuable targets!</li>
               <li><strong>Wandering AI:</strong> Amoebas roam randomly toward planets. They attack any non-Monster ships in range and bombard unowned or enemy planets.</li>
@@ -274,13 +286,28 @@
           <!-- AI & RAMPAGE -->
           <div id="help-topic-ai" class="help-page hidden">
             <ul>
-              <li><strong>AI Spawning:</strong> AIs spawn gradually over the first few minutes. Count is configurable at game start (default 7).</li>
-              <li><strong>AI Aggression:</strong> AIs act more frequently as they grow (2s base interval, −200ms per planet, min 500ms). They prefer nearby weak targets.</li>
-              <li><strong>Defense Thresholds:</strong> AIs with fewer than 3 planets won't attack unless at 75% garrison. Large planets (150+ cap) are held at full capacity before attacking. AIs also consider nearby threats before launching.</li>
-              <li><strong>Overpopulation:</strong> AI planets with 160+ ships have a 10% chance every 10 seconds to launch at the weakest enemy planet.</li>
-              <li><strong>Dominant Player Targeting 🎯:</strong> Players exceeding 4,500 total capacity, leading by 200+ Tech Score, or having 2× capacity of 2nd place are marked — all AIs prioritize attacking them!</li>
-              <li><strong>Homeworld Priority:</strong> AIs have a 75% chance to prioritize recapturing their lost homeworld over other targets.</li>
-              <li><strong>Rampage Events:</strong> Every ~15 minutes (accelerating to min 6 minutes), a dormant AI awakens on a neutral planet. It targets the smallest neutral with &gt;150 cap (or largest overall). It gets <strong>+300% bonus ships</strong> and produces at 3× rate. Rampage planets slowly decay in capacity until captured.</li>
+              <li><strong>AI Spawning:</strong> AIs spawn gradually over the first <strong>4 minutes</strong> of the game (interval scales dynamically based on the active AI count). The count is configurable at game start (default <strong>5</strong>).</li>
+              <li><strong>AI Aggression:</strong> AIs act and make decisions more frequently as they grow. The base decision interval is <strong>2.0 seconds</strong>, which decreases by <strong>0.2 seconds per planet owned</strong>, down to a hyper-aggressive minimum of <strong>0.5 seconds</strong>.</li>
+              <li><strong>Defense Thresholds &amp; Safety Reserves:</strong>
+                <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
+                  <li><strong>Small Empires:</strong> AI players with fewer than <strong>4 planets</strong> will not launch attacks from any planet unless its garrison exceeds <strong>75% capacity</strong>.</li>
+                  <li><strong>Minimum Garrison:</strong> AI planets will never launch attacks if they have <strong>12 or fewer ships</strong>.</li>
+                  <li><strong>Threat Safety Reserves:</strong> The AI calculates a launch reserve ratio (starts at <strong>70%</strong> and decreases by <strong>5% per planet owned</strong>, down to a <strong>35% minimum</strong>). If a launch would drop the garrison below this reserve ratio, the AI scans for hostile planets within <strong>400px</strong> with <strong>&gt;15 ships</strong>. If any significant threats are detected, there is only a <strong>10% chance</strong> the AI will risk launching.</li>
+                </ul>
+              </li>
+              <li><strong>Launch Worthiness:</strong> AIs will only launch an attack if the source planet's garrison exceeds the target planet's garrison by <strong>more than 10 ships</strong>.</li>
+              <li><strong>AI Speed Limits:</strong> If the AI player's √Tech bonus is &lt; 7 (Tech Score &lt; 49), its launched fleets are limited to <strong>1/2 Speed</strong>. Once they reach 49+ Tech, fleets launch at <strong>Normal Speed</strong> (1.0).</li>
+              <li><strong>Overpopulation:</strong> AI planets with <strong>&gt;160 ships</strong> have a <strong>10% chance every 10 seconds</strong> to automatically launch an attack at the weakest enemy planet.</li>
+              <li><strong>Dominant Player Targeting 🎯:</strong> AIs coordinate to prioritize and target dominant leaders! A player is marked as a dominant threat if they exceed <strong>4,500 total capacity</strong>, hold a Tech Score lead of <strong>200+ points</strong>, or possess at least <strong>double the capacity</strong> of the second-place player. Targets owned by a dominant threat receive a huge priority boost (subtracting 200 from the target score).</li>
+              <li><strong>Homeworld Priority:</strong> AIs will fiercely defend and retake their homeworld if captured. Retaking their lost homeworld is given an extremely high priority (subtracting 500 from target score), and if it is within their top targets, they have a <strong>75% chance</strong> to attack it immediately.</li>
+              <li><strong>Rampage Events:</strong> Triggered roughly every <strong>15 minutes</strong> (scaled by map size, and accelerating by −3 minutes per event down to a <strong>6-minute minimum</strong>). A dormant AI player awakens on a neutral planet, targeting the smallest neutral planet with &gt;150 capacity (or the largest neutral overall).
+                <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
+                  <li><strong>Rampage Garrison:</strong> The planet is instantly reinforced with <strong>+300%</strong> of its max capacity in ships.</li>
+                  <li><strong>Vicious Production:</strong> Ships are produced at a <strong>3× rate</strong>.</li>
+                  <li><strong>Garrison Safety:</strong> The AI will not launch from a Rampage planet of &gt;= 150 capacity unless its garrison exceeds <strong>200% of max capacity</strong>, and it must retain at least <strong>100% capacity</strong> after launching.</li>
+                  <li><strong>Capacity Decay &amp; Collapse:</strong> Rather than growing when full, the planet **loses 1 max capacity** periodically. Additionally, **every ship launch permanently drains 1 max capacity**. If its maximum capacity drops <strong>below 55</strong>, the planet undergoes catastrophic collapse and is **completely destroyed**! This decay persists until the planet is successfully captured by another player.</li>
+                </ul>
+              </li>
             </ul>
           </div>
 
@@ -292,6 +319,7 @@
               <li><strong>Map Layout:</strong> Default 60 planets. Sizes: Mega-Super (300 cap), Super (250), Large (150–180), Medium (120–150), Small (75–115), Tiny (53–74). Huge maps get more super planets.</li>
               <li><strong>Configurable Settings:</strong> AI count, fog of war, production speed (0.5×–3×), hazard level (0–4×), map size (800–3200), and planet count — all set from the start screen.</li>
               <li><strong>Leaderboard:</strong> Shows players ranked by total capacity. 🧪 = √Tech bonus %. 🎯 = √Exp×0.5 bonus %. 🪐 = capacity (% of galaxy).</li>
+              <li><strong>Mobile responsive Viewport:</strong> Fully optimized for portrait/upright iPhone layouts. Action buttons (including the Help ❓ button) stack neatly into two compact horizontal rows with optimized touch target sizes, the leaderboard scales to the top-right with scroll limits, and the options/menus have scrollable areas to avoid cutoffs.</li>
               <li><strong>Player Name:</strong> Your name is saved locally and remembered between sessions.</li>
             </ul>
           </div>

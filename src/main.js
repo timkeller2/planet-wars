@@ -192,7 +192,16 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   let lastSuggestedPlanets = 50;
-  let lastSuggestedAI = 7;
+  let lastSuggestedAI = 5;
+
+  if (planetCountInput && aiCountInput) {
+    planetCountInput.addEventListener('input', () => {
+      const planets = parseInt(planetCountInput.value, 10) || 0;
+      const suggestedAI = Math.floor(planets / 10);
+      aiCountInput.value = suggestedAI;
+      lastSuggestedAI = suggestedAI;
+    });
+  }
 
   if (mapSizeselect) {
     mapSizeselect.addEventListener('change', () => {
@@ -207,14 +216,9 @@ window.addEventListener('DOMContentLoaded', () => {
         const suggestedPlanets = Math.min(60, Math.round(50 * scale));
         if (parseInt(planetCountInput.value, 10) === lastSuggestedPlanets) {
           planetCountInput.value = suggestedPlanets;
+          planetCountInput.dispatchEvent(new Event('input'));
         }
         lastSuggestedPlanets = suggestedPlanets;
-
-        const suggestedAI = Math.max(0, Math.floor(suggestedPlanets / 10) - 1);
-        if (parseInt(aiCountInput.value, 10) === lastSuggestedAI) {
-          aiCountInput.value = suggestedAI;
-        }
-        lastSuggestedAI = suggestedAI;
       }
     });
   }
@@ -227,14 +231,9 @@ window.addEventListener('DOMContentLoaded', () => {
         const suggestedPlanets = Math.min(60, Math.round(50 * scale));
         if (parseInt(planetCountInput.value, 10) === lastSuggestedPlanets) {
           planetCountInput.value = suggestedPlanets;
+          planetCountInput.dispatchEvent(new Event('input'));
         }
         lastSuggestedPlanets = suggestedPlanets;
-
-        const suggestedAI = Math.max(0, Math.floor(suggestedPlanets / 10) - 1);
-        if (parseInt(aiCountInput.value, 10) === lastSuggestedAI) {
-          aiCountInput.value = suggestedAI;
-        }
-        lastSuggestedAI = suggestedAI;
       }
     });
   }
@@ -400,6 +399,43 @@ window.addEventListener('DOMContentLoaded', () => {
     const clone = sounds[type].cloneNode();
     clone.volume = sounds[type].volume;
     clone.play().catch(e => { }); // Ignore autoplay errors
+  }
+
+  let audioCtx = null;
+  function playThudSound() {
+    try {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      osc.type = 'triangle';
+      
+      const now = audioCtx.currentTime;
+      osc.frequency.setValueAtTime(120, now);
+      osc.frequency.exponentialRampToValueAtTime(30, now + 0.25);
+      
+      gainNode.gain.setValueAtTime(0.15, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      
+      osc.start(now);
+      osc.stop(now + 0.25);
+    } catch (e) {
+      console.warn('Web Audio synthesis failed, falling back to low volume explosion:', e);
+      if (sounds.explosion) {
+        const clone = sounds.explosion.cloneNode();
+        clone.volume = 0.05;
+        clone.play().catch(err => {});
+      }
+    }
   }
 
   let lastExplosionCount = 0;
@@ -603,8 +639,24 @@ window.addEventListener('DOMContentLoaded', () => {
 
     serverState = state;
 
-    if (state.explosions && state.explosions.some(e => e.age === 0)) {
-      playSound('explosion');
+    if (state.explosions) {
+      let playNormalExplosion = false;
+      let playThud = false;
+      for (const e of state.explosions) {
+        if (e.age === 0) {
+          if (e.color === 'amoeba-shrug') {
+            playThud = true;
+          } else {
+            playNormalExplosion = true;
+          }
+        }
+      }
+      if (playThud) {
+        playThudSound();
+      }
+      if (playNormalExplosion) {
+        playSound('explosion');
+      }
     }
     lastExplosionCount = state.explosions ? state.explosions.length : 0;
 
@@ -1140,7 +1192,12 @@ window.addEventListener('DOMContentLoaded', () => {
     handlePointerUp(event);
   });
 
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartActive = false;
+  let touchLongPressed = false;
   let touchTimeout = null;
+
   canvas.addEventListener('touchstart', (event) => {
     event.preventDefault(); // Prevent double-firing with simulated mouse events
     const rect = canvas.getBoundingClientRect();
@@ -1149,6 +1206,8 @@ window.addEventListener('DOMContentLoaded', () => {
         clearTimeout(touchTimeout);
         touchTimeout = null;
       }
+      touchStartActive = false;
+      touchLongPressed = false;
       initialPinchDistance = getPinchDistance(event.touches);
       initialPinchZoom = cameraZoom;
       const mid = getPinchMidpoint(event.touches);
@@ -1165,30 +1224,48 @@ window.addEventListener('DOMContentLoaded', () => {
       const ty = event.touches[0].clientY;
       lastCameraDragX = tx;
       lastCameraDragY = ty;
-      const cPos = getCanvasPos(tx, ty);
-      handlePointerDown(cPos.x, cPos.y, event.shiftKey, true);
+      
+      touchStartX = tx;
+      touchStartY = ty;
+      touchStartActive = true;
+      touchLongPressed = false;
+      isDraggingCamera = false;
 
-      if (isDraggingCamera) {
-        touchTimeout = setTimeout(() => {
-          isDraggingCamera = false;
-          const cPosHold = getCanvasPos(tx, ty);
-          const serverPos = getMouseServerPos(cPosHold.x, cPosHold.y);
+      // Update hover tooltip immediately on touch down!
+      const cPos = getCanvasPos(tx, ty);
+      handlePointerMove(cPos.x, cPos.y);
+
+      // Set hold timer for 450ms (simulates Right-Click Order event button=2)
+      touchTimeout = setTimeout(() => {
+        if (!touchStartActive) return;
+        touchLongPressed = true;
+        
+        const cPosHold = getCanvasPos(tx, ty);
+        const serverPos = getMouseServerPos(cPosHold.x, cPosHold.y);
+
+        // Display beautiful cyber-haptic floating text at command location
+        floatingAnimations.push({
+          x: serverPos.x,
+          y: serverPos.y,
+          text: "COMMAND ISSUED",
+          color: "#0ff",
+          alpha: 1,
+          life: 1.0
+        });
+
+        // Trigger command orders (button === 2)
+        handlePointerDown(cPosHold.x, cPosHold.y, event.shiftKey, true, 2);
+
+        // Allow Lasso Mode if long press starts in empty space with no selection
+        const clickedPlanet = getPlanetAt(cPosHold.x, cPosHold.y);
+        if (!clickedPlanet && selectedPlanets.length === 0 && selectedShips.length === 0) {
           lasso.active = true;
           lasso.startX = serverPos.x;
           lasso.startY = serverPos.y;
           lasso.endX = serverPos.x;
           lasso.endY = serverPos.y;
-
-          floatingAnimations.push({
-            x: serverPos.x,
-            y: serverPos.y,
-            text: "Lasso Mode",
-            color: "#0ff",
-            alpha: 1,
-            life: 1.0
-          });
-        }, 800); // 800ms hold to start lasso
-      }
+        }
+      }, 450);
     }
   });
 
@@ -1231,20 +1308,30 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     if (event.touches.length === 1 && !initialPinchDistance) {
-      if (touchTimeout) {
-        const dx = event.touches[0].clientX - lastCameraDragX;
-        const dy = event.touches[0].clientY - lastCameraDragY;
+      const tx = event.touches[0].clientX;
+      const ty = event.touches[0].clientY;
+      const dx = tx - touchStartX;
+      const dy = ty - touchStartY;
+
+      // If finger slides significantly (> 10px), cancel hold timer and pan camera instead
+      if (touchStartActive && !touchLongPressed) {
         if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
           clearTimeout(touchTimeout);
           touchTimeout = null;
+          touchStartActive = false;
+          isDraggingCamera = true;
         }
       }
 
       if (isDraggingCamera) {
-        const dx = event.touches[0].clientX - lastCameraDragX;
-        const dy = event.touches[0].clientY - lastCameraDragY;
-        lastCameraDragX = event.touches[0].clientX;
-        lastCameraDragY = event.touches[0].clientY;
+        // Clear hovered entities when actively panning to clean up the viewport
+        hoveredPlanet = null;
+        hoveredShip = null;
+
+        const panDx = tx - lastCameraDragX;
+        const panDy = ty - lastCameraDragY;
+        lastCameraDragX = tx;
+        lastCameraDragY = ty;
 
         const mapWidth = serverState ? (serverState.width || 1920) : 1920;
         const mapHeight = serverState ? (serverState.height || 1620) : 1620;
@@ -1252,10 +1339,11 @@ window.addEventListener('DOMContentLoaded', () => {
         const scaleY = canvas.height / mapHeight;
         const finalScale = Math.min(scaleX, scaleY) * cameraZoom;
 
-        cameraPanX += (dx * cssToCanvasX) / finalScale;
-        cameraPanY += (dy * cssToCanvasY) / finalScale;
-      } else if (lasso.active) {
-        const cPos = getCanvasPos(event.touches[0].clientX, event.touches[0].clientY);
+        cameraPanX += (panDx * cssToCanvasX) / finalScale;
+        cameraPanY += (panDy * cssToCanvasY) / finalScale;
+      } else {
+        // Update hover tooltips dynamically as finger touches or holds
+        const cPos = getCanvasPos(tx, ty);
         handlePointerMove(cPos.x, cPos.y);
       }
     }
@@ -1266,6 +1354,16 @@ window.addEventListener('DOMContentLoaded', () => {
       clearTimeout(touchTimeout);
       touchTimeout = null;
     }
+
+    // Quick tap: trigger selection (button 0 / left-click) only if hold was not fired
+    if (touchStartActive && !touchLongPressed) {
+      const cPos = getCanvasPos(touchStartX, touchStartY);
+      handlePointerDown(cPos.x, cPos.y, event.shiftKey, true, 0);
+    }
+
+    touchStartActive = false;
+    touchLongPressed = false;
+
     if (event.touches.length < 2) {
       initialPinchDistance = null;
     }
@@ -1281,6 +1379,8 @@ window.addEventListener('DOMContentLoaded', () => {
       clearTimeout(touchTimeout);
       touchTimeout = null;
     }
+    touchStartActive = false;
+    touchLongPressed = false;
     initialPinchDistance = null;
     if (lasso.active) {
       handlePointerUp();
@@ -1377,13 +1477,15 @@ window.addEventListener('DOMContentLoaded', () => {
     startScreen.classList.add('hidden');
     gameUI.classList.remove('hidden');
     const fogOfWar = document.getElementById('fog-of-war-checkbox').checked;
+    const smallEmpires = document.getElementById('small-empires-checkbox').checked;
+    const noRampagers = document.getElementById('no-rampagers-checkbox').checked;
     const aiCount = parseInt(document.getElementById('ai-count-input').value, 10);
     const productionMultiple = parseFloat(document.getElementById('production-multiple-input').value) || 1.0;
     const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 1600;
     const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 50;
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
-    const payload = { fogOfWar, aiCount: isNaN(aiCount) ? 7 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm };
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
@@ -1400,6 +1502,8 @@ window.addEventListener('DOMContentLoaded', () => {
     gameUI.classList.remove('hidden');
     if (serverState) serverState.isRunning = true;
     const fogOfWar = document.getElementById('fog-of-war-checkbox').checked;
+    const smallEmpires = document.getElementById('small-empires-checkbox').checked;
+    const noRampagers = document.getElementById('no-rampagers-checkbox').checked;
     const aiCount = parseInt(document.getElementById('ai-count-input').value, 10);
     const productionMultiple = parseFloat(document.getElementById('production-multiple-input').value) || 1.0;
     const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 1600;
@@ -1408,7 +1512,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
     hasCenteredOnHomeworld = false;
     serverState = null;
-    socket.emit('restartGame', { fogOfWar, aiCount: isNaN(aiCount) ? 7 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm });
+    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm });
   });
 
   function draw() {
@@ -1902,6 +2006,25 @@ window.addEventListener('DOMContentLoaded', () => {
               totalDefense += 15;
               lines.push({ label: 'Last stand', value: `15%`, color: '#ff0' });
             }
+
+            // PvP defense bonus (Human vs Human)
+            if (localPlayer && !localPlayer.isAI && !hpOwner.isAI) {
+              const aiOwners = new Set();
+              for (const p of serverState.planets) {
+                if (p.ownerId) {
+                  const pOwner = serverState.players.find(pl => pl.id === p.ownerId);
+                  if (pOwner && pOwner.isAI) {
+                    aiOwners.add(p.ownerId);
+                  }
+                }
+              }
+              const survivingAICount = aiOwners.size;
+              const hvhBonus = survivingAICount * 2;
+              if (hvhBonus > 0) {
+                totalDefense += hvhBonus;
+                lines.push({ label: 'PvP Defense', value: `${hvhBonus}%`, color: '#ff0' });
+              }
+            }
           } else {
             lines.push({ label: 'Neutral', value: 'No defense bonuses', color: '#888' });
           }
@@ -1991,8 +2114,14 @@ window.addEventListener('DOMContentLoaded', () => {
               lines.push({ label: 'Status', value: 'Digesting', color: '#4f4' });
             }
             lines.push({ label: 'Attack Range', value: (50 + (hs.bombs ? hs.bombs * 5 : 0)) + 'px', color: '#f88' });
-            const amoebaHitChance = Math.min(100, 10 + (hs.expScore || 0) + hs.maxHealth * 5 + (hs.bombs ? hs.bombs * 3 : 0)).toFixed(1) + '%';
+            const techBonus = Math.sqrt(hsOwner.techScore || 0);
+            const expBonus = 0.5 * Math.sqrt(hsOwner.expScore || 0);
+            const shipExpBonus = 0.5 * Math.sqrt(hs.expScore || 0);
+            const bombBonus = (hs.bombs && hs.bombs > 0) ? (hs.bombs * 3) : 0;
+            const amoebaHitChance = Math.min(100, 10 + techBonus + expBonus + shipExpBonus + hs.maxHealth * 5 + bombBonus).toFixed(1) + '%';
             lines.push({ label: 'Accuracy', value: amoebaHitChance, color: '#f88' });
+            const shrugChance = Math.min(90, Math.floor(50 + hs.maxHealth * 3 + (techBonus + expBonus + shipExpBonus) * 2));
+            lines.push({ label: 'Armor Deflection', value: shrugChance + '%', color: '#ccc' });
           } else if (hs.isCruiser) {
             lines.push({ label: hsOwner.name + ' Cruiser', value: '', color: hsOwner.color || '#0ff', isHeader: true });
             let shipClass = "Titan";
@@ -2011,27 +2140,35 @@ window.addEventListener('DOMContentLoaded', () => {
             const rawExp = hsOwner.expScore || 0;
             const shipExp = hs.expScore || 0;
 
-            const shrugChance = Math.min(80, Math.floor(hs.maxHealth + rawExp + rawTech + shipExp));
+            const techBonus = Math.sqrt(rawTech);
+            const expBonus = 0.5 * Math.sqrt(rawExp);
+            const shipExpBonus = 0.5 * Math.sqrt(shipExp);
+
+            let shrugChance = Math.min(75, Math.floor(hs.maxHealth + (techBonus + expBonus + shipExpBonus)));
+            if ((hs.bombs || 0) < 1) {
+              shrugChance = Math.floor(shrugChance / 2);
+            }
             lines.push({ label: 'Armor Deflection', value: shrugChance + '%', color: '#ccc' });
 
-            const laserTechBonus = Math.sqrt(rawTech) * 0.01;
-            const xpRangeBonus = (rawExp + shipExp) * 0.005;
+            const laserTechBonus = techBonus * 0.01;
+            const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
             const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
-            let effectiveRange = baseDogfightRange * 1.5;
+            let effectiveRange = baseDogfightRange * 1.10;
             if (hs.bombs > 0) {
-              effectiveRange += baseDogfightRange * 1.5;
+              effectiveRange += baseDogfightRange * 0.10;
             }
             effectiveRange = Math.floor(effectiveRange);
             const healthBonus = Math.floor(hs.health);
 
             let hitChanceValue = 10;
             if (hs.bombs > 0) hitChanceValue += 10;
-            hitChanceValue += rawTech + rawExp + shipExp;
-            const hitChance = Math.min(100, hitChanceValue).toFixed(1) + '%';
+            hitChanceValue += techBonus + expBonus + shipExpBonus;
+            const hitChance = Math.min(100, hitChanceValue * 2).toFixed(1) + '%';
 
-            const maxTargets = Math.max(1, healthBonus);
+            const volleySize = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
             lines.push({ label: 'Range', value: effectiveRange, color: '#f88' });
             lines.push({ label: 'Accuracy (Hit Chance)', value: hitChance, color: '#f88' });
+            lines.push({ label: 'Volley Size', value: volleySize, color: '#ffa' });
 
             let friendlyCap = 0;
             if (serverState.planets) {
@@ -2046,10 +2183,18 @@ window.addEventListener('DOMContentLoaded', () => {
             }
             if (friendlyCap > 0) {
               lines.push({ label: 'Regeneration', value: 'Active (2 HP/min)', color: '#4f4' });
-              lines.push({ label: 'Refueling', value: 'Active (6/min)', color: '#4f4' });
+              if (hs.isWarp) {
+                lines.push({ label: 'Refueling', value: 'Offline (In Warp)', color: '#888' });
+              } else {
+                lines.push({ label: 'Refueling', value: 'Active (6/min)', color: '#4f4' });
+              }
             } else {
               lines.push({ label: 'Regeneration', value: 'Offline', color: '#888' });
-              lines.push({ label: 'Deep space', value: 'Consuming Fuel (1/min)', color: '#aaf' });
+              if (hs.isWarp) {
+                lines.push({ label: 'Deep space', value: 'Consuming Fuel (2/min)', color: '#aaf' });
+              } else {
+                lines.push({ label: 'Deep space', value: 'Consuming Fuel (1/min)', color: '#aaf' });
+              }
             }
           } else {
             // Count nearby friendly ships within swarm bonus range (100px)
@@ -2142,7 +2287,7 @@ window.addEventListener('DOMContentLoaded', () => {
             // Attrition info
             const techSafe = Math.sqrt(hsOwner.techScore || 0);
             const expSafe = 0.5 * Math.sqrt(hsOwner.expScore || 0);
-            const safeTime = (techSafe + expSafe) / 2;
+            const safeTime = techSafe + expSafe;
 
             if (avgFlightTime > 0) {
               lines.push({ label: 'Flight Time', value: `${avgFlightTime.toFixed(1)}s`, color: '#aaa' });
@@ -2263,7 +2408,7 @@ window.addEventListener('DOMContentLoaded', () => {
           if (s.isCruiser) {
             ctx.shadowBlur = 10;
             ctx.shadowColor = '#0ff';
-            ctx.arc(s.x, s.y, 5 * cameraZoom, 0, Math.PI * 2);
+            ctx.arc(s.x, s.y, 20, 0, Math.PI * 2);
             ctx.stroke();
             ctx.shadowBlur = 0;
             ctx.beginPath();
@@ -2306,7 +2451,7 @@ window.addEventListener('DOMContentLoaded', () => {
           ctx.restore();
           ctx.closePath();
         } else if (s.isAmoeba) {
-          const size = ((6 + (s.maxHealth || 0) * 1.5) / 2) * cameraZoom;
+          const size = (6 + (s.maxHealth || 0) * 1.5);
           ctx.save();
           ctx.translate(s.x, s.y);
           const time = Date.now() / 500 + s.id;
@@ -2328,7 +2473,7 @@ window.addEventListener('DOMContentLoaded', () => {
           ctx.restore();
           ctx.beginPath();
         } else if (s.isCruiser) {
-          const size = (((6 + (s.maxHealth || 0) * 1.0) / 2) * cameraZoom) / 5;
+          const size = ((6 + (s.maxHealth || 0) * 1.0) / 2.5);
           let angle = s.angle || 0;
           let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
           let style = ownerPlayer ? ownerPlayer.cruiserStyle : 'Klingon';
@@ -2448,7 +2593,7 @@ window.addEventListener('DOMContentLoaded', () => {
           ctx.closePath();
           ctx.fill();
           ctx.strokeStyle = '#000';
-          ctx.lineWidth = 1 * cameraZoom;
+          ctx.lineWidth = 1;
           ctx.stroke();
           ctx.restore();
 
@@ -2456,12 +2601,17 @@ window.addEventListener('DOMContentLoaded', () => {
             const rawTech = ownerPlayer.techScore || 0;
             const rawExp = ownerPlayer.expScore || 0;
             const shipExp = s.expScore || 0;
-            const localXPBonus = 0.5 * Math.sqrt(s.expScore || 0);
-            if (localXPBonus > 20) {
+            const techBonus = Math.sqrt(rawTech);
+            const expBonus = 0.5 * Math.sqrt(rawExp);
+            const shipExpBonus = 0.5 * Math.sqrt(shipExp);
+            let hitChanceValue = 10;
+            if (s.bombs > 0) hitChanceValue += 10;
+            hitChanceValue += techBonus + expBonus + shipExpBonus;
+            if (hitChanceValue * 2 >= 100) {
               ctx.save();
               const starX = s.x + size * 0.6;
               const starY = s.y - size * 0.6;
-              const starR = 0.7 * cameraZoom;
+              const starR = 1.4;
               ctx.translate(starX, starY);
               ctx.beginPath();
               for (let i = 0; i < 5; i++) {
@@ -2472,7 +2622,7 @@ window.addEventListener('DOMContentLoaded', () => {
               ctx.fillStyle = 'gold';
               ctx.fill();
               ctx.strokeStyle = '#000';
-              ctx.lineWidth = 0.1 * cameraZoom;
+              ctx.lineWidth = 0.2;
               ctx.stroke();
               ctx.restore();
             }
@@ -2481,7 +2631,7 @@ window.addEventListener('DOMContentLoaded', () => {
               ctx.save();
               const boltX = s.x - size * 0.6;
               const boltY = s.y - size * 0.6;
-              const boltSize = 0.8 * cameraZoom;
+              const boltSize = 1.6;
               ctx.translate(boltX, boltY);
               ctx.beginPath();
               ctx.moveTo(0, -boltSize);
@@ -2494,7 +2644,7 @@ window.addEventListener('DOMContentLoaded', () => {
               ctx.fillStyle = '#0f0';
               ctx.fill();
               ctx.strokeStyle = '#000';
-              ctx.lineWidth = 0.1 * cameraZoom;
+              ctx.lineWidth = 0.2;
               ctx.stroke();
               ctx.restore();
             }
@@ -2502,15 +2652,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
           if (s.maxHealth > 0) {
             const barW = size * 1.5;
-            const barH = 2 * cameraZoom;
+            const barH = 2;
             let currentY = s.y - size - 4;
             
-            if (s.fuel !== undefined && s.fuel < s.maxHealth) {
+            const maxFuel = s.maxHealth / 5;
+            if (s.fuel !== undefined && s.fuel < maxFuel) {
               currentY -= barH;
               ctx.fillStyle = '#555';
               ctx.fillRect(s.x - barW / 2, currentY, barW, barH);
               ctx.fillStyle = '#ffa500';
-              ctx.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.fuel) / s.maxHealth), barH);
+              ctx.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.fuel) / maxFuel), barH);
               currentY -= 1;
             }
             
@@ -2532,14 +2683,51 @@ window.addEventListener('DOMContentLoaded', () => {
       if (serverState.lasers) {
         for (const laser of serverState.lasers) {
           const progress = laser.age / laser.duration;
-          if (laser.color === 'amoeba') {
+          if (laser.isAmoebaAttack || laser.color === 'amoeba') {
+            const numParticles = 12;
+            const angle = Math.atan2(laser.endY - laser.startY, laser.endX - laser.startX);
+            const dist = Math.sqrt((laser.endX - laser.startX)**2 + (laser.endY - laser.startY)**2);
+            const perpAngle = angle + Math.PI / 2;
+
+            for (let i = 0; i < numParticles; i++) {
+              // Deterministic pseudo-random seed based on coordinates and index
+              const seed = Math.sin(laser.startX * 12.9898 + laser.startY * 78.233 + i) * 43758.5453;
+              const randX = seed - Math.floor(seed);
+              const randY = (seed * 10) - Math.floor(seed * 10);
+              const randSize = (seed * 100) - Math.floor(seed * 100);
+
+              // Vary speed per particle
+              const pSpeed = 0.75 + randX * 0.5;
+              const pProgress = Math.min(1.0, progress * pSpeed);
+
+              // Spread expands outwards perpendicular to travel path
+              const maxSpread = 15 + dist * 0.12;
+              const spreadOffset = (randY - 0.5) * maxSpread * Math.sin(pProgress * Math.PI);
+
+              // Position
+              const px = laser.startX + (laser.endX - laser.startX) * pProgress + Math.cos(perpAngle) * spreadOffset;
+              const py = laser.startY + (laser.endY - laser.startY) * pProgress + Math.sin(perpAngle) * spreadOffset;
+
+              // Size and opacity scaling
+              const pRadius = 1.0 + randSize * 2.0;
+              const opacity = Math.max(0, 1.0 - pProgress);
+
+              ctx.beginPath();
+              ctx.arc(px, py, pRadius, 0, Math.PI * 2);
+              ctx.fillStyle = `rgba(0, 255, 0, ${opacity * 0.85})`;
+              ctx.strokeStyle = `rgba(0, 100, 0, ${opacity})`;
+              ctx.lineWidth = 0.5;
+              ctx.fill();
+              ctx.stroke();
+            }
+          } else if (laser.color === 'cruiser-projectile') {
             const curX = laser.startX + (laser.endX - laser.startX) * progress;
             const curY = laser.startY + (laser.endY - laser.startY) * progress;
             ctx.beginPath();
-            ctx.arc(curX, curY, 4, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(0, 100, 0, 1)";
-            ctx.strokeStyle = "#ff0";
-            ctx.lineWidth = 1.5;
+            ctx.arc(curX, curY, 1, 0, Math.PI * 2);
+            ctx.fillStyle = "#ff5500";
+            ctx.strokeStyle = "#ffff00";
+            ctx.lineWidth = 0.4;
             ctx.fill();
             ctx.stroke();
           } else {
@@ -2583,6 +2771,15 @@ window.addEventListener('DOMContentLoaded', () => {
               ctx.lineWidth = 6;
               ctx.stroke();
             }
+          } else if (exp.color === 'amoeba-shrug') {
+            ctx.beginPath();
+            const maxRadius = 6;
+            ctx.arc(exp.x, exp.y, exp.age * maxRadius, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(0, 255, 0, ${Math.max(0, 1 - exp.age) * 0.6})`;
+            ctx.fill();
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 1.0;
+            ctx.stroke();
           } else {
             ctx.beginPath();
             const maxRadius = exp.isMassive ? 400 : 35;
