@@ -1,26 +1,37 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { createServer as createViteServer } from 'vite';
 import { Game } from './src/game.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function bootstrap() {
   const app = express();
   const server = createServer(app);
   const io = new Server(server);
 
-  const vite = await createViteServer({
-    server: { 
-      middlewareMode: true,
-      watch: {
-        usePolling: true,
-        interval: 1000
-      }
-    },
-    appType: 'spa'
-  });
-  
-  app.use(vite.middlewares);
+  const isProd = process.env.NODE_ENV === 'production';
+
+  if (isProd) {
+    app.use(express.static(path.join(__dirname, 'dist')));
+  } else {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { 
+        middlewareMode: true,
+        watch: {
+          usePolling: true,
+          interval: 1000
+        }
+      },
+      appType: 'spa'
+    });
+    
+    app.use(vite.middlewares);
+  }
 
   // Initialize server game instance
   let game = new Game({ width: 1920, height: 1620 });
