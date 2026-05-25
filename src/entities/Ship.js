@@ -39,6 +39,96 @@ export class Ship {
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth) {
     if (!this.active) return;
 
+    if (this.isAssaulting) {
+      this.assaultTimer -= (deltaTime / 1000);
+      if (this.assaultTimer <= 0) {
+        this.assaultTimer = 0;
+      }
+      
+      const elapsedFraction = 1.0 - (this.assaultTimer / 3.0);
+      
+      // Attacker losses
+      const targetAttackerLosses = Math.floor(this.totalAttackerLosses * elapsedFraction);
+      const attackerLossesToApply = targetAttackerLosses - this.attackerLossesSpawned;
+      if (attackerLossesToApply > 0) {
+        this.count = Math.max(this.finalAttackerCount, this.count - attackerLossesToApply);
+        this.attackerLossesSpawned += attackerLossesToApply;
+        
+        if (explosions) {
+          for (let i = 0; i < attackerLossesToApply; i++) {
+            explosions.push({
+              x: this.x + (Math.random() - 0.5) * 15,
+              y: this.y + (Math.random() - 0.5) * 15,
+              color: this.owner ? this.owner.color : '#fff',
+              age: 0
+            });
+          }
+        }
+      }
+      
+      // Defender losses
+      const targetDefenderLosses = Math.floor(this.totalDefenderLosses * elapsedFraction);
+      const defenderLossesToApply = targetDefenderLosses - this.defenderLossesSpawned;
+      if (defenderLossesToApply > 0 && this.targetPlanet.owner !== this.owner) {
+        this.targetPlanet.ships = Math.max(0, this.targetPlanet.ships - defenderLossesToApply);
+        this.defenderLossesSpawned += defenderLossesToApply;
+        
+        if (explosions) {
+          for (let i = 0; i < defenderLossesToApply; i++) {
+            explosions.push({
+              x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
+              y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
+              color: this.targetPlanet.owner ? this.targetPlanet.owner.color : '#555',
+              age: 0
+            });
+          }
+        }
+      }
+      
+      if (this.assaultTimer <= 0) {
+        this.isAssaulting = false;
+        
+        this.targetPlanet.owner = this.finalTargetPlanetOwner;
+        this.targetPlanet.ships = this.finalTargetPlanetShips;
+        this.targetPlanet.maxShips = this.finalTargetPlanetMaxShips;
+        this.targetPlanet.dead = this.finalTargetPlanetDead;
+        this.targetPlanet.isResearch = this.finalTargetPlanetIsResearch;
+        this.targetPlanet.isMilitary = this.finalTargetPlanetIsMilitary;
+        this.targetPlanet.isSpeedPlanet = this.finalTargetPlanetIsSpeedPlanet;
+        this.targetPlanet.sacrificedShips = this.finalTargetPlanetSacrificedShips;
+        this.targetPlanet.rampageBoost = this.finalTargetPlanetRampageBoost;
+        this.targetPlanet.rampageEvent = this.finalTargetPlanetRampageEvent;
+        this.targetPlanet.defeatEvent = this.finalTargetPlanetDefeatEvent;
+        
+        this.count = 0;
+        this.active = false;
+        return;
+      }
+      
+      const dx = this.targetPlanet.x - this.x;
+      const dy = this.targetPlanet.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const targetDist = this.targetPlanet.radius;
+      
+      if (dist > 0) {
+        const desiredX = this.targetPlanet.x - (dx / dist) * targetDist;
+        const desiredY = this.targetPlanet.y - (dy / dist) * targetDist;
+        
+        this.x += (desiredX - this.x) * 0.1;
+        this.y += (desiredY - this.y) * 0.1;
+        
+        const tx = -dy / dist;
+        const ty = dx / dist;
+        const circleSpeed = 15;
+        this.x += tx * circleSpeed * (deltaTime / 1000);
+        this.y += ty * circleSpeed * (deltaTime / 1000);
+        
+        this.angle = Math.atan2(ty, tx);
+      }
+      
+      return;
+    }
+
     if (this.isAmoeba && this.pursueTarget) {
       const pdx = this.pursueTarget.x - this.x;
       const pdy = this.pursueTarget.y - this.y;
@@ -596,21 +686,68 @@ export class Ship {
           }
           return;
         }
-        // Reached destination planet
-        this.active = false;
         
-        if (this.targetPlanet.owner !== this.owner) {
-          if (explosions) {
-            explosions.push({
-              x: this.x,
-              y: this.y,
-              color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
-              age: 0
-            });
+        if (!this.isAssaulting) {
+          this.isAssaulting = true;
+          this.assaultTimer = 3.0;
+          this.initialAssaultCount = this.count;
+          
+          const originalTargetPlanetOwner = this.targetPlanet.owner;
+          const originalTargetPlanetShips = this.targetPlanet.ships;
+          const originalTargetPlanetMaxShips = this.targetPlanet.maxShips;
+          const originalTargetPlanetDead = this.targetPlanet.dead;
+          const originalTargetPlanetIsResearch = this.targetPlanet.isResearch;
+          const originalTargetPlanetIsMilitary = this.targetPlanet.isMilitary;
+          const originalTargetPlanetIsSpeedPlanet = this.targetPlanet.isSpeedPlanet;
+          const originalTargetPlanetSacrificedShips = this.targetPlanet.sacrificedShips;
+          const originalTargetPlanetRampageBoost = this.targetPlanet.rampageBoost;
+          const originalTargetPlanetRampageEvent = this.targetPlanet.rampageEvent;
+          const originalTargetPlanetDefeatEvent = this.targetPlanet.defeatEvent;
+          const originalCount = this.count;
+          
+          this.resolveCombat(allShips, null, allPlanets, ionStorms);
+          
+          this.finalTargetPlanetOwner = this.targetPlanet.owner;
+          this.finalTargetPlanetShips = this.targetPlanet.ships;
+          this.finalTargetPlanetMaxShips = this.targetPlanet.maxShips;
+          this.finalTargetPlanetDead = this.targetPlanet.dead;
+          this.finalTargetPlanetIsResearch = this.targetPlanet.isResearch;
+          this.finalTargetPlanetIsMilitary = this.targetPlanet.isMilitary;
+          this.finalTargetPlanetIsSpeedPlanet = this.targetPlanet.isSpeedPlanet;
+          this.finalTargetPlanetSacrificedShips = this.targetPlanet.sacrificedShips;
+          this.finalTargetPlanetRampageBoost = this.targetPlanet.rampageBoost;
+          this.finalTargetPlanetRampageEvent = this.targetPlanet.rampageEvent;
+          this.finalTargetPlanetDefeatEvent = this.targetPlanet.defeatEvent;
+          this.finalAttackerCount = this.count;
+          
+          this.targetPlanet.owner = originalTargetPlanetOwner;
+          this.targetPlanet.ships = originalTargetPlanetShips;
+          this.targetPlanet.maxShips = originalTargetPlanetMaxShips;
+          this.targetPlanet.dead = originalTargetPlanetDead;
+          this.targetPlanet.isResearch = originalTargetPlanetIsResearch;
+          this.targetPlanet.isMilitary = originalTargetPlanetIsMilitary;
+          this.targetPlanet.isSpeedPlanet = originalTargetPlanetIsSpeedPlanet;
+          this.targetPlanet.sacrificedShips = originalTargetPlanetSacrificedShips;
+          this.targetPlanet.rampageBoost = originalTargetPlanetRampageBoost;
+          this.targetPlanet.rampageEvent = originalTargetPlanetRampageEvent;
+          this.targetPlanet.defeatEvent = originalTargetPlanetDefeatEvent;
+          this.count = originalCount;
+          this.active = true;
+          
+          this.totalAttackerLosses = Math.max(0, this.count - this.finalAttackerCount);
+          if (originalTargetPlanetOwner !== this.owner) {
+            this.totalDefenderLosses = Math.max(0, originalTargetPlanetShips - this.finalTargetPlanetShips);
+          } else {
+            this.totalDefenderLosses = 0;
+          }
+          
+          this.attackerLossesSpawned = 0;
+          this.defenderLossesSpawned = 0;
+          
+          if (this.isWarp) {
+            this.isWarp = false;
           }
         }
-        
-        this.resolveCombat(allShips, explosions, allPlanets, ionStorms);
         return;
       }
     } else {
