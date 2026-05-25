@@ -55,7 +55,8 @@ export class Ship {
         this.attackerLossesSpawned += attackerLossesToApply;
         
         if (explosions) {
-          for (let i = 0; i < attackerLossesToApply; i++) {
+          const explosionCount = this.isFriendlyAssault ? Math.ceil(attackerLossesToApply / 3) : attackerLossesToApply;
+          for (let i = 0; i < explosionCount; i++) {
             explosions.push({
               x: this.x + (Math.random() - 0.5) * 15,
               y: this.y + (Math.random() - 0.5) * 15,
@@ -74,7 +75,8 @@ export class Ship {
         this.defenderLossesSpawned += defenderLossesToApply;
         
         if (explosions) {
-          for (let i = 0; i < defenderLossesToApply; i++) {
+          const explosionCount = this.isFriendlyAssault ? Math.ceil(defenderLossesToApply / 3) : defenderLossesToApply;
+          for (let i = 0; i < explosionCount; i++) {
             explosions.push({
               x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
               y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
@@ -105,25 +107,34 @@ export class Ship {
         return;
       }
       
-      const dx = this.targetPlanet.x - this.x;
-      const dy = this.targetPlanet.y - this.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const targetDist = this.targetPlanet.radius;
-      
-      if (dist > 0) {
-        const desiredX = this.targetPlanet.x - (dx / dist) * targetDist;
-        const desiredY = this.targetPlanet.y - (dy / dist) * targetDist;
+      if (this.isFriendlyAssault) {
+        // Strafing run: slow down and continue along same trajectory
+        const strafingSpeed = 20; // slow speed
+        this.x += this.strafingDirX * strafingSpeed * (deltaTime / 1000);
+        this.y += this.strafingDirY * strafingSpeed * (deltaTime / 1000);
+        this.angle = Math.atan2(this.strafingDirY, this.strafingDirX);
+      } else {
+        // Orbit hostile planet
+        const dx = this.targetPlanet.x - this.x;
+        const dy = this.targetPlanet.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const targetDist = this.targetPlanet.radius;
         
-        this.x += (desiredX - this.x) * 0.1;
-        this.y += (desiredY - this.y) * 0.1;
-        
-        const tx = -dy / dist;
-        const ty = dx / dist;
-        const circleSpeed = 15;
-        this.x += tx * circleSpeed * (deltaTime / 1000);
-        this.y += ty * circleSpeed * (deltaTime / 1000);
-        
-        this.angle = Math.atan2(ty, tx);
+        if (dist > 0) {
+          const desiredX = this.targetPlanet.x - (dx / dist) * targetDist;
+          const desiredY = this.targetPlanet.y - (dy / dist) * targetDist;
+          
+          this.x += (desiredX - this.x) * 0.1;
+          this.y += (desiredY - this.y) * 0.1;
+          
+          const tx = -dy / dist;
+          const ty = dx / dist;
+          const circleSpeed = 15;
+          this.x += tx * circleSpeed * (deltaTime / 1000);
+          this.y += ty * circleSpeed * (deltaTime / 1000);
+          
+          this.angle = Math.atan2(ty, tx);
+        }
       }
       
       return;
@@ -740,6 +751,13 @@ export class Ship {
           } else {
             this.totalDefenderLosses = 0;
           }
+          
+          const pdx = this.targetPlanet.x - this.x;
+          const pdy = this.targetPlanet.y - this.y;
+          const dist = Math.sqrt(pdx * pdx + pdy * pdy);
+          this.strafingDirX = pdx / (dist || 1);
+          this.strafingDirY = pdy / (dist || 1);
+          this.isFriendlyAssault = (originalTargetPlanetOwner === this.owner);
           
           this.attackerLossesSpawned = 0;
           this.defenderLossesSpawned = 0;
