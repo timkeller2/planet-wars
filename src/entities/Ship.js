@@ -56,9 +56,8 @@ export class Ship {
         this.count = Math.max(this.finalAttackerCount, this.count - attackerLossesToApply);
         this.attackerLossesSpawned += attackerLossesToApply;
         
-        if (explosions) {
-          const explosionCount = this.isFriendlyAssault ? Math.ceil(attackerLossesToApply / 3) : attackerLossesToApply;
-          for (let i = 0; i < explosionCount; i++) {
+        if (explosions && !this.isFriendlyAssault) {
+          for (let i = 0; i < attackerLossesToApply; i++) {
             explosions.push({
               x: this.x + (Math.random() - 0.5) * 15,
               y: this.y + (Math.random() - 0.5) * 15,
@@ -77,9 +76,8 @@ export class Ship {
         this.targetPlanet.ships = Math.max(0, this.targetPlanet.ships - defenderLossesToApply);
         this.defenderLossesSpawned += defenderLossesToApply;
         
-        if (explosions) {
-          const explosionCount = this.isFriendlyAssault ? Math.ceil(defenderLossesToApply / 3) : defenderLossesToApply;
-          for (let i = 0; i < explosionCount; i++) {
+        if (explosions && !this.isFriendlyAssault) {
+          for (let i = 0; i < defenderLossesToApply; i++) {
             explosions.push({
               x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
               y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
