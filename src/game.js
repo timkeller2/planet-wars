@@ -435,6 +435,7 @@ export class Game {
             console.log(`Assigned ${source.owner.cruiserStyle} style to ${source.owner.id}`);
           }
           ship.isCruiser = true;
+          ship.count = 1;
           this.ships.push(ship);
           return;
         }
@@ -487,51 +488,33 @@ export class Game {
         if (shipsToSend <= 0) return;
         source.decreaseMaxShips(1);
         if (source.maxShips < 10) source.dead = true;
-    }
+      }
     }
     
-        // Distance check for spread
-    let spread = 20;
-    let noFlightSpread = false;
-    if (target) {
-        const dx = target.x - source.x;
-        const dy = target.y - source.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 250) {
-            noFlightSpread = true;
-        } else if (dist < 500 && shipsToSend > 50) {
-            spread = 10;
-        }
+    // Spawn fleet represented as a single Ship entity
+    const ship = new Ship(this.nextShipId++, source.x, source.y, target, source.owner);
+    ship.count = shipsToSend;
+    if (source.isSpeedPlanet) ship.speed += 15;
+    ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
+    ship.sourcePlanet = source;
+    ship.expScore = source.expScore || 0;
+    ship.bomberOffsetMag = 0;
+    
+    if (isBombing) {
+      ship.isBomber = true;
+      ship.bomberType = isBombing; // 'eco' or 'ships'
+      ship.speed = 20;
     }
-
-    // Spawn ships
-    for (let i = 0; i < shipsToSend; i++) {
-      const offsetX = (Math.random() - 0.5) * spread;
-      const offsetY = (Math.random() - 0.5) * spread;
-      const ship = new Ship(this.nextShipId++, source.x + offsetX, source.y + offsetY, target, source.owner);
-      if (source.isSpeedPlanet) ship.speed += 15;
-      ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
-      ship.sourcePlanet = source;
-      ship.expScore = source.expScore || 0;
-      const offsetIndex = i % 2 === 0 ? Math.floor(i/2) : -Math.floor(i/2) - 1;
-      const spreadMultiplier = shipsToSend > 150 ? 1 : (shipsToSend > 100 ? 1.5 : 3);
-      ship.bomberOffsetMag = noFlightSpread ? 0 : offsetIndex * spreadMultiplier;
-      if (isBombing) {
-        ship.isBomber = true;
-        ship.bomberType = isBombing; // 'eco' or 'ships'
-        ship.speed = 20;
-      }
-      if (isInterceptor) {
-        ship.isInterceptor = true;
-        ship.speed = 40;
-      }
-      if (isWarp) {
-        if (this.applyWarpToShip(ship, source.owner)) {
-           continue; // Exploded!
-        }
-      }
-      this.ships.push(ship);
+    if (isInterceptor) {
+      ship.isInterceptor = true;
+      ship.speed = 40;
     }
+    if (isWarp) {
+      if (this.applyWarpToShip(ship, source.owner)) {
+         return; // Exploded!
+      }
+    }
+    this.ships.push(ship);
   }
 
 
@@ -547,27 +530,45 @@ export class Game {
     const techBonus = Math.floor(Math.sqrt(player.techScore || 0));
     const explodeChance = Math.max(0, 50 - techBonus) / 100;
     
-    if (Math.random() < explodeChance) {
-      if (!this.explosions) this.explosions = [];
-      this.explosions.push({
-        x: ship.x,
-        y: ship.y,
-        color: '#add8e6',
-        age: 0,
-        isMassive: false
-      });
-      
-      if (ship.maxHealth > 0) {
-        if (ship.fuel > 0) {
-          ship.fuel -= 1;
+    if (ship.count > 1) {
+      const explodedCount = Math.round(ship.count * explodeChance);
+      if (explodedCount > 0) {
+        ship.count -= explodedCount;
+        if (!this.explosions) this.explosions = [];
+        this.explosions.push({
+          x: ship.x,
+          y: ship.y,
+          color: '#add8e6',
+          age: 0,
+          isMassive: explodedCount > 10
+        });
+      }
+      if (ship.count <= 0) {
+        return true; // Whole fleet exploded
+      }
+    } else {
+      if (Math.random() < explodeChance) {
+        if (!this.explosions) this.explosions = [];
+        this.explosions.push({
+          x: ship.x,
+          y: ship.y,
+          color: '#add8e6',
+          age: 0,
+          isMassive: false
+        });
+        
+        if (ship.maxHealth > 0) {
+          if (ship.fuel > 0) {
+            ship.fuel -= 1;
+          } else {
+            ship.health -= 1;
+          }
+          if (ship.health <= 0) {
+            return true;
+          }
         } else {
-          ship.health -= 1;
-        }
-        if (ship.health <= 0) {
           return true;
         }
-      } else {
-        return true;
       }
     }
     
@@ -600,6 +601,7 @@ export class Game {
             source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
           }
           ship.isCruiser = true;
+          ship.count = 1;
           this.ships.push(ship);
           return;
         }
@@ -649,46 +651,30 @@ export class Game {
       }
     }
     
-        // Distance check for spread
-    let spread = 20;
-    let noFlightSpread = false;
-    const dx = targetX - source.x;
-    const dy = targetY - source.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 250) {
-        noFlightSpread = true;
-    } else if (dist < 500 && shipsToSend > 50) {
-        spread = 10;
+    // Spawn fleet represented as a single Ship entity
+    const ship = new Ship(this.nextShipId++, source.x, source.y, null, source.owner, targetX, targetY);
+    ship.count = shipsToSend;
+    if (source.isSpeedPlanet) ship.speed += 15;
+    ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
+    ship.sourcePlanet = source;
+    ship.expScore = source.expScore || 0;
+    ship.bomberOffsetMag = 0;
+    
+    if (isBombing) {
+      ship.isBomber = true;
+      ship.bomberType = isBombing;
+      ship.speed = 20;
     }
-
-    // Spawn ships
-    for (let i = 0; i < shipsToSend; i++) {
-      const offsetX = (Math.random() - 0.5) * spread;
-      const offsetY = (Math.random() - 0.5) * spread;
-      const ship = new Ship(this.nextShipId++, source.x + offsetX, source.y + offsetY, null, source.owner, targetX + (Math.random() - 0.5) * spread, targetY + (Math.random() - 0.5) * spread);
-      if (source.isSpeedPlanet) ship.speed += 15;
-      ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
-      ship.sourcePlanet = source;
-      ship.expScore = source.expScore || 0;
-      const offsetIndex = i % 2 === 0 ? Math.floor(i/2) : -Math.floor(i/2) - 1;
-      const spreadMultiplier = shipsToSend > 150 ? 1 : (shipsToSend > 100 ? 1.5 : 3);
-      ship.bomberOffsetMag = noFlightSpread ? 0 : offsetIndex * spreadMultiplier;
-      if (isBombing) {
-        ship.isBomber = true;
-        ship.bomberType = isBombing;
-        ship.speed = 20;
-      }
-      if (isInterceptor) {
-        ship.isInterceptor = true;
-        ship.speed = 40;
-      }
-      if (isWarp) {
-        if (this.applyWarpToShip(ship, source.owner)) {
-           continue; // Exploded!
-        }
-      }
-      this.ships.push(ship);
+    if (isInterceptor) {
+      ship.isInterceptor = true;
+      ship.speed = 40;
     }
+    if (isWarp) {
+      if (this.applyWarpToShip(ship, source.owner)) {
+         return; // Exploded!
+      }
+    }
+    this.ships.push(ship);
   }
 
   moveShipsToSpace(player, shipIds, targetX, targetY, isWarp = false, speedModifier = null) {

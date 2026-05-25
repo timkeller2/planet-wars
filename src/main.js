@@ -802,13 +802,13 @@ window.addEventListener('DOMContentLoaded', () => {
     let clickedShip = null;
     if (serverState && serverState.ships) {
       const pos = getMouseServerPos(x, y);
-      const hitRadius = 25;
-      const hitRadiusSq = hitRadius * hitRadius;
       for (const ship of serverState.ships) {
         if (!ship.active || ship.ownerId !== localPlayer.id) continue;
+        const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
+        const hitRadius = ship.count > 1 ? maxSpread + 10 : 25;
         const sdx = ship.x - pos.x;
         const sdy = ship.y - pos.y;
-        if (sdx * sdx + sdy * sdy < hitRadiusSq) {
+        if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
           if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
             clickedShip = ship;
           }
@@ -1004,13 +1004,13 @@ window.addEventListener('DOMContentLoaded', () => {
     // Detect hovered ship (prioritize cruisers)
     hoveredShip = null;
     if (serverState && serverState.ships) {
-      const hoverRadius = 15;
-      const hoverRadiusSq = hoverRadius * hoverRadius;
       for (const ship of serverState.ships) {
         if (!ship.active) continue;
+        const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
+        const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
         const sdx = ship.x - serverPos.x;
         const sdy = ship.y - serverPos.y;
-        if (sdx * sdx + sdy * sdy < hoverRadiusSq) {
+        if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
           if (!hoveredShip || (!hoveredShip.isCruiser && ship.isCruiser)) {
             hoveredShip = ship;
           }
@@ -2395,11 +2395,17 @@ window.addEventListener('DOMContentLoaded', () => {
         }
       }
 
+      function pseudoRandom(seed) {
+        const x = Math.sin(seed) * 10000;
+        return x - Math.floor(x);
+      }
+
       for (const s of serverState.ships) {
         if (!s.active) continue;
         const owner = serverState.players.find(pl => pl.id === s.ownerId);
 
         const isSelected = selectedShips.some(ss => ss.id === s.id);
+        const maxSpread = Math.min(60, 10 + Math.sqrt(s.count || 1) * 2.5);
 
         if (isSelected) {
           ctx.strokeStyle = '#fff';
@@ -2412,6 +2418,8 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.stroke();
             ctx.shadowBlur = 0;
             ctx.beginPath();
+          } else if (s.count > 1) {
+            ctx.arc(s.x, s.y, maxSpread + 4, 0, Math.PI * 2);
           } else if (s.isBomber) {
             ctx.arc(s.x, s.y, 7, 0, Math.PI * 2);
           } else if (s.isInterceptor) {
@@ -2423,6 +2431,57 @@ window.addEventListener('DOMContentLoaded', () => {
         }
 
         ctx.fillStyle = owner ? owner.color : '#fff';
+        
+        if (s.count > 1 && !s.isCruiser && !s.isAmoeba) {
+          const renderCount = Math.min(50, s.count);
+          for (let i = 0; i < renderCount; i++) {
+            const seed = s.id * 1000 + i;
+            const angleOffset = pseudoRandom(seed) * Math.PI * 2;
+            const radiusOffset = Math.sqrt(pseudoRandom(seed + 1)) * maxSpread;
+            const drawX = s.x + Math.cos(angleOffset) * radiusOffset;
+            const drawY = s.y + Math.sin(angleOffset) * radiusOffset;
+            
+            ctx.beginPath();
+            if (s.isBomber) {
+              let angle = 0;
+              if (s.targetX !== undefined && s.targetY !== undefined) {
+                angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
+              }
+              ctx.save();
+              ctx.translate(drawX, drawY);
+              ctx.rotate(angle + Math.PI / 2);
+              ctx.moveTo(0, -4);
+              ctx.lineTo(4, 4);
+              ctx.lineTo(-4, 4);
+              ctx.restore();
+              ctx.closePath();
+              ctx.fill();
+            } else if (s.isInterceptor) {
+              let angle = 0;
+              if (s.targetX !== undefined && s.targetY !== undefined) {
+                angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
+              }
+              ctx.save();
+              ctx.translate(drawX, drawY);
+              ctx.rotate(angle + Math.PI / 2);
+              ctx.moveTo(0, -3);
+              ctx.lineTo(3, 3);
+              ctx.lineTo(-3, 3);
+              ctx.restore();
+              ctx.closePath();
+              ctx.fill();
+            } else {
+              ctx.arc(drawX, drawY, 1.5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+          ctx.fillStyle = 'rgba(0, 255, 255, 0.8)';
+          ctx.font = 'bold 9px Orbitron';
+          ctx.textAlign = 'center';
+          ctx.fillText(s.count, s.x, s.y - maxSpread - 2);
+          continue;
+        }
+
         ctx.beginPath();
         if (s.isBomber) {
           let angle = 0;

@@ -431,6 +431,7 @@ async function bootstrap() {
       id: s.id,
       x: s.x,
       y: s.y,
+      count: s.count || 1,
       ownerId: s.owner ? s.owner.id : null,
       active: s.active,
       expScore: s.expScore || 0,
@@ -488,7 +489,7 @@ async function bootstrap() {
             playerFleets.set(targetId, { count: 0, ships: [] });
           }
           const fleet = playerFleets.get(targetId);
-          fleet.count++;
+          fleet.count += s.count || 1;
           fleet.ships.push(s);
         }
       }
