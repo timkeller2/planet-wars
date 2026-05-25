@@ -418,17 +418,18 @@ export class Game {
 
     if (isCruiserOrder) {
       if ((source.isMilitary || source.homeworldOf) && source.ships > 60 && source.maxShips > 60) {
-        const health = Math.floor(source.ships / 25);
-        const costShips = health * 15;
-        const costCap = health * 2;
+        const basePower = Math.floor(source.ships / 25);
+        const costShips = Math.floor(source.ships / 2);
+        const costCap = basePower * 2;
+        const maxHealth = Math.floor(costShips / 3);
         if (source.ships >= costShips && source.maxShips > costCap) {
           source.ships -= costShips;
           source.decreaseMaxShips(costCap);
           const ship = new Ship(this.nextShipId++, source.x, source.y, target, source.owner);
-          ship.maxHealth = health * 5;
-          ship.health = health * 5;
-          ship.fuel = health;
-          ship.speed = Math.max(5, ship.speed - 10 - health);
+          ship.maxHealth = maxHealth;
+          ship.health = maxHealth;
+          ship.fuel = basePower;
+          ship.speed = Math.max(5, ship.speed - 10 - basePower);
           if (!source.owner.cruiserStyle) {
             const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
             source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
