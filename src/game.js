@@ -894,7 +894,11 @@ export class Game {
                 ship.takeDamage(this.explosions);
               } else {
                 if (!ship.checkSurvivalRoll()) {
-                  ship.active = false;
+                  if (ship.count > 1) {
+                    ship.count--;
+                  } else {
+                    ship.active = false;
+                  }
                   this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
                 }
               }
@@ -1077,7 +1081,11 @@ export class Game {
         const victim = fleet[0];
         if (victim.checkSurvivalRoll()) continue;
         
-        victim.active = false;
+        if (victim.count > 1) {
+          victim.count--;
+        } else {
+          victim.active = false;
+        }
         if (victim.owner) victim.owner.addExperience(1);
         this.explosions.push({
           x: victim.x,

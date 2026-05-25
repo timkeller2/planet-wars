@@ -721,7 +721,11 @@ export class Ship {
                     explosions.push({ x: this.x, y: this.y, color: explosionColor, age: 0 });
                   }
                 } else {
-                  this.active = false;
+                  if (this.count > 1) {
+                    this.count--;
+                  } else {
+                    this.active = false;
+                  }
                   if (explosions) {
                     const explosionColor = h.type === 'minefield' ? '#44f' : '#ff0';
                     explosions.push({ x: this.x, y: this.y, color: explosionColor, age: 0 });
@@ -734,7 +738,9 @@ export class Ship {
                       lasers.push({ startX: midX, startY: midY, endX: this.x, endY: this.y, color: explosionColor, age: 0, duration: 0.4 });
                     }
                   }
-                  return; // Ship destroyed
+                  if (!this.active) {
+                    return; // Ship destroyed
+                  }
                 }
               }
             }
