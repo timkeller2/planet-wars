@@ -451,7 +451,8 @@ async function bootstrap() {
       speedModifier: s.speedModifier || 1.0,
       speed: s.speed || 35,
       targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,
-      targetY: s.targetPlanet ? s.targetPlanet.y : s.targetY
+      targetY: s.targetPlanet ? s.targetPlanet.y : s.targetY,
+      formation: s.formation
     }));
 
     for (const [socketId, player] of connectedClients.entries()) {

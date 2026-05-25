@@ -27,6 +27,8 @@ export class Ship {
     this.endOffsetX = (Math.random() - 0.5) * 20;
     this.endOffsetY = (Math.random() - 0.5) * 20;
     this.count = 1;
+    const formations = ['straight line', 'chevron', 'arrow', 'hex', 'circle', 'double line'];
+    this.formation = formations[Math.floor(Math.random() * formations.length)];
   }
 
   checkSurvivalRoll() {
@@ -746,7 +748,8 @@ export class Ship {
           this.active = true;
           
           this.totalAttackerLosses = Math.max(0, this.count - this.finalAttackerCount);
-          if (originalTargetPlanetOwner !== this.owner) {
+          const isFriendly = !!(originalTargetPlanetOwner && this.owner && (originalTargetPlanetOwner === this.owner || originalTargetPlanetOwner.id === this.owner.id));
+          if (!isFriendly) {
             this.totalDefenderLosses = Math.max(0, originalTargetPlanetShips - this.finalTargetPlanetShips);
           } else {
             this.totalDefenderLosses = 0;
@@ -757,7 +760,7 @@ export class Ship {
           const dist = Math.sqrt(pdx * pdx + pdy * pdy);
           this.strafingDirX = pdx / (dist || 1);
           this.strafingDirY = pdy / (dist || 1);
-          this.isFriendlyAssault = (originalTargetPlanetOwner === this.owner);
+          this.isFriendlyAssault = isFriendly;
           
           this.attackerLossesSpawned = 0;
           this.defenderLossesSpawned = 0;

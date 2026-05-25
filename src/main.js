@@ -2400,6 +2400,91 @@ window.addEventListener('DOMContentLoaded', () => {
         return x - Math.floor(x);
       }
 
+      function getFormationOffset(formationType, i, renderCount, maxSpread) {
+        let lx = 0;
+        let ly = 0;
+        switch (formationType) {
+          case 'straight line': {
+            const spacing = 8;
+            const halfCount = (renderCount - 1) / 2;
+            lx = 0;
+            ly = (i - halfCount) * spacing;
+            break;
+          }
+          case 'double line': {
+            const spacing = 10;
+            const rowSpacing = 8;
+            const row = i % 2;
+            const col = Math.floor(i / 2);
+            const halfCol = (Math.ceil(renderCount / 2) - 1) / 2;
+            lx = -row * rowSpacing;
+            ly = (col - halfCol) * spacing;
+            break;
+          }
+          case 'chevron': {
+            const spacing = 8;
+            const angle = Math.PI / 4;
+            const side = i % 2 === 0 ? 1 : -1;
+            const step = Math.floor((i + 1) / 2);
+            lx = -step * spacing * Math.cos(angle);
+            ly = side * step * spacing * Math.sin(angle);
+            break;
+          }
+          case 'arrow': {
+            let row = 0;
+            let sum = 0;
+            while (sum + row + 1 <= i) {
+              sum += row + 1;
+              row++;
+            }
+            const col = i - sum;
+            const halfCol = row / 2;
+            lx = -row * 8;
+            ly = (col - halfCol) * 8;
+            break;
+          }
+          case 'hex': {
+            if (i > 0) {
+              let ring = 1;
+              let index = i - 1;
+              while (index >= ring * 6) {
+                index -= ring * 6;
+                ring++;
+              }
+              const angle = (index / (ring * 6)) * Math.PI * 2;
+              const radius = ring * 8;
+              lx = radius * Math.cos(angle);
+              ly = radius * Math.sin(angle);
+            }
+            break;
+          }
+          case 'circle': {
+            if (i > 0) {
+              let ring = 1;
+              let index = i - 1;
+              while (index >= ring * 8) {
+                index -= ring * 8;
+                ring++;
+              }
+              const angle = (index / (ring * 8)) * Math.PI * 2;
+              const radius = ring * 9;
+              lx = radius * Math.cos(angle);
+              ly = radius * Math.sin(angle);
+            }
+            break;
+          }
+          default: {
+            const seed = i * 73 + 31;
+            const angleOffset = pseudoRandom(seed) * Math.PI * 2;
+            const radiusOffset = Math.sqrt(pseudoRandom(seed + 1)) * maxSpread;
+            lx = Math.cos(angleOffset) * radiusOffset;
+            ly = Math.sin(angleOffset) * radiusOffset;
+            break;
+          }
+        }
+        return { lx, ly };
+      }
+
       for (const s of serverState.ships) {
         if (!s.active) continue;
         const owner = serverState.players.find(pl => pl.id === s.ownerId);
@@ -2435,11 +2520,11 @@ window.addEventListener('DOMContentLoaded', () => {
         if (s.count > 1 && !s.isCruiser && !s.isAmoeba) {
           const renderCount = Math.min(50, s.count);
           for (let i = 0; i < renderCount; i++) {
-            const seed = s.id * 1000 + i;
-            const angleOffset = pseudoRandom(seed) * Math.PI * 2;
-            const radiusOffset = Math.sqrt(pseudoRandom(seed + 1)) * maxSpread;
-            const drawX = s.x + Math.cos(angleOffset) * radiusOffset;
-            const drawY = s.y + Math.sin(angleOffset) * radiusOffset;
+            const { lx, ly } = getFormationOffset(s.formation, i, renderCount, maxSpread);
+            const cos = Math.cos(s.angle || 0);
+            const sin = Math.sin(s.angle || 0);
+            const drawX = s.x + lx * cos - ly * sin;
+            const drawY = s.y + lx * sin + ly * cos;
             
             ctx.beginPath();
             if (s.isBomber) {
