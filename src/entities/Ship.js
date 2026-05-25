@@ -58,12 +58,14 @@ export class Ship {
         
         if (explosions && !this.isFriendlyAssault) {
           for (let i = 0; i < attackerLossesToApply; i++) {
-            explosions.push({
-              x: this.x + (Math.random() - 0.5) * 15,
-              y: this.y + (Math.random() - 0.5) * 15,
-              color: this.owner ? this.owner.color : '#fff',
-              age: 0
-            });
+            if (Math.random() < 0.25) {
+              explosions.push({
+                x: this.x + (Math.random() - 0.5) * 15,
+                y: this.y + (Math.random() - 0.5) * 15,
+                color: this.owner ? this.owner.color : '#fff',
+                age: 0
+              });
+            }
           }
         }
       }
@@ -78,12 +80,14 @@ export class Ship {
         
         if (explosions && !this.isFriendlyAssault) {
           for (let i = 0; i < defenderLossesToApply; i++) {
-            explosions.push({
-              x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-              y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-              color: this.targetPlanet.owner ? this.targetPlanet.owner.color : '#555',
-              age: 0
-            });
+            if (Math.random() < 0.25) {
+              explosions.push({
+                x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
+                y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
+                color: this.targetPlanet.owner ? this.targetPlanet.owner.color : '#555',
+                age: 0
+              });
+            }
           }
         }
       }
