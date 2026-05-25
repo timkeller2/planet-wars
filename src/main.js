@@ -2560,10 +2560,6 @@ window.addEventListener('DOMContentLoaded', () => {
               ctx.fill();
             }
           }
-          ctx.fillStyle = 'rgba(0, 255, 255, 0.8)';
-          ctx.font = 'bold 9px Orbitron';
-          ctx.textAlign = 'center';
-          ctx.fillText(s.count, s.x, s.y - maxSpread - 2);
           continue;
         }
 
