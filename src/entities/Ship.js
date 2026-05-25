@@ -72,7 +72,8 @@ export class Ship {
       // Defender losses
       const targetDefenderLosses = Math.floor(this.totalDefenderLosses * elapsedFraction);
       const defenderLossesToApply = targetDefenderLosses - this.defenderLossesSpawned;
-      if (defenderLossesToApply > 0 && this.targetPlanet.owner !== this.owner) {
+      const isPlanetHostile = !this.targetPlanet.owner || (this.owner && this.targetPlanet.owner.id !== this.owner.id);
+      if (defenderLossesToApply > 0 && isPlanetHostile) {
         this.targetPlanet.ships = Math.max(0, this.targetPlanet.ships - defenderLossesToApply);
         this.defenderLossesSpawned += defenderLossesToApply;
         
@@ -109,35 +110,11 @@ export class Ship {
         return;
       }
       
-      if (this.isFriendlyAssault) {
-        // Strafing run: slow down and continue along same trajectory
-        const strafingSpeed = 20; // slow speed
-        this.x += this.strafingDirX * strafingSpeed * (deltaTime / 1000);
-        this.y += this.strafingDirY * strafingSpeed * (deltaTime / 1000);
-        this.angle = Math.atan2(this.strafingDirY, this.strafingDirX);
-      } else {
-        // Orbit hostile planet
-        const dx = this.targetPlanet.x - this.x;
-        const dy = this.targetPlanet.y - this.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const targetDist = this.targetPlanet.radius;
-        
-        if (dist > 0) {
-          const desiredX = this.targetPlanet.x - (dx / dist) * targetDist;
-          const desiredY = this.targetPlanet.y - (dy / dist) * targetDist;
-          
-          this.x += (desiredX - this.x) * 0.1;
-          this.y += (desiredY - this.y) * 0.1;
-          
-          const tx = -dy / dist;
-          const ty = dx / dist;
-          const circleSpeed = 15;
-          this.x += tx * circleSpeed * (deltaTime / 1000);
-          this.y += ty * circleSpeed * (deltaTime / 1000);
-          
-          this.angle = Math.atan2(ty, tx);
-        }
-      }
+      // Strafing/Assault glide: slow down to a near stop, continue straight along same trajectory
+      const strafingSpeed = 5; // near stop
+      this.x += this.strafingDirX * strafingSpeed * (deltaTime / 1000);
+      this.y += this.strafingDirY * strafingSpeed * (deltaTime / 1000);
+      this.angle = Math.atan2(this.strafingDirY, this.strafingDirX);
       
       return;
     }
@@ -750,7 +727,12 @@ export class Ship {
           this.totalAttackerLosses = Math.max(0, this.count - this.finalAttackerCount);
           const isFriendly = !!(originalTargetPlanetOwner && this.owner && (originalTargetPlanetOwner === this.owner || originalTargetPlanetOwner.id === this.owner.id));
           if (!isFriendly) {
-            this.totalDefenderLosses = Math.max(0, originalTargetPlanetShips - this.finalTargetPlanetShips);
+            const planetCaptured = !originalTargetPlanetOwner || (this.finalTargetPlanetOwner && this.finalTargetPlanetOwner.id !== originalTargetPlanetOwner.id);
+            if (planetCaptured) {
+              this.totalDefenderLosses = originalTargetPlanetShips;
+            } else {
+              this.totalDefenderLosses = Math.max(0, originalTargetPlanetShips - this.finalTargetPlanetShips);
+            }
           } else {
             this.totalDefenderLosses = 0;
           }
