@@ -2404,32 +2404,6 @@ window.addEventListener('DOMContentLoaded', () => {
         let lx = 0;
         let ly = 0;
         switch (formationType) {
-          case 'straight line': {
-            const spacing = 5;
-            const halfCount = (renderCount - 1) / 2;
-            lx = 0;
-            ly = (i - halfCount) * spacing;
-            break;
-          }
-          case 'double line': {
-            const spacing = 6;
-            const rowSpacing = 5;
-            const row = i % 2;
-            const col = Math.floor(i / 2);
-            const halfCol = (Math.ceil(renderCount / 2) - 1) / 2;
-            lx = -row * rowSpacing;
-            ly = (col - halfCol) * spacing;
-            break;
-          }
-          case 'chevron': {
-            const spacing = 5;
-            const angle = Math.PI / 4;
-            const side = i % 2 === 0 ? 1 : -1;
-            const step = Math.floor((i + 1) / 2);
-            lx = -step * spacing * Math.cos(angle);
-            ly = side * step * spacing * Math.sin(angle);
-            break;
-          }
           case 'arrow': {
             let row = 0;
             let sum = 0;
@@ -2439,8 +2413,8 @@ window.addEventListener('DOMContentLoaded', () => {
             }
             const col = i - sum;
             const halfCol = row / 2;
-            lx = -row * 5;
-            ly = (col - halfCol) * 5;
+            lx = -row * 4;
+            ly = (col - halfCol) * 4;
             break;
           }
           case 'hex': {
@@ -2452,7 +2426,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 ring++;
               }
               const angle = (index / (ring * 6)) * Math.PI * 2;
-              const radius = ring * 8;
+              const radius = ring * 5;
               lx = radius * Math.cos(angle);
               ly = radius * Math.sin(angle);
             }
@@ -2467,10 +2441,20 @@ window.addEventListener('DOMContentLoaded', () => {
                 ring++;
               }
               const angle = (index / (ring * 8)) * Math.PI * 2;
-              const radius = ring * 9;
+              const radius = ring * 6;
               lx = radius * Math.cos(angle);
               ly = radius * Math.sin(angle);
             }
+            break;
+          }
+          case 'bullet': {
+            const spacing = 4;
+            const width = 3;
+            const col = i % width;
+            const row = Math.floor(i / width);
+            const halfCol = (width - 1) / 2;
+            lx = -row * spacing;
+            ly = (col - halfCol) * spacing;
             break;
           }
           default: {
