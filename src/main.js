@@ -2210,15 +2210,15 @@ window.addEventListener('DOMContentLoaded', () => {
               const sdx = ship.x - hs.x;
               const sdy = ship.y - hs.y;
               if (sdx * sdx + sdy * sdy <= swarmRangesq) {
-                nearbyCount++;
-                if (ship.isBomber) bomberCount++;
+                nearbyCount += (ship.count || 1);
+                if (ship.isBomber) bomberCount += (ship.count || 1);
                 if ((ship.expScore || 0) > maxShipExp) maxShipExp = ship.expScore || 0;
-                avgFlightTime += ship.flightTime || 0;
-                flightTimeCount++;
+                avgFlightTime += (ship.flightTime || 0) * (ship.count || 1);
+                flightTimeCount += (ship.count || 1);
               }
             }
             avgFlightTime /= flightTimeCount;
-            const totalShips = nearbyCount + 1;
+            const totalShips = nearbyCount + (hs.count || 1);
 
             // Header
             lines.push({ label: `${hsOwner.name}'s Fleet`, value: '', color: hsOwner.color || '#0ff', isHeader: true });
