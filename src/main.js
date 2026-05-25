@@ -2405,15 +2405,15 @@ window.addEventListener('DOMContentLoaded', () => {
         let ly = 0;
         switch (formationType) {
           case 'straight line': {
-            const spacing = 8;
+            const spacing = 5;
             const halfCount = (renderCount - 1) / 2;
             lx = 0;
             ly = (i - halfCount) * spacing;
             break;
           }
           case 'double line': {
-            const spacing = 10;
-            const rowSpacing = 8;
+            const spacing = 6;
+            const rowSpacing = 5;
             const row = i % 2;
             const col = Math.floor(i / 2);
             const halfCol = (Math.ceil(renderCount / 2) - 1) / 2;
@@ -2422,7 +2422,7 @@ window.addEventListener('DOMContentLoaded', () => {
             break;
           }
           case 'chevron': {
-            const spacing = 8;
+            const spacing = 5;
             const angle = Math.PI / 4;
             const side = i % 2 === 0 ? 1 : -1;
             const step = Math.floor((i + 1) / 2);
@@ -2439,8 +2439,8 @@ window.addEventListener('DOMContentLoaded', () => {
             }
             const col = i - sum;
             const halfCol = row / 2;
-            lx = -row * 8;
-            ly = (col - halfCol) * 8;
+            lx = -row * 5;
+            ly = (col - halfCol) * 5;
             break;
           }
           case 'hex': {

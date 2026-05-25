@@ -88,6 +88,16 @@ export class Ship {
         }
       }
       
+      // Friendly reinforcements increment
+      if (this.isFriendlyAssault && this.totalReinforcements > 0) {
+        const targetReinforcements = Math.floor(this.totalReinforcements * elapsedFraction);
+        const reinforcementsToApply = targetReinforcements - this.reinforcementsApplied;
+        if (reinforcementsToApply > 0) {
+          this.targetPlanet.ships = Math.min(this.finalTargetPlanetShips, this.targetPlanet.ships + reinforcementsToApply);
+          this.reinforcementsApplied += reinforcementsToApply;
+        }
+      }
+      
       if (this.assaultTimer <= 0) {
         this.isAssaulting = false;
         
@@ -733,6 +743,14 @@ export class Ship {
             }
           } else {
             this.totalDefenderLosses = 0;
+          }
+          
+          if (isFriendly) {
+            this.totalReinforcements = Math.max(0, this.finalTargetPlanetShips - originalTargetPlanetShips);
+            this.reinforcementsApplied = 0;
+          } else {
+            this.totalReinforcements = 0;
+            this.reinforcementsApplied = 0;
           }
           
           const pdx = this.targetPlanet.x - this.x;
