@@ -277,12 +277,20 @@ export class Ship {
         const isCruiser = !this.isAmoeba;
         let enemyNearby = false;
         if (isCruiser && allShips) {
-          const range300Sq = 300 * 300;
+          const shipExpBonus = (this.expScore || 0) * 2;
+          let cruiserRadar = Math.min(250, 5 * this.maxHealth) + shipExpBonus;
+          if (this.isWarp) cruiserRadar *= 0.25;
+
+          const playerTechBonus = 0.01 * techBonus;
+          const playerExpBonus = 0.01 * expBonus;
+          const sensorRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
+          const rangeSq = sensorRange * sensorRange;
+
           for (const otherShip of allShips) {
             if (otherShip.active && otherShip.owner !== this.owner) {
               const odx = otherShip.x - this.x;
               const ody = otherShip.y - this.y;
-              if (odx * odx + ody * ody <= range300Sq) {
+              if (odx * odx + ody * ody <= rangeSq) {
                 enemyNearby = true;
                 break;
               }
