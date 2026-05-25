@@ -1240,7 +1240,6 @@ export class Ship {
       }
     }
   }
-  }
 
   draw(ctx) {
     if (!this.active) return;
