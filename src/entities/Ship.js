@@ -27,8 +27,8 @@ export class Ship {
     this.endOffsetX = (Math.random() - 0.5) * 20;
     this.endOffsetY = (Math.random() - 0.5) * 20;
     this.count = 1;
-    const formations = ['arrow', 'hex', 'circle', 'bullet'];
-    this.formation = formations[Math.floor(Math.random() * formations.length)];
+    const formations = ['arrow'];
+    this.formation = 'arrow';
   }
 
   checkSurvivalRoll() {

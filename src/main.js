@@ -2413,12 +2413,14 @@ window.addEventListener('DOMContentLoaded', () => {
           case 'arrow': {
             let row = 0;
             let sum = 0;
-            while (sum + row + 1 <= i) {
-              sum += row + 1;
+            while (sum + row + 5 <= i) {
+              sum += row + 5;
               row++;
             }
             const col = i - sum;
-            const halfCol = row / 2;
+            const rowWidth = row + 5;
+            const actualRowWidth = Math.min(rowWidth, renderCount - sum);
+            const halfCol = (actualRowWidth - 1) / 2;
             lx = -row * 4;
             ly = (col - halfCol) * 4;
             break;
