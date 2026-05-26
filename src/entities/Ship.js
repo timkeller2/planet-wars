@@ -41,95 +41,6 @@ export class Ship {
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth) {
     if (!this.active) return;
 
-    if (this.isAssaulting) {
-      this.assaultTimer -= (deltaTime / 1000);
-      if (this.assaultTimer <= 0) {
-        this.assaultTimer = 0;
-      }
-      
-      const elapsedFraction = 1.0 - (this.assaultTimer / 3.0);
-      
-      // Attacker losses
-      const targetAttackerLosses = Math.floor(this.totalAttackerLosses * elapsedFraction);
-      const attackerLossesToApply = targetAttackerLosses - this.attackerLossesSpawned;
-      if (attackerLossesToApply > 0) {
-        this.count = Math.max(this.finalAttackerCount, this.count - attackerLossesToApply);
-        this.attackerLossesSpawned += attackerLossesToApply;
-        
-        if (explosions && !this.isFriendlyAssault) {
-          for (let i = 0; i < attackerLossesToApply; i++) {
-            if (Math.random() < 0.25) {
-              explosions.push({
-                x: this.x + (Math.random() - 0.5) * 15,
-                y: this.y + (Math.random() - 0.5) * 15,
-                color: this.owner ? this.owner.color : '#fff',
-                age: 0
-              });
-            }
-          }
-        }
-      }
-      
-      // Defender losses
-      const targetDefenderLosses = Math.floor(this.totalDefenderLosses * elapsedFraction);
-      const defenderLossesToApply = targetDefenderLosses - this.defenderLossesSpawned;
-      const isPlanetHostile = !this.targetPlanet.owner || (this.owner && this.targetPlanet.owner.id !== this.owner.id);
-      if (defenderLossesToApply > 0 && isPlanetHostile) {
-        this.targetPlanet.ships = Math.max(0, this.targetPlanet.ships - defenderLossesToApply);
-        this.defenderLossesSpawned += defenderLossesToApply;
-        
-        if (explosions && !this.isFriendlyAssault) {
-          for (let i = 0; i < defenderLossesToApply; i++) {
-            if (Math.random() < 0.25) {
-              explosions.push({
-                x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-                y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-                color: this.targetPlanet.owner ? this.targetPlanet.owner.color : '#555',
-                age: 0
-              });
-            }
-          }
-        }
-      }
-      
-      // Friendly reinforcements increment
-      if (this.isFriendlyAssault && this.totalReinforcements > 0) {
-        const targetReinforcements = Math.floor(this.totalReinforcements * elapsedFraction);
-        const reinforcementsToApply = targetReinforcements - this.reinforcementsApplied;
-        if (reinforcementsToApply > 0) {
-          this.targetPlanet.ships = Math.min(this.finalTargetPlanetShips, this.targetPlanet.ships + reinforcementsToApply);
-          this.reinforcementsApplied += reinforcementsToApply;
-        }
-      }
-      
-      if (this.assaultTimer <= 0) {
-        this.isAssaulting = false;
-        
-        this.targetPlanet.owner = this.finalTargetPlanetOwner;
-        this.targetPlanet.ships = this.finalTargetPlanetShips;
-        this.targetPlanet.maxShips = this.finalTargetPlanetMaxShips;
-        this.targetPlanet.dead = this.finalTargetPlanetDead;
-        this.targetPlanet.isResearch = this.finalTargetPlanetIsResearch;
-        this.targetPlanet.isMilitary = this.finalTargetPlanetIsMilitary;
-        this.targetPlanet.isSpeedPlanet = this.finalTargetPlanetIsSpeedPlanet;
-        this.targetPlanet.sacrificedShips = this.finalTargetPlanetSacrificedShips;
-        this.targetPlanet.rampageBoost = this.finalTargetPlanetRampageBoost;
-        this.targetPlanet.rampageEvent = this.finalTargetPlanetRampageEvent;
-        this.targetPlanet.defeatEvent = this.finalTargetPlanetDefeatEvent;
-        
-        this.count = 0;
-        this.active = false;
-        return;
-      }
-      
-      // Strafing/Assault glide: slow down to a near stop, continue straight along same trajectory
-      const strafingSpeed = 5; // near stop
-      this.x += this.strafingDirX * strafingSpeed * (deltaTime / 1000);
-      this.y += this.strafingDirY * strafingSpeed * (deltaTime / 1000);
-      this.angle = Math.atan2(this.strafingDirY, this.strafingDirX);
-      
-      return;
-    }
 
     if (this.isAmoeba && this.pursueTarget) {
       const pdx = this.pursueTarget.x - this.x;
@@ -688,90 +599,347 @@ export class Ship {
           }
           return;
         }
-        
-        if (!this.isAssaulting) {
-          this.isAssaulting = true;
-          this.assaultTimer = 3.0;
-          this.initialAssaultCount = this.count;
-          
-          const originalTargetPlanetOwner = this.targetPlanet.owner;
-          const originalTargetPlanetShips = this.targetPlanet.ships;
-          const originalTargetPlanetMaxShips = this.targetPlanet.maxShips;
-          const originalTargetPlanetDead = this.targetPlanet.dead;
-          const originalTargetPlanetIsResearch = this.targetPlanet.isResearch;
-          const originalTargetPlanetIsMilitary = this.targetPlanet.isMilitary;
-          const originalTargetPlanetIsSpeedPlanet = this.targetPlanet.isSpeedPlanet;
-          const originalTargetPlanetSacrificedShips = this.targetPlanet.sacrificedShips;
-          const originalTargetPlanetRampageBoost = this.targetPlanet.rampageBoost;
-          const originalTargetPlanetRampageEvent = this.targetPlanet.rampageEvent;
-          const originalTargetPlanetDefeatEvent = this.targetPlanet.defeatEvent;
-          const originalCount = this.count;
-          
-          this.resolveCombat(allShips, null, allPlanets, ionStorms);
-          
-          this.finalTargetPlanetOwner = this.targetPlanet.owner;
-          this.finalTargetPlanetShips = this.targetPlanet.ships;
-          this.finalTargetPlanetMaxShips = this.targetPlanet.maxShips;
-          this.finalTargetPlanetDead = this.targetPlanet.dead;
-          this.finalTargetPlanetIsResearch = this.targetPlanet.isResearch;
-          this.finalTargetPlanetIsMilitary = this.targetPlanet.isMilitary;
-          this.finalTargetPlanetIsSpeedPlanet = this.targetPlanet.isSpeedPlanet;
-          this.finalTargetPlanetSacrificedShips = this.targetPlanet.sacrificedShips;
-          this.finalTargetPlanetRampageBoost = this.targetPlanet.rampageBoost;
-          this.finalTargetPlanetRampageEvent = this.targetPlanet.rampageEvent;
-          this.finalTargetPlanetDefeatEvent = this.targetPlanet.defeatEvent;
-          this.finalAttackerCount = this.count;
-          
-          this.targetPlanet.owner = originalTargetPlanetOwner;
-          this.targetPlanet.ships = originalTargetPlanetShips;
-          this.targetPlanet.maxShips = originalTargetPlanetMaxShips;
-          this.targetPlanet.dead = originalTargetPlanetDead;
-          this.targetPlanet.isResearch = originalTargetPlanetIsResearch;
-          this.targetPlanet.isMilitary = originalTargetPlanetIsMilitary;
-          this.targetPlanet.isSpeedPlanet = originalTargetPlanetIsSpeedPlanet;
-          this.targetPlanet.sacrificedShips = originalTargetPlanetSacrificedShips;
-          this.targetPlanet.rampageBoost = originalTargetPlanetRampageBoost;
-          this.targetPlanet.rampageEvent = originalTargetPlanetRampageEvent;
-          this.targetPlanet.defeatEvent = originalTargetPlanetDefeatEvent;
-          this.count = originalCount;
-          this.active = true;
-          
-          this.totalAttackerLosses = Math.max(0, this.count - this.finalAttackerCount);
-          const isFriendly = !!(originalTargetPlanetOwner && this.owner && (originalTargetPlanetOwner === this.owner || originalTargetPlanetOwner.id === this.owner.id));
-          if (!isFriendly) {
-            const planetCaptured = !originalTargetPlanetOwner || (this.finalTargetPlanetOwner && this.finalTargetPlanetOwner.id !== originalTargetPlanetOwner.id);
-            if (planetCaptured) {
-              this.totalDefenderLosses = originalTargetPlanetShips;
-            } else {
-              this.totalDefenderLosses = Math.max(0, originalTargetPlanetShips - this.finalTargetPlanetShips);
-            }
-          } else {
-            this.totalDefenderLosses = 0;
-          }
-          
-          if (isFriendly) {
-            this.totalReinforcements = Math.max(0, this.finalTargetPlanetShips - originalTargetPlanetShips);
-            this.reinforcementsApplied = 0;
-          } else {
-            this.totalReinforcements = 0;
-            this.reinforcementsApplied = 0;
-          }
-          
-          const pdx = this.targetPlanet.x - this.x;
-          const pdy = this.targetPlanet.y - this.y;
-          const dist = Math.sqrt(pdx * pdx + pdy * pdy);
-          this.strafingDirX = pdx / (dist || 1);
-          this.strafingDirY = pdy / (dist || 1);
-          this.isFriendlyAssault = isFriendly;
-          
-          this.attackerLossesSpawned = 0;
-          this.defenderLossesSpawned = 0;
-          
+
+        // Normal fleet real-time attack / reinforce
+        if (this.count > 0) {
           if (this.isWarp) {
             this.isWarp = false;
           }
+          const isFriendly = !!(this.targetPlanet.owner && this.owner && this.targetPlanet.owner.id === this.owner.id);
+          const dt = deltaTime / 1000;
+
+          if (isFriendly) {
+            // Gradual Reinforcing
+            const rate = Math.max(10, this.count / 4);
+            let N_reinf = rate * dt;
+            N_reinf = Math.min(this.count, N_reinf);
+
+            const spaceLeft = Math.max(0, this.targetPlanet.maxShips - this.targetPlanet.ships);
+            const toAdd = Math.min(spaceLeft, N_reinf);
+            const sacrificed = N_reinf - toAdd;
+
+            this.targetPlanet.ships += toAdd;
+            this.count -= N_reinf;
+
+            if (sacrificed > 0) {
+              this.targetPlanet.sacrificedShips = (this.targetPlanet.sacrificedShips || 0) + sacrificed;
+              const upgrades = Math.floor(this.targetPlanet.sacrificedShips / 20);
+              if (upgrades > 0) {
+                this.targetPlanet.sacrificedShips %= 20;
+                this.targetPlanet.increaseMaxShips(upgrades);
+              }
+              if (explosions && Math.random() < 0.1) {
+                explosions.push({
+                  x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
+                  y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
+                  color: '#fff',
+                  age: 0
+                });
+              }
+            }
+
+            if (this.count <= 0 || distance < 5) {
+              // Complete reinforcement dump
+              if (this.count > 0) {
+                const finalSpaceLeft = Math.max(0, this.targetPlanet.maxShips - this.targetPlanet.ships);
+                const finalToAdd = Math.min(finalSpaceLeft, this.count);
+                const finalSacrificed = this.count - finalToAdd;
+
+                this.targetPlanet.ships += finalToAdd;
+                if (finalSacrificed > 0) {
+                  this.targetPlanet.sacrificedShips = (this.targetPlanet.sacrificedShips || 0) + finalSacrificed;
+                  const upgrades = Math.floor(this.targetPlanet.sacrificedShips / 20);
+                  if (upgrades > 0) {
+                    this.targetPlanet.sacrificedShips %= 20;
+                    this.targetPlanet.increaseMaxShips(upgrades);
+                  }
+                }
+              }
+              this.count = 0;
+              this.active = false;
+              return;
+            }
+          } else {
+            // Gradual Attack
+            // Calculate kill chance
+            let nearbyFriendlyCount = 0;
+            if (allShips) {
+              for (const ship of allShips) {
+                if (ship !== this && ship.owner === this.owner && ship.active) {
+                  const sdx = ship.x - this.x;
+                  const sdy = ship.y - this.y;
+                  const sDistSq = sdx * sdx + sdy * sdy;
+                  if (sDistSq < 10000) {
+                    nearbyFriendlyCount += (ship.count || 1);
+                  }
+                }
+              }
+            }
+
+            let friendlyPlanetBoost = 0;
+            let defenderPlanetPenalty = 0;
+            if (allPlanets) {
+              let friendlyCumulativeCapacity = 0;
+              let defenderCumulativeCapacity = 0;
+              for (const planet of allPlanets) {
+                if (planet !== this.targetPlanet) {
+                  const pdx = planet.x - this.targetPlanet.x;
+                  const pdy = planet.y - this.targetPlanet.y;
+                  const pDistSq = pdx * pdx + pdy * pdy;
+                  const tBonus = planet.owner ? (0.01 * Math.sqrt(planet.owner.techScore || 0)) : 0;
+                  const eBonus = planet.owner ? (0.005 * Math.sqrt(planet.owner.expScore || 0)) : 0;
+                  const gravityRadius = (planet.maxShips * 1.5) * (1 + tBonus + eBonus);
+                  
+                  if (pDistSq < gravityRadius * gravityRadius) {
+                    if (planet.owner === this.owner) {
+                      friendlyCumulativeCapacity += planet.maxShips;
+                    } else if (planet.owner === this.targetPlanet.owner) {
+                      defenderCumulativeCapacity += planet.maxShips;
+                    }
+                  }
+                }
+              }
+              friendlyPlanetBoost = 0.01 * Math.floor(friendlyCumulativeCapacity / 50);
+              defenderPlanetPenalty = 0.01 * Math.floor(defenderCumulativeCapacity / 50);
+            }
+
+            const advantage = 0.01 * Math.floor(nearbyFriendlyCount / 10);
+            const attackerTechBonus = 0.01 * Math.sqrt(this.owner.techScore || 0);
+            const attackerExpBonus = 0.005 * Math.sqrt(this.owner.expScore || 0);
+            
+            const defenderTechPenalty = 0.01 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.techScore || 0) : 0);
+            const defenderExpPenalty = 0.005 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.expScore || 0) : 0);
+            
+            const attackerLocalExpBonus = 0.005 * Math.sqrt(this.expScore || 0);
+            const defenderLocalExpPenalty = 0.005 * Math.sqrt(this.targetPlanet.expScore || 0);
+
+            const humanInvolved = (!this.owner.isAI) || (this.targetPlanet.owner && !this.targetPlanet.owner.isAI);
+            const humanVsHuman = (!this.owner.isAI) && (this.targetPlanet.owner && !this.targetPlanet.owner.isAI);
+            let survivingAICount = 0;
+            if (humanVsHuman && allPlanets) {
+              const aiOwners = new Set();
+              for (const p of allPlanets) {
+                if (p.owner && p.owner.isAI) {
+                  aiOwners.add(p.owner.id);
+                }
+              }
+              survivingAICount = aiOwners.size;
+            }
+            const humanDefenderBonus = humanVsHuman ? (0.02 * survivingAICount) : 0;
+            
+            const lastStandPenalty = (humanInvolved && this.targetPlanet.owner && this.targetPlanet.owner.planetCount === 1) ? 0.15 : 0;
+            
+            const defenderHomeworldPenalty = (humanInvolved && this.targetPlanet.owner && this.targetPlanet.owner.id === this.targetPlanet.homeworldOf) ? 0.15 : 0;
+            const attackerHomeworldBonus = (humanInvolved && this.owner && this.owner.id === this.targetPlanet.homeworldOf && this.targetPlanet.owner !== this.owner) ? 0.15 : 0;
+
+            const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
+
+            let hazardPenalty = 0;
+            if (ionStorms) {
+              for (const storm of ionStorms) {
+                if (storm.type === 'minefield') continue;
+                const sdx = this.targetPlanet.x - storm.x;
+                const sdy = this.targetPlanet.y - storm.y;
+                if (sdx * sdx + sdy * sdy <= storm.radius * storm.radius) {
+                  const knowledge = storm.knowledge[this.owner.id] || 0;
+                  const tRed = Math.sqrt(this.owner.techScore || 0);
+                  const eRed = Math.sqrt(this.owner.expScore || 0);
+                  const sRed = Math.sqrt(this.expScore || 0);
+                  const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+                  if (storm.type === 'nebula') {
+                    hazardPenalty += (eff / 4) / 100;
+                  } else {
+                    hazardPenalty += (eff / 2) / 100;
+                  }
+                }
+              }
+            }
+            
+            if (humanInvolved && this.targetPlanet.owner && this.targetPlanet.owner.planetCount === 1) {
+              const now = Date.now();
+              if (!this.targetPlanet.lastStandTime || now - this.targetPlanet.lastStandTime > 5000) {
+                this.targetPlanet.lastStandEvent = true;
+                this.targetPlanet.lastStandTime = now;
+              }
+            }
+
+            if (humanInvolved && this.targetPlanet.homeworldOf) {
+              const hwId = this.targetPlanet.homeworldOf;
+              const isAttacker = this.owner && this.owner.id === hwId;
+              const isDefender = this.targetPlanet.owner && this.targetPlanet.owner.id === hwId;
+              if (isAttacker || isDefender) {
+                const now = Date.now();
+                if (!this.targetPlanet.homeworldTime || now - this.targetPlanet.homeworldTime > 5000) {
+                  this.targetPlanet.homeworldEvent = true;
+                  this.targetPlanet.homeworldTime = now;
+                }
+              }
+            }
+
+            if (this.isBomber) {
+              // Bombers deal instant eco/ship damage and deactivate
+              let totalEcoDamage = 0;
+              let totalShipDamage = 0;
+              for (let b = 0; b < this.count; b++) {
+                if (this.bomberType === 'eco' || this.bomberType === true) {
+                  totalEcoDamage += Math.floor(Math.random() * 2) + 1;
+                } else if (this.bomberType === 'ships') {
+                  totalShipDamage += Math.floor(Math.random() * 4) + 1;
+                }
+              }
+              if (totalEcoDamage > 0) {
+                this.targetPlanet.maxShips -= totalEcoDamage;
+                this.targetPlanet.capacityDecreaseEvent = true;
+                if (this.targetPlanet.maxShips < 55) {
+                  this.targetPlanet.dead = true;
+                  if (this.targetPlanet.homeworldOf && this.owner) {
+                    this.owner.expScore = (this.owner.expScore || 0) + 100;
+                  }
+                }
+                if (explosions) {
+                  for (let i = 0; i < Math.min(totalEcoDamage, 15); i++) {
+                    explosions.push({
+                      x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
+                      y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
+                      color: '#ffaa00',
+                      age: 0
+                    });
+                  }
+                }
+              }
+              if (totalShipDamage > 0) {
+                this.targetPlanet.ships -= totalShipDamage;
+                if (this.targetPlanet.ships < 0) this.targetPlanet.ships = 0;
+                if (explosions) {
+                  for (let i = 0; i < Math.min(totalShipDamage, 15); i++) {
+                    explosions.push({
+                      x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
+                      y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
+                      color: '#ff00aa',
+                      age: 0
+                    });
+                  }
+                }
+              }
+              this.count = 0;
+              this.active = false;
+              return;
+            }
+
+            // Main assault attack rate
+            const rate = Math.max(10, this.count / 4);
+            let N_att = rate * dt;
+            N_att = Math.min(this.count, N_att);
+
+            const penalty = 0.01 * Math.floor(this.targetPlanet.ships / 5);
+            let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus);
+            if (this.isInterceptor) {
+              killChance *= 0.5;
+            }
+            killChance = Math.max(minKillChance, killChance - hazardPenalty);
+
+            let defendersKilled = N_att * killChance;
+            this.count -= N_att;
+
+            const oldShips = this.targetPlanet.ships;
+            this.targetPlanet.ships = Math.max(0, this.targetPlanet.ships - defendersKilled);
+            const actualKilled = oldShips - this.targetPlanet.ships;
+
+            if (this.owner) this.owner.addExperience(actualKilled);
+            if (this.targetPlanet.owner) this.targetPlanet.owner.addExperience(actualKilled);
+
+            // Capacity decrease chance
+            const expectedCapacityDecrease = actualKilled * 0.08;
+            if (expectedCapacityDecrease > 0 && this.targetPlanet.owner !== null) {
+              this.targetPlanet.maxShips = Math.max(54, this.targetPlanet.maxShips - expectedCapacityDecrease);
+              if (this.targetPlanet.maxShips < 55) {
+                this.targetPlanet.dead = true;
+                if (this.targetPlanet.homeworldOf && this.owner) {
+                  this.owner.expScore = (this.owner.expScore || 0) + 100;
+                }
+              }
+            }
+
+            if (explosions && actualKilled > 0) {
+              // Spawn explosions during active attack
+              const expCount = Math.ceil(actualKilled * 0.25); // 25% of losses show explosions
+              for (let k = 0; k < expCount; k++) {
+                if (Math.random() < 0.25) {
+                  explosions.push({
+                    x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
+                    y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
+                    color: this.targetPlanet.owner ? this.targetPlanet.owner.color : '#555',
+                    age: 0
+                  });
+                }
+              }
+            }
+
+            if (this.targetPlanet.ships <= 0) {
+              // Capture!
+              this.targetPlanet.ships = 0;
+              const previousOwner = this.targetPlanet.owner;
+              if (previousOwner !== null) {
+                this.targetPlanet.maxShips--;
+                if (this.targetPlanet.maxShips < 55) {
+                  this.targetPlanet.dead = true;
+                  if (this.targetPlanet.homeworldOf && this.owner) {
+                    this.owner.expScore = (this.owner.expScore || 0) + 100;
+                  }
+                }
+              } else {
+                // Conquered a neutral planet
+                const roll = Math.random();
+                if (roll < 0.10) {
+                  this.targetPlanet.isResearch = true;
+                } else if (roll < 0.20) {
+                  this.targetPlanet.isMilitary = true;
+                } else if (roll < 0.30) {
+                  this.targetPlanet.isSpeedPlanet = true;
+                }
+              }
+              this.targetPlanet.owner = this.owner;
+              this.targetPlanet.ships = 0; // starts at 0, next lines will reinforce if ships remaining
+              this.targetPlanet.rampageBoost = false;
+              this.targetPlanet.rampageEvent = false;
+
+              // Check if previous owner was eliminated
+              if (previousOwner && previousOwner !== this.owner && allPlanets) {
+                const hasRemaining = allPlanets.some(p => p !== this.targetPlanet && p.owner === previousOwner);
+                if (!hasRemaining) {
+                  this.targetPlanet.defeatEvent = { name: previousOwner.name, color: previousOwner.color };
+                  this.owner.expScore = (this.owner.expScore || 0) + 100;
+                }
+              }
+
+              // Immediately switch to reinforcing for any leftover ships in this same frame
+              if (this.count > 0) {
+                const spaceLeft = Math.max(0, this.targetPlanet.maxShips - this.targetPlanet.ships);
+                const toAdd = Math.min(spaceLeft, this.count);
+                const sacrificed = this.count - toAdd;
+
+                this.targetPlanet.ships += toAdd;
+                if (sacrificed > 0) {
+                  this.targetPlanet.sacrificedShips = (this.targetPlanet.sacrificedShips || 0) + sacrificed;
+                  const upgrades = Math.floor(this.targetPlanet.sacrificedShips / 20);
+                  if (upgrades > 0) {
+                    this.targetPlanet.sacrificedShips %= 20;
+                    this.targetPlanet.increaseMaxShips(upgrades);
+                  }
+                }
+              }
+              this.count = 0;
+              this.active = false;
+              return;
+            }
+
+            if (this.count <= 0) {
+              this.active = false;
+              this.count = 0;
+              return;
+            }
+          }
         }
-        return;
       }
     } else {
       if (distance < 5) {
@@ -827,6 +995,10 @@ export class Ship {
     }
     if (this.speedModifier) {
       effectiveSpeed *= this.speedModifier;
+    }
+
+    if (this.targetPlanet && distance < this.targetPlanet.radius && this.maxHealth === 0) {
+      effectiveSpeed *= 0.1;
     }
 
     if (!this.insideHazards) {
@@ -1022,390 +1194,6 @@ export class Ship {
     return false;
   }
 
-  resolveCombat(allShips, explosions, allPlanets, ionStorms) {
-    if (this.targetPlanet.owner !== this.owner && this.maxHealth > 0) {
-      // Ships with health > 0 may not attack planets, they just stay in orbit
-      return;
-    }
-    if (this.targetPlanet.owner === this.owner) {
-      if (this.count > 1) {
-        let activeCount = this.count;
-        if (this.isInterceptor) {
-          activeCount = 0;
-          for (let i = 0; i < this.count; i++) {
-            if (Math.random() < 0.3) {
-              if (explosions) {
-                explosions.push({
-                  x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-                  y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-                  color: '#ff5555',
-                  age: 0
-                });
-              }
-            } else {
-              activeCount++;
-            }
-          }
-        }
-        const spaceLeft = Math.max(0, this.targetPlanet.maxShips - this.targetPlanet.ships);
-        const reinforced = Math.min(spaceLeft, activeCount);
-        const sacrificed = activeCount - reinforced;
-        this.targetPlanet.ships += reinforced;
-
-        if (sacrificed > 0) {
-          this.targetPlanet.sacrificedShips = (this.targetPlanet.sacrificedShips || 0) + sacrificed;
-          const upgrades = Math.floor(this.targetPlanet.sacrificedShips / 20);
-          if (upgrades > 0) {
-            this.targetPlanet.sacrificedShips %= 20;
-            this.targetPlanet.increaseMaxShips(upgrades);
-          }
-          if (explosions) {
-            explosions.push({
-              x: this.targetPlanet.x,
-              y: this.targetPlanet.y,
-              color: '#fff',
-              age: 0
-            });
-          }
-        }
-        this.count = 0;
-        this.active = false;
-        return;
-      }
-
-      if (this.isInterceptor && Math.random() < 0.3) {
-        if (explosions) {
-          explosions.push({
-            x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-            y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-            color: '#ff5555',
-            age: 0
-          });
-        }
-        return;
-      }
-      if (this.targetPlanet.ships < this.targetPlanet.maxShips) {
-        this.targetPlanet.ships++;
-      } else {
-        // Hard cap reached, sacrifice ship
-        if (explosions) {
-          explosions.push({
-            x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-            y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-            color: '#fff',
-            age: 0
-          });
-        }
-        this.targetPlanet.sacrificedShips = (this.targetPlanet.sacrificedShips || 0) + 1;
-        if (this.targetPlanet.sacrificedShips >= 20) {
-          this.targetPlanet.sacrificedShips -= 20;
-          this.targetPlanet.increaseMaxShips(1);
-        }
-      }
-    } else {
-      // Attack
-      if (!this.owner.attackedPlanets) {
-        this.owner.attackedPlanets = new Map();
-      }
-      const currentTimer = this.owner.attackedPlanets.get(this.targetPlanet.id) || 0;
-      const addedTimer = this.count > 1 ? this.count * 60000 : 60000;
-      this.owner.attackedPlanets.set(this.targetPlanet.id, currentTimer + addedTimer); // add 60 seconds per ship
-
-      if (this.targetPlanet.ships > 0) {
-        let nearbyFriendlyCount = 0;
-        if (allShips) {
-          for (const ship of allShips) {
-            if (ship !== this && ship.owner === this.owner && ship.active) {
-              const dx = ship.x - this.x;
-              const dy = ship.y - this.y;
-              const distSq = dx * dx + dy * dy;
-              if (distSq < 10000) { // 100 pixels squared
-                nearbyFriendlyCount += (ship.count || 1);
-              }
-            }
-          }
-        }
-        let friendlyPlanetBoost = 0;
-        let defenderPlanetPenalty = 0;
-        if (allPlanets) {
-          let friendlyCumulativeCapacity = 0;
-          let defenderCumulativeCapacity = 0;
-          for (const planet of allPlanets) {
-            if (planet !== this.targetPlanet) {
-              const dx = planet.x - this.targetPlanet.x;
-              const dy = planet.y - this.targetPlanet.y;
-              const distSq = dx * dx + dy * dy;
-              const techBonus = planet.owner ? (0.01 * Math.sqrt(planet.owner.techScore || 0)) : 0;
-              const expBonus = planet.owner ? (0.005 * Math.sqrt(planet.owner.expScore || 0)) : 0;
-              const gravityRadius = (planet.maxShips * 1.5) * (1 + techBonus + expBonus);
-              
-              if (distSq < gravityRadius * gravityRadius) { // Distance < modified gravity radius
-                if (planet.owner === this.owner) {
-                  friendlyCumulativeCapacity += planet.maxShips;
-                } else if (planet.owner === this.targetPlanet.owner) {
-                  defenderCumulativeCapacity += planet.maxShips;
-                }
-              }
-            }
-          }
-          friendlyPlanetBoost = 0.01 * Math.floor(friendlyCumulativeCapacity / 50);
-          defenderPlanetPenalty = 0.01 * Math.floor(defenderCumulativeCapacity / 50);
-        }
-
-        const advantage = 0.01 * Math.floor(nearbyFriendlyCount / 10);
-        const attackerTechBonus = 0.01 * Math.sqrt(this.owner.techScore || 0);
-        const attackerExpBonus = 0.005 * Math.sqrt(this.owner.expScore || 0);
-        
-        const defenderTechPenalty = 0.01 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.techScore || 0) : 0);
-        const defenderExpPenalty = 0.005 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.expScore || 0) : 0);
-        
-        const attackerLocalExpBonus = 0.005 * Math.sqrt(this.expScore || 0);
-        const defenderLocalExpPenalty = 0.005 * Math.sqrt(this.targetPlanet.expScore || 0);
-
-        const humanInvolved = (!this.owner.isAI) || (this.targetPlanet.owner && !this.targetPlanet.owner.isAI);
-        
-        const humanVsHuman = (!this.owner.isAI) && (this.targetPlanet.owner && !this.targetPlanet.owner.isAI);
-        let survivingAICount = 0;
-        if (humanVsHuman && allPlanets) {
-          const aiOwners = new Set();
-          for (const p of allPlanets) {
-            if (p.owner && p.owner.isAI) {
-              aiOwners.add(p.owner.id);
-            }
-          }
-          survivingAICount = aiOwners.size;
-        }
-        const humanDefenderBonus = humanVsHuman ? (0.02 * survivingAICount) : 0;
-        
-        const lastStandPenalty = (humanInvolved && this.targetPlanet.owner && this.targetPlanet.owner.planetCount === 1) ? 0.15 : 0;
-        
-        const defenderHomeworldPenalty = (humanInvolved && this.targetPlanet.owner && this.targetPlanet.owner.id === this.targetPlanet.homeworldOf) ? 0.15 : 0;
-        const attackerHomeworldBonus = (humanInvolved && this.owner && this.owner.id === this.targetPlanet.homeworldOf && this.targetPlanet.owner !== this.owner) ? 0.15 : 0;
-
-        const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
-
-        let hazardPenalty = 0;
-        if (ionStorms) {
-          for (const storm of ionStorms) {
-            if (storm.type === 'minefield') continue;
-            const dx = this.targetPlanet.x - storm.x;
-            const dy = this.targetPlanet.y - storm.y;
-            if (dx * dx + dy * dy <= storm.radius * storm.radius) {
-              const knowledge = storm.knowledge[this.owner.id] || 0;
-              const tRed = Math.sqrt(this.owner.techScore || 0);
-              const eRed = Math.sqrt(this.owner.expScore || 0);
-              const sRed = Math.sqrt(this.expScore || 0);
-              const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
-              if (storm.type === 'nebula') {
-                hazardPenalty += (eff / 4) / 100;
-              } else {
-                hazardPenalty += (eff / 2) / 100;
-              }
-            }
-          }
-        }
-        
-        if (humanInvolved && this.targetPlanet.owner && this.targetPlanet.owner.planetCount === 1) {
-          const now = Date.now();
-          if (!this.targetPlanet.lastStandTime || now - this.targetPlanet.lastStandTime > 5000) {
-            this.targetPlanet.lastStandEvent = true;
-            this.targetPlanet.lastStandTime = now;
-          }
-        }
-
-        if (humanInvolved && this.targetPlanet.homeworldOf) {
-          const hwId = this.targetPlanet.homeworldOf;
-          const isAttacker = this.owner && this.owner.id === hwId;
-          const isDefender = this.targetPlanet.owner && this.targetPlanet.owner.id === hwId;
-          if (isAttacker || isDefender) {
-            const now = Date.now();
-            if (!this.targetPlanet.homeworldTime || now - this.targetPlanet.homeworldTime > 5000) {
-              this.targetPlanet.homeworldEvent = true;
-              this.targetPlanet.homeworldTime = now;
-            }
-          }
-        }
-
-        if (this.isBomber) {
-          let totalEcoDamage = 0;
-          let totalShipDamage = 0;
-          for (let b = 0; b < this.count; b++) {
-            if (this.bomberType === 'eco' || this.bomberType === true) {
-              totalEcoDamage += Math.floor(Math.random() * 2) + 1;
-            } else if (this.bomberType === 'ships') {
-              totalShipDamage += Math.floor(Math.random() * 4) + 1;
-            }
-          }
-          if (totalEcoDamage > 0) {
-            this.targetPlanet.maxShips -= totalEcoDamage;
-            this.targetPlanet.capacityDecreaseEvent = true;
-            if (this.targetPlanet.maxShips < 55) {
-              this.targetPlanet.dead = true;
-              if (this.targetPlanet.homeworldOf && this.owner) {
-                this.owner.expScore = (this.owner.expScore || 0) + 100;
-              }
-            }
-            if (explosions) {
-              for (let i = 0; i < Math.min(totalEcoDamage, 15); i++) {
-                explosions.push({
-                  x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-                  y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-                  color: '#ffaa00',
-                  age: 0
-                });
-              }
-            }
-          }
-          if (totalShipDamage > 0) {
-            this.targetPlanet.ships -= totalShipDamage;
-            if (this.targetPlanet.ships < 0) this.targetPlanet.ships = 0;
-            if (explosions) {
-              for (let i = 0; i < Math.min(totalShipDamage, 15); i++) {
-                explosions.push({
-                  x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-                  y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-                  color: '#ff00aa',
-                  age: 0
-                });
-              }
-            }
-          }
-          this.count = 0;
-          this.active = false;
-          return;
-        }
-
-        if (this.count > 1) {
-          let attackersLeft = this.count;
-          while (attackersLeft > 0 && this.targetPlanet.ships > 0) {
-            const penalty = 0.01 * Math.floor(this.targetPlanet.ships / 5);
-            let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus);
-            if (this.isInterceptor) {
-              killChance *= 0.5;
-            }
-            killChance = Math.max(minKillChance, killChance - hazardPenalty);
-
-            if (Math.random() < killChance) {
-              this.targetPlanet.ships--;
-              if (this.owner) this.owner.addExperience(1);
-              if (this.targetPlanet.owner) this.targetPlanet.owner.addExperience(1);
-              
-              if (Math.random() < 0.08 && this.targetPlanet.owner !== null) {
-                this.targetPlanet.maxShips--;
-                this.targetPlanet.capacityDecreaseEvent = true;
-                if (this.targetPlanet.maxShips < 55) {
-                  this.targetPlanet.dead = true;
-                  if (this.targetPlanet.homeworldOf && this.owner) {
-                    this.owner.expScore = (this.owner.expScore || 0) + 100;
-                  }
-                }
-              }
-              
-              if (explosions && Math.random() < 0.1) {
-                explosions.push({
-                  x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-                  y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-                  color: this.targetPlanet.owner ? this.targetPlanet.owner.color : '#555',
-                  age: 0
-                });
-              }
-            } else {
-              if (this.targetPlanet.owner) {
-                this.targetPlanet.owner.addExperience(1);
-              }
-              this.targetPlanet.expScore = (this.targetPlanet.expScore || 0) + 1;
-            }
-            attackersLeft--;
-          }
-          this.count = attackersLeft;
-        } else {
-          const penalty = 0.01 * Math.floor(this.targetPlanet.ships / 5);
-          let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus);
-          if (this.isInterceptor) {
-            killChance *= 0.5;
-          }
-          killChance = Math.max(minKillChance, killChance - hazardPenalty);
-
-          if (Math.random() < killChance) {
-            this.targetPlanet.ships--;
-            if (this.owner) this.owner.addExperience(1);
-            if (this.targetPlanet.owner) this.targetPlanet.owner.addExperience(1);
-            
-            if (Math.random() < 0.08 && this.targetPlanet.owner !== null) {
-              this.targetPlanet.maxShips--;
-              this.targetPlanet.capacityDecreaseEvent = true;
-              if (this.targetPlanet.maxShips < 55) {
-                this.targetPlanet.dead = true;
-                if (this.targetPlanet.homeworldOf && this.owner) {
-                  this.owner.expScore = (this.owner.expScore || 0) + 100;
-                }
-              }
-            }
-            
-            if (explosions) {
-              explosions.push({
-                x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-                y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-                color: this.targetPlanet.owner ? this.targetPlanet.owner.color : '#555',
-                age: 0
-              });
-            }
-          } else {
-            if (this.targetPlanet.owner) {
-              this.targetPlanet.owner.addExperience(1);
-            }
-            this.targetPlanet.expScore = (this.targetPlanet.expScore || 0) + 1;
-          }
-          this.count = 0;
-          this.active = false;
-        }
-      }
-
-      if (this.targetPlanet.ships <= 0) {
-        // Capture
-        this.targetPlanet.ships = 0;
-        const previousOwner = this.targetPlanet.owner;
-        if (previousOwner !== null) {
-          this.targetPlanet.maxShips--;
-          if (this.targetPlanet.maxShips < 55) {
-            this.targetPlanet.dead = true;
-            if (this.targetPlanet.homeworldOf && this.owner) {
-              this.owner.expScore = (this.owner.expScore || 0) + 100;
-            }
-          }
-        } else {
-          // Conquered a neutral planet
-          const roll = Math.random();
-          if (roll < 0.10) {
-            this.targetPlanet.isResearch = true;
-          } else if (roll < 0.20) {
-            this.targetPlanet.isMilitary = true;
-          } else if (roll < 0.30) {
-            this.targetPlanet.isSpeedPlanet = true;
-          }
-        }
-        this.targetPlanet.owner = this.owner;
-        this.targetPlanet.ships = this.count > 0 ? this.count : 1;
-        this.targetPlanet.rampageBoost = false;
-        this.targetPlanet.rampageEvent = false;
-        this.count = 0;
-        this.active = false;
-
-        // Check if previous owner was eliminated
-        if (previousOwner && previousOwner !== this.owner && allPlanets) {
-          const hasRemaining = allPlanets.some(p => p !== this.targetPlanet && p.owner === previousOwner);
-          if (!hasRemaining) {
-            this.targetPlanet.defeatEvent = { name: previousOwner.name, color: previousOwner.color };
-            this.owner.expScore = (this.owner.expScore || 0) + 100;
-          }
-        }
-      } else {
-        // Defender survived
-        this.count = 0;
-        this.active = false;
-      }
-    }
-  }
 
   draw(ctx) {
     if (!this.active) return;
