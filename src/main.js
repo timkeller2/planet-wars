@@ -2484,6 +2484,41 @@ window.addEventListener('DOMContentLoaded', () => {
         const isSelected = selectedShips.some(ss => ss.id === s.id);
         const maxSpread = Math.min(60, 10 + Math.sqrt(s.count || 1) * 2.5);
 
+        if (s.count > 1 || s.isCruiser || s.isAmoeba) {
+          let laserTechBonus = 0;
+          let expBonus = 0;
+          if (owner) {
+            const techBonus = Math.sqrt(owner.techScore || 0);
+            laserTechBonus = 0.01 * techBonus;
+            expBonus = 0.5 * Math.sqrt(owner.expScore || 0);
+          }
+
+          let range = 40 * (1 + laserTechBonus);
+          if (s.isAmoeba) {
+            range = 50;
+          } else if (s.maxHealth > 0) {
+            const shipExpBonus = 0.5 * Math.sqrt(s.expScore || 0);
+            const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+            const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+            range = baseDogfightRange * 1.10;
+            if (s.bombs > 0) {
+              range += baseDogfightRange * 0.10;
+            }
+          } else {
+            const healthBonus = Math.floor(s.health || 0);
+            range = 40 * (1 + laserTechBonus) * (1 + healthBonus * 0.10);
+          }
+
+          ctx.save();
+          ctx.strokeStyle = 'rgba(255, 60, 60, 0.22)'; // Subtle red
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 4]); // Light dotted
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, range, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
         if (isSelected) {
           ctx.strokeStyle = '#fff';
           ctx.lineWidth = 1;
