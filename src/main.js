@@ -2406,9 +2406,10 @@ window.addEventListener('DOMContentLoaded', () => {
         return x - Math.floor(x);
       }
 
-      function getFormationOffset(formationType, i, renderCount, maxSpread) {
+      function getFormationOffset(formationType, i, renderCount, maxSpread, isInterceptor = false) {
         let lx = 0;
         let ly = 0;
+        const spacing = isInterceptor ? 7 : 4;
         switch (formationType) {
           case 'arrow': {
             let row = 0;
@@ -2421,8 +2422,8 @@ window.addEventListener('DOMContentLoaded', () => {
             const rowWidth = row + 5;
             const actualRowWidth = Math.min(rowWidth, renderCount - sum);
             const halfCol = (actualRowWidth - 1) / 2;
-            lx = -row * 4;
-            ly = (col - halfCol) * 4;
+            lx = -row * spacing;
+            ly = (col - halfCol) * spacing;
             break;
           }
           case 'hex': {
@@ -2547,7 +2548,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (s.count > 1 && !s.isCruiser && !s.isAmoeba) {
           const renderCount = Math.min(50, s.count);
           for (let i = 0; i < renderCount; i++) {
-            const { lx, ly } = getFormationOffset(s.formation, i, renderCount, maxSpread);
+            const { lx, ly } = getFormationOffset(s.formation, i, renderCount, maxSpread, s.isInterceptor);
             const cos = Math.cos(s.angle || 0);
             const sin = Math.sin(s.angle || 0);
             const drawX = s.x + lx * cos - ly * sin;
@@ -2898,14 +2899,91 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.fill();
             ctx.stroke();
           } else {
-            ctx.beginPath();
-            ctx.moveTo(laser.startX, laser.startY);
-            ctx.lineTo(laser.endX, laser.endY);
-            ctx.strokeStyle = laser.color;
-            ctx.globalAlpha = 1 - progress;
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.globalAlpha = 1.0;
+            // Cinematic staggered normal lasers
+            const totalDuration = laser.duration || 0.8;
+            const delay = (laser.index || 0) * 0.08; // Staggered by 80ms per laser!
+            const laserDuration = 0.25; // Each blast lasts 250ms
+
+            if (laser.age >= delay && laser.age <= delay + laserDuration) {
+              const activeProgress = (laser.age - delay) / laserDuration;
+
+              // Find exact start and end coordinates based on ship positions
+              let startPtX = laser.startX;
+              let startPtY = laser.startY;
+              let endPtX = laser.endX;
+              let endPtY = laser.endY;
+
+              // Seeded pseudo-random function to choose stable ship offsets
+              const seed = Math.sin(laser.startX * 12.9898 + laser.startY * 78.233 + (laser.index || 0)) * 43758.5453;
+              const randVal = seed - Math.floor(seed);
+              const randVal2 = (seed * 10) - Math.floor(seed * 10);
+
+              // 1. Source Offset (Fleet/Cruiser/Amoeba/Planet)
+              if (laser.sourceCount > 1 && !laser.sourceIsCruiser && !laser.sourceIsAmoeba) {
+                const sourceRenderCount = Math.min(50, laser.sourceCount);
+                const sourceIndex = Math.floor(randVal * sourceRenderCount);
+                const sourceMaxSpread = Math.min(60, 10 + Math.sqrt(laser.sourceCount) * 2.5);
+                const { lx, ly } = getFormationOffset(
+                  laser.sourceFormation || 'arrow',
+                  sourceIndex,
+                  sourceRenderCount,
+                  sourceMaxSpread,
+                  laser.sourceIsInterceptor
+                );
+                const cos = Math.cos(laser.sourceAngle || 0);
+                const sin = Math.sin(laser.sourceAngle || 0);
+                startPtX = laser.startX + lx * cos - ly * sin;
+                startPtY = laser.startY + lx * sin + ly * cos;
+              } else if (laser.sourceIsCruiser) {
+                const size = (6 + (laser.sourceMaxHealth || 6) * 1.0) / 2.5;
+                startPtX = laser.startX + (randVal - 0.5) * size * 10;
+                startPtY = laser.startY + (randVal2 - 0.5) * size * 10;
+              } else if (laser.sourceIsPlanet) {
+                // Originate from random spot within planet radius
+                startPtX = laser.startX + (randVal - 0.5) * 40;
+                startPtY = laser.startY + (randVal2 - 0.5) * 40;
+              }
+
+              // 2. Target Offset (Fleet/Cruiser/Amoeba/Planet)
+              if (laser.targetCount > 1 && !laser.targetIsCruiser && !laser.targetIsAmoeba) {
+                const targetRenderCount = Math.min(50, laser.targetCount);
+                const targetIndex = Math.floor(randVal2 * targetRenderCount);
+                const targetMaxSpread = Math.min(60, 10 + Math.sqrt(laser.targetCount) * 2.5);
+                const { lx, ly } = getFormationOffset(
+                  laser.targetFormation || 'arrow',
+                  targetIndex,
+                  targetRenderCount,
+                  targetMaxSpread,
+                  laser.targetIsInterceptor
+                );
+                const cos = Math.cos(laser.targetAngle || 0);
+                const sin = Math.sin(laser.targetAngle || 0);
+                endPtX = laser.endX + lx * cos - ly * sin;
+                endPtY = laser.endY + lx * sin + ly * cos;
+              } else if (laser.targetIsCruiser) {
+                const size = (6 + (laser.targetMaxHealth || 6) * 1.0) / 2.5;
+                endPtX = laser.endX + (randVal - 0.5) * size * 10;
+                endPtY = laser.endY + (randVal2 - 0.5) * size * 10;
+              } else if (laser.targetIsAmoeba) {
+                const size = 6 + (laser.targetMaxHealth || 6) * 1.5;
+                endPtX = laser.endX + (randVal - 0.5) * size;
+                endPtY = laser.endY + (randVal2 - 0.5) * size;
+              } else if (laser.targetIsPlanet) {
+                // Target a random spot within planet radius
+                endPtX = laser.endX + (randVal - 0.5) * 40;
+                endPtY = laser.endY + (randVal2 - 0.5) * 40;
+              }
+
+              ctx.save();
+              ctx.beginPath();
+              ctx.moveTo(startPtX, startPtY);
+              ctx.lineTo(endPtX, endPtY);
+              ctx.strokeStyle = laser.color;
+              ctx.globalAlpha = Math.max(0, 1.0 - activeProgress);
+              ctx.lineWidth = laser.width || 2;
+              ctx.stroke();
+              ctx.restore();
+            }
           }
         }
       }

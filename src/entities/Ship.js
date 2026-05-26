@@ -238,12 +238,30 @@ export class Ship {
             this.owner.addExperience(1);
           }
 
-          if (lasers && lasersDrawn < 5) {
+          if (lasers && lasersDrawn < 8) {
             lasers.push({
-              startX: this.x + (Math.random() - 0.5) * 15, startY: this.y + (Math.random() - 0.5) * 15,
-              endX: enemyShip.x + (Math.random() - 0.5) * 15, endY: enemyShip.y + (Math.random() - 0.5) * 15,
+              startX: this.x,
+              startY: this.y,
+              endX: enemyShip.x,
+              endY: enemyShip.y,
               color: this.owner ? this.owner.color : '#fff',
-              age: 0, duration: 0.2
+              age: 0,
+              duration: 0.8,
+              sourceId: this.id,
+              targetId: enemyShip.id,
+              sourceCount: this.count || 1,
+              targetCount: enemyShip.count || 1,
+              sourceAngle: this.angle || 0,
+              targetAngle: enemyShip.angle || 0,
+              sourceFormation: this.formation || 'arrow',
+              targetFormation: enemyShip.formation || 'arrow',
+              sourceIsCruiser: this.isCruiser || false,
+              targetIsCruiser: enemyShip.isCruiser || false,
+              sourceIsAmoeba: this.isAmoeba || false,
+              targetIsAmoeba: enemyShip.isAmoeba || false,
+              sourceIsInterceptor: this.isInterceptor || false,
+              targetIsInterceptor: enemyShip.isInterceptor || false,
+              index: lasersDrawn
             });
             lasersDrawn++;
           }
@@ -337,11 +355,30 @@ export class Ship {
           
           if (lasers) {
             lasers.push({
-              startX: this.x, startY: this.y,
-              endX: enemyShip.x, endY: enemyShip.y,
+              startX: this.x,
+              startY: this.y,
+              endX: enemyShip.x,
+              endY: enemyShip.y,
               color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
-              age: 0, duration: usedBomb ? 0.6 : 0.2, width: usedBomb ? 8 : undefined,
-              isAmoebaAttack: !!this.isAmoeba
+              age: 0,
+              duration: 0.8,
+              width: usedBomb ? 8 : undefined,
+              isAmoebaAttack: !!this.isAmoeba,
+              sourceId: this.id,
+              targetId: enemyShip.id,
+              sourceCount: this.count || 1,
+              targetCount: enemyShip.count || 1,
+              sourceAngle: this.angle || 0,
+              targetAngle: enemyShip.angle || 0,
+              sourceFormation: this.formation || 'arrow',
+              targetFormation: enemyShip.formation || 'arrow',
+              sourceIsCruiser: this.isCruiser || false,
+              targetIsCruiser: enemyShip.isCruiser || false,
+              sourceIsAmoeba: this.isAmoeba || false,
+              targetIsAmoeba: enemyShip.isAmoeba || false,
+              sourceIsInterceptor: this.isInterceptor || false,
+              targetIsInterceptor: enemyShip.isInterceptor || false,
+              index: 0
             });
           }
           
@@ -517,23 +554,45 @@ export class Ship {
       if (Math.random() < 0.5 * (deltaTime / 1000)) { // 50% chance per sec from planet to ship
         if (lasers) {
           lasers.push({
-            startX: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-            startY: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-            endX: this.x, endY: this.y,
+            startX: this.targetPlanet.x,
+            startY: this.targetPlanet.y,
+            endX: this.x,
+            endY: this.y,
             color: this.targetPlanet.owner.color,
-            age: 0, duration: 0.2
+            age: 0,
+            duration: 0.8,
+            targetId: this.id,
+            targetCount: this.count || 1,
+            targetAngle: this.angle || 0,
+            targetFormation: this.formation || 'arrow',
+            targetIsCruiser: this.isCruiser || false,
+            targetIsAmoeba: this.isAmoeba || false,
+            targetIsInterceptor: this.isInterceptor || false,
+            sourceIsPlanet: true,
+            index: 0
           });
         }
       }
       if (Math.random() < 0.5 * (deltaTime / 1000)) { // 50% chance per sec from ship to planet
         if (lasers) {
           lasers.push({
-            startX: this.x, startY: this.y,
-            endX: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-            endY: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
+            startX: this.x,
+            startY: this.y,
+            endX: this.targetPlanet.x,
+            endY: this.targetPlanet.y,
             color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
-            age: 0, duration: 0.2,
-            isAmoebaAttack: !!this.isAmoeba
+            age: 0,
+            duration: 0.8,
+            isAmoebaAttack: !!this.isAmoeba,
+            sourceId: this.id,
+            sourceCount: this.count || 1,
+            sourceAngle: this.angle || 0,
+            sourceFormation: this.formation || 'arrow',
+            sourceIsCruiser: this.isCruiser || false,
+            sourceIsAmoeba: this.isAmoeba || false,
+            sourceIsInterceptor: this.isInterceptor || false,
+            targetIsPlanet: true,
+            index: 0
           });
         }
       }
