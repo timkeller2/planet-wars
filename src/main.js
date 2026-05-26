@@ -1940,7 +1940,9 @@ window.addEventListener('DOMContentLoaded', () => {
       // Defense tooltip on hovered planet
       if (hoveredPlanet && serverState.planets) {
         const hp = serverState.planets.find(pp => pp.id === hoveredPlanet.id);
-        if (hp) {
+        if (!hp) {
+          hoveredPlanet = null;
+        } else {
           const hpOwner = hp.ownerId ? serverState.players.find(pl => pl.id === hp.ownerId) : null;
           const lines = [];
           let totalDefense = 0;
@@ -2095,10 +2097,13 @@ window.addEventListener('DOMContentLoaded', () => {
       }
 
       // Fleet tooltip on hovered ship
-      if (hoveredShip && !hoveredPlanet && serverState) {
-        const hs = hoveredShip;
-        const hsOwner = hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
-        if (hsOwner) {
+      if (hoveredShip && !hoveredPlanet && serverState && serverState.ships) {
+        const hs = serverState.ships.find(ss => ss.id === hoveredShip.id);
+        if (!hs) {
+          hoveredShip = null;
+        } else {
+          const hsOwner = hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
+          if (hsOwner) {
           const lines = [];
           let totalAttackMod = 0;
 
@@ -2394,6 +2399,7 @@ window.addEventListener('DOMContentLoaded', () => {
           ctx.restore();
         }
       }
+    }
 
       function pseudoRandom(seed) {
         const x = Math.sin(seed) * 10000;
