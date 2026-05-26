@@ -850,12 +850,20 @@ export class Ship {
 
             // Capacity decrease chance
             const expectedCapacityDecrease = actualKilled * 0.08;
-            if (expectedCapacityDecrease > 0 && this.targetPlanet.owner !== null) {
-              this.targetPlanet.maxShips = Math.max(54, this.targetPlanet.maxShips - expectedCapacityDecrease);
-              if (this.targetPlanet.maxShips < 55) {
-                this.targetPlanet.dead = true;
-                if (this.targetPlanet.homeworldOf && this.owner) {
-                  this.owner.expScore = (this.owner.expScore || 0) + 100;
+            let capacityDrops = Math.floor(expectedCapacityDecrease);
+            const remainderDrops = expectedCapacityDecrease - capacityDrops;
+            if (Math.random() < remainderDrops) {
+              capacityDrops += 1;
+            }
+            if (capacityDrops > 0 && this.targetPlanet.owner !== null) {
+              const actualDrops = Math.min(capacityDrops, this.targetPlanet.maxShips - 54);
+              if (actualDrops > 0) {
+                this.targetPlanet.decreaseMaxShips(actualDrops);
+                if (this.targetPlanet.maxShips < 55) {
+                  this.targetPlanet.dead = true;
+                  if (this.targetPlanet.homeworldOf && this.owner) {
+                    this.owner.expScore = (this.owner.expScore || 0) + 100;
+                  }
                 }
               }
             }
