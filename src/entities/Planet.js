@@ -196,17 +196,21 @@ export class Planet {
 
     // Draw ship count backdrop pill
     let text = `${Math.floor(this.ships)} / ${this.maxShips}`;
-    const isHuman = this.owner && !this.owner.isAI;
-    if (isHuman) {
-      const modeIndicator = this.focusMode === 'research' ? '🧪' : (this.focusMode === 'garrison' ? '🛡️' : '📈');
-      text = `${modeIndicator} ${text}`;
-    }
     ctx.font = `bold ${Math.max(10, this.radius * 0.45)}px Orbitron`;
     const textWidth = ctx.measureText(text).width;
 
     ctx.fillStyle = 'rgba(17, 11, 11, 0.6)';
     const pillHeight = Math.max(14, this.radius * 0.55);
     ctx.fillRect(this.x - textWidth / 2 - 6, this.y - pillHeight / 2, textWidth + 12, pillHeight);
+
+    const isHuman = this.owner && !this.owner.isAI;
+    if (isHuman) {
+      const modeIndicator = this.focusMode === 'research' ? '🧪' : (this.focusMode === 'garrison' ? '🛡️' : '📈');
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(modeIndicator, this.x - textWidth / 2 - 12, this.y);
+    }
 
     ctx.fillStyle = '#000';
     ctx.textAlign = 'center';
