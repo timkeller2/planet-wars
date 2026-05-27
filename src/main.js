@@ -2240,6 +2240,34 @@ window.addEventListener('DOMContentLoaded', () => {
           const pillHeight = 16;
           ctx.fillRect(p.x - textWidth / 2 - 8, p.y - pillHeight / 2, textWidth + 16, pillHeight);
 
+          // Get owner properties to check if human owned
+          const displayOwnerId = isLastKnown ? lastKnownPlanets[p.id].ownerId : p.ownerId;
+          const displayOwner = serverState.players.find(pl => pl.id === displayOwnerId);
+          const isHuman = displayOwner && !displayOwner.isAI;
+
+          // Draw separate circular backdrop for focus badge to the left of ships pill
+          if (isHuman) {
+            const focus = p.focusMode || 'economy';
+            const modeIndicator = focus === 'research' ? '🧪' : (focus === 'garrison' ? '🛡️' : '📈');
+            const badgeRadius = pillHeight / 2;
+            const badgeX = p.x - textWidth / 2 - 8 - badgeRadius - 5;
+
+            // Draw separate circular backdrop for focus badge
+            ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
+            ctx.beginPath();
+            ctx.arc(badgeX, p.y, badgeRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Render emoji badge centered in its circular pill
+            ctx.save();
+            ctx.font = `${badgeRadius * 1.3}px sans-serif`;
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(modeIndicator, badgeX, p.y);
+            ctx.restore();
+          }
+
           ctx.fillStyle = isLastKnown ? '#666' : '#000';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
@@ -2247,12 +2275,15 @@ window.addEventListener('DOMContentLoaded', () => {
 
           ctx.fillStyle = isLastKnown ? '#888' : '#000';
           ctx.font = 'bold 11px Orbitron';
-          const pName = (isLastKnown ? lastKnownPlanets[p.id].name : p.name) || 'Unknown';
+          let pName = (isLastKnown ? lastKnownPlanets[p.id].name : p.name) || 'Unknown';
+          if (isHuman) {
+            const focus = p.focusMode || 'economy';
+            const modeIndicator = focus === 'research' ? '🧪' : (focus === 'garrison' ? '🛡️' : '📈');
+            pName = `${modeIndicator} ${pName}`;
+          }
           ctx.fillText(pName, p.x, p.y - pillHeight / 2 - 8);
 
           const displayHomeworldOf = isLastKnown ? lastKnownPlanets[p.id].homeworldOf : p.homeworldOf;
-          const displayOwnerId = isLastKnown ? lastKnownPlanets[p.id].ownerId : p.ownerId;
-          const displayOwner = serverState.players.find(pl => pl.id === displayOwnerId);
           const displayIsResearch = isLastKnown ? lastKnownPlanets[p.id].isResearch : p.isResearch;
           const displayIsMilitary = isLastKnown ? lastKnownPlanets[p.id].isMilitary : p.isMilitary;
           const displayIsSpeedPlanet = isLastKnown ? lastKnownPlanets[p.id].isSpeedPlanet : p.isSpeedPlanet;
