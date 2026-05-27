@@ -92,6 +92,7 @@ export class Planet {
             // Guaranteed tech score gain, no maxships gain
             this.owner.techScore = (this.owner.techScore || 0) + 1;
             this.techIncreaseEvent = true;
+            this.ships = Math.max(0, this.ships - 2);
             // Decay ships back to maxShips
             if (this.ships > this.maxShips) {
               this.ships = this.maxShips;
@@ -140,9 +141,11 @@ export class Planet {
                 } else {
                   this.techIncreaseEvent = true;
                 }
+                this.ships = Math.max(0, this.ships - 2);
               } else if (this.isResearch) {
                 this.owner.techScore = (this.owner.techScore || 0) + 1;
                 this.techIncreaseEvent = true;
+                this.ships = Math.max(0, this.ships - 2);
               }
             }
           }
