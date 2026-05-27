@@ -44,6 +44,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let interceptorOrderNext = false;
   let cruiserOrderNext = false;
   let upgradeModeActive = false;
+  let focusModeActive = false;
 
   let cameraZoom = 1.0;
   let cameraPanX = 0;
@@ -896,6 +897,16 @@ window.addEventListener('DOMContentLoaded', () => {
     return null;
   }
 
+  function getSelectedPlanetFocusQualifiers() {
+    if (!serverState || !localPlayer) return null;
+    if (selectedPlanets.length !== 1) return null;
+    const planet = serverState.planets.find(p => p.id === selectedPlanets[0].id);
+    if (!planet || planet.ownerId !== localPlayer.id) return null;
+    const cost = (planet.focusChanges || 0) * 10;
+    if (planet.ships < cost) return null;
+    return planet;
+  }
+
   function getCanvasPos(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
@@ -1569,6 +1580,39 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     if (event.repeat) return;
 
+    if (focusModeActive) {
+      const planet = getSelectedPlanetFocusQualifiers();
+      if (planet) {
+        const key = event.key.toLowerCase();
+        if (key === 'e' && planet.focusMode !== 'economy') {
+          event.preventDefault();
+          socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'economy' });
+          focusModeActive = false;
+          return;
+        }
+        if (key === 'r' && planet.focusMode !== 'research') {
+          event.preventDefault();
+          socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'research' });
+          focusModeActive = false;
+          return;
+        }
+        if (key === 'g' && planet.focusMode !== 'garrison') {
+          event.preventDefault();
+          socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'garrison' });
+          focusModeActive = false;
+          return;
+        }
+        if (key === 'c' || key === 'o') {
+          event.preventDefault();
+          focusModeActive = false;
+          return;
+        }
+        return;
+      } else {
+        focusModeActive = false;
+      }
+    }
+
     if (upgradeModeActive) {
       const qual = getSelectedCruiserUpgradeQualifiers();
       if (qual) {
@@ -1673,6 +1717,14 @@ window.addEventListener('DOMContentLoaded', () => {
         return;
       }
     }
+    if (event.key.toLowerCase() === 'o') {
+      const qual = getSelectedPlanetFocusQualifiers();
+      if (qual) {
+        event.preventDefault();
+        focusModeActive = true;
+        return;
+      }
+    }
     if (event.key.toLowerCase() === 'b') {
       bombOrderNext = bombOrderNext === 'eco' ? false : 'eco';
     }
@@ -1748,6 +1800,40 @@ window.addEventListener('DOMContentLoaded', () => {
       if (qual) {
         upgradeModeActive = true;
       }
+    });
+  }
+
+  const btnFocusEl = document.getElementById('btn-focus-mode');
+  if (btnFocusEl) {
+    btnFocusEl.addEventListener('click', () => {
+      const qual = getSelectedPlanetFocusQualifiers();
+      if (qual) {
+        focusModeActive = true;
+      }
+    });
+  }
+
+  const registerFocusBtn = (id, mode) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('click', () => {
+        const planet = getSelectedPlanetFocusQualifiers();
+        if (planet) {
+          socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: mode });
+          focusModeActive = false;
+        }
+      });
+    }
+  };
+
+  registerFocusBtn('btn-focus-economy', 'economy');
+  registerFocusBtn('btn-focus-research', 'research');
+  registerFocusBtn('btn-focus-garrison', 'garrison');
+
+  const btnFocusCancel = document.getElementById('btn-focus-cancel');
+  if (btnFocusCancel) {
+    btnFocusCancel.addEventListener('click', () => {
+      focusModeActive = false;
     });
   }
 
@@ -1860,6 +1946,17 @@ window.addEventListener('DOMContentLoaded', () => {
       upgradeModeActive = false;
     }
 
+    const btnFocusMode = document.getElementById('btn-focus-mode');
+    const focusButtonsMap = {
+      'btn-focus-economy': 'economy',
+      'btn-focus-research': 'research',
+      'btn-focus-garrison': 'garrison'
+    };
+    const focusQual = getSelectedPlanetFocusQualifiers();
+    if (!focusQual) {
+      focusModeActive = false;
+    }
+
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
     const actionButtonsLeft = document.getElementById('action-buttons-left');
     const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-fill', 'btn-scout', 'btn-interceptor', 'btn-cruiser', 'btn-leaderboard', 'help-btn'];
@@ -1874,9 +1971,41 @@ window.addEventListener('DOMContentLoaded', () => {
       'btn-up-damagecontrol': 'damagecontrol'
     };
 
-    if (upgradeModeActive && upgradeQual) {
+    if (focusModeActive && focusQual) {
       if (actionButtonsLeft) actionButtonsLeft.style.display = 'none';
       if (btnUpgradeMode) btnUpgradeMode.style.display = 'none';
+      if (btnFocusMode) btnFocusMode.style.display = 'none';
+
+      for (const btnId of stdButtons) {
+        const el = document.getElementById(btnId);
+        if (el) el.style.display = 'none';
+      }
+      for (const btnId of Object.keys(upButtonsMap)) {
+        const el = document.getElementById(btnId);
+        if (el) el.style.display = 'none';
+      }
+      const elUpCancel = document.getElementById('btn-up-cancel');
+      if (elUpCancel) elUpCancel.style.display = 'none';
+
+      for (const [btnId, mode] of Object.entries(focusButtonsMap)) {
+        const el = document.getElementById(btnId);
+        if (el) el.style.display = (focusQual.focusMode !== mode) ? 'inline-flex' : 'none';
+      }
+      const elFocusCancel = document.getElementById('btn-focus-cancel');
+      if (elFocusCancel) elFocusCancel.style.display = 'inline-flex';
+
+    } else if (upgradeModeActive && upgradeQual) {
+      if (actionButtonsLeft) actionButtonsLeft.style.display = 'none';
+      if (btnUpgradeMode) btnUpgradeMode.style.display = 'none';
+      if (btnFocusMode) btnFocusMode.style.display = 'none';
+
+      for (const btnId of Object.keys(focusButtonsMap)) {
+        const el = document.getElementById(btnId);
+        if (el) el.style.display = 'none';
+      }
+      const elFocusCancel = document.getElementById('btn-focus-cancel');
+      if (elFocusCancel) elFocusCancel.style.display = 'none';
+
       for (const btnId of stdButtons) {
         const el = document.getElementById(btnId);
         if (el) el.style.display = 'none';
@@ -1890,13 +2019,22 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       const elCancel = document.getElementById('btn-up-cancel');
       if (elCancel) elCancel.style.display = 'inline-flex';
+
     } else {
       if (actionButtonsLeft) actionButtonsLeft.style.display = 'flex';
       if (btnUpgradeMode) btnUpgradeMode.style.display = upgradeQual ? 'inline-flex' : 'none';
-      
+      if (btnFocusMode) btnFocusMode.style.display = focusQual ? 'inline-flex' : 'none';
+
+      for (const btnId of Object.keys(focusButtonsMap)) {
+        const el = document.getElementById(btnId);
+        if (el) el.style.display = 'none';
+      }
+      const elFocusCancel = document.getElementById('btn-focus-cancel');
+      if (elFocusCancel) elFocusCancel.style.display = 'none';
+
       const hasMilitary = selectedPlanets.some(p => p.isMilitary);
       const hasCruiserBase = selectedPlanets.some(p => p.isMilitary || p.homeworldOf);
-      
+
       const btnBomb = document.getElementById('btn-bomb');
       const btnBombShips = document.getElementById('btn-bomb-ships');
       const btnCruiser = document.getElementById('btn-cruiser');
@@ -2393,6 +2531,14 @@ window.addEventListener('DOMContentLoaded', () => {
                 totalDefense += hvhBonus;
                 lines.push({ label: 'PvP Defense', value: `${hvhBonus}%`, color: '#ff0' });
               }
+            }
+
+            // Planet Focus Details
+            if (!hpOwner.isAI) {
+              const focus = hp.focusMode || 'economy';
+              const capitalizedFocus = focus.charAt(0).toUpperCase() + focus.slice(1);
+              const cost = (hp.focusChanges || 0) * 10;
+              lines.push({ label: 'Focus Mode', value: `${capitalizedFocus} (Change: ${cost} 🪐)`, color: '#ffd740' });
             }
           } else {
             lines.push({ label: 'Neutral', value: 'No defense bonuses', color: '#888' });

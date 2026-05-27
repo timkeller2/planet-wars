@@ -11,6 +11,8 @@ export class Planet {
     this.productionProgress = 0;
     this.capacityProgress = 0;
     this.sacrificedShips = 0;
+    this.focusMode = 'economy';
+    this.focusChanges = 0;
     
     this.name = this.generatePlanetName();
   }
@@ -47,8 +49,12 @@ export class Planet {
   }
 
   update(deltaTime, allPlanets, settings) {
+    const isHuman = this.owner && !this.owner.isAI;
+    const focus = this.focusMode || 'economy';
+
     if (this.owner) {
-      if (this.ships < this.maxShips || (this.owner && this.owner.isAI)) {
+      const growthLimit = (isHuman && focus === 'garrison') ? this.maxShips * 2 : this.maxShips;
+      if (this.ships < growthLimit || (this.owner && this.owner.isAI)) {
         const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
         const lowPopMultiplier = Math.min(1.0, 0.10 + 0.02 * Math.max(0, this.ships - 5));
         const effectiveMaxShips = this.rampageBoost ? this.maxShips * 3 : this.maxShips;
@@ -75,35 +81,69 @@ export class Planet {
       this.productionProgress = 0;
     }
 
-    // Increase max capacity and tech score if full
-    if (this.owner && this.ships >= this.maxShips) {
+    // Increase max capacity, tech score, or maintain garrison mode if full
+    const isFull = this.owner && (this.ships >= (isHuman && focus === 'garrison' ? this.maxShips * 2 : this.maxShips));
+    if (isFull || (this.owner && this.owner.isAI && this.ships >= this.maxShips)) {
       const timeToIncrease = this.maxShips / 10;
       this.capacityProgress += (deltaTime / 1000);
       if (this.capacityProgress >= timeToIncrease) {
-        if (this.rampageEvent) {
-          this.decreaseMaxShips(1);
-          if (this.maxShips < 55) this.dead = true;
-        } else {
-          const increaseAmount = this.homeworldOf ? 2 : 1;
-          this.increaseMaxShips(increaseAmount);
-          if (this.owner && allPlanets) {
-            let galacticCapacity = 0;
-            for (const p of allPlanets) {
-              galacticCapacity += p.maxShips;
+        if (isHuman) {
+          if (focus === 'research') {
+            // Guaranteed tech score gain, no maxships gain
+            this.owner.techScore = (this.owner.techScore || 0) + 1;
+            this.techIncreaseEvent = true;
+            // Decay ships back to maxShips
+            if (this.ships > this.maxShips) {
+              this.ships = this.maxShips;
             }
-            const capacityPercent = galacticCapacity > 0 ? ((this.owner.totalCapacity || 0) / galacticCapacity) * 100 : 0;
-            const failChance = capacityPercent * 2;
-            if (Math.random() * 100 >= failChance) {
-              const increaseAmount = this.isResearch ? 2 : 1;
-              this.owner.techScore = (this.owner.techScore || 0) + increaseAmount;
-              if (this.isResearch) {
-                this.techDoubleIncreaseEvent = true;
-              } else {
+          } else if (focus === 'economy') {
+            // Grow max capacity, no tech score
+            if (this.rampageEvent) {
+              this.decreaseMaxShips(1);
+              if (this.maxShips < 55) this.dead = true;
+            } else {
+              const increaseAmount = this.homeworldOf ? 2 : 1;
+              this.increaseMaxShips(increaseAmount);
+            }
+            // Decay ships back to maxShips
+            if (this.ships > this.maxShips) {
+              this.ships = this.maxShips;
+            }
+          } else if (focus === 'garrison') {
+            // Grow up to twice max capacity, no grow max capacity or tech score
+            // Decay ships back to twice maxShips
+            const cap = this.maxShips * 2;
+            if (this.ships > cap) {
+              this.ships = cap;
+            }
+          }
+        } else {
+          // AI controlled planets continue to operate as they have before
+          if (this.rampageEvent) {
+            this.decreaseMaxShips(1);
+            if (this.maxShips < 55) this.dead = true;
+          } else {
+            const increaseAmount = this.homeworldOf ? 2 : 1;
+            this.increaseMaxShips(increaseAmount);
+            if (this.owner && allPlanets) {
+              let galacticCapacity = 0;
+              for (const p of allPlanets) {
+                galacticCapacity += p.maxShips;
+              }
+              const capacityPercent = galacticCapacity > 0 ? ((this.owner.totalCapacity || 0) / galacticCapacity) * 100 : 0;
+              const failChance = capacityPercent * 2;
+              if (Math.random() * 100 >= failChance) {
+                const increaseAmount = this.isResearch ? 2 : 1;
+                this.owner.techScore = (this.owner.techScore || 0) + increaseAmount;
+                if (this.isResearch) {
+                  this.techDoubleIncreaseEvent = true;
+                } else {
+                  this.techIncreaseEvent = true;
+                }
+              } else if (this.isResearch) {
+                this.owner.techScore = (this.owner.techScore || 0) + 1;
                 this.techIncreaseEvent = true;
               }
-            } else if (this.isResearch) {
-              this.owner.techScore = (this.owner.techScore || 0) + 1;
-              this.techIncreaseEvent = true;
             }
           }
         }
@@ -150,7 +190,12 @@ export class Planet {
     ctx.shadowBlur = 0;
 
     // Draw ship count backdrop pill
-    const text = `${Math.floor(this.ships)} / ${this.maxShips}`;
+    let text = `${Math.floor(this.ships)} / ${this.maxShips}`;
+    const isHuman = this.owner && !this.owner.isAI;
+    if (isHuman) {
+      const modeIndicator = this.focusMode === 'research' ? '🧪' : (this.focusMode === 'garrison' ? '🛡️' : '📈');
+      text = `${modeIndicator} ${text}`;
+    }
     ctx.font = `bold ${Math.max(10, this.radius * 0.45)}px Orbitron`;
     const textWidth = ctx.measureText(text).width;
 

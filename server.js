@@ -254,6 +254,33 @@ async function bootstrap() {
       }
     });
 
+    socket.on('changePlanetFocus', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      player.lastCommandTime = Date.now();
+      player.afkWarningSent = false;
+      if (player.isAI) {
+        player.isAI = false;
+      }
+      game.tryAssignPlanet(player);
+
+      if (!data || data.planetId === undefined || !data.focusMode) return;
+      const planet = game.planets.find(p => p.id === data.planetId);
+      if (!planet || !planet.owner || planet.owner.id !== player.id) return;
+
+      const validModes = ['economy', 'research', 'garrison'];
+      if (!validModes.includes(data.focusMode)) return;
+
+      const cost = (planet.focusChanges || 0) * 10;
+      if (planet.ships >= cost) {
+        planet.ships -= cost;
+        planet.focusMode = data.focusMode;
+        planet.focusChanges = (planet.focusChanges || 0) + 1;
+      }
+    });
+
     socket.on('resetAFK', () => {
       const player = connectedClients.get(socket.id);
       if (player) {
@@ -490,7 +517,9 @@ async function bootstrap() {
           homeworldEvent: hwEvent,
           isResearch: p.isResearch,
           isMilitary: p.isMilitary,
-          isSpeedPlanet: p.isSpeedPlanet
+          isSpeedPlanet: p.isSpeedPlanet,
+          focusMode: p.focusMode || 'economy',
+          focusChanges: p.focusChanges || 0
       };
     });
 
