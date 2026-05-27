@@ -97,9 +97,9 @@
         
         <div id="action-buttons" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 30px; z-index: 100; pointer-events: auto;">
           <div id="action-buttons-left" style="display: flex; gap: 10px;">
-            <button id="btn-speed-1" class="cyber-btn action-btn-icon" title="1/4 Speed (1)"><span class="btn-icon">🐢</span>1</button>
-            <button id="btn-speed-2" class="cyber-btn action-btn-icon" title="1/2 Speed (2)"><span class="btn-icon">🚶</span>2</button>
-            <button id="btn-speed-3" class="cyber-btn action-btn-icon" title="Normal Speed (3)"><span class="btn-icon">🏃</span>3</button>
+            <button id="btn-speed-1" class="cyber-btn action-btn-icon" title="1/4 Speed (,)"><span class="btn-icon">🐢</span>,</button>
+            <button id="btn-speed-2" class="cyber-btn action-btn-icon" title="1/2 Speed (.)"><span class="btn-icon">🚶</span>.</button>
+            <button id="btn-speed-3" class="cyber-btn action-btn-icon" title="Normal Speed (/)"><span class="btn-icon">🏃</span>/</button>
             <button id="btn-warp" class="cyber-btn action-btn-icon" title="Warp (W)"><span class="btn-icon">⚡</span>W</button>
           </div>
           <div id="action-buttons-right" style="display: flex; gap: 10px;">
@@ -167,13 +167,13 @@
               </li>
               <li><strong>Enter:</strong> Open/send chat messages.</li>
               <li><strong>Pause/Break:</strong> Pause the game.</li>
-              <li><strong>Speed Keys (1, 2, 3):</strong> Set fleet speed to 1/4, 1/2, or normal. Keys 2 and 3 also set the <em>default</em> speed for future launches.</li>
+              <li><strong>Speed Keys (,, ., /):</strong> Set fleet speed to 1/4, 1/2, or normal. Keys . and / also set the <em>default</em> speed for future launches.</li>
               <li><strong>W — Warp:</strong> Toggle warp mode for the next launch.</li>
               <li><strong>B — Bomb Eco:</strong> Launch eco bombers (requires 🚀 Military planet).</li>
               <li><strong>Q — Bomb Ships:</strong> Launch ship bombers (requires 🚀 Military planet).</li>
               <li><strong>F — Fill Mode:</strong> Send only enough ships to fill the target planet.</li>
               <li><strong>S — Scout Mode:</strong> Send a small scouting party (10% of garrison, min 3).</li>
-              <li><strong>I — Interceptor:</strong> Launch fast interceptor ships (can be launched from any planet).</li>
+              <li><strong>I — Interceptor:</strong> Launch fast interceptor ships (requires 🚀 Military planet or Homeworld).</li>
               <li><strong>C — Cruiser:</strong> Build a cruiser from a 🚀 Military planet or your Homeworld.</li>
               <li><strong>L — Leaderboard:</strong> Toggle the leaderboard panel.</li>
               <li><strong>Help Button ❓:</strong> Open this How-to-Play help index (integrated into the bottom-right action buttons panel for instant touch accessibility).</li>
@@ -249,7 +249,7 @@
               <li><strong>Armor Deflection (Damage Resistance):</strong> Cruisers have a base chance to completely shrug off incoming damage equal to <strong>(Max Health + √Tech + √Exp × 0.5 + √ShipExp × 0.5)%</strong> (capped at <strong>75%</strong>). However, if their bomb sacs are completely empty (0), this deflection chance is <strong>cut in half</strong>. Keep them armed!</li>
               <li><strong>Healing:</strong> Cruisers heal slowly inside friendly gravity wells. Outside wells, they burn fuel; when fuel runs out, they take slow health decay and move at reduced speed.</li>
               <li><strong>Bombardment Threat Safety:</strong> Cruisers will automatically <strong>suspend planetary bombardment</strong> if there is any active enemy ship or wild Space Amoeba within their <strong>sensor range</strong>, switching their weapon systems entirely to defensive engagement.</li>
-              <li><strong>Interceptors 🔺:</strong> Fast ships (speed 40) with +5% dogfight bonus. Created by pressing <strong>I</strong> from a non-special planet (permanently marks it). Interceptors have <strong>50% penalty</strong> attacking planets but excel at killing ships in space.</li>
+              <li><strong>Interceptors 🔺:</strong> Fast ships (speed 40) with +5% dogfight bonus. Created by pressing <strong>I</strong> from a Military planet or Homeworld. Interceptors have <strong>50% penalty</strong> attacking planets but excel at killing ships in space.</li>
               <li><strong>Interceptor Landing:</strong> Interceptors have a 30% chance to crash when landing on a friendly planet.</li>
             </ul>
           </div>

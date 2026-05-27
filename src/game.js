@@ -31,12 +31,31 @@ export class Game {
     const aiNames = [
       'Xylar', 'Vexis', 'Gorg', 'Nekro', 'Kael', 'Zor', 'Ruk', 'Drax',
       'Zephyx', 'Vorath', 'Malakor', 'Thrax', 'Sylph', 'Nyx', 'Kryos',
-      'Ignis', 'Aether', 'Onyx', 'Sol', 'Luna', 'Nova', 'Pulsar', 'Quasar'
+      'Ignis', 'Aether', 'Onyx', 'Sol', 'Luna', 'Nova', 'Pulsar', 'Quasar',
+      'Zorgon', 'Centauri', 'Hyperion', 'Vortex', 'Nebula', 'Andromeda', 'Orion',
+      'Sirius', 'Vega', 'Draco', 'Lyra', 'Cygnus', 'Altair', 'Rigel', 'Betelgeuse',
+      'Antares', 'Aldebaran', 'Capella', 'Procyon', 'Castor', 'Pollux', 'Arcturus',
+      'Spica', 'Regulus', 'Fomalhaut', 'Deneb', 'Polaris', 'Canopus', 'Mizar',
+      'Alcor', 'Algol', 'Zubenelgenubi', 'Zubeneschamali', 'Kraz', 'Girtab',
+      'Shaula', 'Lesath', 'Sargas', 'Nunki', 'Kaus', 'Rukbat', 'Arkab',
+      'Tarazed', 'Alshain', 'Altais', 'Rastaban', 'Eltanin', 'Grumium',
+      'Gemma', 'Alphecca', 'Unukalhai', 'Sabik', 'Han', 'Marfik', 'Cheleb',
+      'Cebalrai', 'Rasalas', 'Adhafera', 'Chertan', 'Zosma', 'Denebola',
+      'Phact', 'Wazn', 'Mirzam', 'Adhara', 'Wezen', 'Aludra', 'Furud',
+      'Sirrah', 'Mirach', 'Almach', 'Menkar', 'Baten', 'Acamar', 'Fornacis',
+      'Titanus', 'Cronos'
     ];
+
+    // Fisher-Yates Shuffle to guarantee 100% uniqueness of names assigned within the game
+    const shuffledNames = [...aiNames];
+    for (let i = shuffledNames.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledNames[i], shuffledNames[j]] = [shuffledNames[j], shuffledNames[i]];
+    }
     
     this.aiPlayers = [];
     for (let i = 0; i < 23; i++) {
-      this.aiPlayers.push(new Player(aiNames[i] || `ai${i+1}`, allColors[i], true));
+      this.aiPlayers.push(new Player(shuffledNames[i] || `ai${i+1}`, allColors[i], true));
     }
     
     this.allPlayers = [this.humanPlayer, this.monsterPlayer, ...this.aiPlayers];
@@ -94,25 +113,41 @@ export class Game {
       targetPlanet = neutralPlanets[0];
     } else {
       const humanPlanets = this.planets.filter(p => p.owner && !p.owner.isAI);
-      const candidatePlanets = neutralPlanets.filter(p => p.maxShips > 115 && humanPlanets.every(hp => {
-        const dx = p.x - hp.x;
-        const dy = p.y - hp.y;
-        return dx*dx + dy*dy >= 40000; // 200^2
-      }));
+      
+      if (!player.isAI && humanPlanets.length > 0) {
+        // Human player: prioritize candidates with maxShips > 115, sorted by distance to nearest human planet descending
+        const candidatePlanets = neutralPlanets.filter(p => p.maxShips > 115);
+        if (candidatePlanets.length > 0) {
+          candidatePlanets.sort((a, b) => {
+            const distA = humanPlanets.reduce((min, hp) => Math.min(min, (a.x - hp.x)**2 + (a.y - hp.y)**2), Infinity);
+            const distB = humanPlanets.reduce((min, hp) => Math.min(min, (b.x - hp.x)**2 + (b.y - hp.y)**2), Infinity);
+            return distB - distA; // Descending order (furthest first)
+          });
+          targetPlanet = candidatePlanets[0];
+        }
+      }
+      
+      if (!targetPlanet) {
+        const candidatePlanets = neutralPlanets.filter(p => p.maxShips > 115 && humanPlanets.every(hp => {
+          const dx = p.x - hp.x;
+          const dy = p.y - hp.y;
+          return dx*dx + dy*dy >= 40000; // 200^2
+        }));
 
-      if (candidatePlanets.length > 0) {
-        candidatePlanets.sort((a, b) => a.maxShips - b.maxShips); // smallest > 115
-        targetPlanet = candidatePlanets[0];
-      } else {
-        // Fallback 1: smallest > 115 regardless of distance
-        const anyLarge = neutralPlanets.filter(p => p.maxShips > 115);
-        if (anyLarge.length > 0) {
-          anyLarge.sort((a, b) => a.maxShips - b.maxShips);
-          targetPlanet = anyLarge[0];
+        if (candidatePlanets.length > 0) {
+          candidatePlanets.sort((a, b) => a.maxShips - b.maxShips); // smallest > 115
+          targetPlanet = candidatePlanets[0];
         } else {
-          // Fallback 2: highest maxShips overall
-          neutralPlanets.sort((a, b) => b.maxShips - a.maxShips);
-          targetPlanet = neutralPlanets[0];
+          // Fallback 1: smallest > 115 regardless of distance
+          const anyLarge = neutralPlanets.filter(p => p.maxShips > 115);
+          if (anyLarge.length > 0) {
+            anyLarge.sort((a, b) => a.maxShips - b.maxShips);
+            targetPlanet = anyLarge[0];
+          } else {
+            // Fallback 2: highest maxShips overall
+            neutralPlanets.sort((a, b) => b.maxShips - a.maxShips);
+            targetPlanet = neutralPlanets[0];
+          }
         }
       }
     }
@@ -373,7 +408,11 @@ export class Game {
     }
 
     // Create Beginning Ion Storms
-    const numStorms = Math.round((Math.random() * 1) * hazardScale);
+    let maxStorms = 3;
+    if (this.width < 1600) maxStorms = 2;
+    else if (this.width > 1600) maxStorms = 4;
+
+    const numStorms = Math.min(maxStorms, Math.round((Math.random() * 1) * hazardScale));
     const stormNames = ['Aether', 'Boreas', 'Zephyr', 'Typhon', 'Eurus', 'Notus', 'Tempest', 'Vortex', 'Maelstrom', 'Cyclone', 'Gale', 'Squall', 'Fury', 'Wrath', 'Havoc', 'Chaos', 'Surge', 'Pulse', 'Flux', 'Rift'];
     for (let s = 0; s < numStorms; s++) {
       const radius = (50 + Math.random() * 350) * hazardScale;
@@ -416,6 +455,10 @@ export class Game {
 
   sendShips(source, target, isWarp = false, speedModifier = null, isBombing = false, fillAmount = null, scoutMode = false, isInterceptor = false, isCruiserOrder = false) {
 
+    if (isInterceptor && !source.isMilitary && !source.homeworldOf) {
+      return;
+    }
+
     if (isCruiserOrder) {
       if ((source.isMilitary || source.homeworldOf) && source.ships > 60 && source.maxShips > 60) {
         const basePower = Math.floor(source.ships / 25);
@@ -450,6 +493,7 @@ export class Game {
       const techBonus = Math.floor(Math.sqrt(source.owner.techScore || 0));
       launchCost = Math.max(0, launchCost - techBonus);
     }
+    launchCost = Math.min(250, launchCost);
     if (source.ships < launchCost + 1) return;
     
     source.ships -= launchCost;
@@ -468,6 +512,8 @@ export class Game {
       const maxCanSend = Math.max(0, Math.floor(source.ships) - 10);
       shipsToSend = Math.min(maxCanSend, fillAmount);
     }
+
+    shipsToSend = Math.min(250, shipsToSend);
 
     if (shipsToSend <= 0) {
       source.ships += launchCost; // revert cost
@@ -584,17 +630,22 @@ export class Game {
 
   sendShipsToSpace(source, targetX, targetY, isWarp = false, speedModifier = null, isBombing = false, scoutMode = false, isInterceptor = false, isCruiserOrder = false) {
 
+    if (isInterceptor && !source.isMilitary && !source.homeworldOf) {
+      return;
+    }
+
     if (isCruiserOrder) {
       if ((source.isMilitary || source.homeworldOf) && source.ships > 60 && source.maxShips > 60) {
         const health = Math.floor(source.ships / 25);
         const costShips = health * 15;
         const costCap = health * 2;
         if (source.ships >= costShips && source.maxShips > costCap) {
+          const cruiserMaxHealth = Math.floor(source.ships / 5);
           source.ships -= costShips;
           source.decreaseMaxShips(costCap);
           const ship = new Ship(this.nextShipId++, source.x, source.y, null, source.owner, targetX, targetY);
-          ship.maxHealth = health * 5;
-          ship.health = health * 5;
+          ship.maxHealth = cruiserMaxHealth;
+          ship.health = cruiserMaxHealth;
           ship.fuel = health;
           ship.speed = Math.max(5, ship.speed - 10 - health);
           if (!source.owner.cruiserStyle) {
@@ -616,6 +667,7 @@ export class Game {
       const techBonus = Math.floor(Math.sqrt(source.owner.techScore || 0));
       launchCost = Math.max(0, launchCost - techBonus);
     }
+    launchCost = Math.min(250, launchCost);
     if (source.ships < launchCost + 1) return;
     
     source.ships -= launchCost;
@@ -629,6 +681,8 @@ export class Game {
       }
     }
     
+    shipsToSend = Math.min(250, shipsToSend);
+
     if (shipsToSend <= 0) {
       source.ships += launchCost; // revert cost
       return;
@@ -680,12 +734,28 @@ export class Game {
 
   moveShipsToSpace(player, shipIds, targetX, targetY, isWarp = false, speedModifier = null) {
     const validShips = shipIds.map(id => this.ships.find(s => s.id === id)).filter(s => s && s.owner && s.owner.id === player.id);
-    for (const ship of validShips) {
+    const cruisers = validShips.filter(s => s.isCruiser);
+    const numCruisers = cruisers.length;
+
+    for (let i = 0; i < numCruisers; i++) {
+      const ship = cruisers[i];
       ship.targetPlanet = null;
-      if (ship.isCruiser) {
+      ship.cruiserTargetOffsetX = 0;
+      ship.cruiserTargetOffsetY = 0;
+      if (numCruisers === 1) {
         ship.targetX = targetX;
         ship.targetY = targetY;
       } else {
+        const theta = i * 2.39996; // Golden angle
+        const r = 35 * Math.sqrt(i);
+        ship.targetX = targetX + r * Math.cos(theta);
+        ship.targetY = targetY + r * Math.sin(theta);
+      }
+    }
+
+    for (const ship of validShips) {
+      if (!ship.isCruiser) {
+        ship.targetPlanet = null;
         ship.targetX = targetX + (Math.random() - 0.5) * 30;
         ship.targetY = targetY + (Math.random() - 0.5) * 30;
       }
@@ -704,10 +774,31 @@ export class Game {
 
   moveShipsToPlanet(player, shipIds, targetPlanet, isWarp = false, speedModifier = null) {
     const validShips = shipIds.map(id => this.ships.find(s => s.id === id)).filter(s => s && s.owner && s.owner.id === player.id);
-    for (const ship of validShips) {
+    const cruisers = validShips.filter(s => s.isCruiser);
+    const numCruisers = cruisers.length;
+
+    for (let i = 0; i < numCruisers; i++) {
+      const ship = cruisers[i];
       ship.targetPlanet = targetPlanet;
       ship.targetX = null;
       ship.targetY = null;
+      if (numCruisers === 1) {
+        ship.cruiserTargetOffsetX = 0;
+        ship.cruiserTargetOffsetY = 0;
+      } else {
+        const theta = i * 2.39996; // Golden angle
+        const r = 35 * Math.sqrt(i);
+        ship.cruiserTargetOffsetX = r * Math.cos(theta);
+        ship.cruiserTargetOffsetY = r * Math.sin(theta);
+      }
+    }
+
+    for (const ship of validShips) {
+      if (!ship.isCruiser) {
+        ship.targetPlanet = targetPlanet;
+        ship.targetX = null;
+        ship.targetY = null;
+      }
       if (speedModifier !== null) ship.speedModifier = speedModifier;
       if (isWarp) {
         if (!ship.isWarp) {
@@ -780,21 +871,29 @@ export class Game {
     this.ionStormSpawnTimer += deltaTime;
     if (this.ionStormSpawnTimer >= spawnThreshold) {
       this.ionStormSpawnTimer = (-60000 + Math.random() * 120000) / Math.max(0.1, hazardScaleUpdate);
-      const stormNames = ['Aether', 'Boreas', 'Zephyr', 'Typhon', 'Eurus', 'Notus', 'Tempest', 'Vortex', 'Maelstrom', 'Cyclone', 'Gale', 'Squall', 'Fury', 'Wrath', 'Havoc', 'Chaos', 'Surge', 'Pulse', 'Flux', 'Rift'];
-      const radius = (50 + Math.random() * 350) * hazardScaleUpdate;
-      this.ionStorms.push({
-        id: this.nextIonStormId++,
-        name: stormNames[Math.floor(Math.random() * stormNames.length)],
-        type: 'storm',
-        x: radius + Math.random() * (this.width - radius * 2),
-        y: radius + Math.random() * (this.height - radius * 2),
-        radius: radius,
-        intensity: (() => { let v = 0; for (let d = 0; d < 10; d++) v += Math.floor(Math.random() * 6) + 1; return Math.min(v, 10 * (this.ionStormsCreated + 1)); })(),
-        speed: 1 + Math.random() * 9,
-        heading: Math.random() * 360,
-        knowledge: {}
-      });
-      this.ionStormsCreated++;
+      
+      let maxStorms = 3;
+      if (this.width < 1600) maxStorms = 2;
+      else if (this.width > 1600) maxStorms = 4;
+      
+      const currentStorms = this.ionStorms.filter(st => st.type === 'storm').length;
+      if (currentStorms < maxStorms) {
+        const stormNames = ['Aether', 'Boreas', 'Zephyr', 'Typhon', 'Eurus', 'Notus', 'Tempest', 'Vortex', 'Maelstrom', 'Cyclone', 'Gale', 'Squall', 'Fury', 'Wrath', 'Havoc', 'Chaos', 'Surge', 'Pulse', 'Flux', 'Rift'];
+        const radius = (50 + Math.random() * 350) * hazardScaleUpdate;
+        this.ionStorms.push({
+          id: this.nextIonStormId++,
+          name: stormNames[Math.floor(Math.random() * stormNames.length)],
+          type: 'storm',
+          x: radius + Math.random() * (this.width - radius * 2),
+          y: radius + Math.random() * (this.height - radius * 2),
+          radius: radius,
+          intensity: (() => { let v = 0; for (let d = 0; d < 10; d++) v += Math.floor(Math.random() * 6) + 1; return Math.min(v, 10 * (this.ionStormsCreated + 1)); })(),
+          speed: 1 + Math.random() * 9,
+          heading: Math.random() * 360,
+          knowledge: {}
+        });
+        this.ionStormsCreated++;
+      }
     }
 
     // Ion Storm movement and cleanup (skip stationary hazards)
@@ -892,7 +991,7 @@ export class Game {
             const chance = (storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed) / 500;
             if (chance > 0 && Math.random() < chance) {
               if (ship.maxHealth > 0) {
-                ship.takeDamage(this.explosions);
+                ship.takeDamage(this.explosions, null, true);
               } else {
                 if (!ship.checkSurvivalRoll()) {
                   if (ship.count > 1) {
@@ -1116,6 +1215,12 @@ export class Game {
               const targetPlanet = this.planets.find(pl => pl.id === laser.targetPlanetId);
               if (targetPlanet && targetPlanet.ships > 0) {
                 targetPlanet.ships -= 1;
+              }
+            }
+            if (laser.sourceShipId !== undefined) {
+              const sourceShip = this.ships.find(sh => sh.id === laser.sourceShipId);
+              if (sourceShip && sourceShip.active) {
+                sourceShip.expScore = (sourceShip.expScore || 0) + 0.05;
               }
             }
             this.explosions.push({

@@ -34,6 +34,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let selectedPlanets = [];
   let selectedShips = [];
   let warpOrderNext = false;
+  let controlGroups = {}; // RTS control groups for fleets/cruisers
 
   let speedModifierNext = null;
   let bombOrderNext = false;
@@ -853,6 +854,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
           if (selectedPlanets.length > 0) {
             selectedPlanets.forEach(sourcePlanet => {
+              if (interceptorOrderNext && !sourcePlanet.isMilitary && !sourcePlanet.homeworldOf) return;
               if (currentFillNeeded === 0) return;
               const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
               let launchCost = myPlayer ? 10 + (myPlayer.planetCount || 0) : 10;
@@ -860,6 +862,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 const techBonus = Math.floor(Math.sqrt(myPlayer.techScore || 0));
                 launchCost = Math.max(0, launchCost - techBonus);
               }
+              launchCost = Math.min(250, launchCost);
               if (sourcePlanet.ships >= launchCost + 1) {
                 let fillAmount = null;
                 if (currentFillNeeded !== Infinity) {
@@ -876,7 +879,7 @@ window.addEventListener('DOMContentLoaded', () => {
                   text: `-${launchCost}`,
                   type: 'launchCost',
                   age: 0,
-                  duration: 0.75
+                  duration: 2.5
                 });
               }
             });
@@ -898,12 +901,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
           if (selectedPlanets.length > 0) {
             selectedPlanets.forEach(sourcePlanet => {
+              if (interceptorOrderNext && !sourcePlanet.isMilitary && !sourcePlanet.homeworldOf) return;
               const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
               let launchCost = myPlayer ? 10 + (myPlayer.planetCount || 0) : 10;
               if (myPlayer) {
                 const techBonus = Math.floor(Math.sqrt(myPlayer.techScore || 0));
                 launchCost = Math.max(0, launchCost - techBonus);
               }
+              launchCost = Math.min(250, launchCost);
               if (sourcePlanet.ships >= launchCost + 1) {
                 socket.emit('sendShipsToSpace', { sourceId: sourcePlanet.id, targetX: targetPos.x, targetY: targetPos.y, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, scoutMode: scoutModeNext, isInterceptor: interceptorOrderNext, isCruiser: cruiserOrderNext });
                 floatingAnimations.push({
@@ -912,7 +917,7 @@ window.addEventListener('DOMContentLoaded', () => {
                   text: `-${launchCost}`,
                   type: 'launchCost',
                   age: 0,
-                  duration: 0.75
+                  duration: 2.5
                 });
               }
             });
@@ -953,38 +958,16 @@ window.addEventListener('DOMContentLoaded', () => {
           }
         }
       } else if (clickedShip && clickedShip.ownerId === localPlayer.id) {
-        if (clickedShip.isCruiser) {
-          // Cruiser: toggle individual selection
+        if (isShift) {
           const isAlreadyselected = selectedShips.some(s => s.id === clickedShip.id);
           if (isAlreadyselected) {
             selectedShips = selectedShips.filter(s => s.id !== clickedShip.id);
           } else {
-            if (isShift) {
-              selectedShips.push(clickedShip);
-            } else {
-              selectedShips = [clickedShip];
-              selectedPlanets = [];
-            }
+            selectedShips.push(clickedShip);
           }
         } else {
-          // Non-cruiser: select all friendly non-cruiser ships within 100px
-          const nearbyShips = serverState.ships.filter(s => {
-            if (!s.active || s.ownerId !== localPlayer.id) return false;
-            if (s.isCruiser) return false;
-            const sdx = s.x - clickedShip.x;
-            const sdy = s.y - clickedShip.y;
-            return sdx * sdx + sdy * sdy <= 100 * 100;
-          });
-          if (isShift) {
-            for (const s of nearbyShips) {
-              if (!selectedShips.some(sel => sel.id === s.id)) {
-                selectedShips.push(s);
-              }
-            }
-          } else {
-            selectedShips = nearbyShips;
-            selectedPlanets = [];
-          }
+          selectedShips = [clickedShip];
+          selectedPlanets = [];
         }
       } else {
         // Clicked empty space
@@ -997,7 +980,26 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function handlePointerMove(x, y) {
+  function handlePointerMove(x, y, isTouchInput = false) {
+    if (isTouchInput) {
+      hoveredPlanet = null;
+      hoveredShip = null;
+      if (touchTooltipEntity) {
+        if (touchTooltipEntity.type === 'planet') {
+          const targetPlanet = serverState && serverState.planets ? serverState.planets.find(pp => pp.id === touchTooltipEntity.id) : null;
+          if (targetPlanet) {
+            hoveredPlanet = targetPlanet;
+          }
+        } else if (touchTooltipEntity.type === 'ship') {
+          const targetShip = serverState && serverState.ships ? serverState.ships.find(ss => ss.id === touchTooltipEntity.id && ss.active) : null;
+          if (targetShip) {
+            hoveredShip = targetShip;
+          }
+        }
+      }
+      return;
+    }
+
     const serverPos = getMouseServerPos(x, y);
     hoveredPlanet = getPlanetAt(x, y);
 
@@ -1167,7 +1169,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Always update hover state and lasso
     const cPos = getCanvasPos(event.clientX, event.clientY);
-    handlePointerMove(cPos.x, cPos.y);
+    handlePointerMove(cPos.x, cPos.y, false);
 
     const now = Date.now();
     if (now - lastMouseEmitTime > 5000) {
@@ -1197,6 +1199,10 @@ window.addEventListener('DOMContentLoaded', () => {
   let touchStartActive = false;
   let touchLongPressed = false;
   let touchTimeout = null;
+  let lastTouchTime = 0;
+  let lastTouchX = 0;
+  let lastTouchY = 0;
+  let touchTooltipEntity = null;
 
   canvas.addEventListener('touchstart', (event) => {
     event.preventDefault(); // Prevent double-firing with simulated mouse events
@@ -1231,9 +1237,54 @@ window.addEventListener('DOMContentLoaded', () => {
       touchLongPressed = false;
       isDraggingCamera = false;
 
-      // Update hover tooltip immediately on touch down!
+      // Double tap check
+      const now = Date.now();
+      const timeDiff = now - lastTouchTime;
+      const distSq = (tx - lastTouchX) * (tx - lastTouchX) + (ty - lastTouchY) * (ty - lastTouchY);
+      
+      let isDoubleTap = false;
+      if (timeDiff < 300 && distSq < 900) {
+        isDoubleTap = true;
+      }
+      
+      lastTouchTime = now;
+      lastTouchX = tx;
+      lastTouchY = ty;
+
       const cPos = getCanvasPos(tx, ty);
-      handlePointerMove(cPos.x, cPos.y);
+
+      if (isDoubleTap) {
+        const clickedPlanet = getPlanetAt(cPos.x, cPos.y);
+        let clickedShip = null;
+        const serverPos = getMouseServerPos(cPos.x, cPos.y);
+        if (serverState && serverState.ships) {
+          for (const ship of serverState.ships) {
+            if (!ship.active) continue;
+            const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
+            const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
+            const sdx = ship.x - serverPos.x;
+            const sdy = ship.y - serverPos.y;
+            if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
+              if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
+                clickedShip = ship;
+              }
+            }
+          }
+        }
+        
+        if (clickedShip && clickedShip.isCruiser) {
+          touchTooltipEntity = { type: 'ship', id: clickedShip.id };
+        } else if (clickedPlanet) {
+          touchTooltipEntity = { type: 'planet', id: clickedPlanet.id };
+        } else {
+          touchTooltipEntity = null;
+        }
+      } else {
+        touchTooltipEntity = null;
+      }
+
+      // Update hover tooltip immediately on touch down!
+      handlePointerMove(cPos.x, cPos.y, true);
 
       // Set hold timer for 450ms (simulates Right-Click Order event button=2)
       touchTimeout = setTimeout(() => {
@@ -1344,7 +1395,7 @@ window.addEventListener('DOMContentLoaded', () => {
       } else {
         // Update hover tooltips dynamically as finger touches or holds
         const cPos = getCanvasPos(tx, ty);
-        handlePointerMove(cPos.x, cPos.y);
+        handlePointerMove(cPos.x, cPos.y, true);
       }
     }
   }, { passive: false });
@@ -1391,6 +1442,32 @@ window.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (event.repeat) return;
+
+    // RTS Control Groups (0-9)
+    const numKey = event.key;
+    if (numKey >= '0' && numKey <= '9') {
+      if (event.ctrlKey) {
+        event.preventDefault();
+        controlGroups[numKey] = selectedShips.map(s => s.id);
+        console.log(`Assigned control group ${numKey} to ships:`, controlGroups[numKey]);
+      } else if (!event.altKey && !event.shiftKey && !event.metaKey) {
+        const savedIds = controlGroups[numKey];
+        if (savedIds && savedIds.length > 0) {
+          event.preventDefault();
+          selectedShips = [];
+          if (serverState && serverState.ships) {
+            for (const ship of serverState.ships) {
+              if (ship.active && savedIds.includes(ship.id)) {
+                selectedShips.push(ship);
+              }
+            }
+          }
+          selectedPlanets = [];
+          console.log(`Reselected control group ${numKey}:`, selectedShips.map(s => s.id));
+        }
+      }
+    }
+
     if (event.code === 'Pause') {
       event.preventDefault();
       socket.emit('togglePause');
@@ -1414,14 +1491,21 @@ window.addEventListener('DOMContentLoaded', () => {
       scoutModeNext = !scoutModeNext;
     }
     if (event.key.toLowerCase() === 'i') {
-      interceptorOrderNext = !interceptorOrderNext;
+      if (interceptorOrderNext) {
+        interceptorOrderNext = false;
+      } else {
+        const hasInterceptorBase = selectedPlanets.some(p => p.isMilitary || p.homeworldOf);
+        if (hasInterceptorBase) {
+          interceptorOrderNext = true;
+        }
+      }
     }
     if (event.key.toLowerCase() === 'c') {
       cruiserOrderNext = !cruiserOrderNext;
     }
-    if (event.key === '1') speedModifierNext = speedModifierNext === 0.25 ? null : 0.25;
-    if (event.key === '2') speedModifierNext = speedModifierNext === 0.50 ? null : 0.50;
-    if (event.key === '3') speedModifierNext = speedModifierNext === 1.0 ? null : 1.0;
+    if (event.key === ',') speedModifierNext = speedModifierNext === 0.25 ? null : 0.25;
+    if (event.key === '.') speedModifierNext = speedModifierNext === 0.50 ? null : 0.50;
+    if (event.key === '/') speedModifierNext = speedModifierNext === 1.0 ? null : 1.0;
     if (event.key === '4' || event.key === '0') speedModifierNext = speedModifierNext === 1.0 ? null : 1.0;
 
     if (event.key === '=' || event.key === '+' || event.key === '-' || event.key === '_') {
@@ -1448,7 +1532,16 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-bomb-ships').addEventListener('click', () => { bombOrderNext = bombOrderNext === 'ships' ? false : 'ships'; });
   document.getElementById('btn-fill').addEventListener('click', () => { fillModeNext = !fillModeNext; });
   document.getElementById('btn-scout').addEventListener('click', () => { scoutModeNext = !scoutModeNext; });
-  document.getElementById('btn-interceptor').addEventListener('click', () => { interceptorOrderNext = !interceptorOrderNext; });
+  document.getElementById('btn-interceptor').addEventListener('click', () => {
+    if (interceptorOrderNext) {
+      interceptorOrderNext = false;
+    } else {
+      const hasInterceptorBase = selectedPlanets.some(p => p.isMilitary || p.homeworldOf);
+      if (hasInterceptorBase) {
+        interceptorOrderNext = true;
+      }
+    }
+  });
   document.getElementById('btn-cruiser').addEventListener('click', () => { cruiserOrderNext = !cruiserOrderNext; });
   document.getElementById('btn-speed-1').addEventListener('click', () => { speedModifierNext = speedModifierNext === 0.25 ? null : 0.25; });
   document.getElementById('btn-speed-2').addEventListener('click', () => { speedModifierNext = speedModifierNext === 0.50 ? null : 0.50; });
@@ -1527,11 +1620,13 @@ window.addEventListener('DOMContentLoaded', () => {
     const btnBomb = document.getElementById('btn-bomb');
     const btnBombShips = document.getElementById('btn-bomb-ships');
     const btnCruiser = document.getElementById('btn-cruiser');
+    const btnInterceptor = document.getElementById('btn-interceptor');
     const hasMilitary = selectedPlanets.some(p => p.isMilitary);
     const hasCruiserBase = selectedPlanets.some(p => p.isMilitary || p.homeworldOf);
     if (btnBomb) btnBomb.style.display = hasMilitary ? 'inline-flex' : 'none';
     if (btnBombShips) btnBombShips.style.display = hasMilitary ? 'inline-flex' : 'none';
     if (btnCruiser) btnCruiser.style.display = hasCruiserBase ? 'inline-flex' : 'none';
+    if (btnInterceptor) btnInterceptor.style.display = hasCruiserBase ? 'inline-flex' : 'none';
 
     if (!serverState) return;
 
@@ -1644,9 +1739,11 @@ window.addEventListener('DOMContentLoaded', () => {
             const drawRadius = Math.max(10, f.radarRange * pct);
             ctx.beginPath();
             ctx.arc(f.x, f.y, drawRadius, 0, Math.PI * 2);
-            ctx.fillStyle = owner.color;
-            ctx.globalAlpha = 0.05;
-            ctx.fill();
+            if (!f.isCruiser) {
+              ctx.fillStyle = owner.color;
+              ctx.globalAlpha = 0.05;
+              ctx.fill();
+            }
             ctx.strokeStyle = owner.color;
             ctx.globalAlpha = 0.2;
             ctx.lineWidth = 1;
@@ -2175,32 +2272,7 @@ window.addEventListener('DOMContentLoaded', () => {
             lines.push({ label: 'Accuracy (Hit Chance)', value: hitChance, color: '#f88' });
             lines.push({ label: 'Volley Size', value: volleySize, color: '#ffa' });
 
-            let friendlyCap = 0;
-            if (serverState.planets) {
-              for (const gp of serverState.planets) {
-                if (gp.ownerId !== hs.ownerId) continue;
-                const tb = 0.01 * Math.sqrt(hsOwner.techScore || 0);
-                const eb = 0.005 * Math.sqrt(hsOwner.expScore || 0);
-                const gr = (gp.maxShips * 1.5) * (1 + tb + eb);
-                const pdx = gp.x - hs.x, pdy = gp.y - hs.y;
-                if (pdx * pdx + pdy * pdy <= gr * gr) friendlyCap += gp.maxShips;
-              }
-            }
-            if (friendlyCap > 0) {
-              lines.push({ label: 'Regeneration', value: 'Active (2 HP/min)', color: '#4f4' });
-              if (hs.isWarp) {
-                lines.push({ label: 'Refueling', value: 'Offline (In Warp)', color: '#888' });
-              } else {
-                lines.push({ label: 'Refueling', value: 'Active (6/min)', color: '#4f4' });
-              }
-            } else {
-              lines.push({ label: 'Regeneration', value: 'Offline', color: '#888' });
-              if (hs.isWarp) {
-                lines.push({ label: 'Deep space', value: 'Consuming Fuel (2/min)', color: '#aaf' });
-              } else {
-                lines.push({ label: 'Deep space', value: 'Consuming Fuel (1/min)', color: '#aaf' });
-              }
-            }
+            lines.push({ label: 'XP', value: `+${shipExpBonus.toFixed(1)}`, color: '#00d5ff' });
           } else {
             // Count nearby friendly ships within swarm bonus range (100px)
             const swarmRange = 100;
@@ -2406,10 +2478,10 @@ window.addEventListener('DOMContentLoaded', () => {
         return x - Math.floor(x);
       }
 
-      function getFormationOffset(formationType, i, renderCount, maxSpread, isInterceptor = false) {
+      function getFormationOffset(formationType, i, renderCount, maxSpread, isInterceptor = false, isBomber = false) {
         let lx = 0;
         let ly = 0;
-        const spacing = isInterceptor ? 7 : 4;
+        const spacing = isBomber ? 10 : (isInterceptor ? 7 : 4);
         switch (formationType) {
           case 'arrow': {
             let row = 0;
@@ -2531,6 +2603,28 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.stroke();
             ctx.shadowBlur = 0;
             ctx.beginPath();
+            
+            // Draw cyan sensor range circle (outline only, no fill!)
+            const shipExpBonus = (s.expScore || 0) * 2;
+            let cruiserRadar = Math.min(250, 5 * s.maxHealth) + shipExpBonus;
+            if (s.isWarp) cruiserRadar *= 0.25;
+            let playerTechBonus = 0;
+            let playerExpBonus = 0;
+            if (owner) {
+              playerTechBonus = 0.01 * Math.sqrt(owner.techScore || 0);
+              playerExpBonus = 0.005 * Math.sqrt(owner.expScore || 0);
+            }
+            const sensorRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
+            
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.45)'; // Sleek cyan
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 6]); // Dashed/dotted
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, sensorRange, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+            ctx.beginPath();
           } else if (s.count > 1) {
             ctx.arc(s.x, s.y, maxSpread + 4, 0, Math.PI * 2);
           } else if (s.isBomber) {
@@ -2546,9 +2640,9 @@ window.addEventListener('DOMContentLoaded', () => {
         ctx.fillStyle = owner ? owner.color : '#fff';
         
         if (s.count > 1 && !s.isCruiser && !s.isAmoeba) {
-          const renderCount = Math.min(50, s.count);
+          const renderCount = Math.min(150, s.count);
           for (let i = 0; i < renderCount; i++) {
-            const { lx, ly } = getFormationOffset(s.formation, i, renderCount, maxSpread, s.isInterceptor);
+            const { lx, ly } = getFormationOffset(s.formation, i, renderCount, maxSpread, s.isInterceptor, s.isBomber);
             const cos = Math.cos(s.angle || 0);
             const sin = Math.sin(s.angle || 0);
             const drawX = s.x + lx * cos - ly * sin;
@@ -2588,6 +2682,20 @@ window.addEventListener('DOMContentLoaded', () => {
               ctx.fill();
             }
           }
+
+          if (s.count > 150) {
+            ctx.save();
+            ctx.font = 'bold 9px "Outfit", "Inter", sans-serif';
+            ctx.fillStyle = owner ? owner.color : '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.lineWidth = 2.5;
+            ctx.strokeText(`+${s.count - 150}`, s.x, s.y - maxSpread - 6);
+            ctx.fillText(`+${s.count - 150}`, s.x, s.y - maxSpread - 6);
+            ctx.restore();
+          }
+
           continue;
         }
 
@@ -2641,7 +2749,7 @@ window.addEventListener('DOMContentLoaded', () => {
           ctx.restore();
           ctx.beginPath();
         } else if (s.isCruiser) {
-          const size = ((6 + (s.maxHealth || 0) * 1.0) / 2.5);
+          const size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0);
           let angle = s.angle || 0;
           let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
           let style = ownerPlayer ? ownerPlayer.cruiserStyle : 'Klingon';
@@ -2833,6 +2941,28 @@ window.addEventListener('DOMContentLoaded', () => {
               currentY -= 1;
             }
             
+            if (s.isCruiser && s.bombs !== undefined) {
+              const maxBombs = Math.floor(s.maxHealth / 5);
+              if (s.bombs < maxBombs) {
+                currentY -= barH;
+                ctx.fillStyle = '#3a3a3a';
+                ctx.fillRect(s.x - barW / 2, currentY, barW, barH);
+                ctx.fillStyle = '#a0a0a0';
+                ctx.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.bombs) / maxBombs), barH);
+                currentY -= 1;
+              }
+            }
+            
+            const shipExpBonus = 0.5 * Math.sqrt(s.expScore || 0);
+            if (s.isCruiser && (s.expScore || 0) >= 1) {
+              currentY -= barH;
+              ctx.fillStyle = '#1a3344';
+              ctx.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctx.fillStyle = '#00d5ff';
+              ctx.fillRect(s.x - barW / 2, currentY, barW * Math.min(1.0, shipExpBonus / 10), barH);
+              currentY -= 1;
+            }
+            
             if (s.health < s.maxHealth) {
               currentY -= barH;
               ctx.fillStyle = 'red';
@@ -2851,6 +2981,136 @@ window.addEventListener('DOMContentLoaded', () => {
       if (serverState.lasers) {
         for (const laser of serverState.lasers) {
           const progress = laser.age / laser.duration;
+          
+          if (laser.isBombAttack) {
+            let startPtX = laser.startX;
+            let startPtY = laser.startY;
+            let endPtX = laser.endX;
+            let endPtY = laser.endY;
+            
+            const seed = Math.sin(laser.startX * 12.9898 + laser.startY * 78.233 + (laser.index || 0)) * 43758.5453;
+            const randVal = seed - Math.floor(seed);
+            const randVal2 = (seed * 10) - Math.floor(seed * 10);
+            
+            if (laser.sourceIsCruiser) {
+              const size = (6 + (laser.sourceMaxHealth || 6) * 1.0) / 3.0;
+              const rotAngle = (laser.sourceAngle || 0) + Math.PI / 2;
+              let localX = 0;
+              let localY = 0;
+              const hardpointIndex = Math.floor(randVal * 3);
+              if (hardpointIndex === 0) {
+                localX = 0;
+                localY = -size * 0.95;
+              } else if (hardpointIndex === 1) {
+                localX = -size * 0.75;
+                localY = size * 0.15;
+              } else {
+                localX = size * 0.75;
+                localY = size * 0.15;
+              }
+              const gx = localX * Math.cos(rotAngle) - localY * Math.sin(rotAngle);
+              const gy = localX * Math.sin(rotAngle) + localY * Math.cos(rotAngle);
+              startPtX = laser.startX + gx;
+              startPtY = laser.startY + gy;
+            }
+            
+            if (laser.targetIsCruiser) {
+              const size = (6 + (laser.targetMaxHealth || 6) * 1.0) / 3.0;
+              const rotAngle = (laser.targetAngle || 0) + Math.PI / 2;
+              let localX = 0;
+              let localY = 0;
+              const targetPointSeed = Math.floor(randVal * 4);
+              if (targetPointSeed === 0) {
+                localX = 0;
+                localY = -size * 0.7;
+              } else if (targetPointSeed === 1) {
+                localX = -size * 0.6;
+                localY = size * 0.1;
+              } else if (targetPointSeed === 2) {
+                localX = size * 0.6;
+                localY = size * 0.1;
+              } else {
+                localX = 0;
+                localY = size * 0.4;
+              }
+              const gx = localX * Math.cos(rotAngle) - localY * Math.sin(rotAngle);
+              const gy = localX * Math.sin(rotAngle) + localY * Math.cos(rotAngle);
+              endPtX = laser.endX + gx;
+              endPtY = laser.endY + gy;
+            } else if (laser.targetIsPlanet) {
+              endPtX = laser.endX + (randVal - 0.5) * 40;
+              endPtY = laser.endY + (randVal2 - 0.5) * 40;
+            }
+            
+            const style = laser.cruiserStyle || 'Klingon';
+            if (style === 'Tholian') {
+              ctx.save();
+              ctx.beginPath();
+              ctx.moveTo(startPtX, startPtY);
+              ctx.lineTo(endPtX, endPtY);
+              ctx.strokeStyle = '#ffff00';
+              ctx.lineWidth = 3.0;
+              ctx.globalAlpha = Math.max(0, 1.0 - progress);
+              ctx.stroke();
+              ctx.restore();
+            } else {
+              const curX = startPtX + (endPtX - startPtX) * progress;
+              const curY = startPtY + (endPtY - startPtY) * progress;
+              
+              ctx.save();
+              ctx.translate(curX, curY);
+              
+              if (style === 'Federation') {
+                ctx.beginPath();
+                ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffff00';
+                ctx.shadowColor = '#ffff00';
+                ctx.shadowBlur = 8;
+                ctx.fill();
+              } else if (style === 'Gorn') {
+                ctx.beginPath();
+                ctx.arc(0, 0, 4.0, 0, Math.PI * 2);
+                ctx.fillStyle = '#ff3300';
+                ctx.shadowColor = '#ff3300';
+                ctx.shadowBlur = 10;
+                ctx.fill();
+              } else if (style === 'Romulan') {
+                ctx.beginPath();
+                ctx.arc(0, 0, 6.0, 0, Math.PI * 2);
+                ctx.fillStyle = '#ff0000';
+                ctx.shadowColor = '#ff0000';
+                ctx.shadowBlur = 12;
+                ctx.fill();
+              } else {
+                const angle = Math.atan2(endPtY - startPtY, endPtX - startPtX);
+                ctx.rotate(angle + Math.PI / 2);
+                ctx.beginPath();
+                ctx.moveTo(0, -3);
+                ctx.lineTo(1, -1);
+                ctx.lineTo(1, 2);
+                ctx.lineTo(1.5, 3);
+                ctx.lineTo(-1.5, 3);
+                ctx.lineTo(-1, 2);
+                ctx.lineTo(-1, -1);
+                ctx.closePath();
+                ctx.fillStyle = '#ff1100';
+                ctx.shadowColor = '#ff1100';
+                ctx.shadowBlur = 6;
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(0.5, 3);
+                ctx.lineTo(0, 4.5 + Math.random() * 1.5);
+                ctx.lineTo(-0.5, 3);
+                ctx.closePath();
+                ctx.fillStyle = '#ffaa00';
+                ctx.fill();
+              }
+              ctx.restore();
+            }
+            continue;
+          }
+          
           if (laser.isAmoebaAttack || laser.color === 'amoeba') {
             const numParticles = 12;
             const angle = Math.atan2(laser.endY - laser.startY, laser.endX - laser.startX);
@@ -2922,22 +3182,45 @@ window.addEventListener('DOMContentLoaded', () => {
               if (laser.sourceCount > 1 && !laser.sourceIsCruiser && !laser.sourceIsAmoeba) {
                 const sourceRenderCount = Math.min(50, laser.sourceCount);
                 const sourceIndex = Math.floor(randVal * sourceRenderCount);
-                const sourceMaxSpread = Math.min(60, 10 + Math.sqrt(laser.sourceCount) * 2.5);
+                const sourceMaxSpread = laser.sourceIsBomber ? 10 : Math.min(60, 10 + Math.sqrt(laser.sourceCount) * 2.5);
                 const { lx, ly } = getFormationOffset(
                   laser.sourceFormation || 'arrow',
                   sourceIndex,
                   sourceRenderCount,
                   sourceMaxSpread,
-                  laser.sourceIsInterceptor
+                  laser.sourceIsInterceptor,
+                  laser.sourceIsBomber
                 );
                 const cos = Math.cos(laser.sourceAngle || 0);
                 const sin = Math.sin(laser.sourceAngle || 0);
                 startPtX = laser.startX + lx * cos - ly * sin;
                 startPtY = laser.startY + lx * sin + ly * cos;
               } else if (laser.sourceIsCruiser) {
-                const size = (6 + (laser.sourceMaxHealth || 6) * 1.0) / 2.5;
-                startPtX = laser.startX + (randVal - 0.5) * size * 10;
-                startPtY = laser.startY + (randVal2 - 0.5) * size * 10;
+                const size = (6 + (laser.sourceMaxHealth || 6) * 1.0) / 3.0;
+                const rotAngle = (laser.sourceAngle || 0) + Math.PI / 2;
+                
+                // Select between Front (Nose Tip), Left Side Wing Tip, or Right Side Wing Tip only
+                let localX = 0;
+                let localY = 0;
+                const hardpointIndex = Math.floor(randVal * 3);
+                if (hardpointIndex === 0) {
+                  // Front / Nose Tip
+                  localX = 0;
+                  localY = -size * 0.95;
+                } else if (hardpointIndex === 1) {
+                  // Left Side Wing Tip
+                  localX = -size * 0.75;
+                  localY = size * 0.15;
+                } else {
+                  // Right Side Wing Tip
+                  localX = size * 0.75;
+                  localY = size * 0.15;
+                }
+                
+                const gx = localX * Math.cos(rotAngle) - localY * Math.sin(rotAngle);
+                const gy = localX * Math.sin(rotAngle) + localY * Math.cos(rotAngle);
+                startPtX = laser.startX + gx;
+                startPtY = laser.startY + gy;
               } else if (laser.sourceIsPlanet) {
                 // Originate from random spot within planet radius
                 startPtX = laser.startX + (randVal - 0.5) * 40;
@@ -2948,22 +3231,48 @@ window.addEventListener('DOMContentLoaded', () => {
               if (laser.targetCount > 1 && !laser.targetIsCruiser && !laser.targetIsAmoeba) {
                 const targetRenderCount = Math.min(50, laser.targetCount);
                 const targetIndex = Math.floor(randVal2 * targetRenderCount);
-                const targetMaxSpread = Math.min(60, 10 + Math.sqrt(laser.targetCount) * 2.5);
+                const targetMaxSpread = laser.targetIsBomber ? 10 : Math.min(60, 10 + Math.sqrt(laser.targetCount) * 2.5);
                 const { lx, ly } = getFormationOffset(
                   laser.targetFormation || 'arrow',
                   targetIndex,
                   targetRenderCount,
                   targetMaxSpread,
-                  laser.targetIsInterceptor
+                  laser.targetIsInterceptor,
+                  laser.targetIsBomber
                 );
                 const cos = Math.cos(laser.targetAngle || 0);
                 const sin = Math.sin(laser.targetAngle || 0);
                 endPtX = laser.endX + lx * cos - ly * sin;
                 endPtY = laser.endY + lx * sin + ly * cos;
               } else if (laser.targetIsCruiser) {
-                const size = (6 + (laser.targetMaxHealth || 6) * 1.0) / 2.5;
-                endPtX = laser.endX + (randVal - 0.5) * size * 10;
-                endPtY = laser.endY + (randVal2 - 0.5) * size * 10;
+                const size = (6 + (laser.targetMaxHealth || 6) * 1.0) / 3.0;
+                const rotAngle = (laser.targetAngle || 0) + Math.PI / 2;
+                
+                let localX = 0;
+                let localY = 0;
+                const targetPointSeed = Math.floor(randVal * 4);
+                if (targetPointSeed === 0) {
+                  // Tip/Bridge impact
+                  localX = 0;
+                  localY = -size * 0.7;
+                } else if (targetPointSeed === 1) {
+                  // Left Wing impact
+                  localX = -size * 0.6;
+                  localY = size * 0.1;
+                } else if (targetPointSeed === 2) {
+                  // Right Wing impact
+                  localX = size * 0.6;
+                  localY = size * 0.1;
+                } else {
+                  // Tail/Engineering impact
+                  localX = 0;
+                  localY = size * 0.4;
+                }
+                
+                const gx = localX * Math.cos(rotAngle) - localY * Math.sin(rotAngle);
+                const gy = localX * Math.sin(rotAngle) + localY * Math.cos(rotAngle);
+                endPtX = laser.endX + gx;
+                endPtY = laser.endY + gy;
               } else if (laser.targetIsAmoeba) {
                 const size = 6 + (laser.targetMaxHealth || 6) * 1.5;
                 endPtX = laser.endX + (randVal - 0.5) * size;
@@ -2979,8 +3288,11 @@ window.addEventListener('DOMContentLoaded', () => {
               ctx.moveTo(startPtX, startPtY);
               ctx.lineTo(endPtX, endPtY);
               ctx.strokeStyle = laser.color;
-              ctx.globalAlpha = Math.max(0, 1.0 - activeProgress);
-              ctx.lineWidth = laser.width || 2;
+              // Vary brightness: multiply fading opacity by a random factor between 0.6 and 1.0
+              const brightnessFactor = 0.6 + randVal * 0.4;
+              ctx.globalAlpha = Math.max(0, 1.0 - activeProgress) * brightnessFactor;
+              // Keep it a thin beam (1.5px) instead of randomized widths
+              ctx.lineWidth = 1.5;
               ctx.stroke();
               ctx.restore();
             }
@@ -3102,7 +3414,7 @@ window.addEventListener('DOMContentLoaded', () => {
         } else if (anim.type === 'lightning') {
           yOffset = 0; // doesn't drift up
         } else if (anim.type === 'launchCost') {
-          yOffset = -progress * 40; // floats down
+          yOffset = -progress * 20; // floats down
         } else if (anim.type === 'colonize') {
           yOffset = progress * 60; // drifts up faster
         } else if (anim.type === 'rampage') {
@@ -3120,7 +3432,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (anim.type === 'lightning') {
           fontsize = progress * 30; // grows from 0 to 30
         } else if (anim.type === 'launchCost') {
-          fontsize = 6.6; // 20% larger than 5.5
+          fontsize = 6.0 + (progress * 12); // grows from 6.0px to 18.0px
         } else if (anim.type === 'colonize') {
           fontsize = 12 + (progress * 10); // grows from 12 to 22
         } else if (anim.type === 'rampage') {
@@ -3153,7 +3465,7 @@ window.addEventListener('DOMContentLoaded', () => {
           ctx.shadowColor = `rgba(0, 255, 255, ${alpha})`; // cyan glow
         } else if (anim.type === 'launchCost') {
           // floating down and to the right
-          xOffset = progress * 20;
+          xOffset = progress * 10;
           let brightness = Math.floor(80 + (progress * 175)); // Brightens to white
           ctx.fillStyle = `rgba(255, ${brightness}, ${brightness}, ${alpha})`;
           ctx.shadowColor = `rgba(255, 0, 0, ${alpha})`; // red glow

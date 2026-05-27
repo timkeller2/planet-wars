@@ -544,7 +544,9 @@ async function bootstrap() {
               return dx*dx + dy*dy < fleet.radarRange * fleet.radarRange;
             });
             if (!cluster) {
-              clusters.push({ x: s.x, y: s.y, radarRange: fleet.radarRange, ownerId: player.id });
+              clusters.push({ x: s.x, y: s.y, radarRange: fleet.radarRange, ownerId: player.id, isCruiser: s.isCruiser || false });
+            } else if (s.isCruiser) {
+              cluster.isCruiser = true;
             }
           }
           visibleFleets.push(...clusters.map(c => {

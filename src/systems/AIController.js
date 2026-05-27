@@ -17,7 +17,15 @@ export class AIController {
     // Overpopulated planets (> 160 ships) 10% chance every 10 seconds
     if (this.lastOverpopulatedTime >= 10000) {
       this.lastOverpopulatedTime = 0;
-      const overpopulated = aiPlanets.filter(p => p.ships > 160);
+      const overpopulated = aiPlanets.filter(p => {
+        if (p.ships <= 160) return false;
+        if (p.lastAiLaunchTime && Date.now() - p.lastAiLaunchTime < 5000) return false;
+        const techBonus = Math.floor(Math.sqrt(this.aiPlayer.techScore || 0));
+        const baseCost = 10 + (this.aiPlayer.planetCount || 0);
+        const launchCost = Math.min(250, Math.max(0, baseCost - techBonus));
+        const shipsAfterLaunch = Math.floor((p.ships - launchCost) / 2);
+        return shipsAfterLaunch >= p.maxShips * 0.30;
+      });
       for (const sourcePlanet of overpopulated) {
         if (Math.random() < 0.10) {
           const enemies = this.game.planets.filter(p => p.owner !== this.aiPlayer && p.owner !== null);
@@ -26,6 +34,7 @@ export class AIController {
             const aiTechBonus = Math.floor(Math.sqrt(this.aiPlayer.techScore || 0));
             const aiSpeedMod = aiTechBonus >= 7 ? 1.0 : 0.5;
             this.game.sendShips(sourcePlanet, enemies[0], false, aiSpeedMod);
+            sourcePlanet.lastAiLaunchTime = Date.now();
           }
         }
       }
@@ -49,6 +58,7 @@ export class AIController {
       if (p.ships <= 12) return false;
       if (p.rampageEvent && p.maxShips >= 150 && p.ships < p.maxShips * 2) return false;
       if (aiPlanets.length < 4 && p.ships < p.maxShips * 0.75) return false;
+      if (p.lastAiLaunchTime && Date.now() - p.lastAiLaunchTime < 5000) return false;
       return true;
     });
     if (sourceCandidates.length === 0) return;
@@ -56,7 +66,16 @@ export class AIController {
     const reserveRatio = Math.max(0.35, 0.7 - (aiPlanets.length * 0.05));
 
     const validSources = sourceCandidates.filter(p => {
-      const shipsAfterLaunch = Math.floor((p.ships - 10) / 2);
+      const techBonus = Math.floor(Math.sqrt(this.aiPlayer.techScore || 0));
+      const baseCost = 10 + (this.aiPlayer.planetCount || 0);
+      const launchCost = Math.min(250, Math.max(0, baseCost - techBonus));
+      const shipsAfterLaunch = Math.floor((p.ships - launchCost) / 2);
+      
+      // Always leave at least 30% of maxShips capacity
+      if (shipsAfterLaunch < p.maxShips * 0.30) {
+        return false;
+      }
+
       if (shipsAfterLaunch < p.maxShips * reserveRatio) {
         let significantThreats = 0;
         for (const other of this.game.planets) {
@@ -171,6 +190,7 @@ export class AIController {
       const aiTechBonus = Math.floor(Math.sqrt(this.aiPlayer.techScore || 0));
       const aiSpeedMod = aiTechBonus >= 7 ? 1.0 : 0.5;
       this.game.sendShips(sourcePlanet, targetPlanet, false, aiSpeedMod);
+      sourcePlanet.lastAiLaunchTime = Date.now();
     }
   }
 }

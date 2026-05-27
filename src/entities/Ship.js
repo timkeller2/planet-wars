@@ -20,6 +20,8 @@ export class Ship {
     this.isCruiser = false;
     this.planetBombardTimer = 0;
     this.combatCooldown = 0;
+    this.cruiserTargetOffsetX = 0;
+    this.cruiserTargetOffsetY = 0;
     this.bomberOffsetMag = 0; // Assigned in game.js during launch
     const endSpreadRadius = targetPlanet ? targetPlanet.radius / 2 : 25;
     this.bomberTargetOffsetX = (Math.random() - 0.5) * endSpreadRadius * 2;
@@ -261,6 +263,10 @@ export class Ship {
               targetIsAmoeba: enemyShip.isAmoeba || false,
               sourceIsInterceptor: this.isInterceptor || false,
               targetIsInterceptor: enemyShip.isInterceptor || false,
+              sourceIsBomber: this.isBomber || false,
+              targetIsBomber: enemyShip.isBomber || false,
+              sourceMaxHealth: this.maxHealth,
+              targetMaxHealth: enemyShip.maxHealth,
               index: lasersDrawn
             });
             lasersDrawn++;
@@ -307,6 +313,15 @@ export class Ship {
           if (Math.random() < finalHitChance) {
             const damageDealt = enemyShip.takeDamage(explosions, this);
             if (damageDealt) {
+              const isAttackerCruiser = this.maxHealth > 0 && !this.isAmoeba;
+              if (isAttackerCruiser) {
+                const isTargetCruiserOrAmoeba = enemyShip.maxHealth > 0;
+                const killedShip = !isTargetCruiserOrAmoeba || !enemyShip.active;
+                if (killedShip) {
+                  this.expScore = (this.expScore || 0) + 0.05;
+                }
+              }
+
               if (this.owner) {
                 // XP for damaging amoebas and cruisers
                 if (enemyShip.isAmoeba && enemyShip.maxHealth > 0) {
@@ -363,6 +378,8 @@ export class Ship {
               age: 0,
               duration: 0.8,
               width: usedBomb ? 8 : undefined,
+              isBombAttack: usedBomb,
+              cruiserStyle: this.owner ? this.owner.cruiserStyle : 'Klingon',
               isAmoebaAttack: !!this.isAmoeba,
               sourceId: this.id,
               targetId: enemyShip.id,
@@ -378,6 +395,10 @@ export class Ship {
               targetIsAmoeba: enemyShip.isAmoeba || false,
               sourceIsInterceptor: this.isInterceptor || false,
               targetIsInterceptor: enemyShip.isInterceptor || false,
+              sourceIsBomber: this.isBomber || false,
+              targetIsBomber: enemyShip.isBomber || false,
+              sourceMaxHealth: this.maxHealth,
+              targetMaxHealth: enemyShip.maxHealth,
               index: 0
             });
           }
@@ -474,8 +495,12 @@ export class Ship {
                   endY: p.y + (Math.random() - 0.5) * p.radius,
                   color: 'cruiser-projectile',
                   age: 0, duration: 1.0, width: 8,
+                  isBombAttack: true,
+                  cruiserStyle: this.owner ? this.owner.cruiserStyle : 'Klingon',
+                  sourceMaxHealth: this.maxHealth,
                   destroysDefender: destroyedDefender,
-                  targetPlanetId: p.id
+                  targetPlanetId: p.id,
+                  sourceShipId: this.id
                 });
               } else {
                 lasers.push({
@@ -501,8 +526,8 @@ export class Ship {
         }
       }
     }
-    let destX = this.targetPlanet ? this.targetPlanet.x : this.targetX;
-    let destY = this.targetPlanet ? this.targetPlanet.y : this.targetY;
+    let destX = this.targetPlanet ? (this.targetPlanet.x + (this.cruiserTargetOffsetX || 0)) : this.targetX;
+    let destY = this.targetPlanet ? (this.targetPlanet.y + (this.cruiserTargetOffsetY || 0)) : this.targetY;
 
     const finalDestX = destX + (this.isCruiser ? 0 : (this.isBomber ? this.bomberTargetOffsetX : this.endOffsetX));
     const finalDestY = destY + (this.isCruiser ? 0 : (this.isBomber ? this.bomberTargetOffsetY : this.endOffsetY));
@@ -568,6 +593,8 @@ export class Ship {
             targetIsCruiser: this.isCruiser || false,
             targetIsAmoeba: this.isAmoeba || false,
             targetIsInterceptor: this.isInterceptor || false,
+            targetIsBomber: this.isBomber || false,
+            targetMaxHealth: this.maxHealth,
             sourceIsPlanet: true,
             index: 0
           });
@@ -591,6 +618,8 @@ export class Ship {
             sourceIsCruiser: this.isCruiser || false,
             sourceIsAmoeba: this.isAmoeba || false,
             sourceIsInterceptor: this.isInterceptor || false,
+            sourceIsBomber: this.isBomber || false,
+            sourceMaxHealth: this.maxHealth,
             targetIsPlanet: true,
             index: 0
           });
@@ -603,6 +632,11 @@ export class Ship {
       if (this.bombs === undefined) {
         this.bombs = this.maxHealth / 5;
         this.bombReloadTimer = 0;
+      }
+      
+      if ((this.fuel || 0) > 3 && (this.bombs || 0) < 2) {
+        this.fuel -= 1;
+        this.bombs += 1;
       }
       
       if (this.inFriendlyWell) {
@@ -627,14 +661,15 @@ export class Ship {
           }
         }
       } else {
-        const fuelDrain = this.isWarp ? 2 : 1;
+        const fuelDrain = this.isWarp ? 4 : 2;
         this.fuel = (this.fuel || 0) - (deltaTime / 1000) / (60 / fuelDrain);
         if (this.fuel <= 0) {
           this.fuel = 0;
           if (this.isWarp) {
             this.isWarp = false;
           }
-          this.health -= deltaTime / 60000;
+          const d6 = Math.floor(Math.random() * 6) + 1;
+          this.health -= d6 * (deltaTime / 60000);
           if (this.health <= 0) {
             this.active = false;
             if (explosions) {
@@ -673,12 +708,28 @@ export class Ship {
             let N_reinf = rate * dt;
             N_reinf = Math.min(this.count, N_reinf);
 
+            let actualReinf = N_reinf;
+            let crashed = 0;
+            if (this.isInterceptor) {
+              actualReinf = N_reinf * 0.7;
+              crashed = N_reinf - actualReinf;
+            }
+
             const spaceLeft = Math.max(0, this.targetPlanet.maxShips - this.targetPlanet.ships);
-            const toAdd = Math.min(spaceLeft, N_reinf);
-            const sacrificed = N_reinf - toAdd;
+            const toAdd = Math.min(spaceLeft, actualReinf);
+            const sacrificed = actualReinf - toAdd;
 
             this.targetPlanet.ships += toAdd;
             this.count -= N_reinf;
+
+            if (crashed > 0 && explosions && Math.random() < 0.25) {
+              explosions.push({
+                x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius * 1.5,
+                y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius * 1.5,
+                color: '#ff3300',
+                age: 0
+              });
+            }
 
             if (sacrificed > 0) {
               this.targetPlanet.sacrificedShips = (this.targetPlanet.sacrificedShips || 0) + sacrificed;
@@ -700,9 +751,22 @@ export class Ship {
             if (this.count <= 0 || distance < 5) {
               // Complete reinforcement dump
               if (this.count > 0) {
+                let dumpCount = this.count;
+                if (this.isInterceptor) {
+                  dumpCount = this.count * 0.7;
+                  const crashedDump = this.count - dumpCount;
+                  if (crashedDump > 0 && explosions) {
+                    explosions.push({
+                      x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius * 1.5,
+                      y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius * 1.5,
+                      color: '#ff3300',
+                      age: 0
+                    });
+                  }
+                }
                 const finalSpaceLeft = Math.max(0, this.targetPlanet.maxShips - this.targetPlanet.ships);
-                const finalToAdd = Math.min(finalSpaceLeft, this.count);
-                const finalSacrificed = this.count - finalToAdd;
+                const finalToAdd = Math.min(finalSpaceLeft, dumpCount);
+                const finalSacrificed = dumpCount - finalToAdd;
 
                 this.targetPlanet.ships += finalToAdd;
                 if (finalSacrificed > 0) {
@@ -836,52 +900,72 @@ export class Ship {
             }
 
             if (this.isBomber) {
-              // Bombers deal instant eco/ship damage and deactivate
-              let totalEcoDamage = 0;
-              let totalShipDamage = 0;
-              for (let b = 0; b < this.count; b++) {
-                if (this.bomberType === 'eco' || this.bomberType === true) {
-                  totalEcoDamage += Math.floor(Math.random() * 2) + 1;
-                } else if (this.bomberType === 'ships') {
-                  totalShipDamage += Math.floor(Math.random() * 4) + 1;
-                }
-              }
-              if (totalEcoDamage > 0) {
-                this.targetPlanet.maxShips -= totalEcoDamage;
-                this.targetPlanet.capacityDecreaseEvent = true;
-                if (this.targetPlanet.maxShips < 55) {
-                  this.targetPlanet.dead = true;
-                  if (this.targetPlanet.homeworldOf && this.owner) {
-                    this.owner.expScore = (this.owner.expScore || 0) + 100;
+              // Bombers deal gradual eco/ship damage and deactivate
+              const rate = Math.max(10, this.count / 4);
+              const expectedToConsume = rate * dt;
+              
+              const baseConsume = Math.floor(expectedToConsume);
+              const remainder = expectedToConsume - baseConsume;
+              let numToConsume = baseConsume + (Math.random() < remainder ? 1 : 0);
+              
+              numToConsume = Math.min(Math.ceil(this.count), numToConsume);
+              
+              if (numToConsume > 0) {
+                let ecoDamage = 0;
+                let shipDamage = 0;
+                for (let b = 0; b < numToConsume; b++) {
+                  if (this.bomberType === 'eco' || this.bomberType === true) {
+                    ecoDamage += Math.floor(Math.random() * 2) + 1;
+                  } else if (this.bomberType === 'ships') {
+                    shipDamage += Math.floor(Math.random() * 4) + 1;
                   }
                 }
-                if (explosions) {
-                  for (let i = 0; i < Math.min(totalEcoDamage, 15); i++) {
-                    explosions.push({
-                      x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-                      y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-                      color: '#ffaa00',
-                      age: 0
-                    });
+                
+                this.count = Math.max(0, this.count - numToConsume);
+                if (this.owner && this.owner.attackedPlanets && this.targetPlanet) {
+                  const currentTimer = this.owner.attackedPlanets.get(this.targetPlanet.id) || 0;
+                  this.owner.attackedPlanets.set(this.targetPlanet.id, currentTimer + numToConsume * 60000);
+                }
+                
+                if (ecoDamage > 0) {
+                  this.targetPlanet.decreaseMaxShips(ecoDamage);
+                  if (this.targetPlanet.maxShips < 55) {
+                    this.targetPlanet.dead = true;
+                    if (this.targetPlanet.homeworldOf && this.owner) {
+                      this.owner.expScore = (this.owner.expScore || 0) + 100;
+                    }
+                  }
+                  if (explosions) {
+                    for (let i = 0; i < Math.min(ecoDamage, 15); i++) {
+                      explosions.push({
+                        x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
+                        y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
+                        color: '#ffaa00',
+                        age: 0
+                      });
+                    }
+                  }
+                }
+                
+                if (shipDamage > 0) {
+                  this.targetPlanet.ships -= shipDamage;
+                  if (this.targetPlanet.ships < 0) this.targetPlanet.ships = 0;
+                  if (explosions) {
+                    for (let i = 0; i < Math.min(shipDamage, 15); i++) {
+                      explosions.push({
+                        x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
+                        y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
+                        color: '#ff00aa',
+                        age: 0
+                      });
+                    }
                   }
                 }
               }
-              if (totalShipDamage > 0) {
-                this.targetPlanet.ships -= totalShipDamage;
-                if (this.targetPlanet.ships < 0) this.targetPlanet.ships = 0;
-                if (explosions) {
-                  for (let i = 0; i < Math.min(totalShipDamage, 15); i++) {
-                    explosions.push({
-                      x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius,
-                      y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius,
-                      color: '#ff00aa',
-                      age: 0
-                    });
-                  }
-                }
+              
+              if (this.count <= 0) {
+                this.active = false;
               }
-              this.count = 0;
-              this.active = false;
               return;
             }
 
@@ -899,6 +983,10 @@ export class Ship {
 
             let defendersKilled = N_att * killChance;
             this.count -= N_att;
+             if (this.owner && this.owner.attackedPlanets && this.targetPlanet) {
+               const currentTimer = this.owner.attackedPlanets.get(this.targetPlanet.id) || 0;
+               this.owner.attackedPlanets.set(this.targetPlanet.id, currentTimer + N_att * 60000);
+             }
 
             const oldShips = this.targetPlanet.ships;
             this.targetPlanet.ships = Math.max(0, this.targetPlanet.ships - defendersKilled);
@@ -979,24 +1067,8 @@ export class Ship {
                 }
               }
 
-              // Immediately switch to reinforcing for any leftover ships in this same frame
-              if (this.count > 0) {
-                const spaceLeft = Math.max(0, this.targetPlanet.maxShips - this.targetPlanet.ships);
-                const toAdd = Math.min(spaceLeft, this.count);
-                const sacrificed = this.count - toAdd;
-
-                this.targetPlanet.ships += toAdd;
-                if (sacrificed > 0) {
-                  this.targetPlanet.sacrificedShips = (this.targetPlanet.sacrificedShips || 0) + sacrificed;
-                  const upgrades = Math.floor(this.targetPlanet.sacrificedShips / 20);
-                  if (upgrades > 0) {
-                    this.targetPlanet.sacrificedShips %= 20;
-                    this.targetPlanet.increaseMaxShips(upgrades);
-                  }
-                }
-              }
-              this.count = 0;
-              this.active = false;
+              // Conquered! Do not instantly dump all remaining ships.
+              // Just return here, and in subsequent frames, the fleet will continue to gradually reinforce this newly conquered friendly planet.
               return;
             }
 
@@ -1107,7 +1179,9 @@ export class Ship {
             if ((!this.hazardCooldown || this.hazardCooldown <= 0) && rollChance > 0 && Math.random() < rollChance) {
               if (!this.checkSurvivalRoll()) {
                 if (this.health > 0) {
-                  this.health -= 1;
+                  const isCruiser = this.maxHealth > 0 && !this.isAmoeba;
+                  const damage = isCruiser ? (Math.floor(Math.random() * 6) + 1) : 1;
+                  this.health -= damage;
                   this.hazardCooldown = 1000;
                   if (this.health <= 0 && this.isAmoeba && this.maxHealth > 0) {
                     this.maxHealth -= 1;
@@ -1169,7 +1243,7 @@ export class Ship {
     }
   }
 
-  takeDamage(explosions, attacker = null) {
+  takeDamage(explosions, attacker = null, isHazard = false) {
     if (this.health >= 0) {
       if (this.isAmoeba && attacker && attacker.active && attacker.owner !== this.owner) {
         this.pursueTarget = attacker;
@@ -1227,7 +1301,9 @@ export class Ship {
         return true;
       }
 
-      this.health -= 1;
+      const cruiserCheck = this.maxHealth > 0 && !this.isAmoeba;
+      const damageAmt = (cruiserCheck && isHazard) ? (Math.floor(Math.random() * 6) + 1) : 1;
+      this.health -= damageAmt;
       if (this.health <= 0 && this.isAmoeba && this.maxHealth > 0) {
         this.maxHealth -= 1;
         if (this.maxHealth > 0) {
