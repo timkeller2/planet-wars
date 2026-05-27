@@ -211,10 +211,23 @@ export class Planet {
     const isHuman = this.owner && !this.owner.isAI;
     if (isHuman) {
       const modeIndicator = this.focusMode === 'research' ? '🧪' : (this.focusMode === 'garrison' ? '🛡️' : '📈');
+      const badgeRadius = pillHeight / 2;
+      const badgeX = this.x - textWidth / 2 - 6 - badgeRadius - 5;
+
+      // Draw separate circular backdrop for focus badge
+      ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
+      ctx.beginPath();
+      ctx.arc(badgeX, this.y, badgeRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Render emoji badge centered in its circular pill
+      ctx.save();
+      ctx.font = `${badgeRadius * 1.3}px sans-serif`;
       ctx.fillStyle = '#fff';
-      ctx.textAlign = 'right';
+      ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(modeIndicator, this.x - textWidth / 2 - 12, this.y);
+      ctx.fillText(modeIndicator, badgeX, this.y);
+      ctx.restore();
     }
 
     ctx.fillStyle = '#000';

@@ -276,8 +276,20 @@ async function bootstrap() {
       const cost = (planet.focusChanges || 0) * 10;
       if (planet.ships >= cost) {
         planet.ships -= cost;
+        const oldMode = planet.focusMode || 'economy';
         planet.focusMode = data.focusMode;
         planet.focusChanges = (planet.focusChanges || 0) + 1;
+
+        if (oldMode === 'garrison' && planet.focusMode !== 'garrison' && planet.ships > planet.maxShips) {
+          const extraShips = planet.ships - planet.maxShips;
+          planet.ships = planet.maxShips;
+          planet.sacrificedShips = (planet.sacrificedShips || 0) + extraShips;
+          const upgrades = Math.floor(planet.sacrificedShips / 20);
+          if (upgrades > 0) {
+            planet.sacrificedShips %= 20;
+            planet.increaseMaxShips(upgrades);
+          }
+        }
       }
     });
 
