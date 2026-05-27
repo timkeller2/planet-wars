@@ -133,6 +133,10 @@ export class Planet {
               }
               const capacityPercent = galacticCapacity > 0 ? ((this.owner.totalCapacity || 0) / galacticCapacity) * 100 : 0;
               const failChance = capacityPercent * 2;
+              
+              // Always deduct 2 ships on any tech increase attempt
+              this.ships = Math.max(0, this.ships - 2);
+
               if (Math.random() * 100 >= failChance) {
                 const increaseAmount = this.isResearch ? 2 : 1;
                 this.owner.techScore = (this.owner.techScore || 0) + increaseAmount;
@@ -141,11 +145,9 @@ export class Planet {
                 } else {
                   this.techIncreaseEvent = true;
                 }
-                this.ships = Math.max(0, this.ships - 2);
               } else if (this.isResearch) {
                 this.owner.techScore = (this.owner.techScore || 0) + 1;
                 this.techIncreaseEvent = true;
-                this.ships = Math.max(0, this.ships - 2);
               }
             }
           }
