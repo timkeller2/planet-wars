@@ -200,35 +200,13 @@ export class Planet {
     ctx.shadowBlur = 0;
 
     // Draw ship count backdrop pill
-    let text = `${Math.floor(this.ships)} / ${this.maxShips}`;
+    const text = `${Math.floor(this.ships)} / ${this.maxShips}`;
     ctx.font = `bold ${Math.max(10, this.radius * 0.45)}px Orbitron`;
     const textWidth = ctx.measureText(text).width;
 
     ctx.fillStyle = 'rgba(17, 11, 11, 0.6)';
     const pillHeight = Math.max(14, this.radius * 0.55);
     ctx.fillRect(this.x - textWidth / 2 - 6, this.y - pillHeight / 2, textWidth + 12, pillHeight);
-
-    const isHuman = this.owner && !this.owner.isAI;
-    if (isHuman) {
-      const modeIndicator = this.focusMode === 'research' ? '🧪' : (this.focusMode === 'garrison' ? '🛡️' : '📈');
-      const badgeRadius = pillHeight / 2;
-      const badgeX = this.x - textWidth / 2 - 6 - badgeRadius - 5;
-
-      // Draw separate circular backdrop for focus badge
-      ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
-      ctx.beginPath();
-      ctx.arc(badgeX, this.y, badgeRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Render emoji badge centered in its circular pill
-      ctx.save();
-      ctx.font = `${badgeRadius * 1.3}px sans-serif`;
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(modeIndicator, badgeX, this.y);
-      ctx.restore();
-    }
 
     ctx.fillStyle = '#000';
     ctx.textAlign = 'center';

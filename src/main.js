@@ -2245,29 +2245,6 @@ window.addEventListener('DOMContentLoaded', () => {
           const displayOwner = serverState.players.find(pl => pl.id === displayOwnerId);
           const isHuman = displayOwner && !displayOwner.isAI;
 
-          // Draw separate circular backdrop for focus badge to the left of ships pill
-          if (isHuman) {
-            const focus = p.focusMode || 'economy';
-            const modeIndicator = focus === 'research' ? '🧪' : (focus === 'garrison' ? '🛡️' : '📈');
-            const badgeRadius = pillHeight / 2;
-            const badgeX = p.x - textWidth / 2 - 8 - badgeRadius - 5;
-
-            // Draw separate circular backdrop for focus badge
-            ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
-            ctx.beginPath();
-            ctx.arc(badgeX, p.y, badgeRadius, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Render emoji badge centered in its circular pill
-            ctx.save();
-            ctx.font = `${badgeRadius * 1.3}px sans-serif`;
-            ctx.fillStyle = '#fff';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(modeIndicator, badgeX, p.y);
-            ctx.restore();
-          }
-
           ctx.fillStyle = isLastKnown ? '#666' : '#000';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
