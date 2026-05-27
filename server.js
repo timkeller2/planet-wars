@@ -535,45 +535,50 @@ async function bootstrap() {
       };
     });
 
-    const allShipsMapped = game.ships.map(s => ({
-      id: s.id,
-      x: s.x,
-      y: s.y,
-      count: s.count || 1,
-      ownerId: s.owner ? s.owner.id : null,
-      active: s.active,
-      expScore: s.expScore || 0,
-      isBomber: s.isBomber,
-      isInterceptor: s.isInterceptor,
-      isCruiser: s.isCruiser || false,
+    const allShipsMapped = game.ships.map(s => {
+      const bEvent = s.beakerIncreaseEvent || 0;
+      s.beakerIncreaseEvent = 0;
+      return {
+        id: s.id,
+        x: s.x,
+        y: s.y,
+        count: s.count || 1,
+        ownerId: s.owner ? s.owner.id : null,
+        active: s.active,
+        expScore: s.expScore || 0,
+        isBomber: s.isBomber,
+        isInterceptor: s.isInterceptor,
+        isCruiser: s.isCruiser || false,
         isAmoeba: s.isAmoeba || false,
-      health: s.health || 0,
-      maxHealth: s.maxHealth || 0,
-      bombs: s.bombs || 0,
-      bombReloadTimer: s.bombReloadTimer || 0,
-      labs: s.labs || 0,
-      sensorarrays: s.sensorarrays || 0,
-      armor: s.armor || 0,
-      shields: s.shields || 0,
-      engine: s.engine || 0,
-      munitions: s.munitions || 0,
-      splashDamage: s.splashDamage || 0,
-      targeting: s.targeting || 0,
-      damagecontrol: s.damagecontrol || 0,
-      isUpgrading: s.isUpgrading || false,
-      upgradeTimer: s.upgradeTimer || 0,
-      upgradeType: s.upgradeType || null,
-      isHungry: s.isAmoeba ? (!s.amoebaGrowCooldown || s.amoebaGrowCooldown <= 0) : false,
-      isWarp: s.isWarp || false,
-      fuel: s.fuel || 0,
-      angle: s.angle || 0,
-      flightTime: s.flightTime || 0,
-      speedModifier: s.speedModifier || 1.0,
-      speed: s.speed || 35,
-      targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,
-      targetY: s.targetPlanet ? s.targetPlanet.y : s.targetY,
-      formation: s.formation
-    }));
+        health: s.health || 0,
+        maxHealth: s.maxHealth || 0,
+        bombs: s.bombs || 0,
+        bombReloadTimer: s.bombReloadTimer || 0,
+        labs: s.labs || 0,
+        sensorarrays: s.sensorarrays || 0,
+        armor: s.armor || 0,
+        shields: s.shields || 0,
+        engine: s.engine || 0,
+        munitions: s.munitions || 0,
+        splashDamage: s.splashDamage || 0,
+        targeting: s.targeting || 0,
+        damagecontrol: s.damagecontrol || 0,
+        isUpgrading: s.isUpgrading || false,
+        upgradeTimer: s.upgradeTimer || 0,
+        upgradeType: s.upgradeType || null,
+        isHungry: s.isAmoeba ? (!s.amoebaGrowCooldown || s.amoebaGrowCooldown <= 0) : false,
+        isWarp: s.isWarp || false,
+        fuel: s.fuel || 0,
+        angle: s.angle || 0,
+        flightTime: s.flightTime || 0,
+        speedModifier: s.speedModifier || 1.0,
+        speed: s.speed || 35,
+        targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,
+        targetY: s.targetPlanet ? s.targetPlanet.y : s.targetY,
+        formation: s.formation,
+        beakerIncreaseEvent: bEvent
+      };
+    });
 
     for (const [socketId, player] of connectedClients.entries()) {
       if (!player.discoveredPlanets) {

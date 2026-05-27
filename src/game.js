@@ -994,6 +994,22 @@ export class Game {
             const dy = ship.y - storm.y;
             if (Math.sqrt(dx * dx + dy * dy) <= effRadar + storm.radius) {
               overlapCount += ship.labs;
+
+              const k = storm.knowledge[player.id] || 0;
+              const tR = Math.sqrt(player.techScore || 0);
+              const eR = Math.sqrt(player.expScore || 0);
+              const effectiveIntensity = Math.max(0, storm.intensity - k - (tR + eR) / 2);
+
+              if (effectiveIntensity > 1) {
+                const knowledgeGained = (ship.labs * deltaTime) / 120000;
+                player.techScore = (player.techScore || 0) + knowledgeGained;
+                ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
+                if (ship.accumulatedTech >= 1.0) {
+                  const beakerCount = Math.floor(ship.accumulatedTech);
+                  ship.accumulatedTech -= beakerCount;
+                  ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + beakerCount;
+                }
+              }
             }
           }
         }

@@ -19,6 +19,8 @@ export class Ship {
     this.fireCooldown = Math.random(); // Start randomly staggered
     this.isCruiser = false;
     this.labs = 0;
+    this.accumulatedTech = 0;
+    this.beakerIncreaseEvent = 0;
     this.sensorarrays = 0;
     this.armor = 0;
     this.shields = 0;

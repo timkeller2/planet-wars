@@ -723,6 +723,23 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    if (state.ships) {
+      for (const s of state.ships) {
+        if (s.beakerIncreaseEvent && s.beakerIncreaseEvent > 0) {
+          for (let b = 0; b < s.beakerIncreaseEvent; b++) {
+            floatingAnimations.push({
+              x: s.x,
+              y: s.y - 12,
+              text: '🧪',
+              type: 'beaker',
+              age: b * 0.2,
+              duration: 2.5
+            });
+          }
+        }
+      }
+    }
+
     serverState = state;
 
     if (state.explosions) {
