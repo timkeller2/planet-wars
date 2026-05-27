@@ -11,7 +11,8 @@ export class Planet {
     this.productionProgress = 0;
     this.capacityProgress = 0;
     this.sacrificedShips = 0;
-    this.focusMode = 'economy';
+    const modes = ['economy', 'research', 'garrison'];
+    this.focusMode = modes[Math.floor(Math.random() * modes.length)];
     this.focusChanges = 0;
     
     this.name = this.generatePlanetName();

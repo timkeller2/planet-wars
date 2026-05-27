@@ -1160,10 +1160,13 @@ export class Ship {
                 const roll = Math.random();
                 if (roll < 0.10) {
                   this.targetPlanet.isResearch = true;
+                  this.targetPlanet.focusMode = 'research';
                 } else if (roll < 0.20) {
                   this.targetPlanet.isMilitary = true;
+                  this.targetPlanet.focusMode = 'garrison';
                 } else if (roll < 0.30) {
                   this.targetPlanet.isSpeedPlanet = true;
+                  this.targetPlanet.focusMode = 'garrison';
                 }
               }
               this.targetPlanet.owner = this.owner;

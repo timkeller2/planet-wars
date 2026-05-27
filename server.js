@@ -273,7 +273,7 @@ async function bootstrap() {
       const validModes = ['economy', 'research', 'garrison'];
       if (!validModes.includes(data.focusMode)) return;
 
-      const cost = (planet.focusChanges || 0) * 10;
+      const cost = Math.floor(planet.maxShips / 2);
       if (planet.ships >= cost) {
         planet.ships -= cost;
         const oldMode = planet.focusMode || 'economy';

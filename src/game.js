@@ -158,6 +158,7 @@ export class Game {
       targetPlanet.justAssigned = true;
       targetPlanet.justAssignedTimer = 0;
       targetPlanet.homeworldOf = player.id;
+      targetPlanet.focusMode = 'economy';
       
       // Clear hazards from newly assigned planet
       for (const storm of this.ionStorms) {
@@ -1307,9 +1308,16 @@ export class Game {
                     } else {
                       // Neutral capture
                       const roll = Math.random();
-                      if (roll < 0.10) targetPlanet.isResearch = true;
-                      else if (roll < 0.20) targetPlanet.isMilitary = true;
-                      else if (roll < 0.30) targetPlanet.isSpeedPlanet = true;
+                      if (roll < 0.10) {
+                        targetPlanet.isResearch = true;
+                        targetPlanet.focusMode = 'research';
+                      } else if (roll < 0.20) {
+                        targetPlanet.isMilitary = true;
+                        targetPlanet.focusMode = 'garrison';
+                      } else if (roll < 0.30) {
+                        targetPlanet.isSpeedPlanet = true;
+                        targetPlanet.focusMode = 'garrison';
+                      }
                     }
                     targetPlanet.owner = sourceShip.owner;
                     targetPlanet.rampageBoost = false;

@@ -902,7 +902,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (selectedPlanets.length !== 1) return null;
     const planet = serverState.planets.find(p => p.id === selectedPlanets[0].id);
     if (!planet || planet.ownerId !== localPlayer.id) return null;
-    const cost = (planet.focusChanges || 0) * 10;
+    const cost = Math.floor(planet.maxShips / 2);
     if (planet.ships < cost) return null;
     return planet;
   }
@@ -2249,7 +2249,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const focus = p.focusMode || 'economy';
             const modeIndicator = focus === 'research' ? '🧪' : (focus === 'garrison' ? '🛡️' : '📈');
             const badgeRadius = pillHeight / 2;
-            const badgeX = p.x - textWidth / 2 - 8 - badgeRadius - 2;
+            const badgeX = p.x + textWidth / 2 + 8 + badgeRadius + 2;
 
             // Draw separate circular backdrop for focus badge
             ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
@@ -2562,7 +2562,7 @@ window.addEventListener('DOMContentLoaded', () => {
             if (!hpOwner.isAI) {
               const focus = hp.focusMode || 'economy';
               const capitalizedFocus = focus.charAt(0).toUpperCase() + focus.slice(1);
-              const cost = (hp.focusChanges || 0) * 10;
+              const cost = Math.floor(hp.maxShips / 2);
               lines.push({ label: 'Focus Mode', value: `${capitalizedFocus} (Change: ${cost} 🪐)`, color: '#ffd740' });
             }
           } else {
