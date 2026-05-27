@@ -2249,7 +2249,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const focus = p.focusMode || 'economy';
             const modeIndicator = focus === 'research' ? '🧪' : (focus === 'garrison' ? '🛡️' : '📈');
             const badgeRadius = pillHeight / 2;
-            const badgeX = p.x - textWidth / 2 - 8 - badgeRadius - 5;
+            const badgeX = p.x - textWidth / 2 - 8 - badgeRadius - 2;
 
             // Draw separate circular backdrop for focus badge
             ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
