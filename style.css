@@ -384,7 +384,7 @@ canvas {
 }
 
 .chat-msg {
-  animation: chatFadeOut 30s forwards;
+  animation: chatFadeOut 90s forwards;
 }
 
 .action-btn-active {

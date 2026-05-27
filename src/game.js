@@ -475,7 +475,19 @@ export class Game {
           ship.speed = Math.max(5, ship.speed - 10 - basePower);
           if (!source.owner.cruiserStyle) {
             const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
-            source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
+            if (!source.owner.isAI) {
+              const assignedStyles = this.allPlayers
+                .filter(p => !p.isAI && p.cruiserStyle)
+                .map(p => p.cruiserStyle);
+              const unusedStyles = styles.filter(s => !assignedStyles.includes(s));
+              if (unusedStyles.length > 0) {
+                source.owner.cruiserStyle = unusedStyles[Math.floor(Math.random() * unusedStyles.length)];
+              } else {
+                source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
+              }
+            } else {
+              source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
+            }
             console.log(`Assigned ${source.owner.cruiserStyle} style to ${source.owner.id}`);
           }
           ship.isCruiser = true;
@@ -624,7 +636,7 @@ export class Game {
     for (const p of this.planets) {
       if (p.owner && p.owner.id === player.id) planetCount++;
     }
-    ship.warpBonus = Math.max(5, 30 - planetCount);
+    ship.warpBonus = Math.max(10, 30 - planetCount);
     return false;
   }
 
@@ -650,7 +662,19 @@ export class Game {
           ship.speed = Math.max(5, ship.speed - 10 - health);
           if (!source.owner.cruiserStyle) {
             const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
-            source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
+            if (!source.owner.isAI) {
+              const assignedStyles = this.allPlayers
+                .filter(p => !p.isAI && p.cruiserStyle)
+                .map(p => p.cruiserStyle);
+              const unusedStyles = styles.filter(s => !assignedStyles.includes(s));
+              if (unusedStyles.length > 0) {
+                source.owner.cruiserStyle = unusedStyles[Math.floor(Math.random() * unusedStyles.length)];
+              } else {
+                source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
+              }
+            } else {
+              source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
+            }
           }
           ship.isCruiser = true;
           ship.count = 1;
@@ -733,7 +757,7 @@ export class Game {
   }
 
   moveShipsToSpace(player, shipIds, targetX, targetY, isWarp = false, speedModifier = null) {
-    const validShips = shipIds.map(id => this.ships.find(s => s.id === id)).filter(s => s && s.owner && s.owner.id === player.id);
+    const validShips = shipIds.map(id => this.ships.find(s => s.id === id)).filter(s => s && s.owner && s.owner.id === player.id && !s.isUpgrading);
     const cruisers = validShips.filter(s => s.isCruiser);
     const numCruisers = cruisers.length;
 
@@ -773,7 +797,7 @@ export class Game {
   }
 
   moveShipsToPlanet(player, shipIds, targetPlanet, isWarp = false, speedModifier = null) {
-    const validShips = shipIds.map(id => this.ships.find(s => s.id === id)).filter(s => s && s.owner && s.owner.id === player.id);
+    const validShips = shipIds.map(id => this.ships.find(s => s.id === id)).filter(s => s && s.owner && s.owner.id === player.id && !s.isUpgrading);
     const cruisers = validShips.filter(s => s.isCruiser);
     const numCruisers = cruisers.length;
 
@@ -946,6 +970,32 @@ export class Game {
             if (Math.sqrt(dx * dx + dy * dy) <= effGravR + storm.radius) { overlapCount++; }
           }
         }
+        for (const ship of this.ships) {
+          if (ship.active && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0) {
+            const shipExpBonus = (ship.expScore || 0) * 2;
+            let cruiserRadar = Math.min(250, 5 * ship.maxHealth) + shipExpBonus;
+            if (ship.isWarp) cruiserRadar *= 0.25;
+            if (ship.sensorarrays > 0) {
+              let mult = 1.0;
+              mult += 0.50;
+              if (ship.sensorarrays > 1) {
+                mult += 0.25;
+              }
+              if (ship.sensorarrays > 2) {
+                mult += 0.25;
+              }
+              cruiserRadar *= mult;
+            }
+
+            const red = hazardSensorReduction(ship.x, ship.y, player.id);
+            const effRadar = Math.max(10, cruiserRadar - red);
+            const dx = ship.x - storm.x;
+            const dy = ship.y - storm.y;
+            if (Math.sqrt(dx * dx + dy * dy) <= effRadar + storm.radius) {
+              overlapCount += ship.labs;
+            }
+          }
+        }
         if (overlapCount > 0) {
           if (!storm.knowledge[player.id]) storm.knowledge[player.id] = 0;
           storm.knowledge[player.id] += (overlapCount * deltaTime) / 120000;
@@ -988,27 +1038,47 @@ export class Game {
             const techRed = Math.sqrt(ship.owner.techScore || 0);
             const expRed = Math.sqrt(ship.owner.expScore || 0);
             const shipExpRed = Math.sqrt(ship.expScore || 0);
-            const chance = (storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed) / 500;
-            if (chance > 0 && Math.random() < chance) {
-              if (ship.maxHealth > 0) {
+            const effectiveIntensity = storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed;
+            const damageChance = Math.max(0, effectiveIntensity / 1000);
+
+            if (ship.maxHealth > 0) {
+              // CruiserException: Retains dynamic 1d6 damage on damageChance failure
+              if (damageChance > 0 && Math.random() < damageChance) {
                 ship.takeDamage(this.explosions, null, true);
-              } else {
-                if (!ship.checkSurvivalRoll()) {
-                  if (ship.count > 1) {
-                    ship.count--;
-                  } else {
-                    ship.active = false;
+                // Lightning bolt effect
+                const boltX = ship.x + (Math.random() - 0.5) * 80;
+                const boltY = ship.y - 30 - Math.random() * 50;
+                const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
+                const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
+                this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
+                this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
+              }
+            } else {
+              // Standard fleet tick checks: 1/10th that rate per second afterward
+              let destroyedCount = 0;
+              const initialCount = ship.count;
+              for (let i = 0; i < initialCount; i++) {
+                if (Math.random() < damageChance) {
+                  if (!ship.checkSurvivalRoll()) {
+                    destroyedCount++;
                   }
-                  this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
                 }
               }
-              // Lightning bolt effect
-              const boltX = ship.x + (Math.random() - 0.5) * 80;
-              const boltY = ship.y - 30 - Math.random() * 50;
-              const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
-              const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
-              this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
-              this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
+              if (destroyedCount > 0) {
+                ship.count -= destroyedCount;
+                if (ship.count <= 0) {
+                  ship.count = 0;
+                  ship.active = false;
+                }
+                this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
+                // Lightning bolt effect
+                const boltX = ship.x + (Math.random() - 0.5) * 80;
+                const boltY = ship.y - 30 - Math.random() * 50;
+                const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
+                const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
+                this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
+                this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
+              }
             }
           }
         }
@@ -1215,6 +1285,46 @@ export class Game {
               const targetPlanet = this.planets.find(pl => pl.id === laser.targetPlanetId);
               if (targetPlanet && targetPlanet.ships > 0) {
                 targetPlanet.ships -= 1;
+                if (laser.splashDamage && laser.splashDamage > 0) {
+                  const splashLimit = Math.floor(targetPlanet.ships / 10);
+                  const splash = Math.min(laser.splashDamage, splashLimit);
+                  const toDestroy = Math.min(targetPlanet.ships, splash);
+                  targetPlanet.ships -= toDestroy;
+                }
+                if (targetPlanet.ships <= 0) {
+                  targetPlanet.ships = 0;
+                  const sourceShip = this.ships.find(sh => sh.id === laser.sourceShipId);
+                  if (sourceShip && sourceShip.owner) {
+                    const previousOwner = targetPlanet.owner;
+                    if (previousOwner !== null) {
+                      targetPlanet.maxShips--;
+                      if (targetPlanet.maxShips < 55) {
+                        targetPlanet.dead = true;
+                        if (targetPlanet.homeworldOf) {
+                          sourceShip.owner.expScore = (sourceShip.owner.expScore || 0) + 100;
+                        }
+                      }
+                    } else {
+                      // Neutral capture
+                      const roll = Math.random();
+                      if (roll < 0.10) targetPlanet.isResearch = true;
+                      else if (roll < 0.20) targetPlanet.isMilitary = true;
+                      else if (roll < 0.30) targetPlanet.isSpeedPlanet = true;
+                    }
+                    targetPlanet.owner = sourceShip.owner;
+                    targetPlanet.rampageBoost = false;
+                    targetPlanet.rampageEvent = false;
+                    
+                    // Check previous owner elimination
+                    if (previousOwner && previousOwner !== sourceShip.owner) {
+                      const hasRemaining = this.planets.some(pl => pl !== targetPlanet && pl.owner === previousOwner);
+                      if (!hasRemaining) {
+                        targetPlanet.defeatEvent = { name: previousOwner.name, color: previousOwner.color };
+                        sourceShip.owner.expScore = (sourceShip.owner.expScore || 0) + 100;
+                      }
+                    }
+                  }
+                }
               }
             }
             if (laser.sourceShipId !== undefined) {

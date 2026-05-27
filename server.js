@@ -117,6 +117,73 @@ async function bootstrap() {
       }
     });
 
+    socket.on('upgradeCruiser', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      player.lastCommandTime = Date.now();
+      player.afkWarningSent = false;
+      if (player.isAI) {
+        player.isAI = false;
+      }
+
+      const ship = game.ships.find(s => s.id === data.shipId);
+      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+        // Find if this cruiser is within a friendly gravity well of a planet with over 100 ships
+        for (const p of game.planets) {
+          if (p.owner && p.owner.id === player.id && p.ships > 100) {
+            const techBonus = 0.01 * Math.sqrt(player.techScore || 0);
+            const expBonus = 0.005 * Math.sqrt(player.expScore || 0);
+            const gravityRadius = (p.maxShips * 1.5) * (1 + techBonus + expBonus);
+            
+            let penaltyPct = 0;
+            for (const h of game.ionStorms) {
+              if (h.type === 'minefield') continue;
+              const hdx = p.x - h.x, hdy = p.y - h.y;
+              if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
+                const k = h.knowledge[player.id] || 0;
+                const tR = Math.sqrt(player.techScore || 0);
+                const eR = Math.sqrt(player.expScore || 0);
+                const eff = Math.max(0, h.intensity - k - (tR + eR) / 2);
+                penaltyPct += eff / 100;
+              }
+            }
+            const pct = Math.max(0, 1 - penaltyPct);
+            const effGravity = Math.max(10, gravityRadius * pct);
+
+            const dx = ship.x - p.x;
+            const dy = ship.y - p.y;
+            if (dx * dx + dy * dy <= effGravity * effGravity) {
+              const typesMap = {
+                sensorarray: 'sensorarrays',
+                lab: 'labs',
+                armor: 'armor',
+                shield: 'shields',
+                engine: 'engine',
+                munitions: 'munitions',
+                targeting: 'targeting',
+                damagecontrol: 'damagecontrol'
+              };
+              const prop = typesMap[data.type];
+              if (prop && (ship[prop] || 0) < 3 && !ship.isUpgrading) {
+                ship.isUpgrading = true;
+                ship.upgradeTimer = 20.0;
+                ship.upgradeProp = prop;
+                ship.upgradeType = data.type;
+                ship.upgradePlanetId = p.id;
+                ship.upgradeShipsPaid = 0;
+                ship.upgradeAccumulator = 0;
+                
+                console.log(`Started progressive upgrade for cruiser ${ship.id} with ${data.type}, financing from planet ${p.id}`);
+                break;
+              }
+            }
+          }
+        }
+      }
+    });
+
     socket.on('moveShipsToSpace', (data) => {
       if (!game.isRunning || game.isPaused) return;
       const player = connectedClients.get(socket.id);
@@ -443,6 +510,18 @@ async function bootstrap() {
       maxHealth: s.maxHealth || 0,
       bombs: s.bombs || 0,
       bombReloadTimer: s.bombReloadTimer || 0,
+      labs: s.labs || 0,
+      sensorarrays: s.sensorarrays || 0,
+      armor: s.armor || 0,
+      shields: s.shields || 0,
+      engine: s.engine || 0,
+      munitions: s.munitions || 0,
+      splashDamage: s.splashDamage || 0,
+      targeting: s.targeting || 0,
+      damagecontrol: s.damagecontrol || 0,
+      isUpgrading: s.isUpgrading || false,
+      upgradeTimer: s.upgradeTimer || 0,
+      upgradeType: s.upgradeType || null,
       isHungry: s.isAmoeba ? (!s.amoebaGrowCooldown || s.amoebaGrowCooldown <= 0) : false,
       isWarp: s.isWarp || false,
       fuel: s.fuel || 0,
@@ -528,6 +607,17 @@ async function bootstrap() {
             const shipExpBonus = (s.expScore || 0) * 2;
             let cruiserRadar = Math.min(250, 5 * s.maxHealth) + shipExpBonus;
             if (s.isWarp) cruiserRadar *= 0.25;
+            if (s.sensorarrays && s.sensorarrays > 0) {
+              let mult = 1.0;
+              mult += 0.50;
+              if (s.sensorarrays > 1) {
+                mult += 0.25;
+              }
+              if (s.sensorarrays > 2) {
+                mult += 0.25;
+              }
+              cruiserRadar *= mult;
+            }
             if (cruiserRadar > maxCruiserRadar) maxCruiserRadar = cruiserRadar;
           }
         }

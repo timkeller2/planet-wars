@@ -35,6 +35,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let selectedShips = [];
   let warpOrderNext = false;
   let controlGroups = {}; // RTS control groups for fleets/cruisers
+  let lastKnownPlanets = {}; // Cache of last-known states for planets under Fog of War
 
   let speedModifierNext = null;
   let bombOrderNext = false;
@@ -42,6 +43,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let scoutModeNext = false;
   let interceptorOrderNext = false;
   let cruiserOrderNext = false;
+  let upgradeModeActive = false;
 
   let cameraZoom = 1.0;
   let cameraPanX = 0;
@@ -73,6 +75,36 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   let lasso = { active: false, startX: 0, startY: 0, endX: 0, endY: 0 };
+
+  const getMaxFuel = (s) => {
+    const baseFuel = s.maxHealth / 5;
+    let bonus = 0;
+    if (s.engine > 0) {
+      bonus += 2;
+      if (s.engine > 1) {
+        bonus += 1;
+      }
+      if (s.engine > 2) {
+        bonus += 1;
+      }
+    }
+    return baseFuel + bonus;
+  };
+
+  const getMaxBombs = (s) => {
+    const baseMax = Math.floor(s.maxHealth / 5);
+    let bonus = 0;
+    if (s.munitions > 0) {
+      bonus += 2;
+      if (s.munitions > 1) {
+        bonus += 1;
+      }
+      if (s.munitions > 2) {
+        bonus += 1;
+      }
+    }
+    return baseMax + bonus;
+  };
   let starfieldEnabled = false;
   let hoveredPlanet = null;
   let hoveredShip = null;
@@ -107,6 +139,7 @@ window.addEventListener('DOMContentLoaded', () => {
     planets: '🪐 Planets & Economy',
     ships: '🚀 Ships & Combat',
     cruisers: '🛸 Cruisers & Interceptors',
+    upgrades: '🛠️ Upgrades',
     hazards: '⚡ Hazards',
     monsters: '🧬 Space Amoebas',
     ai: '🤖 AI & Rampage',
@@ -317,12 +350,15 @@ window.addEventListener('DOMContentLoaded', () => {
       chatMessages.appendChild(div);
       chatMessages.scrollTop = chatMessages.scrollHeight;
 
-      // Remove element after 30 seconds to clean up DOM
+      // Play chime sound
+      playChatNotificationSound();
+
+      // Remove element after 90 seconds to clean up DOM
       setTimeout(() => {
         if (div.parentNode === chatMessages) {
           chatMessages.removeChild(div);
         }
-      }, 31000);
+      }, 93000);
     }
   });
 
@@ -436,6 +472,37 @@ window.addEventListener('DOMContentLoaded', () => {
         clone.volume = 0.05;
         clone.play().catch(err => {});
       }
+    }
+  }
+
+  function playChatNotificationSound() {
+    try {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      osc.type = 'sine';
+      
+      const now = audioCtx.currentTime;
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.exponentialRampToValueAtTime(900, now + 0.12);
+      
+      gainNode.gain.setValueAtTime(0.08, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      
+      osc.start(now);
+      osc.stop(now + 0.12);
+    } catch (e) {
+      console.warn('Web Audio synthesis failed for chat sound:', e);
     }
   }
 
@@ -638,6 +705,23 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    if (state.planets) {
+      for (const p of state.planets) {
+        if (!p.inFog || p.permanentlyTracked) {
+          lastKnownPlanets[p.id] = {
+            ownerId: p.ownerId,
+            ships: p.ships,
+            maxShips: p.maxShips,
+            isResearch: p.isResearch,
+            isMilitary: p.isMilitary,
+            isSpeedPlanet: p.isSpeedPlanet,
+            homeworldOf: p.homeworldOf,
+            name: p.name
+          };
+        }
+      }
+    }
+
     serverState = state;
 
     if (state.explosions) {
@@ -770,6 +854,48 @@ window.addEventListener('DOMContentLoaded', () => {
     return bestPlanet;
   }
 
+  const hazardSensorReductionPct = (x, y, ownerId) => {
+    let penaltyPct = 0;
+    if (!serverState || !serverState.storms) return 1;
+    for (const h of serverState.storms) {
+      if (h.type === 'minefield') continue;
+      const hdx = x - h.x, hdy = y - h.y;
+      if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
+        const owner = serverState.players.find(p => p.id === ownerId);
+        const k = h.knowledge || 0;
+        const tR = owner ? Math.sqrt(owner.techScore || 0) : 0;
+        const eR = owner ? Math.sqrt(owner.expScore || 0) : 0;
+        const eff = Math.max(0, h.intensity - k - (tR + eR) / 2);
+        penaltyPct += eff / 100;
+      }
+    }
+    return Math.max(0, 1 - penaltyPct);
+  };
+
+  function getSelectedCruiserUpgradeQualifiers() {
+    if (!serverState || !localPlayer) return null;
+    if (selectedShips.length !== 1) return null;
+    const ship = serverState.ships.find(s => s.id === selectedShips[0].id);
+    if (!ship || !ship.isCruiser || ship.ownerId !== localPlayer.id) return null;
+
+    for (const p of serverState.planets) {
+      if (p.ownerId === localPlayer.id && p.ships > 100) {
+        const techBonus = 0.01 * Math.sqrt(localPlayer.techScore || 0);
+        const expBonus = 0.005 * Math.sqrt(localPlayer.expScore || 0);
+        const gravityRadius = (p.maxShips * 1.5) * (1 + techBonus + expBonus);
+        const pct = hazardSensorReductionPct(p.x, p.y, p.ownerId);
+        const effGravity = Math.max(10, gravityRadius * pct);
+
+        const dx = ship.x - p.x;
+        const dy = ship.y - p.y;
+        if (dx * dx + dy * dy <= effGravity * effGravity) {
+          return { ship, planet: p };
+        }
+      }
+    }
+    return null;
+  }
+
   function getCanvasPos(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
@@ -810,7 +936,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const sdx = ship.x - pos.x;
         const sdy = ship.y - pos.y;
         if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
-          if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
+          if (!clickedShip || (clickedShip.isCruiser && !ship.isCruiser)) {
             clickedShip = ship;
           }
         }
@@ -837,7 +963,7 @@ window.addEventListener('DOMContentLoaded', () => {
           }
 
           if (selectedShips.length > 0) {
-            let shipIds = selectedShips.map(s => s.id);
+            let shipIds = selectedShips.filter(s => !s.isUpgrading).map(s => s.id);
             if (currentFillNeeded !== Infinity) {
               const tosend = Math.min(shipIds.length, currentFillNeeded);
               shipIds = shipIds.slice(0, tosend);
@@ -891,7 +1017,7 @@ window.addEventListener('DOMContentLoaded', () => {
           const targetPos = getMouseServerPos(x, y);
           
           if (selectedShips.length > 0) {
-            let shipIds = selectedShips.map(s => s.id);
+            let shipIds = selectedShips.filter(s => !s.isUpgrading).map(s => s.id);
             if (scoutModeNext) {
               const scoutCount = Math.max(3, Math.ceil(shipIds.length * 0.1));
               shipIds = shipIds.slice(0, scoutCount);
@@ -1265,7 +1391,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const sdx = ship.x - serverPos.x;
             const sdy = ship.y - serverPos.y;
             if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
-              if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
+              if (!clickedShip || (clickedShip.isCruiser && !ship.isCruiser)) {
                 clickedShip = ship;
               }
             }
@@ -1443,6 +1569,70 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     if (event.repeat) return;
 
+    if (upgradeModeActive) {
+      const qual = getSelectedCruiserUpgradeQualifiers();
+      if (qual) {
+        const key = event.key.toLowerCase();
+        const ship = qual.ship;
+        
+        if (ship.isUpgrading) {
+          if (key === 'c' || key === 'u') {
+            event.preventDefault();
+            upgradeModeActive = false;
+          }
+          return;
+        }
+        
+        if (key === 's') {
+          event.preventDefault();
+          if ((ship.sensorarrays || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'sensorarray' });
+          return;
+        }
+        if (key === 'l') {
+          event.preventDefault();
+          if ((ship.labs || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'lab' });
+          return;
+        }
+        if (key === 'a') {
+          event.preventDefault();
+          if ((ship.armor || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'armor' });
+          return;
+        }
+        if (key === 'h') {
+          event.preventDefault();
+          if ((ship.shields || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'shield' });
+          return;
+        }
+        if (key === 'e') {
+          event.preventDefault();
+          if ((ship.engine || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'engine' });
+          return;
+        }
+        if (key === 'm') {
+          event.preventDefault();
+          if ((ship.munitions || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'munitions' });
+          return;
+        }
+        if (key === 't') {
+          event.preventDefault();
+          if ((ship.targeting || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'targeting' });
+          return;
+        }
+        if (key === 'd') {
+          event.preventDefault();
+          if ((ship.damagecontrol || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'damagecontrol' });
+          return;
+        }
+        if (key === 'c' || key === 'u') {
+          event.preventDefault();
+          upgradeModeActive = false;
+          return;
+        }
+      } else {
+        upgradeModeActive = false;
+      }
+    }
+
     // RTS Control Groups (0-9)
     const numKey = event.key;
     if (numKey >= '0' && numKey <= '9') {
@@ -1474,6 +1664,14 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     if (event.key.toLowerCase() === 'w') {
       warpOrderNext = !warpOrderNext;
+    }
+    if (event.key.toLowerCase() === 'u') {
+      const qual = getSelectedCruiserUpgradeQualifiers();
+      if (qual) {
+        event.preventDefault();
+        upgradeModeActive = true;
+        return;
+      }
     }
     if (event.key.toLowerCase() === 'b') {
       bombOrderNext = bombOrderNext === 'eco' ? false : 'eco';
@@ -1543,6 +1741,44 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
   document.getElementById('btn-cruiser').addEventListener('click', () => { cruiserOrderNext = !cruiserOrderNext; });
+  const btnUpgradeEl = document.getElementById('btn-upgrade-mode');
+  if (btnUpgradeEl) {
+    btnUpgradeEl.addEventListener('click', () => {
+      const qual = getSelectedCruiserUpgradeQualifiers();
+      if (qual) {
+        upgradeModeActive = true;
+      }
+    });
+  }
+
+  const registerUpgradeBtn = (id, type) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('click', () => {
+        const qual = getSelectedCruiserUpgradeQualifiers();
+        if (qual && (qual.ship[type] || 0) < 3) {
+          const socketType = type === 'sensorarrays' ? 'sensorarray' : (type === 'shields' ? 'shield' : (type === 'labs' ? 'lab' : type));
+          socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
+        }
+      });
+    }
+  };
+
+  registerUpgradeBtn('btn-up-sensorarray', 'sensorarrays');
+  registerUpgradeBtn('btn-up-lab', 'labs');
+  registerUpgradeBtn('btn-up-armor', 'armor');
+  registerUpgradeBtn('btn-up-shields', 'shields');
+  registerUpgradeBtn('btn-up-engine', 'engine');
+  registerUpgradeBtn('btn-up-munitions', 'munitions');
+  registerUpgradeBtn('btn-up-targeting', 'targeting');
+  registerUpgradeBtn('btn-up-damagecontrol', 'damagecontrol');
+
+  const btnUpCancel = document.getElementById('btn-up-cancel');
+  if (btnUpCancel) {
+    btnUpCancel.addEventListener('click', () => {
+      upgradeModeActive = false;
+    });
+  }
   document.getElementById('btn-speed-1').addEventListener('click', () => { speedModifierNext = speedModifierNext === 0.25 ? null : 0.25; });
   document.getElementById('btn-speed-2').addEventListener('click', () => { speedModifierNext = speedModifierNext === 0.50 ? null : 0.50; });
   const btnSpd3 = document.getElementById('btn-speed-3'); if (btnSpd3) btnSpd3.addEventListener('click', () => { speedModifierNext = speedModifierNext === 1.0 ? null : 1.0; });
@@ -1583,6 +1819,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
       serverState = null; // Clear old state so we don't draw it while waiting for the new one
+      lastKnownPlanets = {}; // Clear cached planet details
       socket.emit('restartGame', payload);
     } else {
       socket.emit('enterGame', payload);
@@ -1605,6 +1842,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
     hasCenteredOnHomeworld = false;
     serverState = null;
+    lastKnownPlanets = {}; // Clear cached planet details
     socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm });
   });
 
@@ -1617,16 +1855,70 @@ window.addEventListener('DOMContentLoaded', () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Dynamic button visibility
-    const btnBomb = document.getElementById('btn-bomb');
-    const btnBombShips = document.getElementById('btn-bomb-ships');
-    const btnCruiser = document.getElementById('btn-cruiser');
-    const btnInterceptor = document.getElementById('btn-interceptor');
-    const hasMilitary = selectedPlanets.some(p => p.isMilitary);
-    const hasCruiserBase = selectedPlanets.some(p => p.isMilitary || p.homeworldOf);
-    if (btnBomb) btnBomb.style.display = hasMilitary ? 'inline-flex' : 'none';
-    if (btnBombShips) btnBombShips.style.display = hasMilitary ? 'inline-flex' : 'none';
-    if (btnCruiser) btnCruiser.style.display = hasCruiserBase ? 'inline-flex' : 'none';
-    if (btnInterceptor) btnInterceptor.style.display = hasCruiserBase ? 'inline-flex' : 'none';
+    const upgradeQual = getSelectedCruiserUpgradeQualifiers();
+    if (!upgradeQual) {
+      upgradeModeActive = false;
+    }
+
+    const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
+    const actionButtonsLeft = document.getElementById('action-buttons-left');
+    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-fill', 'btn-scout', 'btn-interceptor', 'btn-cruiser', 'btn-leaderboard', 'help-btn'];
+    const upButtonsMap = {
+      'btn-up-sensorarray': 'sensorarrays',
+      'btn-up-lab': 'labs',
+      'btn-up-armor': 'armor',
+      'btn-up-shields': 'shields',
+      'btn-up-engine': 'engine',
+      'btn-up-munitions': 'munitions',
+      'btn-up-targeting': 'targeting',
+      'btn-up-damagecontrol': 'damagecontrol'
+    };
+
+    if (upgradeModeActive && upgradeQual) {
+      if (actionButtonsLeft) actionButtonsLeft.style.display = 'none';
+      if (btnUpgradeMode) btnUpgradeMode.style.display = 'none';
+      for (const btnId of stdButtons) {
+        const el = document.getElementById(btnId);
+        if (el) el.style.display = 'none';
+      }
+      for (const [btnId, prop] of Object.entries(upButtonsMap)) {
+        const el = document.getElementById(btnId);
+        if (el) {
+          const currentVal = upgradeQual.ship[prop] || 0;
+          el.style.display = (currentVal < 3 && !upgradeQual.ship.isUpgrading) ? 'inline-flex' : 'none';
+        }
+      }
+      const elCancel = document.getElementById('btn-up-cancel');
+      if (elCancel) elCancel.style.display = 'inline-flex';
+    } else {
+      if (actionButtonsLeft) actionButtonsLeft.style.display = 'flex';
+      if (btnUpgradeMode) btnUpgradeMode.style.display = upgradeQual ? 'inline-flex' : 'none';
+      
+      const hasMilitary = selectedPlanets.some(p => p.isMilitary);
+      const hasCruiserBase = selectedPlanets.some(p => p.isMilitary || p.homeworldOf);
+      
+      const btnBomb = document.getElementById('btn-bomb');
+      const btnBombShips = document.getElementById('btn-bomb-ships');
+      const btnCruiser = document.getElementById('btn-cruiser');
+      const btnInterceptor = document.getElementById('btn-interceptor');
+      if (btnBomb) btnBomb.style.display = hasMilitary ? 'inline-flex' : 'none';
+      if (btnBombShips) btnBombShips.style.display = hasMilitary ? 'inline-flex' : 'none';
+      if (btnCruiser) btnCruiser.style.display = hasCruiserBase ? 'inline-flex' : 'none';
+      if (btnInterceptor) btnInterceptor.style.display = hasCruiserBase ? 'inline-flex' : 'none';
+
+      const simpleStd = ['btn-fill', 'btn-scout', 'btn-leaderboard', 'help-btn'];
+      for (const btnId of simpleStd) {
+        const el = document.getElementById(btnId);
+        if (el) el.style.display = 'inline-flex';
+      }
+
+      for (const btnId of Object.keys(upButtonsMap)) {
+        const el = document.getElementById(btnId);
+        if (el) el.style.display = 'none';
+      }
+      const elCancel = document.getElementById('btn-up-cancel');
+      if (elCancel) elCancel.style.display = 'none';
+    }
 
     if (!serverState) return;
 
@@ -1712,23 +2004,7 @@ window.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      const hazardSensorReductionPct = (x, y, ownerId) => {
-        let penaltyPct = 0;
-        if (!serverState.storms) return 1;
-        for (const h of serverState.storms) {
-          if (h.type === 'minefield') continue;
-          const hdx = x - h.x, hdy = y - h.y;
-          if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
-            const owner = serverState.players.find(p => p.id === ownerId);
-            const k = h.knowledge || 0;
-            const tR = owner ? Math.sqrt(owner.techScore || 0) : 0;
-            const eR = owner ? Math.sqrt(owner.expScore || 0) : 0;
-            const eff = Math.max(0, h.intensity - k - (tR + eR) / 2);
-            penaltyPct += eff / 100;
-          }
-        }
-        return Math.max(0, 1 - penaltyPct);
-      };
+
 
       if (serverState.fleets) {
 
@@ -1739,11 +2015,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const drawRadius = Math.max(10, f.radarRange * pct);
             ctx.beginPath();
             ctx.arc(f.x, f.y, drawRadius, 0, Math.PI * 2);
-            if (!f.isCruiser) {
-              ctx.fillStyle = owner.color;
-              ctx.globalAlpha = 0.05;
-              ctx.fill();
-            }
+
             ctx.strokeStyle = owner.color;
             ctx.globalAlpha = 0.2;
             ctx.lineWidth = 1;
@@ -1818,83 +2090,81 @@ window.addEventListener('DOMContentLoaded', () => {
 
         ctx.shadowBlur = 0;
 
-        if (!p.inFog || p.permanentlyTracked) {
-          const text = `${Math.floor(p.ships)} / ${p.maxShips}`;
+        const isLastKnown = p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id];
+        if (!p.inFog || p.permanentlyTracked || isLastKnown) {
+          const displayShips = isLastKnown ? lastKnownPlanets[p.id].ships : p.ships;
+          const displayMaxShips = isLastKnown ? lastKnownPlanets[p.id].maxShips : p.maxShips;
+          const text = `${Math.floor(displayShips)} / ${displayMaxShips}`;
           ctx.font = `bold 12px Orbitron`;
           const textWidth = ctx.measureText(text).width;
 
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+          ctx.fillStyle = isLastKnown ? 'rgba(200, 200, 200, 0.4)' : 'rgba(255, 255, 255, 0.6)';
           const pillHeight = 16;
           ctx.fillRect(p.x - textWidth / 2 - 8, p.y - pillHeight / 2, textWidth + 16, pillHeight);
 
-          ctx.fillStyle = '#000';
+          ctx.fillStyle = isLastKnown ? '#666' : '#000';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(text, p.x, p.y);
 
-          ctx.fillStyle = '#000';
+          ctx.fillStyle = isLastKnown ? '#888' : '#000';
           ctx.font = 'bold 11px Orbitron';
-          const pName = p.name || 'Unknown';
+          const pName = (isLastKnown ? lastKnownPlanets[p.id].name : p.name) || 'Unknown';
           ctx.fillText(pName, p.x, p.y - pillHeight / 2 - 8);
 
-          if (p.homeworldOf) {
-            const hwOwner = serverState.players.find(pl => pl.id === p.homeworldOf);
+          const displayHomeworldOf = isLastKnown ? lastKnownPlanets[p.id].homeworldOf : p.homeworldOf;
+          const displayOwnerId = isLastKnown ? lastKnownPlanets[p.id].ownerId : p.ownerId;
+          const displayOwner = serverState.players.find(pl => pl.id === displayOwnerId);
+          const displayIsResearch = isLastKnown ? lastKnownPlanets[p.id].isResearch : p.isResearch;
+          const displayIsMilitary = isLastKnown ? lastKnownPlanets[p.id].isMilitary : p.isMilitary;
+          const displayIsSpeedPlanet = isLastKnown ? lastKnownPlanets[p.id].isSpeedPlanet : p.isSpeedPlanet;
+
+          if (displayHomeworldOf) {
+            const hwOwner = serverState.players.find(pl => pl.id === displayHomeworldOf);
             if (hwOwner) {
-              ctx.fillStyle = hwOwner.color;
+              ctx.fillStyle = isLastKnown ? '#888' : hwOwner.color;
               ctx.font = 'bold 12px Orbitron';
               ctx.textAlign = 'center';
               ctx.fillText(`👑 ${hwOwner.name}`, p.x, p.y - p.radius - 8);
               ctx.font = 'bold 11px Orbitron'; // Restore font
             }
-          } else if (p.isResearch) {
-            ctx.fillStyle = owner ? owner.color : '#fff';
+          } else if (displayIsResearch) {
+            ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
             ctx.font = '14px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("🔬", p.x, p.y - p.radius - 8);
             ctx.font = 'bold 11px Orbitron'; // Restore font
-          } else if (p.isMilitary) {
-            ctx.fillStyle = owner ? owner.color : '#fff';
+          } else if (displayIsMilitary) {
+            ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
             ctx.font = '14px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("🚀", p.x, p.y - p.radius - 8);
             ctx.font = 'bold 11px Orbitron'; // Restore font
-          } else if (false) {
-            ctx.fillStyle = owner ? owner.color : '#fff';
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('🛸', p.x, p.y - p.radius - 8);
-            ctx.font = 'bold 11px Orbitron';
-          } else if (p.isSpeedPlanet) {
-            ctx.fillStyle = owner ? owner.color : '#fff';
+          } else if (displayIsSpeedPlanet) {
+            ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
             ctx.font = '14px Arial';
             ctx.textAlign = 'center';
             ctx.fillText("⚡", p.x, p.y - p.radius - 8);
             ctx.font = 'bold 11px Orbitron'; // Restore font
-          } else if (false) {
-            ctx.fillStyle = owner ? owner.color : '#fff';
-            ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText("🔺", p.x, p.y - p.radius - 8);
-            ctx.font = 'bold 11px Orbitron'; // Restore font
           }
 
-
-
-          if (owner) {
-            if (p.ships < 50) {
-              const lowPopMultiplier = 0.10 + 0.02 * Math.max(0, p.ships - 5);
-              const prodPercent = Math.round(lowPopMultiplier * 100);
-              ctx.fillStyle = '#ffaa00';
-              ctx.fillText(`${prodPercent}%`, p.x, p.y + pillHeight / 2 + 8);
+          if (!isLastKnown) {
+            if (owner) {
+              if (p.ships < 50) {
+                const lowPopMultiplier = 0.10 + 0.02 * Math.max(0, p.ships - 5);
+                const prodPercent = Math.round(lowPopMultiplier * 100);
+                ctx.fillStyle = '#ffaa00';
+                ctx.fillText(`${prodPercent}%`, p.x, p.y + pillHeight / 2 + 8);
+              } else if (p.expScore > 0) {
+                const xpPercent = (0.5 * Math.sqrt(p.expScore)).toFixed(1);
+                ctx.fillStyle = '#66ccff';
+                ctx.fillText(`${xpPercent}%`, p.x, p.y + pillHeight / 2 + 8);
+              }
             } else if (p.expScore > 0) {
               const xpPercent = (0.5 * Math.sqrt(p.expScore)).toFixed(1);
               ctx.fillStyle = '#66ccff';
               ctx.fillText(`${xpPercent}%`, p.x, p.y + pillHeight / 2 + 8);
             }
-          } else if (p.expScore > 0) {
-            const xpPercent = (0.5 * Math.sqrt(p.expScore)).toFixed(1);
-            ctx.fillStyle = '#66ccff';
-            ctx.fillText(`${xpPercent}%`, p.x, p.y + pillHeight / 2 + 8);
           }
           let defenderPlanetPenalty = 0;
           let defenderTechPenalty = 0;
@@ -2233,11 +2503,18 @@ window.addEventListener('DOMContentLoaded', () => {
             else if (hs.maxHealth <= 35) shipClass = "Cruiser";
             else if (hs.maxHealth <= 45) shipClass = "Battleship";
             lines.push({ label: 'Ship Class', value: shipClass, color: '#aaf' });
-            lines.push({ label: 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
-            const maxBombs = Math.floor(hs.maxHealth / 5);
+            lines.push({ label: hs.armor > 0 ? `Hull Integrity (${hs.armor})` : 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
+            if (hs.sensorarrays > 0) lines.push({ label: `Sensor Array (${hs.sensorarrays})`, value: `📡 Active`, color: '#ffb300' });
+            if (hs.labs > 0) lines.push({ label: `Laboratories (${hs.labs})`, value: `🔬 Active`, color: '#00e5ff' });
+            if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
+
+            const maxBombs = getMaxBombs(hs);
             let munitionsDisplay = Math.floor(hs.bombs || 0) + ' / ' + maxBombs;
-            lines.push({ label: 'Munitions', value: munitionsDisplay, color: '#ffa' });
-            lines.push({ label: 'Fuel Level', value: Math.floor(hs.fuel || 0) + ' / ' + Math.floor(hs.maxHealth / 5), color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
+            lines.push({ label: hs.munitions > 0 ? `Munitions (${hs.munitions})` : 'Munitions', value: munitionsDisplay, color: '#ffa' });
+            if (hs.munitions > 0) {
+              lines.push({ label: 'Splash Damage', value: `+${hs.munitions}`, color: '#ffd740' });
+            }
+            lines.push({ label: hs.engine > 0 ? `Fuel Level (${hs.engine})` : 'Fuel Level', value: Math.floor(hs.fuel || 0) + ' / ' + Math.floor(getMaxFuel(hs)), color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
             const rawTech = hsOwner.techScore || 0;
             const rawExp = hsOwner.expScore || 0;
             const shipExp = hs.expScore || 0;
@@ -2246,30 +2523,51 @@ window.addEventListener('DOMContentLoaded', () => {
             const expBonus = 0.5 * Math.sqrt(rawExp);
             const shipExpBonus = 0.5 * Math.sqrt(shipExp);
 
-            let shrugChance = Math.min(75, Math.floor(hs.maxHealth + (techBonus + expBonus + shipExpBonus)));
+            let shieldBonus = 0;
+            if (hs.shields > 0) {
+              shieldBonus += 10;
+              if (hs.shields > 1) {
+                shieldBonus += 5;
+              }
+              if (hs.shields > 2) {
+                shieldBonus += 5;
+              }
+            }
+            let shrugChance = Math.min(75, Math.floor(hs.maxHealth + (techBonus + expBonus + shipExpBonus) + shieldBonus));
             if ((hs.bombs || 0) < 1) {
               shrugChance = Math.floor(shrugChance / 2);
             }
-            lines.push({ label: 'Armor Deflection', value: shrugChance + '%', color: '#ccc' });
+            lines.push({ label: hs.shields > 0 ? `Armor Deflection (${hs.shields})` : 'Armor Deflection', value: shrugChance + '%', color: '#ccc' });
 
             const laserTechBonus = techBonus * 0.01;
             const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
             const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+            let targetingBonus = 0;
+            if (hs.targeting > 0) {
+              targetingBonus += 10;
+              if (hs.targeting > 1) {
+                targetingBonus += 5;
+              }
+              if (hs.targeting > 2) {
+                targetingBonus += 5;
+              }
+            }
+            const targetingRangeBonus = targetingBonus / 100;
+
             let effectiveRange = baseDogfightRange * 1.10;
             if (hs.bombs > 0) {
               effectiveRange += baseDogfightRange * 0.10;
             }
-            effectiveRange = Math.floor(effectiveRange);
+            effectiveRange = Math.floor(effectiveRange * (1 + targetingRangeBonus));
             const healthBonus = Math.floor(hs.health);
-
-            let hitChanceValue = 10;
+            let hitChanceValue = 10 + targetingBonus;
             if (hs.bombs > 0) hitChanceValue += 10;
             hitChanceValue += techBonus + expBonus + shipExpBonus;
             const hitChance = Math.min(100, hitChanceValue * 2).toFixed(1) + '%';
 
             const volleySize = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
             lines.push({ label: 'Range', value: effectiveRange, color: '#f88' });
-            lines.push({ label: 'Accuracy (Hit Chance)', value: hitChance, color: '#f88' });
+            lines.push({ label: hs.targeting > 0 ? `Accuracy (Hit Chance) (${hs.targeting})` : 'Accuracy (Hit Chance)', value: hitChance, color: '#f88' });
             lines.push({ label: 'Volley Size', value: volleySize, color: '#ffa' });
 
             lines.push({ label: 'XP', value: `+${shipExpBonus.toFixed(1)}`, color: '#00d5ff' });
@@ -2800,22 +3098,22 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.lineTo(-size * 0.8, -size * 0.2);
             ctx.lineTo(-size * 0.2, -size * 0.6);
           } else if (style === 'Gorn') {
-            ctx.moveTo(-size * 0.3, -size * 0.8);
-            ctx.lineTo(size * 0.3, -size * 0.8);
-            ctx.lineTo(size * 0.4, -size * 0.4);
-            ctx.lineTo(size * 0.8, -size * 0.2);
-            ctx.lineTo(size * 0.8, size * 0.4);
-            ctx.lineTo(size * 0.5, size * 0.4);
-            ctx.lineTo(size * 0.5, size * 0.8);
-            ctx.lineTo(size * 0.2, size * 0.8);
-            ctx.lineTo(size * 0.2, size * 0.6);
-            ctx.lineTo(-size * 0.2, size * 0.6);
-            ctx.lineTo(-size * 0.2, size * 0.8);
-            ctx.lineTo(-size * 0.5, size * 0.8);
-            ctx.lineTo(-size * 0.5, size * 0.4);
-            ctx.lineTo(-size * 0.8, size * 0.4);
-            ctx.lineTo(-size * 0.8, -size * 0.2);
-            ctx.lineTo(-size * 0.4, -size * 0.4);
+            ctx.moveTo(-size * 0.25, -size * 0.56);
+            ctx.lineTo(size * 0.25, -size * 0.56);
+            ctx.lineTo(size * 0.34, -size * 0.28);
+            ctx.lineTo(size * 0.67, -size * 0.14);
+            ctx.lineTo(size * 0.67, size * 0.28);
+            ctx.lineTo(size * 0.42, size * 0.28);
+            ctx.lineTo(size * 0.42, size * 0.56);
+            ctx.lineTo(size * 0.17, size * 0.56);
+            ctx.lineTo(size * 0.17, size * 0.42);
+            ctx.lineTo(-size * 0.17, size * 0.42);
+            ctx.lineTo(-size * 0.17, size * 0.56);
+            ctx.lineTo(-size * 0.42, size * 0.56);
+            ctx.lineTo(-size * 0.42, size * 0.28);
+            ctx.lineTo(-size * 0.67, size * 0.28);
+            ctx.lineTo(-size * 0.67, -size * 0.14);
+            ctx.lineTo(-size * 0.34, -size * 0.28);
           } else if (style === 'Tholian') {
             ctx.moveTo(0, -size);
             ctx.lineTo(size * 0.4, -size * 0.4);
@@ -2872,6 +3170,44 @@ window.addEventListener('DOMContentLoaded', () => {
           ctx.lineWidth = 1;
           ctx.stroke();
           ctx.restore();
+
+          if (s.isUpgrading) {
+            ctx.save();
+            const barW = 40;
+            const barH = 5;
+            const barX = s.x - barW / 2;
+            const barY = s.y - 25; // 25px above cruiser center
+            
+            // Background track
+            ctx.fillStyle = 'rgba(5, 5, 15, 0.92)';
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(barX, barY, barW, barH, 2.5);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Neon progress fill
+            const progress = Math.max(0, Math.min(1, (20.0 - (s.upgradeTimer || 0)) / 20.0));
+            if (progress > 0) {
+              ctx.fillStyle = '#0f0';
+              ctx.shadowColor = '#0f0';
+              ctx.shadowBlur = 6;
+              ctx.beginPath();
+              ctx.roundRect(barX, barY, barW * progress, barH, 2.5);
+              ctx.fill();
+            }
+            
+            // Category text
+            ctx.font = 'bold 8px Orbitron';
+            ctx.fillStyle = '#0ff';
+            ctx.textAlign = 'center';
+            ctx.shadowBlur = 0;
+            const upName = (s.upgradeType || 'UPGRADE').toUpperCase();
+            ctx.fillText(upName, s.x, barY - 4);
+            
+            ctx.restore();
+          }
 
           if (ownerPlayer) {
             const rawTech = ownerPlayer.techScore || 0;
@@ -2931,7 +3267,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const barH = 2;
             let currentY = s.y - size - 4;
             
-            const maxFuel = s.maxHealth / 5;
+            const maxFuel = getMaxFuel(s);
             if (s.fuel !== undefined && s.fuel < maxFuel) {
               currentY -= barH;
               ctx.fillStyle = '#555';
@@ -2942,7 +3278,7 @@ window.addEventListener('DOMContentLoaded', () => {
             }
             
             if (s.isCruiser && s.bombs !== undefined) {
-              const maxBombs = Math.floor(s.maxHealth / 5);
+              const maxBombs = getMaxBombs(s);
               if (s.bombs < maxBombs) {
                 currentY -= barH;
                 ctx.fillStyle = '#3a3a3a';
@@ -3043,12 +3379,12 @@ window.addEventListener('DOMContentLoaded', () => {
             }
             
             const style = laser.cruiserStyle || 'Klingon';
-            if (style === 'Tholian') {
+            if (style === 'Tholian' || style === 'Lyran') {
               ctx.save();
               ctx.beginPath();
               ctx.moveTo(startPtX, startPtY);
               ctx.lineTo(endPtX, endPtY);
-              ctx.strokeStyle = '#ffff00';
+              ctx.strokeStyle = style === 'Lyran' ? '#00ff00' : '#ffff00';
               ctx.lineWidth = 3.0;
               ctx.globalAlpha = Math.max(0, 1.0 - progress);
               ctx.stroke();
