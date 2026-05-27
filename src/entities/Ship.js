@@ -173,7 +173,7 @@ export class Ship {
           const pdx = this.x - planet.x;
           const pdy = this.y - planet.y;
           const tb = 0.01 * Math.sqrt(planet.owner.techScore || 0);
-          const eb = 0.005 * Math.sqrt(planet.owner.expScore || 0);
+          const eb = 0.01 * Math.sqrt(planet.owner.expScore || 0);
           const gravityRadius = (planet.maxShips * 1.5) * (1 + tb + eb);
           if (pdx * pdx + pdy * pdy < gravityRadius * gravityRadius) {
             friendlyWellPlanet = planet;
@@ -917,39 +917,39 @@ export class Ship {
             let friendlyPlanetBoost = 0;
             let defenderPlanetPenalty = 0;
             if (allPlanets) {
-              let friendlyCumulativeCapacity = 0;
-              let defenderCumulativeCapacity = 0;
+              let friendlyCumulativeShips = 0;
+              let defenderCumulativeShips = 0;
               for (const planet of allPlanets) {
                 if (planet !== this.targetPlanet) {
                   const pdx = planet.x - this.targetPlanet.x;
                   const pdy = planet.y - this.targetPlanet.y;
                   const pDistSq = pdx * pdx + pdy * pdy;
                   const tBonus = planet.owner ? (0.01 * Math.sqrt(planet.owner.techScore || 0)) : 0;
-                  const eBonus = planet.owner ? (0.005 * Math.sqrt(planet.owner.expScore || 0)) : 0;
+                  const eBonus = planet.owner ? (0.01 * Math.sqrt(planet.owner.expScore || 0)) : 0;
                   const gravityRadius = (planet.maxShips * 1.5) * (1 + tBonus + eBonus);
                   
                   if (pDistSq < gravityRadius * gravityRadius) {
                     if (planet.owner === this.owner) {
-                      friendlyCumulativeCapacity += planet.maxShips;
+                      friendlyCumulativeShips += planet.ships;
                     } else if (planet.owner === this.targetPlanet.owner) {
-                      defenderCumulativeCapacity += planet.maxShips;
+                      defenderCumulativeShips += planet.ships;
                     }
                   }
                 }
               }
-              friendlyPlanetBoost = 0.01 * Math.floor(friendlyCumulativeCapacity / 50);
-              defenderPlanetPenalty = 0.01 * Math.floor(defenderCumulativeCapacity / 50);
+              friendlyPlanetBoost = 0.02 * Math.floor(friendlyCumulativeShips / 100);
+              defenderPlanetPenalty = 0.02 * Math.floor(defenderCumulativeShips / 100);
             }
 
             const advantage = 0.01 * Math.floor(nearbyFriendlyCount / 10);
             const attackerTechBonus = 0.01 * Math.sqrt(this.owner.techScore || 0);
-            const attackerExpBonus = 0.005 * Math.sqrt(this.owner.expScore || 0);
+            const attackerExpBonus = 0.01 * Math.sqrt(this.owner.expScore || 0);
             
             const defenderTechPenalty = 0.01 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.techScore || 0) : 0);
-            const defenderExpPenalty = 0.005 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.expScore || 0) : 0);
+            const defenderExpPenalty = 0.01 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.expScore || 0) : 0);
             
-            const attackerLocalExpBonus = 0.005 * Math.sqrt(this.expScore || 0);
-            const defenderLocalExpPenalty = 0.005 * Math.sqrt(this.targetPlanet.expScore || 0);
+            const attackerLocalExpBonus = 0.01 * Math.sqrt(this.expScore || 0);
+            const defenderLocalExpPenalty = 0.01 * Math.sqrt(this.targetPlanet.expScore || 0);
 
             const humanInvolved = (!this.owner.isAI) || (this.targetPlanet.owner && !this.targetPlanet.owner.isAI);
             const humanVsHuman = (!this.owner.isAI) && (this.targetPlanet.owner && !this.targetPlanet.owner.isAI);

@@ -962,7 +962,7 @@ export class Game {
         for (const planet of this.planets) {
           if (planet.owner && planet.owner.id === player.id) {
             const tb = 0.01 * Math.sqrt(planet.owner.techScore || 0);
-            const eb = 0.005 * Math.sqrt(planet.owner.expScore || 0);
+            const eb = 0.01 * Math.sqrt(planet.owner.expScore || 0);
             const gravR = (planet.maxShips * 1.5) * (1 + tb + eb);
             const red = hazardSensorReduction(planet.x, planet.y, player.id);
             const effGravR = Math.max(10, gravR - red);
@@ -1487,7 +1487,7 @@ export class Game {
     for (const planet of this.planets) {
       if (planet.owner) {
         const techBonus = 0.01 * Math.sqrt(planet.owner.techScore || 0);
-        const expBonus = 0.005 * Math.sqrt(planet.owner.expScore || 0);
+        const expBonus = 0.01 * Math.sqrt(planet.owner.expScore || 0);
         const mapScale = this.width > 1600 ? this.width / 1600 : 1.0;
         const gravityRadius = (planet.maxShips * 1.5 * mapScale) * (1 + techBonus + expBonus);
         

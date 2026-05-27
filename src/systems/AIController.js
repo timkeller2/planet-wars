@@ -109,7 +109,7 @@ export class AIController {
     if (targets.length === 0) return;
 
     const techBonus = 0.01 * Math.sqrt(this.aiPlayer.techScore || 0);
-    const expBonus = 0.005 * Math.sqrt(this.aiPlayer.expScore || 0);
+    const expBonus = 0.01 * Math.sqrt(this.aiPlayer.expScore || 0);
     const combinedBonus = techBonus + expBonus;
     
     // Higher bonus = lower distance penalty

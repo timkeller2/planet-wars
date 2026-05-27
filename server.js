@@ -134,7 +134,7 @@ async function bootstrap() {
         for (const p of game.planets) {
           if (p.owner && p.owner.id === player.id && p.ships > 100) {
             const techBonus = 0.01 * Math.sqrt(player.techScore || 0);
-            const expBonus = 0.005 * Math.sqrt(player.expScore || 0);
+            const expBonus = 0.01 * Math.sqrt(player.expScore || 0);
             const gravityRadius = (p.maxShips * 1.5) * (1 + techBonus + expBonus);
             
             let penaltyPct = 0;
@@ -435,32 +435,39 @@ async function bootstrap() {
             
             let friendlyPlanetBoost = 0;
             let defenderPlanetPenalty = 0;
+            let friendlyCumulativeShips = 0;
+            let defenderCumulativeShips = 0;
             for (const otherPlanet of game.planets) {
               if (otherPlanet !== p) {
                 const dx = otherPlanet.x - p.x;
                 const dy = otherPlanet.y - p.y;
                 const techBonus = otherPlanet.owner ? (0.01 * Math.sqrt(otherPlanet.owner.techScore || 0)) : 0;
-                const expBonus = otherPlanet.owner ? (0.005 * Math.sqrt(otherPlanet.owner.expScore || 0)) : 0;
-                const gravityRadius = 225 * (1 + techBonus + expBonus);
+                const expBonus = otherPlanet.owner ? (0.01 * Math.sqrt(otherPlanet.owner.expScore || 0)) : 0;
+                const gravityRadius = (otherPlanet.maxShips * 1.5) * (1 + techBonus + expBonus);
                 
                 if (dx*dx + dy*dy < gravityRadius * gravityRadius) {
-                  if (otherPlanet.owner === owner) friendlyPlanetBoost += 0.02;
-                  else if (otherPlanet.owner === p.owner) defenderPlanetPenalty += 0.02;
+                  if (otherPlanet.owner === owner) {
+                    friendlyCumulativeShips += otherPlanet.ships;
+                  } else if (otherPlanet.owner === p.owner) {
+                    defenderCumulativeShips += otherPlanet.ships;
+                  }
                 }
               }
             }
+            friendlyPlanetBoost = 0.02 * Math.floor(friendlyCumulativeShips / 100);
+            defenderPlanetPenalty = 0.02 * Math.floor(defenderCumulativeShips / 100);
             
             const attackerTechBonus = 0.01 * Math.sqrt(owner.techScore || 0);
-            const attackerExpBonus = 0.005 * Math.sqrt(owner.expScore || 0);
+            const attackerExpBonus = 0.01 * Math.sqrt(owner.expScore || 0);
             const defenderTechPenalty = 0.01 * Math.sqrt(p.owner ? (p.owner.techScore || 0) : 0);
-            const defenderExpPenalty = 0.005 * Math.sqrt(p.owner ? (p.owner.expScore || 0) : 0);
+            const defenderExpPenalty = 0.01 * Math.sqrt(p.owner ? (p.owner.expScore || 0) : 0);
             
             let maxShipExp = 0;
             for (const s of ships) {
               if (s.expScore > maxShipExp) maxShipExp = s.expScore;
             }
-            const attackerLocalExpBonus = 0.005 * Math.sqrt(maxShipExp || 0);
-            const defenderLocalExpPenalty = 0.005 * Math.sqrt(p.expScore || 0);
+            const attackerLocalExpBonus = 0.01 * Math.sqrt(maxShipExp || 0);
+            const defenderLocalExpPenalty = 0.01 * Math.sqrt(p.expScore || 0);
             
             const humanInvolved = (!owner.isAI) || (p.owner && !p.owner.isAI);
             const humanVsHuman = (!owner.isAI) && (p.owner && !p.owner.isAI);
@@ -591,7 +598,7 @@ async function bootstrap() {
       let visibleLasers = [];
 
       const playerTechBonus = 0.01 * Math.sqrt(player.techScore || 0);
-      const playerExpBonus = 0.005 * Math.sqrt(player.expScore || 0);
+      const playerExpBonus = 0.01 * Math.sqrt(player.expScore || 0);
 
       let hasEntities = false;
       const playerFleets = new Map();
@@ -699,7 +706,7 @@ async function bootstrap() {
         for (const p of game.planets) {
           if (p.owner && p.owner.id === player.id) {
             const planetTech = 0.01 * Math.sqrt(p.owner.techScore || 0);
-            const planetExp = 0.005 * Math.sqrt(p.owner.expScore || 0);
+            const planetExp = 0.01 * Math.sqrt(p.owner.expScore || 0);
             const gravityRadius = (p.maxShips * 1.5 * scaleMap) * (1 + planetTech + planetExp);
             const pct = hazardSensorReductionPct(p.x, p.y, player.id);
             const effectiveGravity = Math.max(10, gravityRadius * pct);
@@ -725,7 +732,7 @@ async function bootstrap() {
         for (const p of game.planets) {
           if (p.owner && p.owner.id === player.id) {
             const planetTech = 0.01 * Math.sqrt(p.owner.techScore || 0);
-            const planetExp = 0.005 * Math.sqrt(p.owner.expScore || 0);
+            const planetExp = 0.01 * Math.sqrt(p.owner.expScore || 0);
             const gravityRadius = (p.maxShips * 1.5 * scaleMap) * (1 + planetTech + planetExp) * 1.5;
             const pct = hazardSensorReductionPct(p.x, p.y, player.id);
             const effectiveGravity = Math.max(10, gravityRadius * pct);
@@ -811,8 +818,8 @@ async function bootstrap() {
         } else {
           for (const p of game.planets) {
             if (p.owner && p.owner.id === player.id) {
-              const pt = 0.01 * Math.sqrt(p.owner.techScore || 0);
-              const pe = 0.005 * Math.sqrt(p.owner.expScore || 0);
+               const pt = 0.01 * Math.sqrt(p.owner.techScore || 0);
+               const pe = 0.01 * Math.sqrt(p.owner.expScore || 0);
               const gr = (p.maxShips * 1.5) * (1 + pt + pe);
               const dx = p.x - storm.x, dy = p.y - storm.y;
               if (Math.sqrt(dx * dx + dy * dy) <= gr + storm.radius) { stormVisible = true; break; }

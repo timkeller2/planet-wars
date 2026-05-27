@@ -899,7 +899,7 @@ window.addEventListener('DOMContentLoaded', () => {
     for (const p of serverState.planets) {
       if (p.ownerId === localPlayer.id && p.ships > 100) {
         const techBonus = 0.01 * Math.sqrt(localPlayer.techScore || 0);
-        const expBonus = 0.005 * Math.sqrt(localPlayer.expScore || 0);
+        const expBonus = 0.01 * Math.sqrt(localPlayer.expScore || 0);
         const gravityRadius = (p.maxShips * 1.5) * (1 + techBonus + expBonus);
         const pct = hazardSensorReductionPct(p.x, p.y, p.ownerId);
         const effGravity = Math.max(10, gravityRadius * pct);
@@ -2188,7 +2188,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
         if (owner) {
           const techBonus = 0.01 * Math.sqrt(owner.techScore || 0);
-          const expBonus = 0.005 * Math.sqrt(owner.expScore || 0);
+          const expBonus = 0.01 * Math.sqrt(owner.expScore || 0);
           const gravityRadius = (p.maxShips * 1.5) * (1 + techBonus + expBonus);
           const pct = hazardSensorReductionPct(p.x, p.y, p.ownerId);
           const drawRadius = Math.max(10, gravityRadius * pct);
@@ -2336,12 +2336,12 @@ window.addEventListener('DOMContentLoaded', () => {
                 ctx.fillStyle = '#ffaa00';
                 ctx.fillText(`${prodPercent}%`, p.x, p.y + pillHeight / 2 + 8);
               } else if (p.expScore > 0) {
-                const xpPercent = (0.5 * Math.sqrt(p.expScore)).toFixed(1);
+                const xpPercent = (1.0 * Math.sqrt(p.expScore)).toFixed(1);
                 ctx.fillStyle = '#66ccff';
                 ctx.fillText(`${xpPercent}%`, p.x, p.y + pillHeight / 2 + 8);
               }
             } else if (p.expScore > 0) {
-              const xpPercent = (0.5 * Math.sqrt(p.expScore)).toFixed(1);
+              const xpPercent = (1.0 * Math.sqrt(p.expScore)).toFixed(1);
               ctx.fillStyle = '#66ccff';
               ctx.fillText(`${xpPercent}%`, p.x, p.y + pillHeight / 2 + 8);
             }
@@ -2352,13 +2352,13 @@ window.addEventListener('DOMContentLoaded', () => {
 
           if (owner) {
             defenderTechPenalty = 0.01 * Math.sqrt(owner.techScore || 0);
-            defenderExpPenalty = 0.005 * Math.sqrt(owner.expScore || 0);
+            defenderExpPenalty = 0.01 * Math.sqrt(owner.expScore || 0);
 
-            let defenderCumulativeCapacity = 0;
+            let defenderCumulativeShips = 0;
             for (const gp of serverState.planets) {
               if (gp.id === p.id || gp.ownerId !== p.ownerId) continue;
               const techBonus = 0.01 * Math.sqrt(owner.techScore || 0);
-              const expBonus = 0.005 * Math.sqrt(owner.expScore || 0);
+              const expBonus = 0.01 * Math.sqrt(owner.expScore || 0);
               const gravityRadius = (gp.maxShips * 1.5) * (1 + techBonus + expBonus);
               const pct = hazardSensorReductionPct(gp.x, gp.y, gp.ownerId);
               const effGravity = Math.max(10, gravityRadius * pct);
@@ -2366,19 +2366,19 @@ window.addEventListener('DOMContentLoaded', () => {
               const pdx = gp.x - p.x;
               const pdy = gp.y - p.y;
               if (pdx * pdx + pdy * pdy <= effGravity * effGravity) {
-                defenderCumulativeCapacity += gp.maxShips;
+                defenderCumulativeShips += gp.ships;
               }
             }
-            defenderPlanetPenalty = 0.01 * Math.floor(defenderCumulativeCapacity / 50);
+            defenderPlanetPenalty = 0.02 * Math.floor(defenderCumulativeShips / 100);
           }
 
           let friendlyPlanetBoost = 0;
           if (localPlayer) {
-            let friendlyCumulativeCapacity = 0;
+            let friendlyCumulativeShips = 0;
             for (const gp of serverState.planets) {
               if (gp.id === p.id || gp.ownerId !== localPlayer.id) continue;
               const techBonus = 0.01 * Math.sqrt(localPlayer.techScore || 0);
-              const expBonus = 0.005 * Math.sqrt(localPlayer.expScore || 0);
+              const expBonus = 0.01 * Math.sqrt(localPlayer.expScore || 0);
               const gravityRadius = (gp.maxShips * 1.5) * (1 + techBonus + expBonus);
               const pct = hazardSensorReductionPct(gp.x, gp.y, gp.ownerId);
               const effGravity = Math.max(10, gravityRadius * pct);
@@ -2386,10 +2386,10 @@ window.addEventListener('DOMContentLoaded', () => {
               const pdx = gp.x - p.x;
               const pdy = gp.y - p.y;
               if (pdx * pdx + pdy * pdy <= effGravity * effGravity) {
-                friendlyCumulativeCapacity += gp.maxShips;
+                friendlyCumulativeShips += gp.ships;
               }
             }
-            friendlyPlanetBoost = 0.01 * Math.floor(friendlyCumulativeCapacity / 50);
+            friendlyPlanetBoost = 0.02 * Math.floor(friendlyCumulativeShips / 100);
           }
 
           const shipPenalty = 0.01 * Math.floor(p.ships / 5);
@@ -2405,7 +2405,7 @@ window.addEventListener('DOMContentLoaded', () => {
             if (totalAttackingships > 0) {
               const attackerFleetPenalty = 0.01 * Math.floor(totalAttackingships / 10);
               const attackerTechBonus = 0.01 * Math.sqrt(localPlayer.techScore || 0);
-              const attackerExpBonus = 0.005 * Math.sqrt(localPlayer.expScore || 0);
+              const attackerExpBonus = 0.01 * Math.sqrt(localPlayer.expScore || 0);
 
               let maxShipExp = 0;
               for (const s of selectedShips) {
@@ -2415,8 +2415,8 @@ window.addEventListener('DOMContentLoaded', () => {
                 const effectiveExp = sp.expScore || 0;
                 if (effectiveExp > maxShipExp) maxShipExp = effectiveExp;
               }
-              const attackerLocalExpBonus = 0.005 * Math.sqrt(maxShipExp || 0);
-              const defenderLocalExpPenalty = 0.005 * Math.sqrt(p.expScore || 0);
+              const attackerLocalExpBonus = 0.01 * Math.sqrt(maxShipExp || 0);
+              const defenderLocalExpPenalty = 0.01 * Math.sqrt(p.expScore || 0);
 
               const humanInvolved = true; // Attacker is localPlayer (always human)
               const humanVsHuman = owner && (!owner.isAI);
@@ -2520,27 +2520,27 @@ window.addEventListener('DOMContentLoaded', () => {
               totalDefense += techDef;
               lines.push({ label: 'Tech Defense', value: `${techDef.toFixed(1)}%`, color: '#4f4' });
             }
-            const expDef = Math.round(0.5 * Math.sqrt(hpOwner.expScore || 0) * 100) / 100;
+            const expDef = Math.round(Math.sqrt(hpOwner.expScore || 0) * 100) / 100;
             if (expDef > 0) {
               totalDefense += expDef;
               lines.push({ label: 'Exp Defense', value: `${expDef.toFixed(1)}%`, color: '#4f4' });
             }
-            const planetExp = Math.round(0.5 * Math.sqrt(hp.expScore || 0) * 100) / 100;
+            const planetExp = Math.round(Math.sqrt(hp.expScore || 0) * 100) / 100;
             if (planetExp > 0) {
               totalDefense += planetExp;
               lines.push({ label: 'Planet Exp', value: `${planetExp.toFixed(1)}%`, color: '#4f4' });
             }
 
-            let defCap = 0;
+            let defShips = 0;
             for (const gp of serverState.planets) {
               if (gp.id === hp.id || gp.ownerId !== hp.ownerId) continue;
               const tb = 0.01 * Math.sqrt(hpOwner.techScore || 0);
-              const eb = 0.005 * Math.sqrt(hpOwner.expScore || 0);
+              const eb = 0.01 * Math.sqrt(hpOwner.expScore || 0);
               const gr = (gp.maxShips * 1.5) * (1 + tb + eb);
               const pdx = gp.x - hp.x, pdy = gp.y - hp.y;
-              if (pdx * pdx + pdy * pdy <= gr * gr) defCap += gp.maxShips;
+              if (pdx * pdx + pdy * pdy <= gr * gr) defShips += gp.ships;
             }
-            const gravBonus = Math.floor(defCap / 50);
+            const gravBonus = 2 * Math.floor(defShips / 100);
             if (gravBonus > 0) {
               totalDefense += gravBonus;
               lines.push({ label: 'Gravity Field', value: `${gravBonus}%`, color: '#4f4' });
@@ -2812,25 +2812,25 @@ window.addEventListener('DOMContentLoaded', () => {
             }
 
             // ship local exp
-            const shipExp = Math.round(0.5 * Math.sqrt(maxShipExp || 0) * 100) / 100;
+            const shipExp = Math.round(Math.sqrt(maxShipExp || 0) * 100) / 100;
             if (shipExp > 0) {
               totalAttackMod += shipExp;
               lines.push({ label: 'ship Exp', value: `${shipExp.toFixed(1)}%`, color: '#4f4' });
             }
 
             // Friendly gravity boost (check friendly planets near hovered ship position)
-            let friendlyCap = 0;
+            let friendlyShips = 0;
             if (serverState.planets) {
               for (const gp of serverState.planets) {
                 if (gp.ownerId !== hs.ownerId) continue;
                 const tb = 0.01 * Math.sqrt(hsOwner.techScore || 0);
-                const eb = 0.005 * Math.sqrt(hsOwner.expScore || 0);
+                const eb = 0.01 * Math.sqrt(hsOwner.expScore || 0);
                 const gr = (gp.maxShips * 1.5) * (1 + tb + eb);
                 const pdx = gp.x - hs.x, pdy = gp.y - hs.y;
-                if (pdx * pdx + pdy * pdy <= gr * gr) friendlyCap += gp.maxShips;
+                if (pdx * pdx + pdy * pdy <= gr * gr) friendlyShips += gp.ships;
               }
             }
-            const gravAtk = Math.floor(friendlyCap / 50);
+            const gravAtk = 2 * Math.floor(friendlyShips / 100);
             if (gravAtk > 0) {
               totalAttackMod += gravAtk;
               lines.push({ label: 'Gravity support', value: `${gravAtk}%`, color: '#4f4' });
@@ -2849,7 +2849,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
             // Attrition info
             const techSafe = Math.sqrt(hsOwner.techScore || 0);
-            const expSafe = 0.5 * Math.sqrt(hsOwner.expScore || 0);
+            const expSafe = Math.sqrt(hsOwner.expScore || 0);
             const safeTime = techSafe + expSafe;
 
             if (avgFlightTime > 0) {
@@ -2872,7 +2872,7 @@ window.addEventListener('DOMContentLoaded', () => {
                   const pOwner = serverState.players.find(pl => pl.id === planet.ownerId);
                   if (!pOwner) continue;
                   const tb = 0.01 * Math.sqrt(pOwner.techScore || 0);
-                  const eb = 0.005 * Math.sqrt(pOwner.expScore || 0);
+                  const eb = 0.01 * Math.sqrt(pOwner.expScore || 0);
                   const gr = (planet.maxShips * 1.5) * (1 + tb + eb);
                   const pdx = hs.x - planet.x, pdy = hs.y - planet.y;
                   if (pdx * pdx + pdy * pdy < gr * gr) {
@@ -3098,7 +3098,7 @@ window.addEventListener('DOMContentLoaded', () => {
             let playerExpBonus = 0;
             if (owner) {
               playerTechBonus = 0.01 * Math.sqrt(owner.techScore || 0);
-              playerExpBonus = 0.005 * Math.sqrt(owner.expScore || 0);
+              playerExpBonus = 0.01 * Math.sqrt(owner.expScore || 0);
             }
             const sensorRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
             
