@@ -90,8 +90,13 @@ export class Planet {
         if (isHuman) {
           if (focus === 'research') {
             // Guaranteed tech score gain, no maxships gain
-            this.owner.techScore = (this.owner.techScore || 0) + 1;
-            this.techIncreaseEvent = true;
+            const increaseAmount = this.isResearch ? 2 : 1;
+            this.owner.techScore = (this.owner.techScore || 0) + increaseAmount;
+            if (this.isResearch) {
+              this.techDoubleIncreaseEvent = true;
+            } else {
+              this.techIncreaseEvent = true;
+            }
             this.ships = Math.max(0, this.ships - 2);
             // Decay ships back to maxShips
             if (this.ships > this.maxShips) {
