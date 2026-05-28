@@ -41,7 +41,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let bombOrderNext = false;
   let fillModeNext = false;
   let scoutModeNext = false;
-  let interceptorOrderNext = false;
+  // Interceptor order removed
   let cruiserOrderNext = false;
   let upgradeModeActive = false;
   let focusModeActive = false;
@@ -139,7 +139,7 @@ window.addEventListener('DOMContentLoaded', () => {
     victory: '⚔️ Victory Conditions',
     planets: '🪐 Planets & Economy',
     ships: '🚀 Ships & Combat',
-    cruisers: '🛸 Cruisers & Interceptors',
+    cruisers: '🛸 Cruisers',
     upgrades: '🛠️ Upgrades',
     hazards: '⚡ Hazards',
     monsters: '🧬 Space Amoebas',
@@ -327,17 +327,37 @@ window.addEventListener('DOMContentLoaded', () => {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
-      if (chatInput && chatInput.classList.contains('hidden')) {
-        chatInput.classList.remove('hidden');
-        chatInput.focus();
-      } else if (chatInput) {
-        const text = chatInput.value.trim();
-        if (text !== '') {
-          socket.emit('chatMessage', text);
+      if (chatInput) {
+        if (document.activeElement === chatInput) {
+          const text = chatInput.value.trim();
+          if (text !== '') {
+            const match = text.match(/^[nN]\s+(.+)$/);
+            let ship = null;
+            let planet = null;
+            if (selectedShips.length === 1 && serverState) {
+              ship = serverState.ships.find(s => s.id === selectedShips[0].id && s.isCruiser && s.ownerId === localPlayer.id);
+            }
+            if (selectedPlanets.length === 1 && serverState) {
+              planet = serverState.planets.find(p => p.id === selectedPlanets[0].id && p.ownerId === localPlayer.id);
+            }
+
+            if (match && ship) {
+              const newName = match[1].trim().substring(0, 16);
+              socket.emit('nameShip', { shipId: ship.id, name: newName });
+            } else if (match && planet) {
+              const newName = match[1].trim().substring(0, 16);
+              socket.emit('namePlanet', { planetId: planet.id, name: newName });
+            } else {
+              socket.emit('chatMessage', text);
+            }
+          }
+          chatInput.value = '';
+          chatInput.classList.add('hidden');
+          chatInput.blur();
+        } else {
+          chatInput.classList.remove('hidden');
+          chatInput.focus();
         }
-        chatInput.value = '';
-        chatInput.classList.remove('hidden');
-        chatInput.blur();
       }
     }
   });
@@ -890,17 +910,39 @@ window.addEventListener('DOMContentLoaded', () => {
     return Math.max(0, 1 - penaltyPct);
   };
 
+  function getSelectedCruiser() {
+    if (!serverState || !localPlayer) return null;
+    if (selectedShips.length !== 1) return null;
+    const ship = serverState.ships.find(s => s.id === selectedShips[0].id);
+    if (!ship || !ship.isCruiser || ship.ownerId !== localPlayer.id) return null;
+    return ship;
+  }
+
   function getSelectedCruiserUpgradeQualifiers() {
     if (!serverState || !localPlayer) return null;
     if (selectedShips.length !== 1) return null;
     const ship = serverState.ships.find(s => s.id === selectedShips[0].id);
     if (!ship || !ship.isCruiser || ship.ownerId !== localPlayer.id) return null;
 
+    const totalUpgrades = (ship.sensorarrays || 0) +
+                          (ship.labs || 0) +
+                          (ship.armor || 0) +
+                          (ship.shields || 0) +
+                          (ship.engine || 0) +
+                          (ship.munitions || 0) +
+                          (ship.targeting || 0) +
+                          (ship.damagecontrol || 0);
+    const cost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
+
     for (const p of serverState.planets) {
-      if (p.ownerId === localPlayer.id && p.ships > 100) {
+      if (p.ownerId === localPlayer.id && p.ships >= cost) {
         const techBonus = 0.01 * Math.sqrt(localPlayer.techScore || 0);
         const expBonus = 0.01 * Math.sqrt(localPlayer.expScore || 0);
-        const gravityRadius = (p.maxShips * 1.5) * (1 + techBonus + expBonus);
+        let baseRadius = p.maxShips * 1.5;
+        if (p.focusMode === 'garrison') {
+          baseRadius += (p.ships / 2);
+        }
+        const gravityRadius = baseRadius * (1 + techBonus + expBonus);
         const pct = hazardSensorReductionPct(p.x, p.y, p.ownerId);
         const effGravity = Math.max(10, gravityRadius * pct);
 
@@ -912,6 +954,14 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
     return null;
+  }
+
+  function getSelectedPlanetForFocus() {
+    if (!serverState || !localPlayer) return null;
+    if (selectedPlanets.length !== 1) return null;
+    const planet = serverState.planets.find(p => p.id === selectedPlanets[0].id);
+    if (!planet || planet.ownerId !== localPlayer.id) return null;
+    return planet;
   }
 
   function getSelectedPlanetFocusQualifiers() {
@@ -953,6 +1003,37 @@ window.addEventListener('DOMContentLoaded', () => {
   function handlePointerDown(x, y, isShift = false, isTouch = false, button = 0) {
     if (!serverState || !localPlayer) return;
 
+    // Check if clicked/touched a planet's focus mode icon (only left clicks/taps)
+    if (button === 0) {
+      const clickPos = getMouseServerPos(x, y);
+      for (const p of serverState.planets) {
+        if (p.ownerId === localPlayer.id && !p.inFog) {
+          const text = `${Math.floor(p.ships)} / ${p.maxShips}`;
+          ctx.save();
+          ctx.font = `bold 12px Orbitron`;
+          const textWidth = ctx.measureText(text).width;
+          ctx.restore();
+
+          const pillHeight = 16;
+          const badgeRadius = pillHeight / 2;
+          const badgeX = p.x + textWidth / 2 + 8 + badgeRadius + 2;
+
+          const dx = badgeX - clickPos.x;
+          const dy = p.y - clickPos.y;
+          const hitRadius = badgeRadius + 8; // Extra padding for easier clicking/touching
+          if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+            if (focusModeActive && selectedPlanets.length === 1 && selectedPlanets[0].id === p.id) {
+              focusModeActive = false;
+            } else {
+              selectedPlanets = [p];
+              selectedShips = [];
+              focusModeActive = true;
+            }
+            return; // Exit selection early
+          }
+        }
+      }
+    }
 
     let clickedShip = null;
     if (serverState && serverState.ships) {
@@ -1008,7 +1089,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
           if (selectedPlanets.length > 0) {
             selectedPlanets.forEach(sourcePlanet => {
-              if (interceptorOrderNext && !sourcePlanet.isMilitary && !sourcePlanet.homeworldOf) return;
               if (currentFillNeeded === 0) return;
               const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
               let launchCost = myPlayer ? 10 + (myPlayer.planetCount || 0) : 10;
@@ -1022,7 +1102,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (currentFillNeeded !== Infinity) {
                   fillAmount = currentFillNeeded;
                 }
-                socket.emit('sendShips', { sourceId: sourcePlanet.id, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, fillAmount, scoutMode: scoutModeNext, isInterceptor: interceptorOrderNext, isCruiser: cruiserOrderNext });
+                socket.emit('sendShips', { sourceId: sourcePlanet.id, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, fillAmount, scoutMode: scoutModeNext, isCruiser: cruiserOrderNext });
                 if (currentFillNeeded !== Infinity) {
                   const sent = Math.min(Math.floor(sourcePlanet.ships - launchCost), currentFillNeeded);
                   currentFillNeeded = Math.max(0, currentFillNeeded - sent);
@@ -1055,7 +1135,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
           if (selectedPlanets.length > 0) {
             selectedPlanets.forEach(sourcePlanet => {
-              if (interceptorOrderNext && !sourcePlanet.isMilitary && !sourcePlanet.homeworldOf) return;
               const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
               let launchCost = myPlayer ? 10 + (myPlayer.planetCount || 0) : 10;
               if (myPlayer) {
@@ -1064,7 +1143,7 @@ window.addEventListener('DOMContentLoaded', () => {
               }
               launchCost = Math.min(250, launchCost);
               if (sourcePlanet.ships >= launchCost + 1) {
-                socket.emit('sendShipsToSpace', { sourceId: sourcePlanet.id, targetX: targetPos.x, targetY: targetPos.y, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, scoutMode: scoutModeNext, isInterceptor: interceptorOrderNext, isCruiser: cruiserOrderNext });
+                socket.emit('sendShipsToSpace', { sourceId: sourcePlanet.id, targetX: targetPos.x, targetY: targetPos.y, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, scoutMode: scoutModeNext, isCruiser: cruiserOrderNext });
                 floatingAnimations.push({
                   x: sourcePlanet.x,
                   y: sourcePlanet.y,
@@ -1081,7 +1160,6 @@ window.addEventListener('DOMContentLoaded', () => {
       
       // Reset modifier flags after an order
       scoutModeNext = false;
-      interceptorOrderNext = false;
       cruiserOrderNext = false;
       bombOrderNext = false;
       warpOrderNext = false;
@@ -1120,8 +1198,13 @@ window.addEventListener('DOMContentLoaded', () => {
             selectedShips.push(clickedShip);
           }
         } else {
-          selectedShips = [clickedShip];
-          selectedPlanets = [];
+          const wasOnlySelection = (selectedShips.length === 1 && selectedShips[0].id === clickedShip.id && selectedPlanets.length === 0);
+          if (wasOnlySelection && clickedShip.isCruiser) {
+            upgradeModeActive = !upgradeModeActive;
+          } else {
+            selectedShips = [clickedShip];
+            selectedPlanets = [];
+          }
         }
       } else {
         // Clicked empty space
@@ -1631,10 +1714,9 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     if (upgradeModeActive) {
-      const qual = getSelectedCruiserUpgradeQualifiers();
-      if (qual) {
+      const ship = getSelectedCruiser();
+      if (ship) {
         const key = event.key.toLowerCase();
-        const ship = qual.ship;
         
         if (ship.isUpgrading) {
           if (key === 'c' || key === 'u') {
@@ -1644,59 +1726,62 @@ window.addEventListener('DOMContentLoaded', () => {
           return;
         }
         
-        if (key === 's') {
-          event.preventDefault();
-          if ((ship.sensorarrays || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'sensorarray' });
-          return;
-        }
-        if (key === 'l') {
-          event.preventDefault();
-          if ((ship.labs || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'lab' });
-          return;
-        }
-        if (key === 'a') {
-          event.preventDefault();
-          if ((ship.armor || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'armor' });
-          return;
-        }
-        if (key === 'h') {
-          event.preventDefault();
-          if ((ship.shields || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'shield' });
-          return;
-        }
-        if (key === 'e') {
-          event.preventDefault();
-          if ((ship.engine || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'engine' });
-          return;
-        }
-        if (key === 'm') {
-          event.preventDefault();
-          if ((ship.munitions || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'munitions' });
-          return;
-        }
-        if (key === 't') {
-          event.preventDefault();
-          if ((ship.targeting || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'targeting' });
-          return;
-        }
-        if (key === 'd') {
-          event.preventDefault();
-          if ((ship.damagecontrol || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'damagecontrol' });
-          return;
-        }
         if (key === 'c' || key === 'u') {
           event.preventDefault();
           upgradeModeActive = false;
           return;
+        }
+
+        const qual = getSelectedCruiserUpgradeQualifiers();
+        if (qual) {
+          if (key === 's') {
+            event.preventDefault();
+            if ((ship.sensorarrays || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'sensorarray' });
+            return;
+          }
+          if (key === 'l') {
+            event.preventDefault();
+            if ((ship.labs || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'lab' });
+            return;
+          }
+          if (key === 'a') {
+            event.preventDefault();
+            if ((ship.armor || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'armor' });
+            return;
+          }
+          if (key === 'h') {
+            event.preventDefault();
+            if ((ship.shields || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'shield' });
+            return;
+          }
+          if (key === 'e') {
+            event.preventDefault();
+            if ((ship.engine || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'engine' });
+            return;
+          }
+          if (key === 'm') {
+            event.preventDefault();
+            if ((ship.munitions || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'munitions' });
+            return;
+          }
+          if (key === 't') {
+            event.preventDefault();
+            if ((ship.targeting || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'targeting' });
+            return;
+          }
+          if (key === 'd') {
+            event.preventDefault();
+            if ((ship.damagecontrol || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'damagecontrol' });
+            return;
+          }
         }
       } else {
         upgradeModeActive = false;
       }
     }
 
-    // RTS Control Groups (0-9)
-    const numKey = event.key;
-    if (numKey >= '0' && numKey <= '9') {
+    const numKey = parseInt(event.key);
+    if (!isNaN(numKey) && numKey >= 0 && numKey <= 9) {
       if (event.ctrlKey) {
         event.preventDefault();
         controlGroups[numKey] = selectedShips.map(s => s.id);
@@ -1735,8 +1820,8 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
     if (event.key.toLowerCase() === 'o') {
-      const qual = getSelectedPlanetFocusQualifiers();
-      if (qual) {
+      const planet = getSelectedPlanetForFocus();
+      if (planet) {
         event.preventDefault();
         focusModeActive = true;
         return;
@@ -1756,16 +1841,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     if (event.key.toLowerCase() === 's') {
       scoutModeNext = !scoutModeNext;
-    }
-    if (event.key.toLowerCase() === 'i') {
-      if (interceptorOrderNext) {
-        interceptorOrderNext = false;
-      } else {
-        const hasInterceptorBase = selectedPlanets.some(p => p.isMilitary || p.homeworldOf);
-        if (hasInterceptorBase) {
-          interceptorOrderNext = true;
-        }
-      }
     }
     if (event.key.toLowerCase() === 'c') {
       cruiserOrderNext = !cruiserOrderNext;
@@ -1799,16 +1874,6 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-bomb-ships').addEventListener('click', () => { bombOrderNext = bombOrderNext === 'ships' ? false : 'ships'; });
   document.getElementById('btn-fill').addEventListener('click', () => { fillModeNext = !fillModeNext; });
   document.getElementById('btn-scout').addEventListener('click', () => { scoutModeNext = !scoutModeNext; });
-  document.getElementById('btn-interceptor').addEventListener('click', () => {
-    if (interceptorOrderNext) {
-      interceptorOrderNext = false;
-    } else {
-      const hasInterceptorBase = selectedPlanets.some(p => p.isMilitary || p.homeworldOf);
-      if (hasInterceptorBase) {
-        interceptorOrderNext = true;
-      }
-    }
-  });
   document.getElementById('btn-cruiser').addEventListener('click', () => { cruiserOrderNext = !cruiserOrderNext; });
   const btnUpgradeEl = document.getElementById('btn-upgrade-mode');
   if (btnUpgradeEl) {
@@ -1820,11 +1885,13 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+
+
   const btnFocusEl = document.getElementById('btn-focus-mode');
   if (btnFocusEl) {
     btnFocusEl.addEventListener('click', () => {
-      const qual = getSelectedPlanetFocusQualifiers();
-      if (qual) {
+      const planet = getSelectedPlanetForFocus();
+      if (planet) {
         focusModeActive = true;
       }
     });
@@ -1899,7 +1966,6 @@ window.addEventListener('DOMContentLoaded', () => {
     toggle('btn-bomb-ships', bombOrderNext === 'ships');
     toggle('btn-fill', fillModeNext);
     toggle('btn-scout', scoutModeNext);
-    toggle('btn-interceptor', interceptorOrderNext);
     toggle('btn-cruiser', cruiserOrderNext);
   }
 
@@ -1958,10 +2024,11 @@ window.addEventListener('DOMContentLoaded', () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Dynamic button visibility
-    const upgradeQual = getSelectedCruiserUpgradeQualifiers();
-    if (!upgradeQual) {
+    const selectedCruiser = getSelectedCruiser();
+    if (!selectedCruiser) {
       upgradeModeActive = false;
     }
+    const upgradeQual = getSelectedCruiserUpgradeQualifiers();
 
     const btnFocusMode = document.getElementById('btn-focus-mode');
     const focusButtonsMap = {
@@ -1969,14 +2036,15 @@ window.addEventListener('DOMContentLoaded', () => {
       'btn-focus-research': 'research',
       'btn-focus-garrison': 'garrison'
     };
-    const focusQual = getSelectedPlanetFocusQualifiers();
-    if (!focusQual) {
+    const selectedPlanetFocus = getSelectedPlanetForFocus();
+    if (!selectedPlanetFocus) {
       focusModeActive = false;
     }
+    const focusQual = getSelectedPlanetFocusQualifiers();
 
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
     const actionButtonsLeft = document.getElementById('action-buttons-left');
-    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-fill', 'btn-scout', 'btn-interceptor', 'btn-cruiser', 'btn-leaderboard', 'help-btn'];
+    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-fill', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn'];
     const upButtonsMap = {
       'btn-up-sensorarray': 'sensorarrays',
       'btn-up-lab': 'labs',
@@ -1988,7 +2056,7 @@ window.addEventListener('DOMContentLoaded', () => {
       'btn-up-damagecontrol': 'damagecontrol'
     };
 
-    if (focusModeActive && focusQual) {
+    if (focusModeActive && selectedPlanetFocus) {
       if (actionButtonsLeft) actionButtonsLeft.style.display = 'none';
       if (btnUpgradeMode) btnUpgradeMode.style.display = 'none';
       if (btnFocusMode) btnFocusMode.style.display = 'none';
@@ -2004,14 +2072,30 @@ window.addEventListener('DOMContentLoaded', () => {
       const elUpCancel = document.getElementById('btn-up-cancel');
       if (elUpCancel) elUpCancel.style.display = 'none';
 
+      const focusCost = Math.floor(selectedPlanetFocus.maxShips / 2);
+      const canAffordFocus = selectedPlanetFocus.ships >= focusCost;
       for (const [btnId, mode] of Object.entries(focusButtonsMap)) {
         const el = document.getElementById(btnId);
-        if (el) el.style.display = (focusQual.focusMode !== mode) ? 'inline-flex' : 'none';
+        if (el) {
+          el.style.display = (selectedPlanetFocus.focusMode !== mode) ? 'inline-flex' : 'none';
+          if (el.style.display === 'inline-flex') {
+            const costSpan = el.querySelector('.btn-cost');
+            if (costSpan) costSpan.textContent = focusCost;
+
+            if (!canAffordFocus) {
+              el.style.opacity = '0.5';
+              el.style.pointerEvents = 'none';
+            } else {
+              el.style.opacity = '1.0';
+              el.style.pointerEvents = 'auto';
+            }
+          }
+        }
       }
       const elFocusCancel = document.getElementById('btn-focus-cancel');
       if (elFocusCancel) elFocusCancel.style.display = 'inline-flex';
 
-    } else if (upgradeModeActive && upgradeQual) {
+    } else if (upgradeModeActive && selectedCruiser) {
       if (actionButtonsLeft) actionButtonsLeft.style.display = 'none';
       if (btnUpgradeMode) btnUpgradeMode.style.display = 'none';
       if (btnFocusMode) btnFocusMode.style.display = 'none';
@@ -2027,11 +2111,46 @@ window.addEventListener('DOMContentLoaded', () => {
         const el = document.getElementById(btnId);
         if (el) el.style.display = 'none';
       }
+      const totalUpgrades = (selectedCruiser.sensorarrays || 0) +
+                            (selectedCruiser.labs || 0) +
+                            (selectedCruiser.armor || 0) +
+                            (selectedCruiser.shields || 0) +
+                            (selectedCruiser.engine || 0) +
+                            (selectedCruiser.munitions || 0) +
+                            (selectedCruiser.targeting || 0) +
+                            (selectedCruiser.damagecontrol || 0);
+      const cost = Math.min(150, Math.round(25 + selectedCruiser.maxHealth * (3 + totalUpgrades / 3)));
+      
+      const namesMap = {
+        'btn-up-sensorarray': 'Sensor Array (S)',
+        'btn-up-lab': 'Lab (L)',
+        'btn-up-armor': 'Armor (A)',
+        'btn-up-shields': 'Shields (H)',
+        'btn-up-engine': 'Engine (E)',
+        'btn-up-munitions': 'Munitions (M)',
+        'btn-up-targeting': 'Targeting Computer (T)',
+        'btn-up-damagecontrol': 'Damage Control (D)'
+      };
+
       for (const [btnId, prop] of Object.entries(upButtonsMap)) {
         const el = document.getElementById(btnId);
         if (el) {
-          const currentVal = upgradeQual.ship[prop] || 0;
-          el.style.display = (currentVal < 3 && !upgradeQual.ship.isUpgrading) ? 'inline-flex' : 'none';
+          const currentVal = selectedCruiser[prop] || 0;
+          el.style.display = (currentVal < 3 && !selectedCruiser.isUpgrading) ? 'inline-flex' : 'none';
+          if (el.style.display === 'inline-flex') {
+            const baseName = namesMap[btnId] || 'Upgrade';
+            el.setAttribute('title', `${baseName} (Cost: ${cost} ships)`);
+            const costSpan = el.querySelector('.btn-cost');
+            if (costSpan) costSpan.textContent = cost;
+
+            if (!upgradeQual) {
+              el.style.opacity = '0.5';
+              el.style.pointerEvents = 'none';
+            } else {
+              el.style.opacity = '1.0';
+              el.style.pointerEvents = 'auto';
+            }
+          }
         }
       }
       const elCancel = document.getElementById('btn-up-cancel');
@@ -2039,8 +2158,32 @@ window.addEventListener('DOMContentLoaded', () => {
 
     } else {
       if (actionButtonsLeft) actionButtonsLeft.style.display = 'flex';
-      if (btnUpgradeMode) btnUpgradeMode.style.display = upgradeQual ? 'inline-flex' : 'none';
-      if (btnFocusMode) btnFocusMode.style.display = focusQual ? 'inline-flex' : 'none';
+      const hasCruiserSelected = selectedShips.some(s => s.isCruiser);
+      const speedDisplay = hasCruiserSelected ? 'inline-flex' : 'none';
+      const btnSpeed1 = document.getElementById('btn-speed-1');
+      const btnSpeed2 = document.getElementById('btn-speed-2');
+      const btnSpeed3 = document.getElementById('btn-speed-3');
+      if (btnSpeed1) btnSpeed1.style.display = speedDisplay;
+      if (btnSpeed2) btnSpeed2.style.display = speedDisplay;
+      if (btnSpeed3) btnSpeed3.style.display = speedDisplay;
+      if (btnUpgradeMode) {
+        btnUpgradeMode.style.display = 'none';
+        if (upgradeQual) {
+          const totalUpgrades = (upgradeQual.ship.sensorarrays || 0) +
+                                (upgradeQual.ship.labs || 0) +
+                                (upgradeQual.ship.armor || 0) +
+                                (upgradeQual.ship.shields || 0) +
+                                (upgradeQual.ship.engine || 0) +
+                                (upgradeQual.ship.munitions || 0) +
+                                (upgradeQual.ship.targeting || 0) +
+                                (upgradeQual.ship.damagecontrol || 0);
+          const cost = Math.min(150, Math.round(25 + upgradeQual.ship.maxHealth * (3 + totalUpgrades / 3)));
+          btnUpgradeMode.setAttribute('title', `Upgrade Mode (U) (Cost: ${cost} ships)`);
+          const costSpan = btnUpgradeMode.querySelector('.btn-cost');
+          if (costSpan) costSpan.textContent = cost;
+        }
+      }
+      if (btnFocusMode) btnFocusMode.style.display = 'none';
 
       for (const btnId of Object.keys(focusButtonsMap)) {
         const el = document.getElementById(btnId);
@@ -2055,17 +2198,19 @@ window.addEventListener('DOMContentLoaded', () => {
       const btnBomb = document.getElementById('btn-bomb');
       const btnBombShips = document.getElementById('btn-bomb-ships');
       const btnCruiser = document.getElementById('btn-cruiser');
-      const btnInterceptor = document.getElementById('btn-interceptor');
       if (btnBomb) btnBomb.style.display = hasMilitary ? 'inline-flex' : 'none';
       if (btnBombShips) btnBombShips.style.display = hasMilitary ? 'inline-flex' : 'none';
       if (btnCruiser) btnCruiser.style.display = hasCruiserBase ? 'inline-flex' : 'none';
-      if (btnInterceptor) btnInterceptor.style.display = hasCruiserBase ? 'inline-flex' : 'none';
 
-      const simpleStd = ['btn-fill', 'btn-scout', 'btn-leaderboard', 'help-btn'];
+      const simpleStd = ['btn-leaderboard', 'help-btn'];
       for (const btnId of simpleStd) {
         const el = document.getElementById(btnId);
         if (el) el.style.display = 'inline-flex';
       }
+      const btnFill = document.getElementById('btn-fill');
+      if (btnFill) btnFill.style.display = 'none';
+      const btnScout = document.getElementById('btn-scout');
+      if (btnScout) btnScout.style.display = 'none';
 
       for (const btnId of Object.keys(upButtonsMap)) {
         const el = document.getElementById(btnId);
@@ -2074,6 +2219,8 @@ window.addEventListener('DOMContentLoaded', () => {
       const elCancel = document.getElementById('btn-up-cancel');
       if (elCancel) elCancel.style.display = 'none';
     }
+
+
 
     if (!serverState) return;
 
@@ -2189,7 +2336,12 @@ window.addEventListener('DOMContentLoaded', () => {
         if (owner) {
           const techBonus = 0.01 * Math.sqrt(owner.techScore || 0);
           const expBonus = 0.01 * Math.sqrt(owner.expScore || 0);
-          const gravityRadius = (p.maxShips * 1.5) * (1 + techBonus + expBonus);
+          let baseRadius = p.maxShips * 1.5;
+          const isHuman = owner && !owner.isAI;
+          if (isHuman && p.focusMode === 'garrison') {
+            baseRadius += (p.ships / 2);
+          }
+          const gravityRadius = baseRadius * (1 + techBonus + expBonus);
           const pct = hazardSensorReductionPct(p.x, p.y, p.ownerId);
           const drawRadius = Math.max(10, gravityRadius * pct);
 
@@ -2245,6 +2397,57 @@ window.addEventListener('DOMContentLoaded', () => {
 
         ctx.shadowBlur = 0;
 
+        if (p.focusTransition) {
+          const progress = p.focusTransition.progress || 0;
+          const target = p.focusTransition.targetMode;
+          const emoji = target === 'research' ? '🔬' : (target === 'garrison' ? '🛡️' : '📈');
+          
+          // 1. Draw glowing rotating progress ring
+          ctx.save();
+          ctx.beginPath();
+          const ringRadius = p.radius + 12;
+          ctx.arc(p.x, p.y, ringRadius, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * progress));
+          
+          ctx.strokeStyle = '#39ff14'; // neon-green
+          ctx.lineWidth = 3;
+          ctx.shadowColor = '#39ff14';
+          ctx.shadowBlur = 8;
+          ctx.stroke();
+          ctx.restore();
+          
+          // 2. Draw rotating particles orbiting the planet
+          ctx.save();
+          const particleCount = 6;
+          const angleOffset = (Date.now() / 300) % (Math.PI * 2);
+          for (let i = 0; i < particleCount; i++) {
+            const angle = angleOffset + (i / particleCount) * Math.PI * 2;
+            const currentRadius = p.radius + 12 + Math.sin(Date.now() / 100 + i) * 3 * (1 - progress);
+            const px = p.x + Math.cos(angle) * currentRadius;
+            const py = p.y + Math.sin(angle) * currentRadius;
+            
+            ctx.beginPath();
+            ctx.arc(px, py, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#0ff'; // cyan glowing particles
+            ctx.shadowColor = '#0ff';
+            ctx.shadowBlur = 6;
+            ctx.fill();
+          }
+          ctx.restore();
+
+          // 3. Draw dynamic floating emoji/status above the planet
+          ctx.save();
+          ctx.font = 'bold 11px Orbitron';
+          ctx.fillStyle = '#39ff14';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.shadowColor = '#000';
+          ctx.shadowBlur = 4;
+          const pulse = 1.0 + Math.sin(Date.now() / 150) * 0.1;
+          ctx.font = `${Math.floor(13 * pulse)}px sans-serif`;
+          ctx.fillText(`${emoji} INCOMING`, p.x, p.y - p.radius - 20);
+          ctx.restore();
+        }
+
         const isLastKnown = p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id];
         if (!p.inFog || p.permanentlyTracked || isLastKnown) {
           const displayShips = isLastKnown ? lastKnownPlanets[p.id].ships : p.ships;
@@ -2264,7 +2467,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
           if (isHuman) {
             const focus = p.focusMode || 'economy';
-            const modeIndicator = focus === 'research' ? '🧪' : (focus === 'garrison' ? '🛡️' : '📈');
+            const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : '📈');
             const badgeRadius = pillHeight / 2;
             const badgeX = p.x + textWidth / 2 + 8 + badgeRadius + 2;
 
@@ -2293,6 +2496,17 @@ window.addEventListener('DOMContentLoaded', () => {
           ctx.font = 'bold 11px Orbitron';
           let pName = (isLastKnown ? lastKnownPlanets[p.id].name : p.name) || 'Unknown';
           ctx.fillText(pName, p.x, p.y - pillHeight / 2 - 8);
+ 
+           if (!isLastKnown && p.finalRateExceedsOne) {
+             const nameWidth = ctx.measureText(pName).width;
+             ctx.save();
+             ctx.font = '11px sans-serif';
+             ctx.textAlign = 'left';
+             ctx.textBaseline = 'middle';
+             ctx.fillStyle = '#fff';
+             ctx.fillText('🏭', p.x + nameWidth / 2 + 4, p.y - pillHeight / 2 - 8);
+             ctx.restore();
+           }
 
           const displayHomeworldOf = isLastKnown ? lastKnownPlanets[p.id].homeworldOf : p.homeworldOf;
           const displayIsResearch = isLastKnown ? lastKnownPlanets[p.id].isResearch : p.isResearch;
@@ -2312,7 +2526,7 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
             ctx.font = '14px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText("🔬", p.x, p.y - p.radius - 8);
+            ctx.fillText("🧪", p.x, p.y - p.radius - 8);
             ctx.font = 'bold 11px Orbitron'; // Restore font
           } else if (displayIsMilitary) {
             ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
@@ -2353,43 +2567,30 @@ window.addEventListener('DOMContentLoaded', () => {
           if (owner) {
             defenderTechPenalty = 0.01 * Math.sqrt(owner.techScore || 0);
             defenderExpPenalty = 0.01 * Math.sqrt(owner.expScore || 0);
-
-            let defenderCumulativeShips = 0;
-            for (const gp of serverState.planets) {
-              if (gp.id === p.id || gp.ownerId !== p.ownerId) continue;
-              const techBonus = 0.01 * Math.sqrt(owner.techScore || 0);
-              const expBonus = 0.01 * Math.sqrt(owner.expScore || 0);
-              const gravityRadius = (gp.maxShips * 1.5) * (1 + techBonus + expBonus);
-              const pct = hazardSensorReductionPct(gp.x, gp.y, gp.ownerId);
-              const effGravity = Math.max(10, gravityRadius * pct);
-
-              const pdx = gp.x - p.x;
-              const pdy = gp.y - p.y;
-              if (pdx * pdx + pdy * pdy <= effGravity * effGravity) {
-                defenderCumulativeShips += gp.ships;
-              }
-            }
-            defenderPlanetPenalty = 0.02 * Math.floor(defenderCumulativeShips / 100);
           }
 
           let friendlyPlanetBoost = 0;
           if (localPlayer) {
-            let friendlyCumulativeShips = 0;
             for (const gp of serverState.planets) {
               if (gp.id === p.id || gp.ownerId !== localPlayer.id) continue;
               const techBonus = 0.01 * Math.sqrt(localPlayer.techScore || 0);
               const expBonus = 0.01 * Math.sqrt(localPlayer.expScore || 0);
-              const gravityRadius = (gp.maxShips * 1.5) * (1 + techBonus + expBonus);
+              let baseRadius = gp.maxShips * 1.5;
+              const isGpHuman = localPlayer && !localPlayer.isAI;
+              if (isGpHuman && gp.focusMode === 'garrison') {
+                baseRadius += (gp.ships / 2);
+              }
+              const gravityRadius = baseRadius * (1 + techBonus + expBonus);
               const pct = hazardSensorReductionPct(gp.x, gp.y, gp.ownerId);
               const effGravity = Math.max(10, gravityRadius * pct);
 
               const pdx = gp.x - p.x;
               const pdy = gp.y - p.y;
               if (pdx * pdx + pdy * pdy <= effGravity * effGravity) {
-                friendlyCumulativeShips += gp.ships;
+                const mult = (gp.isMilitary && gp.ships >= gp.maxShips) ? 0.003 : 0.002;
+                friendlyPlanetBoost += mult * Math.floor(gp.ships / 10);
               }
             }
-            friendlyPlanetBoost = 0.02 * Math.floor(friendlyCumulativeShips / 100);
           }
 
           const shipPenalty = 0.01 * Math.floor(p.ships / 5);
@@ -2500,7 +2701,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const hwOwner = serverState.players.find(pl => pl.id === hp.homeworldOf);
             if (hwOwner) nameLabel += ` (👑 ${hwOwner.name})`;
           }
-          if (hp.isResearch) nameLabel += ' 🔬';
+          if (hp.isResearch) nameLabel += ' 🧪';
           if (hp.isMilitary) nameLabel += ' 🚀';
           
           if (hp.isSpeedPlanet) nameLabel += ' ⚡';
@@ -2531,20 +2732,7 @@ window.addEventListener('DOMContentLoaded', () => {
               lines.push({ label: 'Planet Exp', value: `${planetExp.toFixed(1)}%`, color: '#4f4' });
             }
 
-            let defShips = 0;
-            for (const gp of serverState.planets) {
-              if (gp.id === hp.id || gp.ownerId !== hp.ownerId) continue;
-              const tb = 0.01 * Math.sqrt(hpOwner.techScore || 0);
-              const eb = 0.01 * Math.sqrt(hpOwner.expScore || 0);
-              const gr = (gp.maxShips * 1.5) * (1 + tb + eb);
-              const pdx = gp.x - hp.x, pdy = gp.y - hp.y;
-              if (pdx * pdx + pdy * pdy <= gr * gr) defShips += gp.ships;
-            }
-            const gravBonus = 2 * Math.floor(defShips / 100);
-            if (gravBonus > 0) {
-              totalDefense += gravBonus;
-              lines.push({ label: 'Gravity Field', value: `${gravBonus}%`, color: '#4f4' });
-            }
+
 
             if (hpOwner.id === hp.homeworldOf) {
               totalDefense += 15;
@@ -2683,15 +2871,20 @@ window.addEventListener('DOMContentLoaded', () => {
             const shrugChance = Math.min(90, Math.floor(50 + hs.maxHealth * 3 + (techBonus + expBonus + shipExpBonus) * 2));
             lines.push({ label: 'Armor Deflection', value: shrugChance + '%', color: '#ccc' });
           } else if (hs.isCruiser) {
-            lines.push({ label: hsOwner.name + ' Cruiser', value: '', color: hsOwner.color || '#0ff', isHeader: true });
             let shipClass = "Titan";
             if (hs.maxHealth < 20) shipClass = "Scout Ship";
             else if (hs.maxHealth < 25) shipClass = "Frigate";
             else if (hs.maxHealth < 30) shipClass = "Destroyer";
             else if (hs.maxHealth <= 35) shipClass = "Cruiser";
             else if (hs.maxHealth <= 45) shipClass = "Battleship";
+
+            const headerLabel = hsOwner.name + ' ' + (hs.name ? hs.name : shipClass);
+            lines.push({ label: headerLabel, value: '', color: hsOwner.color || '#0ff', isHeader: true });
             lines.push({ label: 'Ship Class', value: shipClass, color: '#aaf' });
-            lines.push({ label: hs.armor > 0 ? `Hull Integrity (${hs.armor})` : 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
+            lines.push({ label: 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
+            if (hs.maxArmor && hs.maxArmor > 0) {
+              lines.push({ label: `Cruiser Armor (${hs.armor})`, value: Math.floor(hs.armorPoints) + ' / ' + Math.floor(hs.maxArmor), color: '#b0bec5' });
+            }
             if (hs.sensorarrays > 0) lines.push({ label: `Sensor Array (${hs.sensorarrays})`, value: `📡 Active`, color: '#ffb300' });
             if (hs.labs > 0) lines.push({ label: `Laboratories (${hs.labs})`, value: `🔬 Active`, color: '#00e5ff' });
             if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
@@ -2751,11 +2944,65 @@ window.addEventListener('DOMContentLoaded', () => {
             let hitChanceValue = 10 + targetingBonus;
             if (hs.bombs > 0) hitChanceValue += 10;
             hitChanceValue += techBonus + expBonus + shipExpBonus;
-            const hitChance = Math.min(100, hitChanceValue * 2).toFixed(1) + '%';
+            
+            let friendlyGrav = 0;
+            let enemyGrav = 0;
+            if (serverState.planets) {
+              for (const gp of serverState.planets) {
+                if (!gp.ownerId) continue;
+                const gpOwner = serverState.players.find(pl => pl.id === gp.ownerId);
+                if (!gpOwner) continue;
+                const tb = 0.01 * Math.sqrt(gpOwner.techScore || 0);
+                const eb = 0.01 * Math.sqrt(gpOwner.expScore || 0);
+                let baseRadius = gp.maxShips * 1.5;
+                const isGpHuman = gpOwner && !gpOwner.isAI;
+                if (isGpHuman && gp.focusMode === 'garrison') {
+                  baseRadius += (gp.ships / 2);
+                }
+                const gr = baseRadius * (1 + tb + eb);
+                const pdx = gp.x - hs.x, pdy = gp.y - hs.y;
+                if (pdx * pdx + pdy * pdy <= gr * gr) {
+                  const mult = (gp.isMilitary && gp.ships >= gp.maxShips) ? 0.3 : 0.2;
+                  const strength = mult * Math.floor(gp.ships / 10);
+                  if (gp.ownerId === hs.ownerId) {
+                    friendlyGrav += strength;
+                  } else {
+                    enemyGrav += strength;
+                  }
+                }
+              }
+            }
+            
+            let hazardPenalty = 0;
+            if (serverState.storms) {
+              for (const storm of serverState.storms) {
+                if (storm.type === 'minefield') continue;
+                const sdx = hs.x - storm.x;
+                const sdy = hs.y - storm.y;
+                if (sdx * sdx + sdy * sdy <= storm.radius * storm.radius) {
+                  const knowledge = typeof storm.knowledge === 'object' ? ((storm.knowledge && storm.knowledge[hsOwner.id]) || 0) : (storm.knowledge || 0);
+                  const tRed = Math.sqrt(hsOwner.techScore || 0);
+                  const eRed = Math.sqrt(hsOwner.expScore || 0);
+                  const sRed = Math.sqrt(hs.expScore || 0);
+                  const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+                  hazardPenalty += eff;
+                }
+              }
+            }
+
+            const hitChance = Math.min(100, Math.max(10.0, hitChanceValue * 2 + friendlyGrav - enemyGrav - hazardPenalty)).toFixed(1) + '%';
 
             const volleySize = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
             lines.push({ label: 'Range', value: effectiveRange, color: '#f88' });
-            lines.push({ label: hs.targeting > 0 ? `Accuracy (Hit Chance) (${hs.targeting})` : 'Accuracy (Hit Chance)', value: hitChance, color: '#f88' });
+            lines.push({ label: hs.targeting > 0 ? `Accuracy (${hs.targeting})` : 'Accuracy', value: hitChance, color: '#f88' });
+            
+            const netMapBonus = friendlyGrav - enemyGrav - hazardPenalty;
+            if (netMapBonus !== 0) {
+              const sign = netMapBonus > 0 ? '+' : '';
+              const color = netMapBonus > 0 ? '#4f4' : '#f66';
+              lines.push({ label: 'Map Bonus', value: `${sign}${netMapBonus.toFixed(1)}%`, color: color });
+            }
+            
             lines.push({ label: 'Volley Size', value: volleySize, color: '#ffa' });
 
             lines.push({ label: 'XP', value: `+${shipExpBonus.toFixed(1)}`, color: '#00d5ff' });
@@ -2818,22 +3065,66 @@ window.addEventListener('DOMContentLoaded', () => {
               lines.push({ label: 'ship Exp', value: `${shipExp.toFixed(1)}%`, color: '#4f4' });
             }
 
-            // Friendly gravity boost (check friendly planets near hovered ship position)
-            let friendlyShips = 0;
+            // Friendly and Enemy gravity wells (check planets near hovered ship position)
+            let friendlyGrav = 0;
+            let enemyGrav = 0;
             if (serverState.planets) {
               for (const gp of serverState.planets) {
-                if (gp.ownerId !== hs.ownerId) continue;
-                const tb = 0.01 * Math.sqrt(hsOwner.techScore || 0);
-                const eb = 0.01 * Math.sqrt(hsOwner.expScore || 0);
-                const gr = (gp.maxShips * 1.5) * (1 + tb + eb);
+                if (!gp.ownerId) continue;
+                const gpOwner = serverState.players.find(pl => pl.id === gp.ownerId);
+                if (!gpOwner) continue;
+                const tb = 0.01 * Math.sqrt(gpOwner.techScore || 0);
+                const eb = 0.01 * Math.sqrt(gpOwner.expScore || 0);
+                let baseRadius = gp.maxShips * 1.5;
+                const isGpHuman = gpOwner && !gpOwner.isAI;
+                if (isGpHuman && gp.focusMode === 'garrison') {
+                  baseRadius += (gp.ships / 2);
+                }
+                const gr = baseRadius * (1 + tb + eb);
                 const pdx = gp.x - hs.x, pdy = gp.y - hs.y;
-                if (pdx * pdx + pdy * pdy <= gr * gr) friendlyShips += gp.ships;
+                if (pdx * pdx + pdy * pdy <= gr * gr) {
+                  const mult = (gp.isMilitary && gp.ships >= gp.maxShips) ? 0.3 : 0.2;
+                  const strength = mult * Math.floor(gp.ships / 10);
+                  if (gp.ownerId === hs.ownerId) {
+                    friendlyGrav += strength;
+                  } else {
+                    enemyGrav += strength;
+                  }
+                }
               }
             }
-            const gravAtk = 2 * Math.floor(friendlyShips / 100);
-            if (gravAtk > 0) {
-              totalAttackMod += gravAtk;
-              lines.push({ label: 'Gravity support', value: `${gravAtk}%`, color: '#4f4' });
+            let hazardPenalty = 0;
+            if (serverState.storms) {
+              for (const storm of serverState.storms) {
+                if (storm.type === 'minefield') continue;
+                const sdx = hs.x - storm.x;
+                const sdy = hs.y - storm.y;
+                if (sdx * sdx + sdy * sdy <= storm.radius * storm.radius) {
+                  const knowledge = typeof storm.knowledge === 'object' ? ((storm.knowledge && storm.knowledge[hsOwner.id]) || 0) : (storm.knowledge || 0);
+                  const tRed = Math.sqrt(hsOwner.techScore || 0);
+                  const eRed = Math.sqrt(hsOwner.expScore || 0);
+                  const sRed = Math.sqrt(maxShipExp || 0);
+                  const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+                  hazardPenalty += eff;
+                }
+              }
+            }
+
+            if (friendlyGrav > 0) {
+              totalAttackMod += friendlyGrav;
+            }
+            if (enemyGrav > 0) {
+              totalAttackMod -= enemyGrav;
+            }
+            if (hazardPenalty > 0) {
+              totalAttackMod -= hazardPenalty;
+            }
+
+            const netMapBonus = friendlyGrav - enemyGrav - hazardPenalty;
+            if (netMapBonus !== 0) {
+              const sign = netMapBonus > 0 ? '+' : '';
+              const color = netMapBonus > 0 ? '#4f4' : '#f66';
+              lines.push({ label: 'Map Bonus', value: `${sign}${netMapBonus.toFixed(1)}%`, color: color });
             }
 
             // speed modifier
@@ -2845,7 +3136,7 @@ window.addEventListener('DOMContentLoaded', () => {
             }
 
             // Add Dogfight Hit%
-            lines.push({ label: 'Dogfight Hit%', value: `${Math.round(100 + totalAttackMod * 10) / 10}%`, color: '#fff' });
+            lines.push({ label: 'Dogfight Hit%', value: `${Math.max(1.0, Math.round(100 + totalAttackMod * 10) / 10).toFixed(1)}%`, color: '#fff' });
 
             // Attrition info
             const techSafe = Math.sqrt(hsOwner.techScore || 0);
@@ -2873,7 +3164,12 @@ window.addEventListener('DOMContentLoaded', () => {
                   if (!pOwner) continue;
                   const tb = 0.01 * Math.sqrt(pOwner.techScore || 0);
                   const eb = 0.01 * Math.sqrt(pOwner.expScore || 0);
-                  const gr = (planet.maxShips * 1.5) * (1 + tb + eb);
+                  let baseRadius = planet.maxShips * 1.5;
+                  const isPlanetHuman = pOwner && !pOwner.isAI;
+                  if (isPlanetHuman && planet.focusMode === 'garrison') {
+                    baseRadius += (planet.ships / 2);
+                  }
+                  const gr = baseRadius * (1 + tb + eb);
                   const pdx = hs.x - planet.x, pdy = hs.y - planet.y;
                   if (pdx * pdx + pdy * pdy < gr * gr) {
                     inFriendlyWell = true;
@@ -3094,6 +3390,17 @@ window.addEventListener('DOMContentLoaded', () => {
             const shipExpBonus = (s.expScore || 0) * 2;
             let cruiserRadar = Math.min(250, 5 * s.maxHealth) + shipExpBonus;
             if (s.isWarp) cruiserRadar *= 0.25;
+            if (s.sensorarrays && s.sensorarrays > 0) {
+              let mult = 1.0;
+              mult += 0.50;
+              if (s.sensorarrays > 1) {
+                mult += 0.25;
+              }
+              if (s.sensorarrays > 2) {
+                mult += 0.25;
+              }
+              cruiserRadar *= mult;
+            }
             let playerTechBonus = 0;
             let playerExpBonus = 0;
             if (owner) {
@@ -3359,6 +3666,59 @@ window.addEventListener('DOMContentLoaded', () => {
           ctx.stroke();
           ctx.restore();
 
+          // Draw mini-icons representing active upgrades below the ship when zoomed in (cameraZoom >= 1.0)
+          const activeUpgrades = [];
+          if ((s.sensorarrays || 0) > 0) activeUpgrades.push({ symbol: '📡', count: s.sensorarrays });
+          if ((s.labs || 0) > 0) activeUpgrades.push({ symbol: '🔬', count: s.labs });
+          if ((s.shields || 0) > 0) activeUpgrades.push({ symbol: '🌀', count: s.shields });
+          if ((s.armor || 0) > 0) activeUpgrades.push({ symbol: '🛡️', count: s.armor });
+          if ((s.engine || 0) > 0) activeUpgrades.push({ symbol: '🚀', count: s.engine });
+          if ((s.munitions || 0) > 0) activeUpgrades.push({ symbol: '💣', count: s.munitions });
+          if ((s.targeting || 0) > 0) activeUpgrades.push({ symbol: '🎯', count: s.targeting });
+          if ((s.damagecontrol || 0) > 0) activeUpgrades.push({ symbol: '🔧', count: s.damagecontrol });
+
+          let upgradesHeight = 0;
+          if (cameraZoom >= 1.0 && activeUpgrades.length > 0) {
+            const iconSize = 4;
+            const spacingX = 5;
+            const yOffset = size + 4;
+            upgradesHeight = 6; // offset the name by 6px if upgrades are drawn
+            
+            ctx.save();
+            ctx.font = `${iconSize}px "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", Orbitron`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            const startX = s.x - ((activeUpgrades.length - 1) * spacingX) / 2;
+            for (let j = 0; j < activeUpgrades.length; j++) {
+              const item = activeUpgrades[j];
+              const x = startX + j * spacingX;
+              const y = s.y + yOffset;
+              
+              // Draw the upgrade symbol directly without a decal background
+              ctx.fillText(item.symbol, x, y);
+              
+              // Draw tiny tier level if greater than 1
+              if (item.count > 1) {
+                ctx.fillStyle = '#39ff14'; // Vibrant neon green
+                ctx.font = 'bold 2px Orbitron';
+                ctx.fillText(item.count.toString(), x + 2.5, y - 2.0);
+                ctx.font = `${iconSize}px "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", Orbitron`;
+              }
+            }
+            ctx.restore();
+          }
+
+          if (s.name) {
+            ctx.save();
+            ctx.font = 'bold 6px Orbitron';
+            ctx.fillStyle = ownerPlayer ? ownerPlayer.color : '#fff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(s.name, s.x, s.y + size + 4 + upgradesHeight);
+            ctx.restore();
+          }
+
           if (s.isUpgrading) {
             ctx.save();
             const barW = 40;
@@ -3376,7 +3736,17 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.stroke();
             
             // Neon progress fill
-            const progress = Math.max(0, Math.min(1, (20.0 - (s.upgradeTimer || 0)) / 20.0));
+            const totalUpgrades = (s.sensorarrays || 0) +
+                                  (s.labs || 0) +
+                                  (s.armor || 0) +
+                                  (s.shields || 0) +
+                                  (s.engine || 0) +
+                                  (s.munitions || 0) +
+                                  (s.targeting || 0) +
+                                  (s.damagecontrol || 0);
+            const cost = Math.min(150, Math.round(25 + s.maxHealth * (3 + totalUpgrades / 3)));
+            const totalDuration = cost * 0.2;
+            const progress = Math.max(0, Math.min(1, (totalDuration - (s.upgradeTimer || 0)) / totalDuration));
             if (progress > 0) {
               ctx.fillStyle = '#0f0';
               ctx.shadowColor = '#0f0';
@@ -3906,15 +4276,15 @@ window.addEventListener('DOMContentLoaded', () => {
           if (t === 'minefield') {
             ctx.fillText('Ancient Minefield', storm.x, storm.y - 16);
             ctx.font = '10px Rajdhani';
-            ctx.fillText(`Intensity: ${storm.intensity} (${effIntensity.toFixed(1)})`, storm.x, storm.y);
+            ctx.fillText(`Intensity: ${storm.intensity} (${Math.round(effIntensity)})`, storm.x, storm.y);
           } else if (t === 'nebula') {
             ctx.fillText(`${storm.name} Nebula`, storm.x, storm.y - 8);
             ctx.font = '10px Rajdhani';
-            ctx.fillText(`Intensity: ${storm.intensity} (${effIntensity.toFixed(1)})`, storm.x, storm.y + 8);
+            ctx.fillText(`Intensity: ${storm.intensity} (${Math.round(effIntensity)})`, storm.x, storm.y + 8);
           } else {
             ctx.fillText(`Ion Storm ${storm.name}`, storm.x, storm.y - 8);
             ctx.font = '10px Rajdhani';
-            ctx.fillText(`Intensity: ${storm.intensity} (${effIntensity.toFixed(1)})  speed: ${storm.speed.toFixed(1)}  Heading: ${Math.round(storm.heading)}\u00B0`, storm.x, storm.y + 8);
+            ctx.fillText(`Intensity: ${storm.intensity} (${Math.round(effIntensity)})  speed: ${storm.speed.toFixed(1)}  Heading: ${Math.round(storm.heading)}\u00B0`, storm.x, storm.y + 8);
           }
         }
       }

@@ -23,6 +23,8 @@ export class Ship {
     this.beakerIncreaseEvent = 0;
     this.sensorarrays = 0;
     this.armor = 0;
+    this.maxArmor = 0;
+    this.armorPoints = 0;
     this.shields = 0;
     this.engine = 0;
     this.munitions = 0;
@@ -38,6 +40,7 @@ export class Ship {
     this.upgradeAccumulator = 0;
     this.planetBombardTimer = 0;
     this.combatCooldown = 0;
+    this.name = null;
     this.cruiserTargetOffsetX = 0;
     this.cruiserTargetOffsetY = 0;
     this.bomberOffsetMag = 0; // Assigned in game.js during launch
@@ -81,11 +84,68 @@ export class Ship {
     return baseFuel + bonus;
   }
 
+  cruiserRadarRange() {
+    if (this.maxHealth <= 0) return 0;
+    const shipExpBonus = (this.expScore || 0) * 2;
+    let cruiserRadar = Math.min(250, 5 * this.maxHealth) + shipExpBonus;
+    if (this.isWarp) cruiserRadar *= 0.25;
+    if (this.sensorarrays > 0) {
+      let mult = 1.0;
+      mult += 0.50;
+      if (this.sensorarrays > 1) {
+        mult += 0.25;
+      }
+      if (this.sensorarrays > 2) {
+        mult += 0.25;
+      }
+      cruiserRadar *= mult;
+    }
+    const techBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
+    const expBonus = this.owner ? (0.01 * Math.sqrt(this.owner.expScore || 0)) : 0;
+    return cruiserRadar * (1 + techBonus + expBonus);
+  }
+
   checkSurvivalRoll() {
     if (this.maxHealth > 0) return true;
     if (this.speedModifier === 0.25 && Math.random() < 0.90) return true;
     if (this.speedModifier === 0.50 && Math.random() < 0.75) return true;
     return false;
+  }
+
+  getGravityWellBonusAt(x, y, owner, allPlanets) {
+    if (!allPlanets || !owner) return 0;
+    let totalBonus = 0;
+    for (const gp of allPlanets) {
+      if (gp.owner !== owner) continue;
+      const gravityRadius = gp.getGravityRadius();
+      const dx = gp.x - x;
+      const dy = gp.y - y;
+      if (dx * dx + dy * dy < gravityRadius * gravityRadius) {
+        const mult = (gp.isMilitary && gp.ships >= gp.maxShips) ? 0.003 : 0.002;
+        totalBonus += mult * Math.floor(gp.ships / 10);
+      }
+    }
+    return totalBonus;
+  }
+
+  getHazardAccuracyReduction(allStorms) {
+    if (this.isAmoeba) return 0;
+    if (!allStorms || !this.owner) return 0;
+    let reduction = 0;
+    for (const storm of allStorms) {
+      if (storm.type === 'minefield') continue;
+      const dx = this.x - storm.x;
+      const dy = this.y - storm.y;
+      if (dx * dx + dy * dy <= storm.radius * storm.radius) {
+        const knowledge = (storm.knowledge && storm.knowledge[this.owner.id]) || 0;
+        const tRed = Math.sqrt(this.owner.techScore || 0);
+        const eRed = Math.sqrt(this.owner.expScore || 0);
+        const sRed = Math.sqrt(this.expScore || 0);
+        const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+        reduction += eff / 100;
+      }
+    }
+    return reduction;
   }
 
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth) {
@@ -114,10 +174,9 @@ export class Ship {
           this[this.upgradeProp] = currentLevel + 1;
           
           if (this.upgradeProp === 'armor') {
-            const healthBonusMap = { 0: 6, 1: 3, 2: 3 };
-            const bonus = healthBonusMap[currentLevel] || 1;
-            this.maxHealth += bonus;
-            this.health += bonus;
+            const bonus = (currentLevel === 0) ? (2 + 0.10 * this.maxHealth) : (1 + 0.10 * this.maxHealth);
+            this.maxArmor = (this.maxArmor || 0) + bonus;
+            this.armorPoints = (this.armorPoints || 0) + bonus;
           } else if (this.upgradeProp === 'engine') {
             const fuelBonusMap = { 0: 2, 1: 1, 2: 1 };
             const bonus = fuelBonusMap[currentLevel] || 1;
@@ -172,9 +231,7 @@ export class Ship {
         if (planet.owner && planet.owner === this.owner) {
           const pdx = this.x - planet.x;
           const pdy = this.y - planet.y;
-          const tb = 0.01 * Math.sqrt(planet.owner.techScore || 0);
-          const eb = 0.01 * Math.sqrt(planet.owner.expScore || 0);
-          const gravityRadius = (planet.maxShips * 1.5) * (1 + tb + eb);
+          const gravityRadius = planet.getGravityRadius();
           if (pdx * pdx + pdy * pdy < gravityRadius * gravityRadius) {
             friendlyWellPlanet = planet;
             break;
@@ -293,8 +350,7 @@ export class Ship {
       hitChance += targetingBonus;
     } else {
       const bombBonus = (this.bombs && this.bombs > 0) ? (this.bombs * 3) : 0;
-      const interceptorBonus = this.isInterceptor ? 5 : 0;
-      hitChance = (10 + techBonus + expBonus + shipExpBonus + this.maxHealth * 5 + interceptorBonus + bombBonus) / 100;
+      hitChance = (10 + techBonus + expBonus + shipExpBonus + this.maxHealth * 5 + bombBonus) / 100;
     }
     hitChance = Math.min(1.0, hitChance);
 
@@ -334,59 +390,57 @@ export class Ship {
         this.combatCooldown = 1.1;
 
         let totalShots = this.count;
-        let hitsToDeal = 0;
-        for (let s = 0; s < totalShots; s++) {
-          if (Math.random() < hitChance) {
-            hitsToDeal++;
-          }
-        }
-
         let lasersDrawn = 0;
-        while (hitsToDeal > 0 && validTargets.length > 0) {
+        const friendlyPlanetBoost = this.getGravityWellBonusAt(this.x, this.y, this.owner, allPlanets);
+        const hazardPenalty = this.getHazardAccuracyReduction(ionStorms);
+
+        for (let s = 0; s < totalShots; s++) {
+          if (validTargets.length === 0) break;
           const targetIndex = Math.floor(Math.random() * validTargets.length);
           const enemyShip = validTargets[targetIndex].ship;
           
-          const damageDealt = enemyShip.takeDamage(explosions, this);
-          hitsToDeal--;
+          const defenderPlanetPenalty = this.getGravityWellBonusAt(enemyShip.x, enemyShip.y, enemyShip.owner, allPlanets);
+          const finalHitChance = Math.min(1.0, Math.max(0.01, hitChance + friendlyPlanetBoost - defenderPlanetPenalty - hazardPenalty));
+          
+          if (Math.random() < finalHitChance) {
+            const damageDealt = enemyShip.takeDamage(explosions, this);
+            if (damageDealt && this.owner) {
+              this.owner.addExperience(1);
+            }
 
-          if (damageDealt && this.owner) {
-            this.owner.addExperience(1);
-          }
+            if (lasers && lasersDrawn < 8) {
+              lasers.push({
+                startX: this.x,
+                startY: this.y,
+                endX: enemyShip.x,
+                endY: enemyShip.y,
+                color: this.owner ? this.owner.color : '#fff',
+                age: 0,
+                duration: 0.8,
+                sourceId: this.id,
+                targetId: enemyShip.id,
+                sourceCount: this.count || 1,
+                targetCount: enemyShip.count || 1,
+                sourceAngle: this.angle || 0,
+                targetAngle: enemyShip.angle || 0,
+                sourceFormation: this.formation || 'arrow',
+                targetFormation: enemyShip.formation || 'arrow',
+                sourceIsCruiser: this.isCruiser || false,
+                targetIsCruiser: enemyShip.isCruiser || false,
+                sourceIsAmoeba: this.isAmoeba || false,
+                targetIsAmoeba: enemyShip.isAmoeba || false,
+                sourceIsBomber: this.isBomber || false,
+                targetIsBomber: enemyShip.isBomber || false,
+                sourceMaxHealth: this.maxHealth,
+                targetMaxHealth: enemyShip.maxHealth,
+                index: lasersDrawn
+              });
+              lasersDrawn++;
+            }
 
-          if (lasers && lasersDrawn < 8) {
-            lasers.push({
-              startX: this.x,
-              startY: this.y,
-              endX: enemyShip.x,
-              endY: enemyShip.y,
-              color: this.owner ? this.owner.color : '#fff',
-              age: 0,
-              duration: 0.8,
-              sourceId: this.id,
-              targetId: enemyShip.id,
-              sourceCount: this.count || 1,
-              targetCount: enemyShip.count || 1,
-              sourceAngle: this.angle || 0,
-              targetAngle: enemyShip.angle || 0,
-              sourceFormation: this.formation || 'arrow',
-              targetFormation: enemyShip.formation || 'arrow',
-              sourceIsCruiser: this.isCruiser || false,
-              targetIsCruiser: enemyShip.isCruiser || false,
-              sourceIsAmoeba: this.isAmoeba || false,
-              targetIsAmoeba: enemyShip.isAmoeba || false,
-              sourceIsInterceptor: this.isInterceptor || false,
-              targetIsInterceptor: enemyShip.isInterceptor || false,
-              sourceIsBomber: this.isBomber || false,
-              targetIsBomber: enemyShip.isBomber || false,
-              sourceMaxHealth: this.maxHealth,
-              targetMaxHealth: enemyShip.maxHealth,
-              index: lasersDrawn
-            });
-            lasersDrawn++;
-          }
-
-          if (!enemyShip.active) {
-            validTargets.splice(targetIndex, 1);
+            if (!enemyShip.active) {
+              validTargets.splice(targetIndex, 1);
+            }
           }
         }
       } else {
@@ -411,6 +465,8 @@ export class Ship {
           this.volleyShotIndex = (this.volleyShotIndex + 1) % shotsPerVolley;
         }
 
+        const hazardPenalty = this.getHazardAccuracyReduction(ionStorms);
+
         while (shotsFired < maxShots && validTargets.length > 0) {
           const targetIndex = Math.floor(Math.random() * validTargets.length);
           const targetData = validTargets[targetIndex];
@@ -422,6 +478,11 @@ export class Ship {
           if (this.maxHealth > 0 && !this.isAmoeba) {
             finalHitChance = Math.min(1.0, finalHitChance * 2);
           }
+
+          const friendlyPlanetBoost = this.getGravityWellBonusAt(this.x, this.y, this.owner, allPlanets);
+          const defenderPlanetPenalty = this.getGravityWellBonusAt(enemyShip.x, enemyShip.y, enemyShip.owner, allPlanets);
+          const minHitChance = (this.maxHealth > 0 && !this.isAmoeba) ? 0.10 : 0.01;
+          finalHitChance = Math.min(1.0, Math.max(minHitChance, finalHitChance + friendlyPlanetBoost - defenderPlanetPenalty - hazardPenalty));
           
           if (Math.random() < finalHitChance) {
             const damageDealt = enemyShip.takeDamage(explosions, this);
@@ -506,8 +567,6 @@ export class Ship {
               targetIsCruiser: enemyShip.isCruiser || false,
               sourceIsAmoeba: this.isAmoeba || false,
               targetIsAmoeba: enemyShip.isAmoeba || false,
-              sourceIsInterceptor: this.isInterceptor || false,
-              targetIsInterceptor: enemyShip.isInterceptor || false,
               sourceIsBomber: this.isBomber || false,
               targetIsBomber: enemyShip.isBomber || false,
               sourceMaxHealth: this.maxHealth,
@@ -706,7 +765,6 @@ export class Ship {
             targetFormation: this.formation || 'arrow',
             targetIsCruiser: this.isCruiser || false,
             targetIsAmoeba: this.isAmoeba || false,
-            targetIsInterceptor: this.isInterceptor || false,
             targetIsBomber: this.isBomber || false,
             targetMaxHealth: this.maxHealth,
             sourceIsPlanet: true,
@@ -731,7 +789,6 @@ export class Ship {
             sourceFormation: this.formation || 'arrow',
             sourceIsCruiser: this.isCruiser || false,
             sourceIsAmoeba: this.isAmoeba || false,
-            sourceIsInterceptor: this.isInterceptor || false,
             sourceIsBomber: this.isBomber || false,
             sourceMaxHealth: this.maxHealth,
             targetIsPlanet: true,
@@ -743,6 +800,22 @@ export class Ship {
 
 
     if (this.maxHealth > 0 && !this.isAmoeba) {
+      if (this.fuel <= 0 && allShips) {
+        for (const other of allShips) {
+          if (other.active && other.maxHealth > 0 && !other.isAmoeba && other.id !== this.id && other.owner && this.owner && other.owner.id === this.owner.id && other.fuel > 1) {
+            const dx = other.x - this.x;
+            const dy = other.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const sensorRange = this.cruiserRadarRange();
+            if (dist <= sensorRange) {
+              other.fuel -= 1;
+              this.fuel += 1;
+              break;
+            }
+          }
+        }
+      }
+
       if (this.bombs === undefined) {
         this.bombs = this.getMaxBombs();
         this.bombReloadTimer = 0;
@@ -758,6 +831,11 @@ export class Ship {
           let baseHeal = 6 + (this.damagecontrol || 0);
           let healRate = (deltaTime / 60000) * baseHeal;
           this.health = Math.min(this.maxHealth, this.health + healRate);
+        }
+        
+        if (this.armorPoints < this.maxArmor) {
+          let armorHealRate = (deltaTime / 60000) * 3;
+          this.armorPoints = Math.min(this.maxArmor, (this.armorPoints || 0) + armorHealRate);
         }
         
         // Cruisers don't recover bombs or fuel while in warp
@@ -776,7 +854,7 @@ export class Ship {
           }
         }
       } else {
-        const fuelDrain = this.isWarp ? 4 : 2;
+        const fuelDrain = this.isWarp ? 8 : 4;
         this.fuel = (this.fuel || 0) - (deltaTime / 1000) / (60 / fuelDrain);
         if (this.fuel <= 0) {
           this.fuel = 0;
@@ -824,27 +902,17 @@ export class Ship {
             N_reinf = Math.min(this.count, N_reinf);
 
             let actualReinf = N_reinf;
-            let crashed = 0;
-            if (this.isInterceptor) {
-              actualReinf = N_reinf * 0.7;
-              crashed = N_reinf - actualReinf;
-            }
 
-            const spaceLeft = Math.max(0, this.targetPlanet.maxShips - this.targetPlanet.ships);
+            const isTargetHuman = this.targetPlanet.owner && !this.targetPlanet.owner.isAI;
+            const reinfCap = (isTargetHuman && this.targetPlanet.focusMode === 'garrison') ? this.targetPlanet.maxShips * 2 : this.targetPlanet.maxShips;
+            const spaceLeft = Math.max(0, reinfCap - this.targetPlanet.ships);
             const toAdd = Math.min(spaceLeft, actualReinf);
             const sacrificed = actualReinf - toAdd;
 
             this.targetPlanet.ships += toAdd;
             this.count -= N_reinf;
 
-            if (crashed > 0 && explosions && Math.random() < 0.25) {
-              explosions.push({
-                x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius * 1.5,
-                y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius * 1.5,
-                color: '#ff3300',
-                age: 0
-              });
-            }
+
 
             if (sacrificed > 0) {
               this.targetPlanet.sacrificedShips = (this.targetPlanet.sacrificedShips || 0) + sacrificed;
@@ -867,19 +935,9 @@ export class Ship {
               // Complete reinforcement dump
               if (this.count > 0) {
                 let dumpCount = this.count;
-                if (this.isInterceptor) {
-                  dumpCount = this.count * 0.7;
-                  const crashedDump = this.count - dumpCount;
-                  if (crashedDump > 0 && explosions) {
-                    explosions.push({
-                      x: this.targetPlanet.x + (Math.random() - 0.5) * this.targetPlanet.radius * 1.5,
-                      y: this.targetPlanet.y + (Math.random() - 0.5) * this.targetPlanet.radius * 1.5,
-                      color: '#ff3300',
-                      age: 0
-                    });
-                  }
-                }
-                const finalSpaceLeft = Math.max(0, this.targetPlanet.maxShips - this.targetPlanet.ships);
+                const isTargetHuman = this.targetPlanet.owner && !this.targetPlanet.owner.isAI;
+                const reinfCap = (isTargetHuman && this.targetPlanet.focusMode === 'garrison') ? this.targetPlanet.maxShips * 2 : this.targetPlanet.maxShips;
+                const finalSpaceLeft = Math.max(0, reinfCap - this.targetPlanet.ships);
                 const finalToAdd = Math.min(finalSpaceLeft, dumpCount);
                 const finalSacrificed = dumpCount - finalToAdd;
 
@@ -917,28 +975,21 @@ export class Ship {
             let friendlyPlanetBoost = 0;
             let defenderPlanetPenalty = 0;
             if (allPlanets) {
-              let friendlyCumulativeShips = 0;
-              let defenderCumulativeShips = 0;
               for (const planet of allPlanets) {
                 if (planet !== this.targetPlanet) {
                   const pdx = planet.x - this.targetPlanet.x;
                   const pdy = planet.y - this.targetPlanet.y;
                   const pDistSq = pdx * pdx + pdy * pdy;
-                  const tBonus = planet.owner ? (0.01 * Math.sqrt(planet.owner.techScore || 0)) : 0;
-                  const eBonus = planet.owner ? (0.01 * Math.sqrt(planet.owner.expScore || 0)) : 0;
-                  const gravityRadius = (planet.maxShips * 1.5) * (1 + tBonus + eBonus);
+                  const gravityRadius = planet.getGravityRadius();
                   
                   if (pDistSq < gravityRadius * gravityRadius) {
                     if (planet.owner === this.owner) {
-                      friendlyCumulativeShips += planet.ships;
-                    } else if (planet.owner === this.targetPlanet.owner) {
-                      defenderCumulativeShips += planet.ships;
+                      const mult = (planet.isMilitary && planet.ships >= planet.maxShips) ? 0.003 : 0.002;
+                      friendlyPlanetBoost += mult * Math.floor(planet.ships / 10);
                     }
                   }
                 }
               }
-              friendlyPlanetBoost = 0.02 * Math.floor(friendlyCumulativeShips / 100);
-              defenderPlanetPenalty = 0.02 * Math.floor(defenderCumulativeShips / 100);
             }
 
             const advantage = 0.01 * Math.floor(nearbyFriendlyCount / 10);
@@ -1091,9 +1142,6 @@ export class Ship {
 
             const penalty = 0.01 * Math.floor(this.targetPlanet.ships / 5);
             let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus);
-            if (this.isInterceptor) {
-              killChance *= 0.5;
-            }
             killChance = Math.max(minKillChance, killChance - hazardPenalty);
 
             let defendersKilled = N_att * killChance;
@@ -1244,9 +1292,6 @@ export class Ship {
 
     const speedTechBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
     let effectiveSpeed = this.speed * (1 + speedTechBonus);
-    if (this.maxHealth > 0 && this.fuel <= 0) {
-      effectiveSpeed = Math.max(5, effectiveSpeed - 10);
-    }
     let engineBonus = 0;
     if (this.engine > 0) {
       engineBonus += 10;
@@ -1263,6 +1308,9 @@ export class Ship {
     }
     if (this.speedModifier) {
       effectiveSpeed *= this.speedModifier;
+    }
+    if (this.maxHealth > 0 && this.fuel <= 0) {
+      effectiveSpeed *= 0.25;
     }
 
     if (this.targetPlanet && distance < this.targetPlanet.radius && this.maxHealth === 0) {
@@ -1468,7 +1516,16 @@ export class Ship {
       }
 
       const cruiserCheck = this.maxHealth > 0 && !this.isAmoeba;
-      const damageAmt = (cruiserCheck && isHazard) ? (Math.floor(Math.random() * 6) + 1) : 1;
+      let damageAmt = (cruiserCheck && isHazard) ? (Math.floor(Math.random() * 6) + 1) : 1;
+      if (cruiserCheck && (this.armorPoints || 0) > 0) {
+        if (this.armorPoints >= damageAmt) {
+          this.armorPoints -= damageAmt;
+          damageAmt = 0;
+        } else {
+          damageAmt -= this.armorPoints;
+          this.armorPoints = 0;
+        }
+      }
       this.health -= damageAmt;
 
       if (attacker && attacker.maxHealth > 0 && !attacker.isAmoeba && (attacker.bombs || 0) > 0 && (attacker.splashDamage || 0) > 0) {
@@ -1476,7 +1533,9 @@ export class Ship {
         const splashLimit = Math.floor(this.health / 10);
         const splash = Math.min(baseSplash, splashLimit);
         for (let i = 0; i < splash; i++) {
-          if (this.health > 0) {
+          if (this.armorPoints && this.armorPoints > 0) {
+            this.armorPoints -= 1;
+          } else if (this.health > 0) {
             this.health -= 1;
             if (this.health <= 0 && this.isAmoeba && this.maxHealth > 0) {
               this.maxHealth -= 1;

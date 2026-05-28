@@ -50,6 +50,43 @@ export class Planet {
   }
 
   update(deltaTime, allPlanets, settings) {
+    // Handle focus mode transition
+    if (this.focusTransition) {
+      if (!this.owner || this.owner.id !== this.focusTransition.playerId) {
+        this.focusTransition = null;
+      } else {
+        this.focusTransition.elapsed += deltaTime;
+        const progress = Math.min(1.0, this.focusTransition.elapsed / 15000);
+        const consumedSoFar = Math.floor(this.focusTransition.totalCost * progress);
+        const alreadyConsumed = this.focusTransition.totalCost - this.focusTransition.costRemaining;
+        const toConsume = consumedSoFar - alreadyConsumed;
+        
+        if (toConsume > 0) {
+          const actualConsume = Math.min(this.ships, toConsume);
+          this.ships = Math.max(0, this.ships - actualConsume);
+          this.focusTransition.costRemaining -= toConsume;
+        }
+        
+        if (progress >= 1.0) {
+          const oldMode = this.focusMode || 'economy';
+          this.focusMode = this.focusTransition.targetMode;
+          this.focusChanges = (this.focusChanges || 0) + 1;
+          
+          if (oldMode === 'garrison' && this.focusMode !== 'garrison' && this.ships > this.maxShips) {
+            const extraShips = this.ships - this.maxShips;
+            this.ships = this.maxShips;
+            this.sacrificedShips = (this.sacrificedShips || 0) + extraShips;
+            const upgrades = Math.floor(this.sacrificedShips / 20);
+            if (upgrades > 0) {
+              this.sacrificedShips %= 20;
+              this.increaseMaxShips(upgrades);
+            }
+          }
+          this.focusTransition = null;
+        }
+      }
+    }
+
     const isHuman = this.owner && !this.owner.isAI;
     const focus = this.focusMode || 'economy';
 
@@ -90,15 +127,31 @@ export class Planet {
       if (this.capacityProgress >= timeToIncrease) {
         if (isHuman) {
           if (focus === 'research') {
-            // Guaranteed tech score gain, no maxships gain
-            const increaseAmount = this.isResearch ? 2 : 1;
-            this.owner.techScore = (this.owner.techScore || 0) + increaseAmount;
-            if (this.isResearch) {
-              this.techDoubleIncreaseEvent = true;
-            } else {
-              this.techIncreaseEvent = true;
+            let galacticCapacity = 0;
+            if (allPlanets) {
+              for (const p of allPlanets) {
+                galacticCapacity += p.maxShips;
+              }
             }
-            this.ships = Math.max(0, this.ships - 2);
+            const capacityPercent = galacticCapacity > 0 ? ((this.owner.totalCapacity || 0) / galacticCapacity) * 100 : 0;
+            const failChance = capacityPercent * 2;
+
+            if (Math.random() * 100 >= failChance) {
+              const increaseAmount = this.isResearch ? 2 : 1;
+              this.owner.techScore = (this.owner.techScore || 0) + increaseAmount;
+              if (this.isResearch) {
+                this.techDoubleIncreaseEvent = true;
+              } else {
+                this.techIncreaseEvent = true;
+              }
+              this.ships = Math.max(0, this.ships - 2);
+            } else {
+              if (this.isResearch) {
+                this.owner.techScore = (this.owner.techScore || 0) + 1;
+                this.techIncreaseEvent = true;
+              }
+              this.ships = Math.max(0, this.ships - 1);
+            }
             // Decay ships back to maxShips
             if (this.ships > this.maxShips) {
               this.ships = this.maxShips;
@@ -171,8 +224,17 @@ export class Planet {
         this.justAssignedTimer = 0;
       }
     }
+  }
 
-    // Rampage event is persistent until captured.
+  getGravityRadius(mapScale = 1.0) {
+    let baseRadius = this.maxShips * 1.5 * mapScale;
+    const isHuman = this.owner && !this.owner.isAI;
+    if (isHuman && this.focusMode === 'garrison') {
+      baseRadius += (this.ships / 2) * mapScale;
+    }
+    const tb = 0.01 * Math.sqrt(this.owner ? (this.owner.techScore || 0) : 0);
+    const eb = 0.01 * Math.sqrt(this.owner ? (this.owner.expScore || 0) : 0);
+    return baseRadius * (1 + tb + eb);
   }
 
   draw(ctx, isSelected) {

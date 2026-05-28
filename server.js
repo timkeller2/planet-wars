@@ -95,7 +95,7 @@ async function bootstrap() {
       const targetPlanet = game.planets.find(p => p.id === data.targetId);
       if (sourcePlanet && targetPlanet && sourcePlanet.owner && sourcePlanet.owner.id === player.id) {
 
-        game.sendShips(sourcePlanet, targetPlanet, data.isWarp, data.speedModifier, data.isBombing, data.fillAmount, data.scoutMode, data.isInterceptor, data.isCruiser);
+        game.sendShips(sourcePlanet, targetPlanet, data.isWarp, data.speedModifier, data.isBombing, data.fillAmount, data.scoutMode, data.isCruiser);
       }
     });
 
@@ -113,7 +113,7 @@ async function bootstrap() {
       const sourcePlanet = game.planets.find(p => p.id === data.sourceId);
 
       if (sourcePlanet && sourcePlanet.owner && sourcePlanet.owner.id === player.id) {
-        game.sendShipsToSpace(sourcePlanet, data.targetX, data.targetY, data.isWarp, data.speedModifier, data.isBombing, data.scoutMode, data.isInterceptor, data.isCruiser);
+        game.sendShipsToSpace(sourcePlanet, data.targetX, data.targetY, data.isWarp, data.speedModifier, data.isBombing, data.scoutMode, data.isCruiser);
       }
     });
 
@@ -130,12 +130,20 @@ async function bootstrap() {
 
       const ship = game.ships.find(s => s.id === data.shipId);
       if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
-        // Find if this cruiser is within a friendly gravity well of a planet with over 100 ships
+        const totalUpgrades = (ship.sensorarrays || 0) +
+                              (ship.labs || 0) +
+                              (ship.armor || 0) +
+                              (ship.shields || 0) +
+                              (ship.engine || 0) +
+                              (ship.munitions || 0) +
+                              (ship.targeting || 0) +
+                              (ship.damagecontrol || 0);
+        const cost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
+
+        // Find if this cruiser is within a friendly gravity well of a planet with enough ships
         for (const p of game.planets) {
-          if (p.owner && p.owner.id === player.id && p.ships > 100) {
-            const techBonus = 0.01 * Math.sqrt(player.techScore || 0);
-            const expBonus = 0.01 * Math.sqrt(player.expScore || 0);
-            const gravityRadius = (p.maxShips * 1.5) * (1 + techBonus + expBonus);
+          if (p.owner && p.owner.id === player.id && p.ships >= cost) {
+            const gravityRadius = p.getGravityRadius();
             
             let penaltyPct = 0;
             for (const h of game.ionStorms) {
@@ -167,8 +175,17 @@ async function bootstrap() {
               };
               const prop = typesMap[data.type];
               if (prop && (ship[prop] || 0) < 3 && !ship.isUpgrading) {
+                const totalUpgrades = (ship.sensorarrays || 0) +
+                                      (ship.labs || 0) +
+                                      (ship.armor || 0) +
+                                      (ship.shields || 0) +
+                                      (ship.engine || 0) +
+                                      (ship.munitions || 0) +
+                                      (ship.targeting || 0) +
+                                      (ship.damagecontrol || 0);
+                const cost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
                 ship.isUpgrading = true;
-                ship.upgradeTimer = 20.0;
+                ship.upgradeTimer = cost * 0.2;
                 ship.upgradeProp = prop;
                 ship.upgradeType = data.type;
                 ship.upgradePlanetId = p.id;
@@ -273,23 +290,60 @@ async function bootstrap() {
       const validModes = ['economy', 'research', 'garrison'];
       if (!validModes.includes(data.focusMode)) return;
 
+      if (planet.focusTransition) return; // Prevent concurrent focus shifts on same planet
       const cost = Math.floor(planet.maxShips / 2);
       if (planet.ships >= cost) {
-        planet.ships -= cost;
-        const oldMode = planet.focusMode || 'economy';
-        planet.focusMode = data.focusMode;
-        planet.focusChanges = (planet.focusChanges || 0) + 1;
+        planet.focusTransition = {
+          targetMode: data.focusMode,
+          totalCost: cost,
+          costRemaining: cost,
+          elapsed: 0,
+          playerId: player.id
+        };
+      }
+    });
 
-        if (oldMode === 'garrison' && planet.focusMode !== 'garrison' && planet.ships > planet.maxShips) {
-          const extraShips = planet.ships - planet.maxShips;
-          planet.ships = planet.maxShips;
-          planet.sacrificedShips = (planet.sacrificedShips || 0) + extraShips;
-          const upgrades = Math.floor(planet.sacrificedShips / 20);
-          if (upgrades > 0) {
-            planet.sacrificedShips %= 20;
-            planet.increaseMaxShips(upgrades);
-          }
-        }
+    socket.on('nameShip', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      player.lastCommandTime = Date.now();
+      player.afkWarningSent = false;
+      if (player.isAI) {
+        player.isAI = false;
+      }
+      game.tryAssignPlanet(player);
+
+      if (!data || data.shipId === undefined) return;
+      const ship = game.ships.find(s => s.id === data.shipId);
+      if (!ship || !ship.owner || ship.owner.id !== player.id) return;
+
+      if (data.name !== undefined) {
+        const cleanName = typeof data.name === 'string' ? data.name.trim().substring(0, 16) : '';
+        ship.name = cleanName || null;
+      }
+    });
+
+    socket.on('namePlanet', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      player.lastCommandTime = Date.now();
+      player.afkWarningSent = false;
+      if (player.isAI) {
+        player.isAI = false;
+      }
+      game.tryAssignPlanet(player);
+
+      if (!data || data.planetId === undefined) return;
+      const planet = game.planets.find(p => p.id === data.planetId);
+      if (!planet || !planet.owner || planet.owner.id !== player.id) return;
+
+      if (data.name !== undefined) {
+        const cleanName = typeof data.name === 'string' ? data.name.trim().substring(0, 16) : '';
+        planet.name = cleanName || null;
       }
     });
 
@@ -435,27 +489,20 @@ async function bootstrap() {
             
             let friendlyPlanetBoost = 0;
             let defenderPlanetPenalty = 0;
-            let friendlyCumulativeShips = 0;
-            let defenderCumulativeShips = 0;
             for (const otherPlanet of game.planets) {
               if (otherPlanet !== p) {
                 const dx = otherPlanet.x - p.x;
                 const dy = otherPlanet.y - p.y;
-                const techBonus = otherPlanet.owner ? (0.01 * Math.sqrt(otherPlanet.owner.techScore || 0)) : 0;
-                const expBonus = otherPlanet.owner ? (0.01 * Math.sqrt(otherPlanet.owner.expScore || 0)) : 0;
-                const gravityRadius = (otherPlanet.maxShips * 1.5) * (1 + techBonus + expBonus);
+                const gravityRadius = otherPlanet.getGravityRadius();
                 
                 if (dx*dx + dy*dy < gravityRadius * gravityRadius) {
                   if (otherPlanet.owner === owner) {
-                    friendlyCumulativeShips += otherPlanet.ships;
-                  } else if (otherPlanet.owner === p.owner) {
-                    defenderCumulativeShips += otherPlanet.ships;
+                    const mult = (otherPlanet.isMilitary && otherPlanet.ships >= otherPlanet.maxShips) ? 0.003 : 0.002;
+                    friendlyPlanetBoost += mult * Math.floor(otherPlanet.ships / 10);
                   }
                 }
               }
             }
-            friendlyPlanetBoost = 0.02 * Math.floor(friendlyCumulativeShips / 100);
-            defenderPlanetPenalty = 0.02 * Math.floor(defenderCumulativeShips / 100);
             
             const attackerTechBonus = 0.01 * Math.sqrt(owner.techScore || 0);
             const attackerExpBonus = 0.01 * Math.sqrt(owner.expScore || 0);
@@ -513,6 +560,30 @@ async function bootstrap() {
         const hwEvent = p.homeworldEvent;
         p.homeworldEvent = false;
 
+        // Calculate final production rate with soft-cap
+        let finalRate = 0;
+        if (p.owner) {
+          const isHuman = !p.owner.isAI;
+          const focus = p.focusMode || 'economy';
+          const growthLimit = (isHuman && focus === 'garrison') ? p.maxShips * 2 : p.maxShips;
+          
+          if (p.ships < growthLimit || p.owner.isAI) {
+            const techBonus = p.owner.techScore ? 0.01 * Math.sqrt(p.owner.techScore) : 0;
+            const lowPopMultiplier = Math.min(1.0, 0.10 + 0.02 * Math.max(0, p.ships - 5));
+            const effectiveMaxShips = p.rampageBoost ? p.maxShips * 3 : p.maxShips;
+            const prodDivisor = 100 / (game.settings?.productionMultiple || 1.0);
+            finalRate = (Math.max(10, effectiveMaxShips - p.ships) / prodDivisor) * (1 + techBonus) * lowPopMultiplier;
+            if (p.homeworldOf === p.owner.id) {
+              finalRate *= 2;
+            }
+            if (isHuman) {
+              if (finalRate > 1.0) {
+                finalRate = 1.0 + ((finalRate - 1.0) / 3);
+              }
+            }
+          }
+        }
+
         return {
           id: p.id,
           name: p.name,
@@ -538,7 +609,12 @@ async function bootstrap() {
           isMilitary: p.isMilitary,
           isSpeedPlanet: p.isSpeedPlanet,
           focusMode: p.focusMode || 'economy',
-          focusChanges: p.focusChanges || 0
+          focusChanges: p.focusChanges || 0,
+          focusTransition: p.focusTransition ? {
+            targetMode: p.focusTransition.targetMode,
+            progress: Math.min(1.0, p.focusTransition.elapsed / 15000)
+          } : null,
+          finalRateExceedsOne: finalRate > 1.0
       };
     });
 
@@ -554,8 +630,8 @@ async function bootstrap() {
         active: s.active,
         expScore: s.expScore || 0,
         isBomber: s.isBomber,
-        isInterceptor: s.isInterceptor,
         isCruiser: s.isCruiser || false,
+        name: s.name || null,
         isAmoeba: s.isAmoeba || false,
         health: s.health || 0,
         maxHealth: s.maxHealth || 0,
@@ -564,6 +640,8 @@ async function bootstrap() {
         labs: s.labs || 0,
         sensorarrays: s.sensorarrays || 0,
         armor: s.armor || 0,
+        armorPoints: s.armorPoints || 0,
+        maxArmor: s.maxArmor || 0,
         shields: s.shields || 0,
         engine: s.engine || 0,
         munitions: s.munitions || 0,
@@ -705,9 +783,7 @@ async function bootstrap() {
         
         for (const p of game.planets) {
           if (p.owner && p.owner.id === player.id) {
-            const planetTech = 0.01 * Math.sqrt(p.owner.techScore || 0);
-            const planetExp = 0.01 * Math.sqrt(p.owner.expScore || 0);
-            const gravityRadius = (p.maxShips * 1.5 * scaleMap) * (1 + planetTech + planetExp);
+            const gravityRadius = p.getGravityRadius();
             const pct = hazardSensorReductionPct(p.x, p.y, player.id);
             const effectiveGravity = Math.max(10, gravityRadius * pct);
             const dx = p.x - x;
@@ -731,9 +807,7 @@ async function bootstrap() {
         
         for (const p of game.planets) {
           if (p.owner && p.owner.id === player.id) {
-            const planetTech = 0.01 * Math.sqrt(p.owner.techScore || 0);
-            const planetExp = 0.01 * Math.sqrt(p.owner.expScore || 0);
-            const gravityRadius = (p.maxShips * 1.5 * scaleMap) * (1 + planetTech + planetExp) * 1.5;
+            const gravityRadius = p.getGravityRadius() * 1.5;
             const pct = hazardSensorReductionPct(p.x, p.y, player.id);
             const effectiveGravity = Math.max(10, gravityRadius * pct);
             const dx = p.x - x;
@@ -818,9 +892,7 @@ async function bootstrap() {
         } else {
           for (const p of game.planets) {
             if (p.owner && p.owner.id === player.id) {
-               const pt = 0.01 * Math.sqrt(p.owner.techScore || 0);
-               const pe = 0.01 * Math.sqrt(p.owner.expScore || 0);
-              const gr = (p.maxShips * 1.5) * (1 + pt + pe);
+              const gr = p.getGravityRadius();
               const dx = p.x - storm.x, dy = p.y - storm.y;
               if (Math.sqrt(dx * dx + dy * dy) <= gr + storm.radius) { stormVisible = true; break; }
             }

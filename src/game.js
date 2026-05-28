@@ -454,11 +454,7 @@ export class Game {
     this.selectedPlanet = null;
   }
 
-  sendShips(source, target, isWarp = false, speedModifier = null, isBombing = false, fillAmount = null, scoutMode = false, isInterceptor = false, isCruiserOrder = false) {
-
-    if (isInterceptor && !source.isMilitary && !source.homeworldOf) {
-      return;
-    }
+  sendShips(source, target, isWarp = false, speedModifier = null, isBombing = false, fillAmount = null, scoutMode = false, isCruiserOrder = false) {
 
     if (isCruiserOrder) {
       if ((source.isMilitary || source.homeworldOf) && source.ships > 60 && source.maxShips > 60) {
@@ -474,6 +470,7 @@ export class Game {
           ship.health = maxHealth;
           ship.fuel = basePower;
           ship.speed = Math.max(5, ship.speed - 10 - basePower);
+          ship.speedModifier = 1.0;
           if (!source.owner.cruiserStyle) {
             const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
             if (!source.owner.isAI) {
@@ -510,7 +507,22 @@ export class Game {
     if (source.ships < launchCost + 1) return;
     
     source.ships -= launchCost;
-    let shipsToSend = scoutMode ? Math.max(3, Math.floor(source.ships * 0.1)) : Math.floor(source.ships / 2);
+    let shipsToSend;
+    const isReinforcing = source.owner && target && target.owner && source.owner.id === target.owner.id;
+    if (isReinforcing && !isBombing) {
+      if (target.ships >= target.maxShips) {
+        shipsToSend = 0;
+      } else {
+        const fillNeeded = target.maxShips - target.ships;
+        if (source.ships >= fillNeeded) {
+          shipsToSend = fillNeeded;
+        } else {
+          shipsToSend = Math.floor(source.ships / 2);
+        }
+      }
+    } else {
+      shipsToSend = scoutMode ? Math.max(3, Math.floor(source.ships * 0.1)) : Math.floor(source.ships / 2);
+    }
 
     shipsToSend = Math.min(shipsToSend, source.ships);
     
@@ -564,10 +576,6 @@ export class Game {
       ship.isBomber = true;
       ship.bomberType = isBombing; // 'eco' or 'ships'
       ship.speed = 20;
-    }
-    if (isInterceptor) {
-      ship.isInterceptor = true;
-      ship.speed = 40;
     }
     if (isWarp) {
       if (this.applyWarpToShip(ship, source.owner)) {
@@ -641,11 +649,7 @@ export class Game {
     return false;
   }
 
-  sendShipsToSpace(source, targetX, targetY, isWarp = false, speedModifier = null, isBombing = false, scoutMode = false, isInterceptor = false, isCruiserOrder = false) {
-
-    if (isInterceptor && !source.isMilitary && !source.homeworldOf) {
-      return;
-    }
+  sendShipsToSpace(source, targetX, targetY, isWarp = false, speedModifier = null, isBombing = false, scoutMode = false, isCruiserOrder = false) {
 
     if (isCruiserOrder) {
       if ((source.isMilitary || source.homeworldOf) && source.ships > 60 && source.maxShips > 60) {
@@ -661,6 +665,7 @@ export class Game {
           ship.health = cruiserMaxHealth;
           ship.fuel = health;
           ship.speed = Math.max(5, ship.speed - 10 - health);
+          ship.speedModifier = 1.0;
           if (!source.owner.cruiserStyle) {
             const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
             if (!source.owner.isAI) {
@@ -735,7 +740,10 @@ export class Game {
     const ship = new Ship(this.nextShipId++, source.x, source.y, null, source.owner, targetX, targetY);
     ship.count = shipsToSend;
     if (source.isSpeedPlanet) ship.speed += 15;
-    ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
+    const spaceDx = targetX - source.x;
+    const spaceDy = targetY - source.y;
+    const spaceDist = Math.sqrt(spaceDx * spaceDx + spaceDy * spaceDy);
+    ship.speedModifier = spaceDist < 100 ? 0.25 : 1.0;
     ship.sourcePlanet = source;
     ship.expScore = source.expScore || 0;
     ship.bomberOffsetMag = 0;
@@ -744,10 +752,6 @@ export class Game {
       ship.isBomber = true;
       ship.bomberType = isBombing;
       ship.speed = 20;
-    }
-    if (isInterceptor) {
-      ship.isInterceptor = true;
-      ship.speed = 40;
     }
     if (isWarp) {
       if (this.applyWarpToShip(ship, source.owner)) {
@@ -954,23 +958,11 @@ export class Game {
       return reduction;
     };
 
-    // Ion Storm knowledge accumulation (+1 per 2 minutes per overlapping planet)
+    // Ion Storm knowledge accumulation (ships with labs are the primary method of gaining knowledge now)
     for (const storm of this.ionStorms) {
       for (const player of this.allPlayers) {
         if (!player.isAlive) continue;
         let overlapCount = 0;
-        for (const planet of this.planets) {
-          if (planet.owner && planet.owner.id === player.id) {
-            const tb = 0.01 * Math.sqrt(planet.owner.techScore || 0);
-            const eb = 0.01 * Math.sqrt(planet.owner.expScore || 0);
-            const gravR = (planet.maxShips * 1.5) * (1 + tb + eb);
-            const red = hazardSensorReduction(planet.x, planet.y, player.id);
-            const effGravR = Math.max(10, gravR - red);
-            const dx = planet.x - storm.x;
-            const dy = planet.y - storm.y;
-            if (Math.sqrt(dx * dx + dy * dy) <= effGravR + storm.radius) { overlapCount++; }
-          }
-        }
         for (const ship of this.ships) {
           if (ship.active && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0) {
             const shipExpBonus = (ship.expScore || 0) * 2;
@@ -1369,6 +1361,44 @@ export class Game {
       }
     }
     
+    // Award tech score to cruisers with laboratories in sensor range when an amoeba dies
+    for (const ship of this.ships) {
+      if (!ship.active && ship.isAmoeba) {
+        for (const cruiser of this.ships) {
+          if (cruiser.active && cruiser.isCruiser && cruiser.labs > 0 && cruiser.owner) {
+            const dx = cruiser.x - ship.x;
+            const dy = cruiser.y - ship.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Calculate Cruiser sensor range including experience & player modifiers
+            const shipExpBonus = (cruiser.expScore || 0) * 2;
+            let cruiserRadar = Math.min(250, 5 * cruiser.maxHealth) + shipExpBonus;
+            if (cruiser.isWarp) cruiserRadar *= 0.25;
+            if (cruiser.sensorarrays > 0) {
+              let mult = 1.0;
+              mult += 0.50;
+              if (cruiser.sensorarrays > 1) {
+                mult += 0.25;
+              }
+              if (cruiser.sensorarrays > 2) {
+                mult += 0.25;
+              }
+              cruiserRadar *= mult;
+            }
+            const playerTechBonus = 0.01 * Math.sqrt(cruiser.owner.techScore || 0);
+            const playerExpBonus = 0.01 * Math.sqrt(cruiser.owner.expScore || 0);
+            const sensorRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
+            
+            if (dist <= sensorRange) {
+              const techGain = cruiser.labs;
+              cruiser.owner.techScore = (cruiser.owner.techScore || 0) + techGain;
+              cruiser.beakerIncreaseEvent = (cruiser.beakerIncreaseEvent || 0) + techGain;
+            }
+          }
+        }
+      }
+    }
+
     // Remove inactive ships and dead planets
     this.ships = this.ships.filter(s => s.active);
     
@@ -1486,10 +1516,8 @@ export class Game {
     
     for (const planet of this.planets) {
       if (planet.owner) {
-        const techBonus = 0.01 * Math.sqrt(planet.owner.techScore || 0);
-        const expBonus = 0.01 * Math.sqrt(planet.owner.expScore || 0);
         const mapScale = this.width > 1600 ? this.width / 1600 : 1.0;
-        const gravityRadius = (planet.maxShips * 1.5 * mapScale) * (1 + techBonus + expBonus);
+        const gravityRadius = planet.getGravityRadius(mapScale);
         
         this.ctx.beginPath();
         this.ctx.arc(planet.x, planet.y, gravityRadius, 0, Math.PI * 2);
