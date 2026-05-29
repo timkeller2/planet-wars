@@ -129,7 +129,7 @@ export class Ship {
       const dy = gp.y - y;
         let mult = 0.002;
         if (gp.isMilitary || gp.focusMode === 'garrison') {
-          if (gp.ships >= gp.maxShips * 2) {
+          if (gp.ships >= gp.maxShips * 2 - 10) {
             mult = 0.0045;
           } else if (gp.ships >= gp.maxShips) {
             mult = 0.003;
@@ -1004,7 +1004,7 @@ export class Ship {
                     if (planet.owner === this.owner) {
                       let mult = 0.002;
                       if (planet.isMilitary || planet.focusMode === 'garrison') {
-                        if (planet.ships >= planet.maxShips * 2) {
+                        if (planet.ships >= planet.maxShips * 2 - 10) {
                           mult = 0.0045;
                         } else if (planet.ships >= planet.maxShips) {
                           mult = 0.003;
@@ -1014,7 +1014,7 @@ export class Ship {
                     } else if (planet.owner === this.targetPlanet.owner && this.targetPlanet.owner !== null) {
                       let mult = 0.002;
                       if (planet.isMilitary || planet.focusMode === 'garrison') {
-                        if (planet.ships >= planet.maxShips * 2) {
+                        if (planet.ships >= planet.maxShips * 2 - 10) {
                           mult = 0.0045;
                         } else if (planet.ships >= planet.maxShips) {
                           mult = 0.003;

@@ -555,7 +555,7 @@ async function bootstrap() {
                   if (otherPlanet.owner === owner) {
                     let mult = 0.002;
                     if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
-                      if (otherPlanet.ships >= otherPlanet.maxShips * 2) {
+                      if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) {
                         mult = 0.0045;
                       } else if (otherPlanet.ships >= otherPlanet.maxShips) {
                         mult = 0.003;
@@ -565,7 +565,7 @@ async function bootstrap() {
                   } else if (p.owner !== null && otherPlanet.owner === p.owner) {
                     let mult = 0.002;
                     if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
-                      if (otherPlanet.ships >= otherPlanet.maxShips * 2) {
+                      if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) {
                         mult = 0.0045;
                       } else if (otherPlanet.ships >= otherPlanet.maxShips) {
                         mult = 0.003;

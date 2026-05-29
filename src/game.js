@@ -1854,8 +1854,16 @@ export class Game {
           if (p.owner && p.owner.id === ship.owner.id) {
             const pdx = p.x - ship.x;
             const pdy = p.y - ship.y;
+            const distSq = pdx*pdx + pdy*pdy;
             const gr = p.getGravityRadius();
-            if (pdx*pdx + pdy*pdy < gr * gr) {
+            if (distSq < gr * gr) {
+              // Rule: When loading marines, do not load from a garrison world that is within 10 of twice maxships
+              // unless the ship to be loaded is sitting within 25px of the planet.
+              const isSuchGarrisonWorld = (p.isMilitary || p.focusMode === 'garrison') && (p.ships >= p.maxShips * 2 - 10);
+              if (isSuchGarrisonWorld && distSq > 25 * 25) {
+                continue;
+              }
+
               const halfCapacity = 0.5 * p.maxShips;
               if (p.ships > halfCapacity) {
                 const needed = capacity - ship.marineCount;
@@ -1895,9 +1903,9 @@ export class Game {
 
         let closestPlanet = null;
         if (qualifyingPlanets.length > 0) {
-          const closeQualifying = qualifyingPlanets.filter(qp => qp.dist <= 100);
+          const closeQualifying = qualifyingPlanets.filter(qp => qp.dist <= 25);
           if (closeQualifying.length > 0) {
-            // Exception: select the closest qualifying planet within 100px
+            // Exception: select the closest qualifying planet within 25px
             let minDist = Infinity;
             for (const qp of closeQualifying) {
               if (qp.dist < minDist) {

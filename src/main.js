@@ -2916,7 +2916,7 @@ window.addEventListener('DOMContentLoaded', () => {
                   if (pdx * pdx + pdy * pdy <= gr * gr) {
                     let mult = 0.002;
                     if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
-                      if (otherPlanet.ships >= otherPlanet.maxShips * 2) {
+                      if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) {
                         mult = 0.0045;
                       } else if (otherPlanet.ships >= otherPlanet.maxShips) {
                         mult = 0.003;
@@ -2952,7 +2952,7 @@ window.addEventListener('DOMContentLoaded', () => {
               if (pdx * pdx + pdy * pdy <= effGravity * effGravity) {
                 let mult = 0.002;
                 if (gp.isMilitary || gp.focusMode === 'garrison') {
-                  if (gp.ships >= gp.maxShips * 2) {
+                  if (gp.ships >= gp.maxShips * 2 - 10) {
                     mult = 0.0045;
                   } else if (gp.ships >= gp.maxShips) {
                     mult = 0.003;
@@ -3106,7 +3106,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (pdx * pdx + pdy * pdy <= gr * gr) {
                   let mult = 0.002;
                   if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
-                    if (otherPlanet.ships >= otherPlanet.maxShips * 2) {
+                    if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) {
                       mult = 0.0045;
                     } else if (otherPlanet.ships >= otherPlanet.maxShips) {
                       mult = 0.003;
@@ -3425,7 +3425,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (pdx * pdx + pdy * pdy <= gr * gr) {
                   let mult = 0.2;
                   if (gp.isMilitary || gp.focusMode === 'garrison') {
-                    if (gp.ships >= gp.maxShips * 2) {
+                    if (gp.ships >= gp.maxShips * 2 - 10) {
                       mult = 0.45;
                     } else if (gp.ships >= gp.maxShips) {
                       mult = 0.3;
@@ -3556,7 +3556,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (pdx * pdx + pdy * pdy <= gr * gr) {
                   let mult = 0.2;
                   if (gp.isMilitary || gp.focusMode === 'garrison') {
-                    if (gp.ships >= gp.maxShips * 2) {
+                    if (gp.ships >= gp.maxShips * 2 - 10) {
                       mult = 0.45;
                     } else if (gp.ships >= gp.maxShips) {
                       mult = 0.3;
