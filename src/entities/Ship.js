@@ -398,8 +398,52 @@ export class Ship {
           const edx = enemyShip.x - this.x;
           const edy = enemyShip.y - this.y;
           const distSq = edx * edx + edy * edy;
-          if (distSq < squaredRange) {
-            validTargets.push({ ship: enemyShip, distSq: distSq });
+          
+          let targetRange = effectiveRange;
+          let targetType = 'side';
+          
+          if (this.maxHealth > 0 && !this.isAmoeba) {
+            // Cruiser: determine relative target direction
+            const enemyAngle = Math.atan2(edy, edx);
+            let diff = enemyAngle - this.angle;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            
+            const absDiff = Math.abs(diff);
+            if (absDiff <= Math.PI / 4) {
+              targetType = 'front';
+              targetRange = effectiveRange * 1.2;
+            } else if (absDiff >= 3 * Math.PI / 4) {
+              targetType = 'aft';
+              // Firing aft: do not gain range advantages of munitions (bombs)
+              let rangeWithoutMunitions = effectiveRange;
+              if (this.bombs > 0) {
+                const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+                const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+                
+                let targetingRangeBonus = 0;
+                if (this.targeting > 0) {
+                  targetingRangeBonus += 0.10;
+                  if (this.targeting > 1) {
+                    targetingRangeBonus += 0.05;
+                  }
+                  if (this.targeting > 2) {
+                    targetingRangeBonus += 0.05;
+                  }
+                }
+                
+                const munitionsBonus = baseDogfightRange * 0.10 * (1 + targetingRangeBonus);
+                rangeWithoutMunitions = Math.max(0, effectiveRange - munitionsBonus);
+              }
+              targetRange = rangeWithoutMunitions * 0.85;
+            } else {
+              targetType = 'side';
+              targetRange = effectiveRange;
+            }
+          }
+          
+          if (distSq < targetRange * targetRange) {
+            validTargets.push({ ship: enemyShip, distSq: distSq, targetType: targetType });
           }
         }
       }
@@ -472,11 +516,46 @@ export class Ship {
         maxShots = 1; // Fire only 1 shot per trigger
 
         let usedBomb = false;
+        let selectedTargetIndex = -1;
+
         if (validTargets.length > 0) {
           this.combatCooldown = 1.1;
+
+          if (this.maxHealth > 0 && !this.isAmoeba) {
+            // Cruiser: Prioritize front > side > aft targets
+            const frontTargets = [];
+            const sideTargets = [];
+            const aftTargets = [];
+            
+            for (let i = 0; i < validTargets.length; i++) {
+              const vt = validTargets[i];
+              if (vt.targetType === 'front') frontTargets.push(i);
+              else if (vt.targetType === 'side') sideTargets.push(i);
+              else if (vt.targetType === 'aft') aftTargets.push(i);
+            }
+            
+            if (frontTargets.length > 0) {
+              selectedTargetIndex = frontTargets[Math.floor(Math.random() * frontTargets.length)];
+            } else if (sideTargets.length > 0) {
+              selectedTargetIndex = sideTargets[Math.floor(Math.random() * sideTargets.length)];
+            } else if (aftTargets.length > 0) {
+              selectedTargetIndex = aftTargets[Math.floor(Math.random() * aftTargets.length)];
+            }
+          }
+          
+          if (selectedTargetIndex === -1) {
+            selectedTargetIndex = Math.floor(Math.random() * validTargets.length);
+          }
+
+          const targetData = validTargets[selectedTargetIndex];
+          const targetType = targetData.targetType || 'side';
+
           // Only consume a bomb on the first shot of each volley cycle
           if (!this.volleyShotIndex) this.volleyShotIndex = 0;
-          if (this.maxHealth > 0 && this.bombs > 0 && this.volleyShotIndex === 0 && !this.isAmoeba) {
+          
+          const isAftCruiserShot = (this.maxHealth > 0 && !this.isAmoeba && targetType === 'aft');
+          
+          if (this.maxHealth > 0 && this.bombs > 0 && this.volleyShotIndex === 0 && !this.isAmoeba && !isAftCruiserShot) {
             usedBomb = true;
             this.bombs -= 0.5;
             if (this.bombs < 0) this.bombs = 0;
@@ -487,15 +566,34 @@ export class Ship {
         const hazardPenalty = this.getHazardAccuracyReduction(ionStorms);
 
         while (shotsFired < maxShots && validTargets.length > 0) {
-          const targetIndex = Math.floor(Math.random() * validTargets.length);
+          if (selectedTargetIndex === -1) {
+            selectedTargetIndex = Math.floor(Math.random() * validTargets.length);
+          }
+          const targetIndex = selectedTargetIndex;
           const targetData = validTargets[targetIndex];
           const enemyShip = targetData.ship;
+          const targetType = targetData.targetType || 'side';
           
           shotsFired++;
           
           let finalHitChance = hitChance;
           if (this.maxHealth > 0 && !this.isAmoeba) {
-            finalHitChance = Math.min(1.0, finalHitChance * 2);
+            // Firing aft: do not gain accuracy advantages of munitions
+            let cruiserBaseHitChance = hitChance;
+            if (targetType === 'aft' && this.bombs > 0) {
+              cruiserBaseHitChance = Math.max(0, cruiserBaseHitChance - 0.10);
+            }
+            
+            // Double the hit chance for cruisers
+            finalHitChance = cruiserBaseHitChance * 2;
+            
+            // Apply front/aft accuracy multipliers
+            if (targetType === 'front') {
+              finalHitChance *= 1.2;
+            } else if (targetType === 'aft') {
+              finalHitChance *= 0.85;
+            }
+            finalHitChance = Math.min(1.0, finalHitChance);
           }
 
           const friendlyPlanetBoost = this.getGravityWellBonusAt(this.x, this.y, this.owner, allPlanets);
