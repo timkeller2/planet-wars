@@ -1786,15 +1786,16 @@ export class Game {
 
         if (closestPlanet) {
           ship.diplomatTimer = (ship.diplomatTimer || 0) + dt;
-          if (ship.diplomatTimer >= 1.0) {
-            ship.diplomatTimer -= 1.0;
+          const attemptInterval = 60 / ship.diplomat;
+          if (ship.diplomatTimer >= attemptInterval) {
+            ship.diplomatTimer -= attemptInterval;
 
-            // Sympathy increase probability: (30 + expBonus * 3 + currentSympathy)% per diplomat per minute
-            const expBonus = 0.5 * Math.sqrt(ship.owner.expScore || 0);
+            // XP Bonus: sqrt( XP score )
+            const expBonus = Math.sqrt(ship.owner.expScore || 0);
             const currentSym = closestPlanet.sympathy ? (closestPlanet.sympathy[ship.owner.id] || 0) : 0;
-            const ratePercentPerMinute = 30 + expBonus * 3 + currentSym;
-            const ratePercentPerSecond = ratePercentPerMinute / 60;
-            const prob = (ratePercentPerSecond * ship.diplomat) / 100;
+            // Success rate: (30 + XP bonus * 3 + current player sympathy)%
+            const chancePercent = 30 + expBonus * 3 + currentSym;
+            const prob = chancePercent / 100;
 
             if (Math.random() < prob) {
               closestPlanet.sympathy = closestPlanet.sympathy || {};
