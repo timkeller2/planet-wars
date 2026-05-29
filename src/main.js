@@ -3024,7 +3024,7 @@ window.addEventListener('DOMContentLoaded', () => {
             if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ Active`, color: '#ffa500' });
             if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
             if (hs.marines > 0) lines.push({ label: `Marines (${hs.marines})`, value: `🪖 ${Math.floor(hs.marineCount || 0)} / ${hs.marines * hs.maxHealth}`, color: '#ffb74d' });
-            lines.push({ label: 'Crew', value: `👤 ${Math.floor(hs.crew || 0)} / ${2 * hs.health}`, color: '#81d4fa' });
+            lines.push({ label: 'Crew', value: `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(2 * hs.health)}`, color: '#81d4fa' });
 
             const maxBombs = getMaxBombs(hs);
             let munitionsDisplay = Math.floor(hs.bombs || 0) + ' / ' + maxBombs;
