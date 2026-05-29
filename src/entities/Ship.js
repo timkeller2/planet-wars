@@ -15,7 +15,11 @@ export class Ship {
     this.health = 0;
     this.maxHealth = 0;
     this.fuel = 0;
-    this.angle = 0;
+    const initDestX = targetPlanet ? targetPlanet.x : (targetX !== null ? targetX : x);
+    const initDestY = targetPlanet ? targetPlanet.y : (targetY !== null ? targetY : y);
+    const initDx = initDestX - x;
+    const initDy = initDestY - y;
+    this.angle = (initDx !== 0 || initDy !== 0) ? Math.atan2(initDy, initDx) : 0;
     this.fireCooldown = Math.random(); // Start randomly staggered
     this.isCruiser = false;
     this.labs = 0;
@@ -760,7 +764,24 @@ export class Ship {
     const distance = Math.sqrt(baseTargetDx * baseTargetDx + baseTargetDy * baseTargetDy);
     
     if (moveDistanceToDest > 0) {
-      this.angle = Math.atan2(dy, dx);
+      const desiredAngle = Math.atan2(dy, dx);
+      if (this.isAmoeba) {
+        this.angle = desiredAngle;
+      } else {
+        const turnRateDeg = this.isCruiser ? Math.max(15, 60 - (this.maxHealth || 0)) : 60;
+        const turnRateRad = turnRateDeg * Math.PI / 180;
+        const maxRotation = turnRateRad * (deltaTime / 1000);
+
+        let diff = desiredAngle - this.angle;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+
+        if (Math.abs(diff) <= maxRotation) {
+          this.angle = desiredAngle;
+        } else {
+          this.angle += Math.sign(diff) * maxRotation;
+        }
+      }
     }
 
     // Cosmetic lasers back and forth between attacking ship and defending planet
@@ -1461,8 +1482,13 @@ export class Ship {
 
     const moveDistance = effectiveSpeed * (deltaTime / 1000);
     if (moveDistanceToDest > 0) {
-      this.x += (dx / moveDistanceToDest) * moveDistance;
-      this.y += (dy / moveDistanceToDest) * moveDistance;
+      if (this.isAmoeba) {
+        this.x += (dx / moveDistanceToDest) * moveDistance;
+        this.y += (dy / moveDistanceToDest) * moveDistance;
+      } else {
+        this.x += Math.cos(this.angle) * moveDistance;
+        this.y += Math.sin(this.angle) * moveDistance;
+      }
     }
   }
 
