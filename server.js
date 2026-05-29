@@ -690,6 +690,7 @@ async function bootstrap() {
         fuel_tanker: s.fuel_tanker || 0,
         diplomat: s.diplomat || 0,
         marines: s.marines || 0,
+        diplomatTargetPlanetId: s.diplomatTargetPlanetId || null,
         crew: s.crew || 0,
         marineCount: s.marineCount || 0,
         isBoardingFleet: s.isBoardingFleet || false,

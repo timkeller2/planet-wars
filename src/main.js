@@ -758,10 +758,19 @@ window.addEventListener('DOMContentLoaded', () => {
           }
         }
         if (s.diplomatSuccessEvent && s.diplomatSuccessEvent > 0) {
+          let targetX = s.x;
+          let targetY = s.y - 12;
+          if (s.diplomatTargetPlanetId !== null && state.planets) {
+            const targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
+            if (targetP) {
+              targetX = targetP.x;
+              targetY = targetP.y;
+            }
+          }
           for (let b = 0; b < s.diplomatSuccessEvent; b++) {
             floatingAnimations.push({
-              x: s.x,
-              y: s.y - 12,
+              x: targetX,
+              y: targetY,
               text: '💖',
               type: 'diplomacy_success',
               age: b * 0.2,
@@ -770,10 +779,19 @@ window.addEventListener('DOMContentLoaded', () => {
           }
         }
         if (s.diplomatFailureEvent && s.diplomatFailureEvent > 0) {
+          let targetX = s.x;
+          let targetY = s.y - 12;
+          if (s.diplomatTargetPlanetId !== null && state.planets) {
+            const targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
+            if (targetP) {
+              targetX = targetP.x;
+              targetY = targetP.y;
+            }
+          }
           for (let b = 0; b < s.diplomatFailureEvent; b++) {
             floatingAnimations.push({
-              x: s.x,
-              y: s.y - 12,
+              x: targetX,
+              y: targetY,
               text: '💔',
               type: 'diplomacy_failure',
               age: b * 0.2,

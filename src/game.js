@@ -1861,6 +1861,7 @@ export class Game {
 
       // 4. Diplomats sympathy generation
       if ((ship.diplomat || 0) > 0) {
+        ship.diplomatTargetPlanetId = null;
         // Find all qualifying neutral/enemy planets within sensor range that are not at max empathy/sympathy
         const qualifyingPlanets = [];
         for (const p of this.planets) {
@@ -1912,6 +1913,7 @@ export class Game {
         }
 
         if (closestPlanet) {
+          ship.diplomatTargetPlanetId = closestPlanet.id;
           ship.diplomatTimer = (ship.diplomatTimer || 0) + dt;
           const attemptInterval = 60 / ship.diplomat;
           if (ship.diplomatTimer >= attemptInterval) {
