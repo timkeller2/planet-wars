@@ -1706,40 +1706,32 @@ export class Game {
         }
       }
 
-      let friendlyPlanet = null;
-      if (ship.inFriendlyWell) {
-        // Find friendly planet whose well cruiser is in
-        for (const p of this.planets) {
-          if (p.owner && p.owner.id === ship.owner.id) {
-            const pdx = p.x - ship.x;
-            const pdy = p.y - ship.y;
-            const gr = p.getGravityRadius();
-            if (pdx*pdx + pdy*pdy < gr * gr) {
-              friendlyPlanet = p;
-              break;
-            }
-          }
-        }
-      }
-
       if (ship.inFriendlyWell && !enemyNearby) {
         ship.crew = Math.min(2 * ship.health, (ship.crew || 0) + 1 * dt);
       }
 
       // 3. Load Marines
       // "load marines up to capacity from planets with > 50% ships at cost of 1 ship from nearby planet for each marine"
-      if (ship.inFriendlyWell && friendlyPlanet && (ship.marines || 0) > 0) {
+      if (ship.inFriendlyWell && (ship.marines || 0) > 0) {
         const capacity = ship.marines * ship.maxHealth;
-        if (ship.marineCount < capacity) {
-          const halfCapacity = 0.5 * friendlyPlanet.maxShips;
-          if (friendlyPlanet.ships > halfCapacity) {
-            const needed = capacity - ship.marineCount;
-            const available = friendlyPlanet.ships - halfCapacity;
-            // Load continuously at a rate of 1 per second
-            const toLoad = Math.min(needed, available, 1 * dt);
-            if (toLoad > 0) {
-              ship.marineCount += toLoad;
-              friendlyPlanet.ships = Math.max(0, friendlyPlanet.ships - toLoad);
+        for (const p of this.planets) {
+          if (ship.marineCount >= capacity) break;
+          if (p.owner && p.owner.id === ship.owner.id) {
+            const pdx = p.x - ship.x;
+            const pdy = p.y - ship.y;
+            const gr = p.getGravityRadius();
+            if (pdx*pdx + pdy*pdy < gr * gr) {
+              const halfCapacity = 0.5 * p.maxShips;
+              if (p.ships > halfCapacity) {
+                const needed = capacity - ship.marineCount;
+                const available = p.ships - halfCapacity;
+                // Load continuously at a rate of 1 per second
+                const toLoad = Math.min(needed, available, 1 * dt);
+                if (toLoad > 0) {
+                  ship.marineCount += toLoad;
+                  p.ships = Math.max(0, p.ships - toLoad);
+                }
+              }
             }
           }
         }
