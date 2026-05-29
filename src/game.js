@@ -1830,8 +1830,9 @@ export class Game {
                     // Planet joins this player
                     closestPlanet.owner = winnerPlayer;
                     
-                    // Consume only sympathy equal to the number of ships captured
-                    closestPlanet.sympathy[winnerPlayer.id] = Math.max(0, closestPlanet.sympathy[winnerPlayer.id] - oldShips);
+                    // Consume only 1 sympathy for every 3 ships captured
+                    const sympathyConsumed = Math.floor(oldShips / 3);
+                    closestPlanet.sympathy[winnerPlayer.id] = Math.max(0, closestPlanet.sympathy[winnerPlayer.id] - sympathyConsumed);
                     
                     // Cooldown reset: 3 minutes = 180,000 milliseconds
                     closestPlanet.revoltCooldown = 180000;

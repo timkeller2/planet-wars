@@ -2933,6 +2933,18 @@ window.addEventListener('DOMContentLoaded', () => {
 
           lines[0].value = totalDefense > 0 ? `🛡️ ${Math.round(totalDefense * 10) / 10}%` : '';
 
+          // Show sympathy levels on the planet tooltip
+          if (hp.sympathy) {
+            for (const [pId, symVal] of Object.entries(hp.sympathy)) {
+              if (symVal > 0) {
+                const targetPlayer = serverState.players.find(pl => pl.id === pId);
+                const pName = targetPlayer ? targetPlayer.name : pId;
+                const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
+                lines.push({ label: `💖 Sympathy (${pName})`, value: `${symVal}`, color: pColor });
+              }
+            }
+          }
+
           if (serverState.storms) {
             for (const storm of serverState.storms) {
               const dx = hp.x - storm.x, dy = hp.y - storm.y;

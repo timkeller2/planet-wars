@@ -862,7 +862,8 @@ async function bootstrap() {
 
       for (let i = 0; i < game.planets.length; i++) {
         const p = game.planets[i];
-        if ((p.owner && p.owner.id === player.id) || isVisible(p.x, p.y)) {
+        const hasSympathy = p.sympathy && p.sympathy[player.id] > 0;
+        if ((p.owner && p.owner.id === player.id) || isVisible(p.x, p.y) || hasSympathy) {
           player.discoveredPlanets.add(p.id);
           const mappedPlanet = Object.assign({}, allPlanetsMapped[i]);
           if (player.spyRootedEvents && player.spyRootedEvents.has(p.id)) mappedPlanet.spyRootedOutEvent = true;
@@ -947,6 +948,13 @@ async function bootstrap() {
         }
       }
 
+      const visibleUpgradeEnhanceEvents = (game.upgradeEnhanceEvents || []).filter(ev => {
+        const targetPlanet = game.planets.find(p => p.id === ev.planetId);
+        if (!targetPlanet) return false;
+        const hasSympathy = targetPlanet.sympathy && targetPlanet.sympathy[player.id] > 0;
+        return (targetPlanet.owner && targetPlanet.owner.id === player.id) || isVisible(targetPlanet.x, targetPlanet.y) || hasSympathy;
+      });
+
       const state = {
         planets: visiblePlanets,
         ships: visibleShips,
@@ -956,7 +964,7 @@ async function bootstrap() {
         storms: visibleStorms,
         players: game.allPlayers,
         globalUpgradeModifiers: game.globalUpgradeModifiers,
-        upgradeEnhanceEvents: game.upgradeEnhanceEvents || [],
+        upgradeEnhanceEvents: visibleUpgradeEnhanceEvents,
         galacticCapacity: game.galacticCapacity,
         isPaused: game.isPaused,
         isRunning: game.isRunning,
