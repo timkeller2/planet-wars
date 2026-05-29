@@ -2788,6 +2788,28 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.font = 'bold 11px Orbitron'; // Restore font
           }
 
+          // Evaluate if the planet is in an unstable state (eligible for revolt)
+          const eligibleForRevolt = !isLastKnown && (p.revoltCooldown || 0) <= 0 && p.sympathy && Object.entries(p.sympathy).some(([pId, symVal]) => {
+            const isNotOwner = !p.ownerId || pId !== p.ownerId;
+            return isNotOwner && symVal > p.ships / 3;
+          });
+
+          if (eligibleForRevolt) {
+            ctx.save();
+            const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 180);
+            ctx.globalAlpha = pulse;
+            ctx.shadowColor = '#f00';
+            ctx.shadowBlur = 10;
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            let iconHeight = 8;
+            if (displayHomeworldOf || displayIsResearch || displayIsMilitary || displayIsSpeedPlanet) {
+              iconHeight = 26;
+            }
+            ctx.fillText("✊", p.x, p.y - p.radius - iconHeight);
+            ctx.restore();
+          }
+
           if (!isLastKnown) {
             if (owner) {
               if (p.ships < 50) {
