@@ -957,8 +957,82 @@ export class Game {
       requestAnimationFrame(this.gameLoop.bind(this));
     }
   }
+  checkSympathyRevolts() {
+    for (const planet of this.planets) {
+      if ((planet.revoltCooldown || 0) > 0) continue;
+      if (!planet.sympathy) continue;
+
+      const threshold = planet.ships / 3;
+
+      const eligibleNonOwners = [];
+      for (const [pId, symVal] of Object.entries(planet.sympathy)) {
+        const isNotOwner = !planet.owner || pId !== planet.owner.id;
+        if (isNotOwner && symVal > threshold) {
+          eligibleNonOwners.push({ id: pId, sympathy: symVal });
+        }
+      }
+
+      if (eligibleNonOwners.length > 0) {
+        const competitors = [];
+
+        if (planet.owner) {
+          const ownerSym = planet.sympathy[planet.owner.id] || 0;
+          const maxRoll = planet.ships + ownerSym;
+          const rollVal = Math.floor(Math.random() * (maxRoll + 1));
+          competitors.push({ id: planet.owner.id, roll: rollVal, isOwner: true });
+        }
+
+        for (const competitor of eligibleNonOwners) {
+          const maxRoll = competitor.sympathy;
+          const rollVal = Math.floor(Math.random() * (maxRoll + 1));
+          competitors.push({ id: competitor.id, roll: rollVal, isOwner: false });
+        }
+
+        competitors.sort((a, b) => b.roll - a.roll);
+        const winner = competitors[0];
+
+        if (winner && !winner.isOwner) {
+          const winnerPlayer = this.allPlayers.find(p => p.id === winner.id);
+          if (winnerPlayer) {
+            const oldShips = planet.ships;
+            const originalOwner = planet.owner;
+
+            planet.owner = winnerPlayer;
+
+            const sympathyConsumed = Math.floor(oldShips / 3);
+            planet.sympathy[winnerPlayer.id] = Math.max(0, (planet.sympathy[winnerPlayer.id] || 0) - sympathyConsumed);
+
+            planet.revoltCooldown = 180000;
+            planet.justAssigned = true;
+            planet.focusTransition = null;
+
+            if (!originalOwner) {
+              if (oldShips > planet.maxShips) {
+                planet.retainedShips = true;
+              }
+              const roll = Math.random();
+              if (roll < 0.10) {
+                planet.isResearch = true;
+              } else if (roll < 0.20) {
+                planet.isMilitary = true;
+              } else if (roll < 0.30) {
+                planet.isSpeedPlanet = true;
+              }
+            }
+            console.log(`[REVOLT] Planet ${planet.name} revolted through competitive roll and joined player ${winnerPlayer.name}`);
+          }
+        }
+      }
+    }
+  }
 
   update(deltaTime) {
+    this.revoltCheckTimer = (this.revoltCheckTimer || 0) + deltaTime;
+    if (this.revoltCheckTimer >= 60000) {
+      this.revoltCheckTimer -= 60000;
+      this.checkSympathyRevolts();
+    }
+
     this.gameTime += deltaTime;
 
     if (this.settings && this.settings.noRampagers) {
@@ -1814,70 +1888,15 @@ export class Game {
               const disp = closestPlanet.disposition[ship.owner.id];
               const increaseAmt = 1 + Math.floor(Math.random() * (disp + 1));
 
-              // Give ship XP score equal to the sympathy created
-              ship.expScore = (ship.expScore || 0) + increaseAmt;
+              const newSym = Math.min(closestPlanet.maxShips, currentSym + increaseAmt);
+              const actualIncrease = newSym - currentSym;
 
-              closestPlanet.sympathy[ship.owner.id] = currentSym + increaseAmt;
+              // Give ship XP score equal to the sympathy created
+              ship.expScore = (ship.expScore || 0) + actualIncrease;
+
+              closestPlanet.sympathy[ship.owner.id] = newSym;
               
               ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + 1;
-
-              // Check for Revolt!
-              if ((closestPlanet.revoltCooldown || 0) <= 0) {
-                const candidateIds = Object.keys(closestPlanet.sympathy).filter(pId => {
-                  const isNotOwner = !closestPlanet.owner || pId !== closestPlanet.owner.id;
-                  return isNotOwner && closestPlanet.sympathy[pId] > closestPlanet.ships;
-                });
-
-                if (candidateIds.length > 0) {
-                  // Find the candidate with the highest sympathy
-                  let bestCandidateId = candidateIds[0];
-                  let maxSympathy = closestPlanet.sympathy[bestCandidateId];
-                  for (let i = 1; i < candidateIds.length; i++) {
-                    const pId = candidateIds[i];
-                    if (closestPlanet.sympathy[pId] > maxSympathy) {
-                      maxSympathy = closestPlanet.sympathy[pId];
-                      bestCandidateId = pId;
-                    }
-                  }
-
-                  const winnerPlayer = this.allPlayers.find(p => p.id === bestCandidateId);
-                  if (winnerPlayer) {
-                    const oldShips = closestPlanet.ships;
-                    const originalOwner = closestPlanet.owner;
-                    
-                    // Planet joins this player
-                    closestPlanet.owner = winnerPlayer;
-                    
-                    // Consume only 1 sympathy for every 3 ships captured
-                    const sympathyConsumed = Math.floor(oldShips / 3);
-                    closestPlanet.sympathy[winnerPlayer.id] = Math.max(0, closestPlanet.sympathy[winnerPlayer.id] - sympathyConsumed);
-                    
-                    // Cooldown reset: 3 minutes = 180,000 milliseconds
-                    closestPlanet.revoltCooldown = 180000;
-                    
-                    closestPlanet.justAssigned = true;
-                    closestPlanet.focusTransition = null;
-
-                    // Retain ships logic: if it was neutral (originalOwner === null)
-                    if (!originalOwner) {
-                      // If it joins a player with more ships than economy, retain them
-                      if (oldShips > closestPlanet.maxShips) {
-                        closestPlanet.retainedShips = true;
-                      }
-                      // Randomize neutral captures modes
-                      const roll = Math.random();
-                      if (roll < 0.10) {
-                        closestPlanet.isResearch = true;
-                      } else if (roll < 0.20) {
-                        closestPlanet.isMilitary = true;
-                      } else if (roll < 0.30) {
-                        closestPlanet.isSpeedPlanet = true;
-                      }
-                    }
-                    console.log(`[REVOLT] Planet ${closestPlanet.name} revolted and joined player ${winnerPlayer.name}`);
-                  }
-                }
-              }
             } else {
               ship.diplomatFailureEvent = (ship.diplomatFailureEvent || 0) + 1;
             }
