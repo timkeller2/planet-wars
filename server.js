@@ -640,6 +640,10 @@ async function bootstrap() {
     const allShipsMapped = game.ships.map(s => {
       const bEvent = s.beakerIncreaseEvent || 0;
       s.beakerIncreaseEvent = 0;
+      const dipSuccess = s.diplomatSuccessEvent || 0;
+      s.diplomatSuccessEvent = 0;
+      const dipFailure = s.diplomatFailureEvent || 0;
+      s.diplomatFailureEvent = 0;
       return {
         id: s.id,
         x: s.x,
@@ -687,7 +691,9 @@ async function bootstrap() {
         targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,
         targetY: s.targetPlanet ? s.targetPlanet.y : s.targetY,
         formation: s.formation,
-        beakerIncreaseEvent: bEvent
+        beakerIncreaseEvent: bEvent,
+        diplomatSuccessEvent: dipSuccess,
+        diplomatFailureEvent: dipFailure
       };
     });
 

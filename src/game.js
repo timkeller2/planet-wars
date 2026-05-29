@@ -1756,46 +1756,54 @@ export class Game {
         }
 
         if (closestPlanet) {
-          // Sympathy increase probability: (30 + expBonus * 3 + currentSympathy)% per diplomat per minute
-          const expBonus = 0.5 * Math.sqrt(ship.owner.expScore || 0);
-          const currentSym = closestPlanet.sympathy ? (closestPlanet.sympathy[ship.owner.id] || 0) : 0;
-          const ratePercentPerMinute = 30 + expBonus * 3 + currentSym;
-          const ratePercentPerSecond = ratePercentPerMinute / 60;
-          const probPerSec = ratePercentPerSecond / 100;
-          const probThisTick = probPerSec * dt * ship.diplomat;
+          ship.diplomatTimer = (ship.diplomatTimer || 0) + dt;
+          if (ship.diplomatTimer >= 1.0) {
+            ship.diplomatTimer -= 1.0;
 
-          if (Math.random() < probThisTick) {
-            closestPlanet.sympathy = closestPlanet.sympathy || {};
-            closestPlanet.sympathy[ship.owner.id] = currentSym + 1;
-            
-            // Check for Revolt!
-            if (closestPlanet.sympathy[ship.owner.id] > closestPlanet.ships) {
-              const oldShips = closestPlanet.ships;
-              const originalOwner = closestPlanet.owner;
+            // Sympathy increase probability: (30 + expBonus * 3 + currentSympathy)% per diplomat per minute
+            const expBonus = 0.5 * Math.sqrt(ship.owner.expScore || 0);
+            const currentSym = closestPlanet.sympathy ? (closestPlanet.sympathy[ship.owner.id] || 0) : 0;
+            const ratePercentPerMinute = 30 + expBonus * 3 + currentSym;
+            const ratePercentPerSecond = ratePercentPerMinute / 60;
+            const prob = (ratePercentPerSecond * ship.diplomat) / 100;
+
+            if (Math.random() < prob) {
+              closestPlanet.sympathy = closestPlanet.sympathy || {};
+              closestPlanet.sympathy[ship.owner.id] = currentSym + 1;
               
-              // Planet joins this player
-              closestPlanet.owner = ship.owner;
-              delete closestPlanet.sympathy[ship.owner.id];
-              closestPlanet.justAssigned = true;
-              closestPlanet.focusTransition = null;
+              ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + 1;
 
-              // Retain ships logic: if it was neutral (originalOwner === null)
-              if (!originalOwner) {
-                // If it joins a player with more ships than economy, retain them
-                if (oldShips > closestPlanet.maxShips) {
-                  closestPlanet.retainedShips = true;
+              // Check for Revolt!
+              if (closestPlanet.sympathy[ship.owner.id] > closestPlanet.ships) {
+                const oldShips = closestPlanet.ships;
+                const originalOwner = closestPlanet.owner;
+                
+                // Planet joins this player
+                closestPlanet.owner = ship.owner;
+                delete closestPlanet.sympathy[ship.owner.id];
+                closestPlanet.justAssigned = true;
+                closestPlanet.focusTransition = null;
+
+                // Retain ships logic: if it was neutral (originalOwner === null)
+                if (!originalOwner) {
+                  // If it joins a player with more ships than economy, retain them
+                  if (oldShips > closestPlanet.maxShips) {
+                    closestPlanet.retainedShips = true;
+                  }
+                  // Randomize neutral captures modes
+                  const roll = Math.random();
+                  if (roll < 0.10) {
+                    closestPlanet.isResearch = true;
+                  } else if (roll < 0.20) {
+                    closestPlanet.isMilitary = true;
+                  } else if (roll < 0.30) {
+                    closestPlanet.isSpeedPlanet = true;
+                  }
                 }
-                // Randomize neutral captures modes
-                const roll = Math.random();
-                if (roll < 0.10) {
-                  closestPlanet.isResearch = true;
-                } else if (roll < 0.20) {
-                  closestPlanet.isMilitary = true;
-                } else if (roll < 0.30) {
-                  closestPlanet.isSpeedPlanet = true;
-                }
+                console.log(`[REVOLT] Planet ${closestPlanet.name} revolted and joined player ${ship.owner.name}`);
               }
-              console.log(`[REVOLT] Planet ${closestPlanet.name} revolted and joined player ${ship.owner.name}`);
+            } else {
+              ship.diplomatFailureEvent = (ship.diplomatFailureEvent || 0) + 1;
             }
           }
         }

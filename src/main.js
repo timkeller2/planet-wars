@@ -757,6 +757,30 @@ window.addEventListener('DOMContentLoaded', () => {
             });
           }
         }
+        if (s.diplomatSuccessEvent && s.diplomatSuccessEvent > 0) {
+          for (let b = 0; b < s.diplomatSuccessEvent; b++) {
+            floatingAnimations.push({
+              x: s.x,
+              y: s.y - 12,
+              text: '💖',
+              type: 'diplomacy_success',
+              age: b * 0.2,
+              duration: 2.5
+            });
+          }
+        }
+        if (s.diplomatFailureEvent && s.diplomatFailureEvent > 0) {
+          for (let b = 0; b < s.diplomatFailureEvent; b++) {
+            floatingAnimations.push({
+              x: s.x,
+              y: s.y - 12,
+              text: '💔',
+              type: 'diplomacy_failure',
+              age: b * 0.2,
+              duration: 2.5
+            });
+          }
+        }
       }
     }
 
@@ -4504,6 +4528,8 @@ window.addEventListener('DOMContentLoaded', () => {
           yOffset = 0; // stationary
         } else if (anim.type === 'enhance') {
           yOffset = progress * 60; // drifts up nicely
+        } else if (anim.type === 'diplomacy_success' || anim.type === 'diplomacy_failure') {
+          yOffset = progress * 40; // float up nicely
         }
 
         // Grow font
@@ -4521,6 +4547,8 @@ window.addEventListener('DOMContentLoaded', () => {
         } else if (anim.type === 'lastStand' || anim.type === 'homeworldAnim') {
           fontsize = 7; // constant size
         } else if (anim.type === 'enhance') {
+          fontsize = 12 + (progress * 8); // grows from 12 to 20
+        } else if (anim.type === 'diplomacy_success' || anim.type === 'diplomacy_failure') {
           fontsize = 12 + (progress * 8); // grows from 12 to 20
         }
 
@@ -4575,6 +4603,14 @@ window.addEventListener('DOMContentLoaded', () => {
           xOffset = 0;
           ctx.fillStyle = anim.color || '#fff';
           ctx.shadowColor = anim.color || 'rgba(0, 255, 255, 0.8)';
+        } else if (anim.type === 'diplomacy_success') {
+          xOffset = Math.sin(progress * Math.PI * 3) * 6;
+          ctx.fillStyle = `rgba(255, 180, 200, ${alpha})`;
+          ctx.shadowColor = `rgba(255, 0, 128, ${alpha})`;
+        } else if (anim.type === 'diplomacy_failure') {
+          xOffset = -Math.sin(progress * Math.PI * 3) * 6;
+          ctx.fillStyle = `rgba(180, 180, 180, ${alpha})`;
+          ctx.shadowColor = `rgba(100, 100, 100, ${alpha})`;
         } else {
           xOffset = Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
