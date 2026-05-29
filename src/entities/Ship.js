@@ -832,10 +832,8 @@ export class Ship {
         this.bombReloadTimer = 0;
       }
       
-      if ((this.fuel || 0) > 3 && (this.bombs || 0) < 2) {
-        this.fuel -= 1;
-        this.bombs += 1;
-      }
+      // Don't convert fuel to munitions.
+      
       
       if (this.inFriendlyWell) {
         if (this.health < this.maxHealth) {

@@ -1861,18 +1861,52 @@ export class Game {
 
       // 4. Diplomats sympathy generation
       if ((ship.diplomat || 0) > 0) {
-        // Find closest enemy or neutral planet within sensor range
-        let closestPlanet = null;
-        let minDist = Infinity;
+        // Find all qualifying neutral/enemy planets within sensor range that are not at max empathy/sympathy
+        const qualifyingPlanets = [];
         for (const p of this.planets) {
           const isNeutralOrEnemy = !p.owner || p.owner.id !== ship.owner.id;
           if (isNeutralOrEnemy) {
             const dx = p.x - ship.x;
             const dy = p.y - ship.y;
             const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist <= radar && dist < minDist) {
-              minDist = dist;
-              closestPlanet = p;
+            if (dist <= radar) {
+              const currentSym = p.sympathy ? (p.sympathy[ship.owner.id] || 0) : 0;
+              const isMaxEmpathy = currentSym >= p.maxShips;
+              if (!isMaxEmpathy) {
+                qualifyingPlanets.push({ planet: p, dist: dist });
+              }
+            }
+          }
+        }
+
+        let closestPlanet = null;
+        if (qualifyingPlanets.length > 0) {
+          const closeQualifying = qualifyingPlanets.filter(qp => qp.dist <= 100);
+          if (closeQualifying.length > 0) {
+            // Exception: select the closest qualifying planet within 100px
+            let minDist = Infinity;
+            for (const qp of closeQualifying) {
+              if (qp.dist < minDist) {
+                minDist = qp.dist;
+                closestPlanet = qp.planet;
+              }
+            }
+          } else {
+            // General Rule: choose the one with the highest disposition (break ties by distance)
+            let highestDisp = -1;
+            let closestDistForHighestDisp = Infinity;
+            for (const qp of qualifyingPlanets) {
+              const disp = qp.planet.disposition ? (qp.planet.disposition[ship.owner.id] || 0) : 0;
+              if (disp > highestDisp) {
+                highestDisp = disp;
+                closestDistForHighestDisp = qp.dist;
+                closestPlanet = qp.planet;
+              } else if (disp === highestDisp) {
+                if (qp.dist < closestDistForHighestDisp) {
+                  closestDistForHighestDisp = qp.dist;
+                  closestPlanet = qp.planet;
+                }
+              }
             }
           }
         }
