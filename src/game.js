@@ -1798,8 +1798,23 @@ export class Game {
             const prob = chancePercent / 100;
 
             if (Math.random() < prob) {
+              // Award 1 XP score to player
+              ship.owner.expScore = (ship.owner.expScore || 0) + 1;
+
               closestPlanet.sympathy = closestPlanet.sympathy || {};
-              closestPlanet.sympathy[ship.owner.id] = currentSym + 1;
+              closestPlanet.disposition = closestPlanet.disposition || {};
+
+              // Roll disposition if not yet set
+              if (closestPlanet.disposition[ship.owner.id] === undefined) {
+                const d20 = Math.floor(Math.random() * 20) + 1;
+                const expBonus = Math.sqrt(ship.owner.expScore || 0);
+                closestPlanet.disposition[ship.owner.id] = Math.floor((d20 + expBonus) / 6);
+              }
+
+              const disp = closestPlanet.disposition[ship.owner.id];
+              const increaseAmt = 1 + Math.floor(Math.random() * (disp + 1));
+
+              closestPlanet.sympathy[ship.owner.id] = currentSym + increaseAmt;
               
               ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + 1;
 

@@ -15,6 +15,7 @@ export class Planet {
     this.focusMode = modes[Math.floor(Math.random() * modes.length)];
     this.focusChanges = 0;
     this.sympathy = {};
+    this.disposition = {};
     this.retainedShips = false;
     this.revoltCooldown = 0;
     
