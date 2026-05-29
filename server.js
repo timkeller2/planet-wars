@@ -456,6 +456,21 @@ async function bootstrap() {
       game.update(deltaTime);
       game.checkWinCondition();
       
+      // Process pending game chat messages
+      if (game.pendingChatMessages && game.pendingChatMessages.length > 0) {
+        for (const msg of game.pendingChatMessages) {
+          for (const [socketId, player] of connectedClients.entries()) {
+            if (player.id === msg.playerId) {
+              io.to(socketId).emit('chatMessage', {
+                sender: 'System',
+                color: '#ffb74d',
+                text: msg.text
+              });
+            }
+          }
+        }
+        game.pendingChatMessages = [];
+      }
     } else if (game.isRunning && game.isPaused) {
       // Pause logic is not needed for AFK since AFK is removed
     }

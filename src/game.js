@@ -106,6 +106,7 @@ export class Game {
       marines: -0.25
     };
     this.upgradeEnhanceEvents = [];
+    this.pendingChatMessages = [];
   }
 
   getUpgradeCost(ship, type) {
@@ -1019,6 +1020,14 @@ export class Game {
                 planet.isSpeedPlanet = true;
               }
             }
+
+            // Queue a chat message for the player who wins the revolt
+            this.pendingChatMessages = this.pendingChatMessages || [];
+            this.pendingChatMessages.push({
+              playerId: winnerPlayer.id,
+              text: `Your subverters succeeded! Planet ${planet.name} has revolted and joined your empire!`
+            });
+
             console.log(`[REVOLT] Planet ${planet.name} revolted through competitive roll and joined player ${winnerPlayer.name}`);
           }
         }
@@ -1719,6 +1728,14 @@ export class Game {
                 text: text,
                 color: player.color || '#fff'
               });
+
+              // Queue a chat message for the player who gets the upgrade discount
+              this.pendingChatMessages = this.pendingChatMessages || [];
+              this.pendingChatMessages.push({
+                playerId: player.id,
+                text: `Congratulations! You received a discount on ${displayUpgradeName} upgrades!`
+              });
+
               console.log(`[TECH ENHANCEMENT] Player ${player.name} enhanced ${chosenType} cost modifier to ${player.upgradeModifiers[chosenType]}`);
             }
           }
