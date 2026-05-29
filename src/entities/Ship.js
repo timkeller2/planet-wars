@@ -24,6 +24,7 @@ export class Ship {
     this.isCruiser = false;
     this.cruiserTargetType = null;
     this.cruiserTargetId = null;
+    this.fireSideLeft = false;
     this.labs = 0;
     this.accumulatedTech = 0;
     this.beakerIncreaseEvent = 0;
@@ -483,9 +484,19 @@ export class Ship {
             }
 
             if (lasers && lasersDrawn < 8) {
+              let startX = this.x;
+              let startY = this.y;
+              if (this.maxHealth > 0 && !this.isAmoeba) {
+                this.fireSideLeft = !this.fireSideLeft;
+                const offset = 5;
+                const angle = this.angle || 0;
+                const mult = this.fireSideLeft ? -1 : 1;
+                startX = this.x + Math.sin(angle) * offset * mult;
+                startY = this.y - Math.cos(angle) * offset * mult;
+              }
               lasers.push({
-                startX: this.x,
-                startY: this.y,
+                startX: startX,
+                startY: startY,
                 endX: enemyShip.x,
                 endY: enemyShip.y,
                 color: this.owner ? this.owner.color : '#fff',
@@ -671,9 +682,19 @@ export class Ship {
           }
           
           if (lasers) {
+            let startX = this.x;
+            let startY = this.y;
+            if (this.maxHealth > 0 && !this.isAmoeba && !usedBomb) {
+              this.fireSideLeft = !this.fireSideLeft;
+              const offset = 5;
+              const angle = this.angle || 0;
+              const mult = this.fireSideLeft ? -1 : 1;
+              startX = this.x + Math.sin(angle) * offset * mult;
+              startY = this.y - Math.cos(angle) * offset * mult;
+            }
             lasers.push({
-              startX: this.x,
-              startY: this.y,
+              startX: startX,
+              startY: startY,
               endX: enemyShip.x,
               endY: enemyShip.y,
               color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
@@ -985,9 +1006,19 @@ export class Ship {
       }
       if (Math.random() < 0.5 * (deltaTime / 1000)) { // 50% chance per sec from ship to planet
         if (lasers) {
+          let startX = this.x;
+          let startY = this.y;
+          if (this.maxHealth > 0 && !this.isAmoeba) {
+            this.fireSideLeft = !this.fireSideLeft;
+            const offset = 5;
+            const angle = this.angle || 0;
+            const mult = this.fireSideLeft ? -1 : 1;
+            startX = this.x + Math.sin(angle) * offset * mult;
+            startY = this.y - Math.cos(angle) * offset * mult;
+          }
           lasers.push({
-            startX: this.x,
-            startY: this.y,
+            startX: startX,
+            startY: startY,
             endX: this.targetPlanet.x,
             endY: this.targetPlanet.y,
             color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
