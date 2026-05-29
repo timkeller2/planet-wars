@@ -737,7 +737,7 @@ async function bootstrap() {
       let visibleExplosions = [];
       let visibleLasers = [];
 
-      const playerTechBonus = 0.01 * Math.sqrt(player.techScore || 0);
+      const playerTechBonus = 0.01 * Math.floor(Math.sqrt(player.techScore || 0));
       const playerExpBonus = 0.01 * Math.sqrt(player.expScore || 0);
 
       let hasEntities = false;

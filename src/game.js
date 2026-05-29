@@ -1573,7 +1573,7 @@ export class Game {
               }
               cruiserRadar *= mult;
             }
-            const playerTechBonus = 0.01 * Math.sqrt(cruiser.owner.techScore || 0);
+            const playerTechBonus = 0.01 * Math.floor(Math.sqrt(cruiser.owner.techScore || 0));
             const playerExpBonus = 0.01 * Math.sqrt(cruiser.owner.expScore || 0);
             const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
             const shipXpBonus = Math.sqrt(cruiser.expScore || 0);

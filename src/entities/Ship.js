@@ -309,7 +309,8 @@ export class Ship {
       }
     }
 
-    const laserTechBonus = 0.01 * techBonus;
+    const playerTechBonus = this.owner ? Math.floor(Math.sqrt(this.owner.techScore || 0)) : 0;
+    const laserTechBonus = 0.01 * playerTechBonus;
     const shipExpBonus = 0.5 * Math.sqrt(this.expScore || 0);
     
     // Range Calculation
@@ -597,7 +598,7 @@ export class Ship {
           let cruiserRadar = Math.min(250, 5 * this.maxHealth);
           if (this.isWarp) cruiserRadar *= 0.25;
 
-          const playerTechBonus = 0.01 * techBonus;
+          const playerTechBonus = 0.01 * Math.floor(techBonus);
           const playerExpBonus = 0.01 * expBonus;
           const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
           const shipXpBonus = Math.sqrt(this.expScore || 0);

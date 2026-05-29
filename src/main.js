@@ -3197,7 +3197,7 @@ window.addEventListener('DOMContentLoaded', () => {
             }
             lines.push({ label: hs.shields > 0 ? `Armor Deflection (${hs.shields})` : 'Armor Deflection', value: shrugChance + '%', color: '#ccc' });
 
-            const laserTechBonus = techBonus * 0.01;
+            const laserTechBonus = Math.floor(techBonus) * 0.01;
             const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
             const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
             let targetingBonus = 0;
@@ -3671,7 +3671,7 @@ window.addEventListener('DOMContentLoaded', () => {
           let laserTechBonus = 0;
           let expBonus = 0;
           if (owner) {
-            const techBonus = Math.sqrt(owner.techScore || 0);
+            const techBonus = Math.floor(Math.sqrt(owner.techScore || 0));
             laserTechBonus = 0.01 * techBonus;
             expBonus = 0.5 * Math.sqrt(owner.expScore || 0);
           }
