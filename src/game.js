@@ -870,6 +870,8 @@ export class Game {
       ship.targetPlanet = null;
       ship.cruiserTargetOffsetX = 0;
       ship.cruiserTargetOffsetY = 0;
+      ship.cruiserTargetType = null;
+      ship.cruiserTargetId = null;
       if (numCruisers === 1) {
         ship.targetX = targetX;
         ship.targetY = targetY;
@@ -910,6 +912,8 @@ export class Game {
       ship.targetPlanet = targetPlanet;
       ship.targetX = null;
       ship.targetY = null;
+      ship.cruiserTargetType = null;
+      ship.cruiserTargetId = null;
       if (numCruisers === 1) {
         ship.cruiserTargetOffsetX = 0;
         ship.cruiserTargetOffsetY = 0;

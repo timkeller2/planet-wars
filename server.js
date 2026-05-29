@@ -307,6 +307,23 @@ async function bootstrap() {
       game.moveShipsToPlanet(player, data.shipIds, targetPlanet, data.isWarp, data.speedModifier, data.isBombing);
     });
 
+    socket.on('setCruiserTarget', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const { shipIds, targetType, targetId } = data;
+      if (!shipIds || !targetType || targetId === undefined) return;
+
+      for (const id of shipIds) {
+        const ship = game.ships.find(s => s.id === id);
+        if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+          ship.cruiserTargetType = targetType;
+          ship.cruiserTargetId = targetId;
+        }
+      }
+    });
+
     socket.on('togglePause', () => {
       game.isPaused = !game.isPaused;
     });
@@ -778,7 +795,9 @@ async function bootstrap() {
           formation: s.formation,
           beakerIncreaseEvent: bEvent,
           diplomatSuccessEvent: dipSuccess,
-          diplomatFailureEvent: dipFailure
+          diplomatFailureEvent: dipFailure,
+          cruiserTargetType: s.cruiserTargetType || null,
+          cruiserTargetId: s.cruiserTargetId || null
         };
       } else {
         return {

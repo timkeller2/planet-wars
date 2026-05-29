@@ -22,6 +22,8 @@ export class Ship {
     this.angle = (initDx !== 0 || initDy !== 0) ? Math.atan2(initDy, initDx) : 0;
     this.fireCooldown = Math.random(); // Start randomly staggered
     this.isCruiser = false;
+    this.cruiserTargetType = null;
+    this.cruiserTargetId = null;
     this.labs = 0;
     this.accumulatedTech = 0;
     this.beakerIncreaseEvent = 0;
@@ -817,6 +819,67 @@ export class Ship {
         }
       }
     }
+    
+    // Cruiser Target Lock State Machine
+    if (this.maxHealth > 0 && !this.isAmoeba && this.cruiserTargetType) {
+      let targetObj = null;
+      let isPlanet = false;
+      let tx = 0;
+      let ty = 0;
+      
+      if (this.cruiserTargetType === 'planet') {
+        targetObj = allPlanets ? allPlanets.find(p => p.id === this.cruiserTargetId) : null;
+        isPlanet = true;
+        if (targetObj) {
+          tx = targetObj.x;
+          ty = targetObj.y;
+        }
+      } else if (this.cruiserTargetType === 'ship') {
+        targetObj = allShips ? allShips.find(s => s.id === this.cruiserTargetId) : null;
+        isPlanet = false;
+        if (targetObj) {
+          tx = targetObj.x;
+          ty = targetObj.y;
+        }
+      }
+      
+      if (targetObj && targetObj.active !== false && (!isPlanet || targetObj.owner !== this.owner)) {
+        // Target is valid! Calculate distance
+        const tdx = tx - this.x;
+        const tdy = ty - this.y;
+        const dist = Math.sqrt(tdx * tdx + tdy * tdy);
+        
+        // Calculate angle to target
+        const targetAngle = Math.atan2(tdy, tdx);
+        let diff = targetAngle - (this.angle || 0);
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        
+        // Stop range check: just inside the max firing range in the front firing arc
+        const maxFrontRange = (effectiveRange * 1.2) + (isPlanet ? targetObj.radius : 0);
+        const isTargetInFront = (Math.abs(diff) <= Math.PI / 4);
+        
+        if (isTargetInFront && dist <= maxFrontRange - 5) {
+          // Target is in range and in front arc! Stop moving
+          this.targetX = this.x;
+          this.targetY = this.y;
+          this.targetPlanet = null;
+        } else {
+          // Target is either out of range or in side/aft arc! Move towards it to steer/close in
+          this.targetX = tx;
+          this.targetY = ty;
+          this.targetPlanet = null;
+        }
+      } else {
+        // Target was conquered/destroyed or doesn't exist anymore! Stop moving
+        this.cruiserTargetType = null;
+        this.cruiserTargetId = null;
+        this.targetX = this.x;
+        this.targetY = this.y;
+        this.targetPlanet = null;
+      }
+    }
+
     let destX = this.targetPlanet ? (this.targetPlanet.x + (this.cruiserTargetOffsetX || 0)) : this.targetX;
     let destY = this.targetPlanet ? (this.targetPlanet.y + (this.cruiserTargetOffsetY || 0)) : this.targetY;
 

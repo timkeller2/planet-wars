@@ -1240,7 +1240,40 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (button === 2) {
       // RIGHT CLICK: Issue Orders
-      if (clickedPlanet) {
+      const clickPos = getMouseServerPos(x, y);
+      
+      let clickedTargetShip = null;
+      if (serverState && serverState.ships) {
+        for (const ship of serverState.ships) {
+          if (!ship.active) continue;
+          const hitRadius = ship.isCruiser ? 30 : (ship.isAmoeba ? 25 : 20);
+          const sdx = ship.x - clickPos.x;
+          const sdy = ship.y - clickPos.y;
+          if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
+            clickedTargetShip = ship;
+            break;
+          }
+        }
+      }
+
+      if (clickedTargetShip && selectedShips.length > 0) {
+        // Direct target locking on an enemy/amoeba ship
+        const selectedCruisers = selectedShips.filter(s => s.isCruiser && !s.isUpgrading);
+        const selectedFleets = selectedShips.filter(s => !s.isCruiser && !s.isUpgrading);
+        
+        if (selectedCruisers.length > 0) {
+          socket.emit('setCruiserTarget', { shipIds: selectedCruisers.map(c => c.id), targetType: 'ship', targetId: clickedTargetShip.id });
+        }
+        
+        if (selectedFleets.length > 0) {
+          let fleetIds = selectedFleets.map(f => f.id);
+          if (scoutModeNext) {
+            const scoutCount = Math.max(3, Math.ceil(fleetIds.length * 0.1));
+            fleetIds = fleetIds.slice(0, scoutCount);
+          }
+          socket.emit('moveShipsToSpace', { shipIds: fleetIds, targetX: clickedTargetShip.x, targetY: clickedTargetShip.y, isWarp: warpOrderNext, speedModifier: speedModifierNext });
+        }
+      } else if (clickedPlanet) {
         if (selectedPlanets.length > 0 || selectedShips.length > 0) {
           let currentFillNeeded = Infinity;
           if (fillModeNext) {
@@ -1254,18 +1287,27 @@ window.addEventListener('DOMContentLoaded', () => {
           }
 
           if (selectedShips.length > 0) {
-            let shipIds = selectedShips.filter(s => !s.isUpgrading).map(s => s.id);
-            if (currentFillNeeded !== Infinity) {
-              const tosend = Math.min(shipIds.length, currentFillNeeded);
-              shipIds = shipIds.slice(0, tosend);
-              currentFillNeeded -= tosend;
+            const selectedCruisers = selectedShips.filter(s => s.isCruiser && !s.isUpgrading);
+            const selectedFleets = selectedShips.filter(s => !s.isCruiser && !s.isUpgrading);
+            
+            if (selectedCruisers.length > 0) {
+              socket.emit('setCruiserTarget', { shipIds: selectedCruisers.map(c => c.id), targetType: 'planet', targetId: clickedPlanet.id });
             }
-            if (shipIds.length > 0) {
-              if (scoutModeNext) {
-                const scoutCount = Math.max(3, Math.ceil(shipIds.length * 0.1));
-                shipIds = shipIds.slice(0, scoutCount);
+            
+            if (selectedFleets.length > 0) {
+              let fleetIds = selectedFleets.map(f => f.id);
+              if (currentFillNeeded !== Infinity) {
+                const tosend = Math.min(fleetIds.length, currentFillNeeded);
+                fleetIds = fleetIds.slice(0, tosend);
+                currentFillNeeded -= tosend;
               }
-              socket.emit('moveShipsToPlanet', { shipIds, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext });
+              if (fleetIds.length > 0) {
+                if (scoutModeNext) {
+                  const scoutCount = Math.max(3, Math.ceil(fleetIds.length * 0.1));
+                  fleetIds = fleetIds.slice(0, scoutCount);
+                }
+                socket.emit('moveShipsToPlanet', { shipIds: fleetIds, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext });
+              }
             }
           }
 
@@ -4043,6 +4085,49 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.arc(s.x, s.y, sensorRange, 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
+
+            // Draw cyan target lock dotted line to its target
+            if (s.cruiserTargetType && s.cruiserTargetId !== null) {
+              let tx = null;
+              let ty = null;
+              if (s.cruiserTargetType === 'planet') {
+                const targetP = serverState.planets.find(p => p.id === s.cruiserTargetId);
+                if (targetP) {
+                  tx = targetP.x;
+                  ty = targetP.y;
+                }
+              } else if (s.cruiserTargetType === 'ship') {
+                const targetS = serverState.ships.find(ship => ship.id === s.cruiserTargetId);
+                if (targetS && targetS.active) {
+                  tx = targetS.x;
+                  ty = targetS.y;
+                }
+              }
+              
+              if (tx !== null && ty !== null) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.55)'; // Glowing cyan
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]); // Dotted targeting reticle line
+                
+                // Draw target line
+                ctx.beginPath();
+                ctx.moveTo(s.x, s.y);
+                ctx.lineTo(tx, ty);
+                ctx.stroke();
+                
+                // Draw target reticle bracket box at target coordinates
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.7)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                // small bracket box [ ] size 16 around target
+                ctx.strokeRect(tx - 8, ty - 8, 16, 16);
+                
+                ctx.restore();
+              }
+            }
+
             ctx.beginPath();
           } else if (s.count > 1) {
             ctx.arc(s.x, s.y, maxSpread + 4, 0, Math.PI * 2);
