@@ -16,6 +16,7 @@ export class Planet {
     this.focusChanges = 0;
     this.sympathy = {};
     this.retainedShips = false;
+    this.revoltCooldown = 0;
     
     this.name = this.generatePlanetName();
   }
@@ -217,6 +218,10 @@ export class Planet {
       }
     } else {
       this.capacityProgress = 0;
+    }
+
+    if (this.revoltCooldown > 0) {
+      this.revoltCooldown = Math.max(0, this.revoltCooldown - deltaTime);
     }
 
     if (this.justAssigned) {
