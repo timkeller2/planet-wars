@@ -301,7 +301,36 @@ export class Game {
       player.techScore = 0;
       player.expScore = 0;
       player.cruiserStyle = null;
+      player.prevTechBonus = 0;
+      player.upgradeModifiers = {
+        sensorarray: 0,
+        lab: 0,
+        armor: 0,
+        shield: 0,
+        engine: 0,
+        munitions: 0,
+        targeting: 0,
+        damagecontrol: 0,
+        fueltanker: 0,
+        diplomat: 0,
+        marines: 0
+      };
     }
+
+    // Reset global upgrade modifiers
+    this.globalUpgradeModifiers = {
+      sensorarray: -0.25,
+      lab: -0.25,
+      armor: -0.25,
+      shield: -0.25,
+      engine: -0.25,
+      munitions: -0.25,
+      targeting: -0.25,
+      damagecontrol: -0.25,
+      fueltanker: -0.25,
+      diplomat: -0.25,
+      marines: -0.25
+    };
     
     const width = this.width;
     const height = this.height;
