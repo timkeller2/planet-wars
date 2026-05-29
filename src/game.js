@@ -1803,11 +1803,11 @@ export class Game {
 
       // 4b. Marine Planet Attack Check
       if ((ship.marineCount || 0) > 0) {
-        // Find an enemy planet within sensor range
+        // Find an enemy or neutral planet within sensor range
         let targetPlanet = null;
         for (const p of this.planets) {
-          const isEnemy = p.owner && p.owner.id !== ship.owner.id;
-          if (isEnemy) {
+          const isNeutralOrEnemy = !p.owner || p.owner.id !== ship.owner.id;
+          if (isNeutralOrEnemy) {
             const dx = p.x - ship.x;
             const dy = p.y - ship.y;
             const dist = Math.sqrt(dx*dx + dy*dy);
@@ -1829,7 +1829,7 @@ export class Game {
           marineFleet.expScore = ship.expScore || 0;
           this.ships.push(marineFleet);
 
-          console.log(`[MARINE PLANET INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to attack enemy planet ${targetPlanet.name}.`);
+          console.log(`[MARINE PLANET INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to attack target planet ${targetPlanet.name}.`);
           ship.marineCount = 0;
         }
       }
