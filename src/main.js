@@ -916,14 +916,25 @@ window.addEventListener('DOMContentLoaded', () => {
     const expBonus = (0.5 * Math.sqrt(expScore)).toFixed(1);
 
     if (leaderboardContent) {
+      let galacticCapacity = serverState.galacticCapacity || 1;
+
+      const getVictoryScore = (p) => {
+        const capacity = p.totalCapacity || 0;
+        const capacityPercent = galacticCapacity > 0 ? Math.round((capacity / galacticCapacity) * 100) : 0;
+        const pTech = Math.floor(Math.sqrt(p.techScore || 0));
+        const pExp = Math.floor(0.5 * Math.sqrt(p.expScore || 0));
+        return pTech + pExp + capacityPercent;
+      };
+
       const alivePlayers = serverState.players.filter(p => p.isAlive || p.id === localPlayer.id || (serverState.ships && serverState.ships.some(s => s.active && s.ownerId === p.id)));
-      alivePlayers.sort((a, b) => (b.totalCapacity || 0) - (a.totalCapacity || 0));
+      alivePlayers.sort((a, b) => getVictoryScore(b) - getVictoryScore(a));
 
       const techSorted = [...alivePlayers].sort((a, b) => (b.techScore || 0) - (a.techScore || 0));
       const techLead = techSorted.length > 1 ? ((techSorted[0].techScore || 0) - (techSorted[1].techScore || 0)) : (techSorted[0] ? (techSorted[0].techScore || 0) : 0);
       const techLeadingId = techLead >= 200 ? techSorted[0].id : null;
 
-      const capLeadingId = alivePlayers.length > 1 && (alivePlayers[0].totalCapacity || 0) > 2 * (alivePlayers[1].totalCapacity || 0) ? alivePlayers[0].id : (alivePlayers.length === 1 && (alivePlayers[0].totalCapacity || 0) > 0 ? alivePlayers[0].id : null);
+      const capSorted = [...alivePlayers].sort((a, b) => (b.totalCapacity || 0) - (a.totalCapacity || 0));
+      const capLeadingId = capSorted.length > 1 && (capSorted[0].totalCapacity || 0) > 2 * (capSorted[1].totalCapacity || 0) ? capSorted[0].id : (capSorted.length === 1 && (capSorted[0].totalCapacity || 0) > 0 ? capSorted[0].id : null);
 
       // Determine bullseye targets: capacity > 4500, OR tech lead >= 200, OR 2x capacity over 2nd
       const bullseyeIds = new Set();
@@ -933,23 +944,23 @@ window.addEventListener('DOMContentLoaded', () => {
         if ((p.totalCapacity || 0) > 4500) bullseyeIds.add(p.id);
       });
 
-      let galacticCapacity = serverState.galacticCapacity || 1;
-
       let html = '';
       alivePlayers.forEach(p => {
         const capacity = p.totalCapacity || 0;
         const capacityPercent = galacticCapacity > 0 ? Math.round((capacity / galacticCapacity) * 100) : 0;
         const pTech = Math.floor(Math.sqrt(p.techScore || 0));
         const pExp = Math.floor(0.5 * Math.sqrt(p.expScore || 0));
+        const victoryScore = pTech + pExp + capacityPercent;
         const blinkClass = (p.id === techLeadingId || p.id === capLeadingId) ? ' leader-row' : '';
         const bullseye = bullseyeIds.has(p.id) ? '<span style="color: #f00; text-shadow: 0 0 5px #f00; margin-left: 2px;" title="Target!">🎯</span>' : '';
 
         html += `
             <div class="${blinkClass}" style="display: flex; justify-content: space-between; font-family: 'Rajdhani', sans-serif; font-size: 1.05rem; gap: 5px; color: ${p.color}; text-shadow: 0 0 5px ${p.color};">
-              <span style="width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}${bullseye}</span>
-              <span style="width: 65px; text-align: center;">+${pTech}%</span>
+              <span style="width: 75px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}${bullseye}</span>
+              <span style="width: 50px; text-align: center;">+${pTech}%</span>
               <span style="width: 45px; text-align: center;">+${pExp}%</span>
-              <span style="min-width: 40px; text-align: right;">${capacityPercent}%</span>
+              <span style="width: 45px; text-align: right;">${capacityPercent}%</span>
+              <span style="width: 55px; text-align: right; font-weight: bold;">${victoryScore}</span>
             </div>
           `;
       });
@@ -2761,7 +2772,7 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
             ctx.font = '14px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText("🧪", p.x, p.y - p.radius - 8);
+            ctx.fillText("🔬", p.x, p.y - p.radius - 8);
             ctx.font = 'bold 11px Orbitron'; // Restore font
           } else if (displayIsMilitary) {
             ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
@@ -2939,7 +2950,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const hwOwner = serverState.players.find(pl => pl.id === hp.homeworldOf);
             if (hwOwner) nameLabel += ` (👑 ${hwOwner.name})`;
           }
-          if (hp.isResearch) nameLabel += ' 🧪';
+          if (hp.isResearch) nameLabel += ' 🔬';
           if (hp.isMilitary) nameLabel += ' 🚀';
           
           if (hp.isSpeedPlanet) nameLabel += ' ⚡';
