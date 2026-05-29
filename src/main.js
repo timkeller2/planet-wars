@@ -2434,7 +2434,7 @@ window.addEventListener('DOMContentLoaded', () => {
           }
         }
 
-        if (!owner && p.sympathy) {
+        if (p.sympathy) {
           let ringIndex = 0;
           for (const player of serverState.players) {
             const symLevel = p.sympathy[player.id] || 0;
