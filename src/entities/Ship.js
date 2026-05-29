@@ -1011,6 +1011,16 @@ export class Ship {
                         }
                       }
                       friendlyPlanetBoost += mult * Math.floor(planet.ships / 10);
+                    } else if (planet.owner === this.targetPlanet.owner && this.targetPlanet.owner !== null) {
+                      let mult = 0.002;
+                      if (planet.isMilitary || planet.focusMode === 'garrison') {
+                        if (planet.ships >= planet.maxShips * 2) {
+                          mult = 0.0045;
+                        } else if (planet.ships >= planet.maxShips) {
+                          mult = 0.003;
+                        }
+                      }
+                      defenderPlanetPenalty += mult * Math.floor(planet.ships / 10);
                     }
                   }
                 }

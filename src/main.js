@@ -2835,6 +2835,38 @@ window.addEventListener('DOMContentLoaded', () => {
           if (owner) {
             defenderTechPenalty = 0.01 * Math.sqrt(owner.techScore || 0);
             defenderExpPenalty = 0.01 * Math.sqrt(owner.expScore || 0);
+
+            // Calculate defender planet penalty from other defender-friendly planets overlapping p
+            if (serverState.planets) {
+              for (const otherPlanet of serverState.planets) {
+                if (otherPlanet.id !== p.id && otherPlanet.ownerId === owner.id) {
+                  const tb = 0.01 * Math.sqrt(owner.techScore || 0);
+                  const eb = 0.01 * Math.sqrt(owner.expScore || 0);
+                  let baseRadius = otherPlanet.maxShips * 1.5;
+                  if (otherPlanet.isMilitary && otherPlanet.ships >= otherPlanet.maxShips) {
+                    baseRadius *= 1.5;
+                  }
+                  const isOtherHuman = owner && !owner.isAI;
+                  if (isOtherHuman && otherPlanet.focusMode === 'garrison' && otherPlanet.ships >= otherPlanet.maxShips) {
+                    baseRadius += (otherPlanet.ships / 2);
+                  }
+                  const gr = baseRadius * (1 + tb + eb);
+                  const pdx = otherPlanet.x - p.x;
+                  const pdy = otherPlanet.y - p.y;
+                  if (pdx * pdx + pdy * pdy <= gr * gr) {
+                    let mult = 0.002;
+                    if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
+                      if (otherPlanet.ships >= otherPlanet.maxShips * 2) {
+                        mult = 0.0045;
+                      } else if (otherPlanet.ships >= otherPlanet.maxShips) {
+                        mult = 0.003;
+                      }
+                    }
+                    defenderPlanetPenalty += mult * Math.floor(otherPlanet.ships / 10);
+                  }
+                }
+              }
+            }
           }
 
           let friendlyPlanetBoost = 0;
@@ -2991,6 +3023,44 @@ window.addEventListener('DOMContentLoaded', () => {
           if (garrisonPenalty > 0) {
             totalDefense += garrisonPenalty;
             lines.push({ label: 'Garrison Defense', value: `${garrisonPenalty}%`, color: '#4f4' });
+          }
+
+          // Gravity Well Support (Defender Friendly)
+          let defenderPlanetPenalty = 0;
+          if (hpOwner && serverState.planets) {
+            for (const otherPlanet of serverState.planets) {
+              if (otherPlanet.id !== hp.id && otherPlanet.ownerId === hpOwner.id) {
+                const tb = 0.01 * Math.sqrt(hpOwner.techScore || 0);
+                const eb = 0.01 * Math.sqrt(hpOwner.expScore || 0);
+                let baseRadius = otherPlanet.maxShips * 1.5;
+                if (otherPlanet.isMilitary && otherPlanet.ships >= otherPlanet.maxShips) {
+                  baseRadius *= 1.5;
+                }
+                const isOtherHuman = hpOwner && !hpOwner.isAI;
+                if (isOtherHuman && otherPlanet.focusMode === 'garrison' && otherPlanet.ships >= otherPlanet.maxShips) {
+                  baseRadius += (otherPlanet.ships / 2);
+                }
+                const gr = baseRadius * (1 + tb + eb);
+                const pdx = otherPlanet.x - hp.x;
+                const pdy = otherPlanet.y - hp.y;
+                if (pdx * pdx + pdy * pdy <= gr * gr) {
+                  let mult = 0.002;
+                  if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
+                    if (otherPlanet.ships >= otherPlanet.maxShips * 2) {
+                      mult = 0.0045;
+                    } else if (otherPlanet.ships >= otherPlanet.maxShips) {
+                      mult = 0.003;
+                    }
+                  }
+                  defenderPlanetPenalty += mult * Math.floor(otherPlanet.ships / 10);
+                }
+              }
+            }
+          }
+          const defPlanetPenaltyPct = Math.round(defenderPlanetPenalty * 100 * 10) / 10;
+          if (defPlanetPenaltyPct > 0) {
+            totalDefense += defPlanetPenaltyPct;
+            lines.push({ label: 'Gravity Well Support', value: `${defPlanetPenaltyPct.toFixed(1)}%`, color: '#4f4' });
           }
 
           if (hpOwner) {
