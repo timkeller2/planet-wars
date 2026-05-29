@@ -130,69 +130,68 @@ async function bootstrap() {
 
       const ship = game.ships.find(s => s.id === data.shipId);
       if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
-        const totalUpgrades = (ship.sensorarrays || 0) +
-                              (ship.labs || 0) +
-                              (ship.armor || 0) +
-                              (ship.shields || 0) +
-                              (ship.engine || 0) +
-                              (ship.munitions || 0) +
-                              (ship.targeting || 0) +
-                              (ship.damagecontrol || 0) +
-                              (ship.fuel_tanker || 0) +
-                              (ship.diplomat || 0) +
-                              (ship.marines || 0);
-        const cost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
+        const typesMap = {
+          sensorarray: 'sensorarrays',
+          lab: 'labs',
+          armor: 'armor',
+          shield: 'shields',
+          engine: 'engine',
+          munitions: 'munitions',
+          targeting: 'targeting',
+          damagecontrol: 'damagecontrol',
+          fueltanker: 'fuel_tanker',
+          diplomat: 'diplomat',
+          marines: 'marines'
+        };
+        const prop = typesMap[data.type];
+        if (prop && (ship[prop] || 0) < 3 && !ship.isUpgrading) {
+          const cost = game.getUpgradeCost(ship, data.type);
 
-        // Find if this cruiser is within a friendly gravity well of a planet with enough ships
-        for (const p of game.planets) {
-          if (p.owner && p.owner.id === player.id && p.ships >= cost) {
-            const gravityRadius = p.getGravityRadius();
-            
-            let penaltyPct = 0;
-            for (const h of game.ionStorms) {
-              if (h.type === 'minefield') continue;
-              const hdx = p.x - h.x, hdy = p.y - h.y;
-              if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
-                const k = h.knowledge[player.id] || 0;
-                const tR = Math.sqrt(player.techScore || 0);
-                const eR = Math.sqrt(player.expScore || 0);
-                const eff = Math.max(0, h.intensity - k - (tR + eR) / 2);
-                penaltyPct += eff / 100;
+          // Find if this cruiser is within a friendly gravity well of a planet with enough ships
+          for (const p of game.planets) {
+            if (p.owner && p.owner.id === player.id && p.ships >= cost) {
+              const gravityRadius = p.getGravityRadius();
+              
+              let penaltyPct = 0;
+              for (const h of game.ionStorms) {
+                if (h.type === 'minefield') continue;
+                const hdx = p.x - h.x, hdy = p.y - h.y;
+                if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
+                  const k = h.knowledge[player.id] || 0;
+                  const tR = Math.sqrt(player.techScore || 0);
+                  const eR = Math.sqrt(player.expScore || 0);
+                  const eff = Math.max(0, h.intensity - k - (tR + eR) / 2);
+                  penaltyPct += eff / 100;
+                }
               }
-            }
-            const pct = Math.max(0, 1 - penaltyPct);
-            const effGravity = Math.max(10, gravityRadius * pct);
+              const pct = Math.max(0, 1 - penaltyPct);
+              const effGravity = Math.max(10, gravityRadius * pct);
 
-            const dx = ship.x - p.x;
-            const dy = ship.y - p.y;
-            if (dx * dx + dy * dy <= effGravity * effGravity) {
-              const typesMap = {
-                sensorarray: 'sensorarrays',
-                lab: 'labs',
-                armor: 'armor',
-                shield: 'shields',
-                engine: 'engine',
-                munitions: 'munitions',
-                targeting: 'targeting',
-                damagecontrol: 'damagecontrol',
-                fueltanker: 'fuel_tanker',
-                diplomat: 'diplomat',
-                marines: 'marines'
-              };
-              const prop = typesMap[data.type];
-              if (prop && (ship[prop] || 0) < 3 && !ship.isUpgrading) {
-                const totalUpgrades = (ship.sensorarrays || 0) +
-                                      (ship.labs || 0) +
-                                      (ship.armor || 0) +
-                                      (ship.shields || 0) +
-                                      (ship.engine || 0) +
-                                      (ship.munitions || 0) +
-                                      (ship.targeting || 0) +
-                                      (ship.damagecontrol || 0) +
-                                      (ship.fuel_tanker || 0) +
-                                      (ship.diplomat || 0) +
-                                      (ship.marines || 0);
-                const cost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
+              const dx = ship.x - p.x;
+              const dy = ship.y - p.y;
+              if (dx * dx + dy * dy <= effGravity * effGravity) {
+                // Increase the global cost modifier by 5% when starting/purchasing the upgrade
+                const typeKeyMap = {
+                  sensorarrays: 'sensorarray',
+                  labs: 'lab',
+                  armor: 'armor',
+                  shields: 'shield',
+                  engine: 'engine',
+                  munitions: 'munitions',
+                  targeting: 'targeting',
+                  damagecontrol: 'damagecontrol',
+                  fuel_tanker: 'fueltanker',
+                  diplomat: 'diplomat',
+                  marines: 'marines',
+                  
+                  sensorarray: 'sensorarray',
+                  lab: 'lab',
+                  shield: 'shield',
+                  fueltanker: 'fueltanker'
+                };
+                const normType = typeKeyMap[data.type] || data.type;
+                game.globalUpgradeModifiers[normType] = (game.globalUpgradeModifiers[normType] || 0) + 0.05;
+
                 ship.isUpgrading = true;
                 ship.upgradeTimer = cost * 0.2;
                 ship.upgradeProp = prop;
@@ -201,7 +200,7 @@ async function bootstrap() {
                 ship.upgradeShipsPaid = 0;
                 ship.upgradeAccumulator = 0;
                 
-                console.log(`Started progressive upgrade for cruiser ${ship.id} with ${data.type}, financing from planet ${p.id}`);
+                console.log(`Started progressive upgrade for cruiser ${ship.id} with ${data.type}, financing from planet ${p.id} at cost ${cost}`);
                 break;
               }
             }
@@ -940,6 +939,8 @@ async function bootstrap() {
         lasers: visibleLasers,
         storms: visibleStorms,
         players: game.allPlayers,
+        globalUpgradeModifiers: game.globalUpgradeModifiers,
+        upgradeEnhanceEvents: game.upgradeEnhanceEvents || [],
         galacticCapacity: game.galacticCapacity,
         isPaused: game.isPaused,
         isRunning: game.isRunning,
@@ -951,6 +952,9 @@ async function bootstrap() {
       
       io.to(socketId).emit('gameStateUpdate', state);
     }
+
+    // Clear upgrade enhancement events after broadcasting to all clients
+    game.upgradeEnhanceEvents = [];
     
   }, TICK_RATE);
 

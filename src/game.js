@@ -92,6 +92,67 @@ export class Game {
     this.nextIonStormId = 0;
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
+    this.globalUpgradeModifiers = {
+      sensorarray: -0.25,
+      lab: -0.25,
+      armor: -0.25,
+      shield: -0.25,
+      engine: -0.25,
+      munitions: -0.25,
+      targeting: -0.25,
+      damagecontrol: -0.25,
+      fueltanker: -0.25,
+      diplomat: -0.25,
+      marines: -0.25
+    };
+    this.upgradeEnhanceEvents = [];
+  }
+
+  getUpgradeCost(ship, type) {
+    const totalUpgrades = (ship.sensorarrays || 0) +
+                          (ship.labs || 0) +
+                          (ship.armor || 0) +
+                          (ship.shields || 0) +
+                          (ship.engine || 0) +
+                          (ship.munitions || 0) +
+                          (ship.targeting || 0) +
+                          (ship.damagecontrol || 0) +
+                          (ship.fuel_tanker || 0) +
+                          (ship.diplomat || 0) +
+                          (ship.marines || 0);
+    const baseCost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
+    
+    const typeKeyMap = {
+      sensorarrays: 'sensorarray',
+      labs: 'lab',
+      armor: 'armor',
+      shields: 'shield',
+      engine: 'engine',
+      munitions: 'munitions',
+      targeting: 'targeting',
+      damagecontrol: 'damagecontrol',
+      fuel_tanker: 'fueltanker',
+      diplomat: 'diplomat',
+      marines: 'marines',
+      
+      sensorarray: 'sensorarray',
+      lab: 'lab',
+      shield: 'shield',
+      fueltanker: 'fueltanker'
+    };
+    const normType = typeKeyMap[type] || type;
+    
+    const globalMod = (this.globalUpgradeModifiers && this.globalUpgradeModifiers[normType] !== undefined)
+      ? this.globalUpgradeModifiers[normType]
+      : -0.25;
+      
+    let playerMod = 0.0;
+    if (ship.owner && ship.owner.upgradeModifiers && ship.owner.upgradeModifiers[normType] !== undefined) {
+      playerMod = ship.owner.upgradeModifiers[normType];
+    }
+    
+    const modifier = globalMod + playerMod;
+    return Math.max(1, Math.round(baseCost * (1 + modifier)));
   }
 
   tryAssignPlanet(player) {
@@ -1487,7 +1548,79 @@ export class Game {
         }
       }
     }
-    
+    // Check if any player's tech bonus increased
+    for (const player of this.allPlayers) {
+      const curBonus = Math.floor(Math.sqrt(player.techScore || 0));
+      if (player.prevTechBonus === undefined) {
+        player.prevTechBonus = curBonus;
+      } else if (curBonus > player.prevTechBonus) {
+        player.prevTechBonus = curBonus;
+
+        const roll = Math.floor(Math.random() * 2) + 1; // d2 roll (1 or 2)
+
+        if (player.upgradeModifiers) {
+          const eligibleUpgradeTypes = [];
+          const zeroUpgradeTypes = [];
+
+          for (const type of Object.keys(player.upgradeModifiers)) {
+            const val = player.upgradeModifiers[type];
+            if (val < 0 && val > -0.50) {
+              eligibleUpgradeTypes.push(type);
+            } else if (val === 0) {
+              zeroUpgradeTypes.push(type);
+            }
+          }
+
+          let chosenType = null;
+          if (roll === 1 && eligibleUpgradeTypes.length > 0) {
+            chosenType = eligibleUpgradeTypes[Math.floor(Math.random() * eligibleUpgradeTypes.length)];
+            player.upgradeModifiers[chosenType] -= 0.10;
+          } else if (zeroUpgradeTypes.length > 0) {
+            chosenType = zeroUpgradeTypes[Math.floor(Math.random() * zeroUpgradeTypes.length)];
+            player.upgradeModifiers[chosenType] -= 0.10;
+          }
+
+          if (chosenType) {
+            let targetPlanet = this.planets.find(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
+            if (!targetPlanet) {
+              const ownedPlanets = this.planets.filter(p => p.owner && p.owner.id === player.id);
+              if (ownedPlanets.length > 0) {
+                targetPlanet = ownedPlanets[Math.floor(Math.random() * ownedPlanets.length)];
+              }
+            }
+
+            if (targetPlanet) {
+              const displayUpgradeName = {
+                sensorarray: 'Sensor Array',
+                lab: 'Research Lab',
+                armor: 'Armor',
+                shield: 'Shield',
+                engine: 'Engine',
+                munitions: 'Munitions',
+                targeting: 'Targeting',
+                damagecontrol: 'Damage Control',
+                fueltanker: 'Fuel Tanker',
+                diplomat: 'Diplomat',
+                marines: 'Marines'
+              }[chosenType] || chosenType;
+
+              const text = `${player.name} enhances the ${displayUpgradeName} upgrade!`;
+              
+              this.upgradeEnhanceEvents = this.upgradeEnhanceEvents || [];
+              this.upgradeEnhanceEvents.push({
+                planetId: targetPlanet.id,
+                x: targetPlanet.x,
+                y: targetPlanet.y - targetPlanet.radius - 15,
+                text: text,
+                color: player.color || '#fff'
+              });
+              console.log(`[TECH ENHANCEMENT] Player ${player.name} enhanced ${chosenType} cost modifier to ${player.upgradeModifiers[chosenType]}`);
+            }
+          }
+        }
+      }
+    }
+
     this.updateCustomCruiserSystems(deltaTime / 1000);
 
     if (this.onScoreUpdate) {

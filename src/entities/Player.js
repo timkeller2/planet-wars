@@ -7,6 +7,20 @@ export class Player {
     this.expScore = 0;
     this.expProgress = 0;
     this.cruiserStyle = null;
+    this.upgradeModifiers = {
+      sensorarray: 0,
+      lab: 0,
+      armor: 0,
+      shield: 0,
+      engine: 0,
+      munitions: 0,
+      targeting: 0,
+      damagecontrol: 0,
+      fueltanker: 0,
+      diplomat: 0,
+      marines: 0
+    };
+    this.prevTechBonus = 0;
     if (this.isAI) {
       this.name = id;
     } else {

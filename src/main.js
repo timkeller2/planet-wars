@@ -762,6 +762,20 @@ window.addEventListener('DOMContentLoaded', () => {
 
     serverState = state;
 
+    if (state.upgradeEnhanceEvents && state.upgradeEnhanceEvents.length > 0) {
+      for (const ev of state.upgradeEnhanceEvents) {
+        floatingAnimations.push({
+          x: ev.x,
+          y: ev.y,
+          text: ev.text,
+          type: 'enhance',
+          age: 0,
+          duration: 3.5,
+          color: ev.color || '#fff'
+        });
+      }
+    }
+
     if (state.explosions) {
       let playNormalExplosion = false;
       let playThud = false;
@@ -918,12 +932,8 @@ window.addEventListener('DOMContentLoaded', () => {
     return ship;
   }
 
-  function getSelectedCruiserUpgradeQualifiers() {
-    if (!serverState || !localPlayer) return null;
-    if (selectedShips.length !== 1) return null;
-    const ship = serverState.ships.find(s => s.id === selectedShips[0].id);
-    if (!ship || !ship.isCruiser || ship.ownerId !== localPlayer.id) return null;
-
+  function getUpgradeCostForShip(ship, type) {
+    if (!serverState) return 0;
     const totalUpgrades = (ship.sensorarrays || 0) +
                           (ship.labs || 0) +
                           (ship.armor || 0) +
@@ -935,10 +945,67 @@ window.addEventListener('DOMContentLoaded', () => {
                           (ship.fuel_tanker || 0) +
                           (ship.diplomat || 0) +
                           (ship.marines || 0);
-    const cost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
+    const baseCost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
+    
+    const typeKeyMap = {
+      sensorarrays: 'sensorarray',
+      labs: 'lab',
+      armor: 'armor',
+      shields: 'shield',
+      engine: 'engine',
+      munitions: 'munitions',
+      targeting: 'targeting',
+      damagecontrol: 'damagecontrol',
+      fuel_tanker: 'fueltanker',
+      diplomat: 'diplomat',
+      marines: 'marines',
+      
+      sensorarray: 'sensorarray',
+      lab: 'lab',
+      shield: 'shield',
+      fueltanker: 'fueltanker'
+    };
+    const normType = typeKeyMap[type] || type;
+    
+    const globalMod = (serverState.globalUpgradeModifiers && serverState.globalUpgradeModifiers[normType] !== undefined)
+      ? serverState.globalUpgradeModifiers[normType]
+      : -0.25;
+      
+    let playerMod = 0.0;
+    const playerObj = serverState.players ? serverState.players.find(p => p.id === ship.ownerId) : null;
+    if (playerObj && playerObj.upgradeModifiers && playerObj.upgradeModifiers[normType] !== undefined) {
+      playerMod = playerObj.upgradeModifiers[normType];
+    }
+    
+    const modifier = globalMod + playerMod;
+    return Math.max(1, Math.round(baseCost * (1 + modifier)));
+  }
+
+  function getSelectedCruiserUpgradeQualifiers() {
+    if (!serverState || !localPlayer) return null;
+    if (selectedShips.length !== 1) return null;
+    const ship = serverState.ships.find(s => s.id === selectedShips[0].id);
+    if (!ship || !ship.isCruiser || ship.ownerId !== localPlayer.id) return null;
+
+    const validProps = [
+      'sensorarrays', 'labs', 'armor', 'shields', 'engine',
+      'munitions', 'targeting', 'damagecontrol', 'fuel_tanker',
+      'diplomat', 'marines'
+    ];
+    let minCost = Infinity;
+    for (const prop of validProps) {
+      if ((ship[prop] || 0) < 3) {
+        const uCost = getUpgradeCostForShip(ship, prop);
+        if (uCost < minCost) {
+          minCost = uCost;
+        }
+      }
+    }
+    
+    if (minCost === Infinity) return null;
 
     for (const p of serverState.planets) {
-      if (p.ownerId === localPlayer.id && p.ships >= cost) {
+      if (p.ownerId === localPlayer.id && p.ships >= minCost) {
         const techBonus = 0.01 * Math.sqrt(localPlayer.techScore || 0);
         const expBonus = 0.01 * Math.sqrt(localPlayer.expScore || 0);
         let baseRadius = p.maxShips * 1.5;
@@ -2138,19 +2205,6 @@ window.addEventListener('DOMContentLoaded', () => {
         const el = document.getElementById(btnId);
         if (el) el.style.display = 'none';
       }
-      const totalUpgrades = (selectedCruiser.sensorarrays || 0) +
-                            (selectedCruiser.labs || 0) +
-                            (selectedCruiser.armor || 0) +
-                            (selectedCruiser.shields || 0) +
-                            (selectedCruiser.engine || 0) +
-                            (selectedCruiser.munitions || 0) +
-                            (selectedCruiser.targeting || 0) +
-                            (selectedCruiser.damagecontrol || 0) +
-                            (selectedCruiser.fuel_tanker || 0) +
-                            (selectedCruiser.diplomat || 0) +
-                            (selectedCruiser.marines || 0);
-      const cost = Math.min(150, Math.round(25 + selectedCruiser.maxHealth * (3 + totalUpgrades / 3)));
-      
       const namesMap = {
         'btn-up-sensorarray': 'Sensor Array (S)',
         'btn-up-lab': 'Lab (L)',
@@ -2171,12 +2225,14 @@ window.addEventListener('DOMContentLoaded', () => {
           const currentVal = selectedCruiser[prop] || 0;
           el.style.display = (currentVal < 3 && !selectedCruiser.isUpgrading) ? 'inline-flex' : 'none';
           if (el.style.display === 'inline-flex') {
+            const uCost = getUpgradeCostForShip(selectedCruiser, prop);
             const baseName = namesMap[btnId] || 'Upgrade';
-            el.setAttribute('title', `${baseName} (Cost: ${cost} ships)`);
+            el.setAttribute('title', `${baseName} (Cost: ${uCost} ships)`);
             const costSpan = el.querySelector('.btn-cost');
-            if (costSpan) costSpan.textContent = cost;
+            if (costSpan) costSpan.textContent = uCost;
 
-            if (!upgradeQual) {
+            const canAfford = upgradeQual && upgradeQual.planet.ships >= uCost;
+            if (!canAfford) {
               el.style.opacity = '0.5';
               el.style.pointerEvents = 'none';
             } else {
@@ -2202,21 +2258,22 @@ window.addEventListener('DOMContentLoaded', () => {
       if (btnUpgradeMode) {
         btnUpgradeMode.style.display = 'none';
         if (upgradeQual) {
-          const totalUpgrades = (upgradeQual.ship.sensorarrays || 0) +
-                                (upgradeQual.ship.labs || 0) +
-                                (upgradeQual.ship.armor || 0) +
-                                (upgradeQual.ship.shields || 0) +
-                                (upgradeQual.ship.engine || 0) +
-                                (upgradeQual.ship.munitions || 0) +
-                                (upgradeQual.ship.targeting || 0) +
-                                (upgradeQual.ship.damagecontrol || 0) +
-                                (upgradeQual.ship.fuel_tanker || 0) +
-                                (upgradeQual.ship.diplomat || 0) +
-                                (upgradeQual.ship.marines || 0);
-          const cost = Math.min(150, Math.round(25 + upgradeQual.ship.maxHealth * (3 + totalUpgrades / 3)));
-          btnUpgradeMode.setAttribute('title', `Upgrade Mode (U) (Cost: ${cost} ships)`);
+          const validProps = [
+            'sensorarrays', 'labs', 'armor', 'shields', 'engine',
+            'munitions', 'targeting', 'damagecontrol', 'fuel_tanker',
+            'diplomat', 'marines'
+          ];
+          let minCost = Infinity;
+          for (const prop of validProps) {
+            if ((upgradeQual.ship[prop] || 0) < 3) {
+              const uCost = getUpgradeCostForShip(upgradeQual.ship, prop);
+              if (uCost < minCost) minCost = uCost;
+            }
+          }
+          const displayCost = minCost === Infinity ? 0 : minCost;
+          btnUpgradeMode.setAttribute('title', `Upgrade Mode (U) (Cost: ${displayCost} ships)`);
           const costSpan = btnUpgradeMode.querySelector('.btn-cost');
-          if (costSpan) costSpan.textContent = cost;
+          if (costSpan) costSpan.textContent = displayCost;
         }
       }
       if (btnFocusMode) btnFocusMode.style.display = 'none';
@@ -3853,15 +3910,7 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.stroke();
             
             // Neon progress fill
-            const totalUpgrades = (s.sensorarrays || 0) +
-                                  (s.labs || 0) +
-                                  (s.armor || 0) +
-                                  (s.shields || 0) +
-                                  (s.engine || 0) +
-                                  (s.munitions || 0) +
-                                  (s.targeting || 0) +
-                                  (s.damagecontrol || 0);
-            const cost = Math.min(150, Math.round(25 + s.maxHealth * (3 + totalUpgrades / 3)));
+            const cost = getUpgradeCostForShip(s, s.upgradeType);
             const totalDuration = cost * 0.2;
             const progress = Math.max(0, Math.min(1, (totalDuration - (s.upgradeTimer || 0)) / totalDuration));
             if (progress > 0) {
@@ -4436,6 +4485,8 @@ window.addEventListener('DOMContentLoaded', () => {
           yOffset = 0; // stationary
         } else if (anim.type === 'homeworldAnim') {
           yOffset = 0; // stationary
+        } else if (anim.type === 'enhance') {
+          yOffset = progress * 60; // drifts up nicely
         }
 
         // Grow font
@@ -4452,6 +4503,8 @@ window.addEventListener('DOMContentLoaded', () => {
           fontsize = 16 + (progress * 30); // grows large
         } else if (anim.type === 'lastStand' || anim.type === 'homeworldAnim') {
           fontsize = 7; // constant size
+        } else if (anim.type === 'enhance') {
+          fontsize = 12 + (progress * 8); // grows from 12 to 20
         }
 
         ctx.font = `bold ${fontsize}px Orbitron`; // growing font
@@ -4501,6 +4554,10 @@ window.addEventListener('DOMContentLoaded', () => {
           xOffset = 0; // stationary
           ctx.fillStyle = anim.color || '#fff';
           ctx.shadowColor = `rgba(255, 255, 255, ${alpha})`; // white glow
+        } else if (anim.type === 'enhance') {
+          xOffset = 0;
+          ctx.fillStyle = anim.color || '#fff';
+          ctx.shadowColor = anim.color || 'rgba(0, 255, 255, 0.8)';
         } else {
           xOffset = Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
