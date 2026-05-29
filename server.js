@@ -629,6 +629,7 @@ async function bootstrap() {
           focusMode: p.focusMode || 'economy',
           focusChanges: p.focusChanges || 0,
           sympathy: p.sympathy || null,
+          disposition: p.disposition || null,
           focusTransition: p.focusTransition ? {
             targetMode: p.focusTransition.targetMode,
             progress: Math.min(1.0, p.focusTransition.elapsed / 15000)

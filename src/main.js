@@ -2945,6 +2945,18 @@ window.addEventListener('DOMContentLoaded', () => {
             }
           }
 
+          // Show disposition levels on the planet tooltip
+          if (hp.disposition) {
+            for (const [pId, dispVal] of Object.entries(hp.disposition)) {
+              if (dispVal > 0) {
+                const targetPlayer = serverState.players.find(pl => pl.id === pId);
+                const pName = targetPlayer ? targetPlayer.name : pId;
+                const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
+                lines.push({ label: `🎭 Disposition (${pName})`, value: `${dispVal}`, color: pColor });
+              }
+            }
+          }
+
           if (serverState.storms) {
             for (const storm of serverState.storms) {
               const dx = hp.x - storm.x, dy = hp.y - storm.y;
