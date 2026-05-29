@@ -383,8 +383,14 @@ async function bootstrap() {
           productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
           mapSize: options && options.mapSize !== undefined ? options.mapSize : 1600,
           planetCount: options && options.planetCount !== undefined ? options.planetCount : 60,
-          hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0
+          hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
+          timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600"
         };
+        if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
+          game.timeRemaining = parseFloat(game.settings.timedGameLimit);
+        } else {
+          game.timeRemaining = null;
+        }
       }
       const p = connectedClients.get(socket.id);
       if (p) {
@@ -407,8 +413,15 @@ async function bootstrap() {
           productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
           mapSize: options && options.mapSize !== undefined ? options.mapSize : 1600,
           planetCount: options && options.planetCount !== undefined ? options.planetCount : 60,
-          hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0
+          hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
+          timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600"
       };
+      
+      if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
+        game.timeRemaining = parseFloat(game.settings.timedGameLimit);
+      } else {
+        game.timeRemaining = null;
+      }
       
       game.width = game.settings.mapSize;
       game.height = game.settings.mapSize;
@@ -989,6 +1002,7 @@ async function bootstrap() {
         isRunning: game.isRunning,
         gameOverMessage: game.gameOverMessage,
         settings: game.settings,
+        timeRemaining: game.timeRemaining,
         width: game.width,
         height: game.height
       };

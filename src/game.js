@@ -289,6 +289,7 @@ export class Game {
     this.ionStormsCreated = 0;
     this.nextShipId = 1;
     this.gameTime = 0;
+    this.timeRemaining = null;
     let rampageDelayMultiple = 1.0;
     if (this.width < 1600) {
       rampageDelayMultiple = 1600 / this.width;
@@ -1043,6 +1044,17 @@ export class Game {
     }
 
     this.gameTime += deltaTime;
+
+    if (this.settings && this.settings.timedGameLimit && this.settings.timedGameLimit !== 'unlimited') {
+      if (this.timeRemaining === undefined || this.timeRemaining === null) {
+        this.timeRemaining = parseFloat(this.settings.timedGameLimit);
+      }
+      this.timeRemaining -= deltaTime / 1000;
+      if (this.timeRemaining <= 0) {
+        this.timeRemaining = 0;
+        this.triggerTimedGameVictory();
+      }
+    }
 
     if (this.settings && this.settings.noRampagers) {
       // No rampagers
@@ -2257,5 +2269,56 @@ export class Game {
         return;
       }
     }
+  }
+
+  triggerTimedGameVictory() {
+    this.stop();
+
+    // Find all alive players
+    const players = this.allPlayers.filter(p => p.isAlive);
+    if (players.length === 0) {
+      this.gameOverMessage = "TIMED GAME ENDED IN A DRAW!";
+      if (this.onGameOver) this.onGameOver(this.gameOverMessage);
+      return;
+    }
+
+    // Calculate total galaxy max ships capacity
+    let totalGalaxyMaxShips = 0;
+    for (const p of this.planets) {
+      totalGalaxyMaxShips += p.maxShips || 0;
+    }
+
+    // For each player, compute: Tech Bonus + Experience Bonus + Percentage of Maxships
+    let bestPlayer = null;
+    let highestScore = -Infinity;
+
+    for (const player of players) {
+      const techBonus = Math.sqrt(player.techScore || 0);
+      const expBonus = Math.sqrt(player.expScore || 0);
+
+      // Percentage of Maxships (out of 100)
+      let playerMaxShips = 0;
+      for (const p of this.planets) {
+        if (p.owner && p.owner.id === player.id) {
+          playerMaxShips += p.maxShips || 0;
+        }
+      }
+      const pctMaxShips = totalGalaxyMaxShips > 0 ? (playerMaxShips / totalGalaxyMaxShips) * 100 : 0;
+
+      const totalScore = techBonus + expBonus + pctMaxShips;
+
+      if (totalScore > highestScore) {
+        highestScore = totalScore;
+        bestPlayer = player;
+      }
+    }
+
+    let winnerName = 'NO ONE';
+    if (bestPlayer) {
+      winnerName = bestPlayer.name || bestPlayer.id;
+    }
+
+    this.gameOverMessage = `${winnerName.toUpperCase()} WINS A TIMED GAME VICTORY!`;
+    if (this.onGameOver) this.onGameOver(this.gameOverMessage);
   }
 }

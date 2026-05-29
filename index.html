@@ -72,11 +72,23 @@
             <input type="number" id="planet-count-input" value="50" min="10" max="1000" style="width: 60px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
             Planet Count
           </label>
+          <label style="cursor: pointer; display: flex; align-items: center;">
+            <select id="timed-game-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
+              <option value="1800">30 minutes</option>
+              <option value="3600" selected>1 hour</option>
+              <option value="5400">1.5 hours</option>
+              <option value="7200">2 hours</option>
+              <option value="10800">3 hours</option>
+              <option value="unlimited">Unlimited</option>
+            </select>
+            Timed Game
+          </label>
         </div>
         <button id="start-btn" class="cyber-btn" style="margin-top: 30px; padding: 20px 60px; font-size: 2.2rem; box-shadow: 0 0 20px rgba(0, 255, 255, 0.5), inset 0 0 15px rgba(0, 255, 255, 0.4);">ENTER GAME</button>
         <button id="setup-new-game-btn" class="cyber-btn" style="position: absolute; bottom: 20px; right: 20px; padding: 10px 20px; font-size: 0.9rem;">SET UP NEW GAME</button>
       </div>
       <div id="game-ui" class="hidden">
+        <div id="game-timer" style="position: absolute; top: 20px; left: 20px; font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #0ff; text-shadow: 0 0 5px #0ff; z-index: 100; pointer-events: none; background: rgba(0, 255, 255, 0.05); border: 1px solid rgba(0, 255, 255, 0.2); padding: 5px 15px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">00:00</div>
         <div id="player-names-container" class="player-names"></div>
         <div id="score-board">
           <div id="leaderboard-header" style="font-weight: bold; font-family: 'Orbitron', sans-serif; color: #0ff; text-shadow: 0 0 5px #0ff; margin-bottom: 5px; border-bottom: 1px solid #0ff; padding-bottom: 5px; display: flex; justify-content: space-between;">

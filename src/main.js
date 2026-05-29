@@ -856,8 +856,32 @@ window.addEventListener('DOMContentLoaded', () => {
     updateUI();
   });
 
+  function formatTime(seconds) {
+    if (seconds === undefined || seconds === null || isNaN(seconds)) return "00:00";
+    const totalSeconds = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    
+    const pad = (n) => String(n).padStart(2, '0');
+    if (h > 0) {
+      return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+    return `${pad(m)}:${pad(s)}`;
+  }
+
   function updateUI() {
     if (!serverState || !localPlayer) return;
+
+    const gameTimer = document.getElementById('game-timer');
+    if (gameTimer) {
+      if (serverState.settings && serverState.settings.timedGameLimit && serverState.settings.timedGameLimit !== 'unlimited') {
+        gameTimer.style.display = 'block';
+        gameTimer.textContent = formatTime(serverState.timeRemaining);
+      } else {
+        gameTimer.style.display = 'none';
+      }
+    }
 
     const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
     if (!myPlayer) return;
@@ -2133,7 +2157,9 @@ window.addEventListener('DOMContentLoaded', () => {
     const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 50;
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm };
+    const timedGameSelect = document.getElementById('timed-game-select');
+    const timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm, timedGameLimit };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
@@ -2159,10 +2185,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 50;
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
+    const timedGameSelect = document.getElementById('timed-game-select');
+    const timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
     hasCenteredOnHomeworld = false;
     serverState = null;
     lastKnownPlanets = {}; // Clear cached planet details
-    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm });
+    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm, timedGameLimit });
   });
 
   function draw() {
