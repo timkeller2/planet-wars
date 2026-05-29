@@ -128,6 +128,7 @@ async function bootstrap() {
         player.isAI = false;
       }
 
+      console.log(`[Server Received Upgrade] Player: ${player.name}, shipId: ${data.shipId}, type: ${data.type}`);
       const ship = game.ships.find(s => s.id === data.shipId);
       if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
         const typesMap = {
@@ -147,6 +148,7 @@ async function bootstrap() {
         if (prop && (ship[prop] || 0) < 3 && !ship.isUpgrading) {
           const cost = game.getUpgradeCost(ship, data.type);
 
+          let upgradeStarted = false;
           // Find if this cruiser is within a friendly gravity well of a planet with enough ships
           for (const p of game.planets) {
             if (p.owner && p.owner.id === player.id && p.ships >= cost) {
@@ -201,11 +203,19 @@ async function bootstrap() {
                 ship.upgradeAccumulator = 0;
                 
                 console.log(`Started progressive upgrade for cruiser ${ship.id} with ${data.type}, financing from planet ${p.id} at cost ${cost}`);
+                upgradeStarted = true;
                 break;
               }
             }
           }
+          if (!upgradeStarted) {
+            console.log(`[Server Rejected Upgrade] Financing or distance check failed. shipId: ${ship.id}, type: ${data.type}, prop: ${prop}, cost: ${cost}`);
+          }
+        } else {
+          console.log(`[Server Rejected Upgrade] Validation failed. shipId: ${ship.id}, type: ${data.type}, prop: ${prop}, currentVal: ${prop ? (ship[prop] || 0) : 'N/A'}, isUpgrading: ${ship.isUpgrading}`);
         }
+      } else {
+        console.log(`[Server Rejected Upgrade] Ship verification failed. shipId: ${data.shipId}, type: ${data.type}, shipExists: ${!!ship}, isCruiser: ${ship ? ship.isCruiser : 'N/A'}, ownerMatches: ${ship && ship.owner ? ship.owner.id === player.id : 'N/A'}`);
       }
     });
 

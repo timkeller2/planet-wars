@@ -2009,14 +2009,31 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const upgradeToSocketTypeMap = {
+    sensorarrays: 'sensorarray',
+    labs: 'lab',
+    armor: 'armor',
+    shields: 'shield',
+    engine: 'engine',
+    munitions: 'munitions',
+    targeting: 'targeting',
+    damagecontrol: 'damagecontrol',
+    fuel_tanker: 'fueltanker',
+    diplomat: 'diplomat',
+    marines: 'marines'
+  };
+
   const registerUpgradeBtn = (id, type) => {
     const el = document.getElementById(id);
     if (el) {
       el.addEventListener('click', () => {
         const qual = getSelectedCruiserUpgradeQualifiers();
         if (qual && (qual.ship[type] || 0) < 3) {
-          const socketType = type === 'sensorarrays' ? 'sensorarray' : (type === 'shields' ? 'shield' : (type === 'labs' ? 'lab' : (type === 'fuel_tanker' ? 'fueltanker' : type)));
+          const socketType = upgradeToSocketTypeMap[type] || type;
+          console.log(`[Upgrade Click] Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${qual.ship.id}`);
           socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
+        } else {
+          console.log(`[Upgrade Click Rejected] Button: ${id}, type: ${type}, hasQual: ${!!qual}, currentVal: ${qual ? (qual.ship[type] || 0) : 'N/A'}`);
         }
       });
     }
