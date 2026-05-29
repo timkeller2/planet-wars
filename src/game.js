@@ -583,6 +583,8 @@ export class Game {
           shipsToSend = Math.floor(source.ships / 2);
         }
       }
+      // Never leave source planet with less than 10 ships
+      shipsToSend = Math.min(shipsToSend, Math.max(0, source.ships - 10));
     } else {
       shipsToSend = scoutMode ? Math.max(3, Math.floor(source.ships * 0.1)) : Math.floor(source.ships / 2);
     }
