@@ -513,20 +513,7 @@ async function bootstrap() {
 
     tickCount++;
 
-    // Check if any client is experiencing backpressure
-    let anyClientBehind = false;
-    for (const [socketId] of connectedClients.entries()) {
-      const sock = io.sockets.sockets.get(socketId);
-      if (sock && sock.conn) {
-        if (sock.conn.writeBuffer && sock.conn.writeBuffer.length > 5) {
-          anyClientBehind = true;
-          break;
-        }
-      }
-    }
 
-    const broadcastEvery = anyClientBehind ? BROADCAST_EVERY_SLOW : BROADCAST_EVERY_NORMAL;
-    if (tickCount % broadcastEvery !== 0) return;
 
     // Compute planet visual state
     const allPlanetsMapped = game.planets.map(p => {
@@ -733,61 +720,98 @@ async function bootstrap() {
       s.diplomatSuccessEvent = 0;
       const dipFailure = s.diplomatFailureEvent || 0;
       s.diplomatFailureEvent = 0;
-      return {
-        id: s.id,
-        x: s.x,
-        y: s.y,
-        count: s.count || 1,
-        ownerId: s.owner ? s.owner.id : null,
-        active: s.active,
-        expScore: s.expScore || 0,
-        isBomber: s.isBomber,
-        isCruiser: s.isCruiser || false,
-        name: s.name || null,
-        isAmoeba: s.isAmoeba || false,
-        health: s.health || 0,
-        maxHealth: s.maxHealth || 0,
-        bombs: s.bombs || 0,
-        bombReloadTimer: s.bombReloadTimer || 0,
-        labs: s.labs || 0,
-        sensorarrays: s.sensorarrays || 0,
-        armor: s.armor || 0,
-        armorPoints: s.armorPoints || 0,
-        maxArmor: s.maxArmor || 0,
-        shields: s.shields || 0,
-        engine: s.engine || 0,
-        munitions: s.munitions || 0,
-        splashDamage: s.splashDamage || 0,
-        targeting: s.targeting || 0,
-        damagecontrol: s.damagecontrol || 0,
-        fuel_tanker: s.fuel_tanker || 0,
-        diplomat: s.diplomat || 0,
-        marines: s.marines || 0,
-        diplomatTargetPlanetId: s.diplomatTargetPlanetId || null,
-        crew: s.crew || 0,
-        marineCount: s.marineCount || 0,
-        isBoardingFleet: s.isBoardingFleet || false,
-        isReturnPod: s.isReturnPod || false,
-        isUpgrading: s.isUpgrading || false,
-        upgradeTimer: s.upgradeTimer || 0,
-        upgradeType: s.upgradeType || null,
-        isHungry: s.isAmoeba ? (!s.amoebaGrowCooldown || s.amoebaGrowCooldown <= 0) : false,
-        isWarp: s.isWarp || false,
-        fuel: s.fuel || 0,
-        angle: s.angle || 0,
-        flightTime: s.flightTime || 0,
-        speedModifier: s.speedModifier || 1.0,
-        speed: s.speed || 35,
-        targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,
-        targetY: s.targetPlanet ? s.targetPlanet.y : s.targetY,
-        formation: s.formation,
-        beakerIncreaseEvent: bEvent,
-        diplomatSuccessEvent: dipSuccess,
-        diplomatFailureEvent: dipFailure
-      };
+
+      if (s.isCruiser || s.isAmoeba) {
+        return {
+          id: s.id,
+          x: s.x,
+          y: s.y,
+          count: s.count || 1,
+          ownerId: s.owner ? s.owner.id : null,
+          active: s.active,
+          expScore: s.expScore || 0,
+          isBomber: s.isBomber,
+          isCruiser: s.isCruiser || false,
+          name: s.name || null,
+          isAmoeba: s.isAmoeba || false,
+          health: s.health || 0,
+          maxHealth: s.maxHealth || 0,
+          bombs: s.bombs || 0,
+          bombReloadTimer: s.bombReloadTimer || 0,
+          labs: s.labs || 0,
+          sensorarrays: s.sensorarrays || 0,
+          armor: s.armor || 0,
+          armorPoints: s.armorPoints || 0,
+          maxArmor: s.maxArmor || 0,
+          shields: s.shields || 0,
+          engine: s.engine || 0,
+          munitions: s.munitions || 0,
+          splashDamage: s.splashDamage || 0,
+          targeting: s.targeting || 0,
+          damagecontrol: s.damagecontrol || 0,
+          fuel_tanker: s.fuel_tanker || 0,
+          diplomat: s.diplomat || 0,
+          marines: s.marines || 0,
+          diplomatTargetPlanetId: s.diplomatTargetPlanetId || null,
+          crew: s.crew || 0,
+          marineCount: s.marineCount || 0,
+          isBoardingFleet: s.isBoardingFleet || false,
+          isReturnPod: s.isReturnPod || false,
+          isUpgrading: s.isUpgrading || false,
+          upgradeTimer: s.upgradeTimer || 0,
+          upgradeType: s.upgradeType || null,
+          isHungry: s.isAmoeba ? (!s.amoebaGrowCooldown || s.amoebaGrowCooldown <= 0) : false,
+          isWarp: s.isWarp || false,
+          fuel: s.fuel || 0,
+          angle: s.angle || 0,
+          flightTime: s.flightTime || 0,
+          speedModifier: s.speedModifier || 1.0,
+          speed: s.speed || 35,
+          targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,
+          targetY: s.targetPlanet ? s.targetPlanet.y : s.targetY,
+          formation: s.formation,
+          beakerIncreaseEvent: bEvent,
+          diplomatSuccessEvent: dipSuccess,
+          diplomatFailureEvent: dipFailure
+        };
+      } else {
+        return {
+          id: s.id,
+          x: s.x,
+          y: s.y,
+          count: s.count || 1,
+          ownerId: s.owner ? s.owner.id : null,
+          active: s.active,
+          isBomber: s.isBomber,
+          isInterceptor: s.isInterceptor,
+          isBoardingFleet: s.isBoardingFleet || false,
+          isReturnPod: s.isReturnPod || false,
+          angle: s.angle || 0,
+          targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,
+          targetY: s.targetPlanet ? s.targetPlanet.y : s.targetY,
+          formation: s.formation,
+          health: s.health || 0,
+          expScore: s.expScore || 0,
+          flightTime: s.flightTime || 0
+        };
+      }
     });
 
     for (const [socketId, player] of connectedClients.entries()) {
+      const sock = io.sockets.sockets.get(socketId);
+      if (sock && sock.conn && sock.conn.writeBuffer) {
+        const bufferLen = sock.conn.writeBuffer.length;
+        if (bufferLen > 8) {
+          // Extremely congested socket: drop the tick entirely to allow the buffer to clear
+          continue;
+        } else if (bufferLen > 3) {
+          // Mildly congested socket: rate-limit to 5 FPS to reduce traffic without losing telemetry
+          if (tickCount % 4 !== 0) {
+            continue;
+          }
+        }
+      }
+
       if (!player.discoveredPlanets) {
         player.discoveredPlanets = new Set();
       }
