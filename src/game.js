@@ -455,6 +455,7 @@ export class Game {
   }
 
   sendShips(source, target, isWarp = false, speedModifier = null, isBombing = false, fillAmount = null, scoutMode = false, isCruiserOrder = false) {
+    if (source) source.retainedShips = false;
 
     if (isCruiserOrder) {
       if ((source.isMilitary || source.homeworldOf) && source.ships > 60 && source.maxShips > 60) {
@@ -468,6 +469,7 @@ export class Game {
           const ship = new Ship(this.nextShipId++, source.x, source.y, target, source.owner);
           ship.maxHealth = maxHealth;
           ship.health = maxHealth;
+          ship.crew = 2 * maxHealth;
           ship.fuel = basePower;
           ship.speed = Math.max(5, ship.speed - 10 - basePower);
           ship.speedModifier = 1.0;
@@ -650,6 +652,7 @@ export class Game {
   }
 
   sendShipsToSpace(source, targetX, targetY, isWarp = false, speedModifier = null, isBombing = false, scoutMode = false, isCruiserOrder = false) {
+    if (source) source.retainedShips = false;
 
     if (isCruiserOrder) {
       if ((source.isMilitary || source.homeworldOf) && source.ships > 60 && source.maxShips > 60) {
@@ -663,6 +666,7 @@ export class Game {
           const ship = new Ship(this.nextShipId++, source.x, source.y, null, source.owner, targetX, targetY);
           ship.maxHealth = cruiserMaxHealth;
           ship.health = cruiserMaxHealth;
+          ship.crew = 2 * cruiserMaxHealth;
           ship.fuel = health;
           ship.speed = Math.max(5, ship.speed - 10 - health);
           ship.speedModifier = 1.0;
@@ -1484,10 +1488,307 @@ export class Game {
       }
     }
     
+    this.updateCustomCruiserSystems(deltaTime / 1000);
+
     if (this.onScoreUpdate) {
       const pCount = this.planets.filter(p => p.owner === this.humanPlayer).length;
       const aiCount = this.planets.filter(p => p.owner && p.owner !== this.humanPlayer).length;
       this.onScoreUpdate(pCount, aiCount);
+    }
+  }
+
+  updateCustomCruiserSystems(dt) {
+    if (!this.isRunning || this.isPaused) return;
+
+    // 1. Update Boarding Pods, Return Pods, and active Cruisers
+    const cruisers = this.ships.filter(s => s.active && s.isCruiser);
+    const pods = this.ships.filter(s => s.active && (s.isBoardingFleet || s.isReturnPod));
+
+    // Handle Pods tracking and collision/impact
+    for (const pod of pods) {
+      const target = this.ships.find(s => s.id === pod.targetShipId && s.active);
+      if (!target) {
+        // Target is destroyed
+        if (pod.isBoardingFleet) {
+          // Turn into return pod back to launcher (if launcher alive)
+          const launcher = this.ships.find(s => s.id === pod.sourceShipId && s.active);
+          if (launcher) {
+            pod.isBoardingFleet = false;
+            pod.isReturnPod = true;
+            pod.targetShipId = launcher.id;
+          } else {
+            pod.active = false;
+          }
+        } else {
+          pod.active = false;
+        }
+        continue;
+      }
+
+      // Track target coordinate
+      pod.targetX = target.x;
+      pod.targetY = target.y;
+      pod.startX = pod.x;
+      pod.startY = pod.y;
+
+      // Check distance for impact
+      const dx = target.x - pod.x;
+      const dy = target.y - pod.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist <= 5) {
+        pod.active = false;
+        if (pod.isBoardingFleet) {
+          target.isUnderBoarding = true;
+          target.boardingPlayer = pod.owner;
+          target.boardingMarines = (target.boardingMarines || 0) + pod.marineCount;
+          target.boardingSourceId = pod.sourceShipId;
+        } else if (pod.isReturnPod) {
+          const maxCapacity = (target.marines || 0) * target.maxHealth;
+          target.marineCount = Math.min(maxCapacity, (target.marineCount || 0) + pod.marineCount);
+        }
+      }
+    }
+
+    // Handle Cruisers simulation
+    for (const ship of cruisers) {
+      if (ship.isUpgrading) continue;
+
+      // 2. Crew restoration
+      // "not within sensor range of enemy vessels automatically restore crew at no cost at the rate of 1 per second"
+      let enemyNearby = false;
+      const radar = ship.cruiserRadarRange();
+      for (const other of this.ships) {
+        if (other.active && other.id !== ship.id) {
+          const isEnemy = (other.owner && other.owner.id !== ship.owner.id) || other.isAmoeba;
+          if (isEnemy) {
+            const dx = other.x - ship.x;
+            const dy = other.y - ship.y;
+            if (dx*dx + dy*dy <= radar * radar) {
+              enemyNearby = true;
+              break;
+            }
+          }
+        }
+      }
+
+      let friendlyPlanet = null;
+      if (ship.inFriendlyWell) {
+        // Find friendly planet whose well cruiser is in
+        for (const p of this.planets) {
+          if (p.owner && p.owner.id === ship.owner.id) {
+            const pdx = p.x - ship.x;
+            const pdy = p.y - ship.y;
+            const gr = p.getGravityRadius();
+            if (pdx*pdx + pdy*pdy < gr * gr) {
+              friendlyPlanet = p;
+              break;
+            }
+          }
+        }
+      }
+
+      if (ship.inFriendlyWell && !enemyNearby) {
+        ship.crew = Math.min(2 * ship.health, (ship.crew || 0) + 1 * dt);
+      }
+
+      // 3. Load Marines
+      // "load marines up to capacity from planets with > 50% ships at cost of 1 ship from nearby planet for each marine"
+      if (ship.inFriendlyWell && friendlyPlanet && (ship.marines || 0) > 0) {
+        const capacity = ship.marines * ship.maxHealth;
+        if (ship.marineCount < capacity) {
+          const halfCapacity = 0.5 * friendlyPlanet.maxShips;
+          if (friendlyPlanet.ships > halfCapacity) {
+            const needed = capacity - ship.marineCount;
+            const available = friendlyPlanet.ships - halfCapacity;
+            // Load continuously at a rate of 1 per second
+            const toLoad = Math.min(needed, available, 1 * dt);
+            if (toLoad > 0) {
+              ship.marineCount += toLoad;
+              friendlyPlanet.ships = Math.max(0, friendlyPlanet.ships - toLoad);
+            }
+          }
+        }
+      }
+
+      // 4. Diplomats sympathy generation
+      if ((ship.diplomat || 0) > 0) {
+        // Find closest enemy or neutral planet within sensor range
+        let closestPlanet = null;
+        let minDist = Infinity;
+        for (const p of this.planets) {
+          const isNeutralOrEnemy = !p.owner || p.owner.id !== ship.owner.id;
+          if (isNeutralOrEnemy) {
+            const dx = p.x - ship.x;
+            const dy = p.y - ship.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist <= radar && dist < minDist) {
+              minDist = dist;
+              closestPlanet = p;
+            }
+          }
+        }
+
+        if (closestPlanet) {
+          // Sympathy increase probability: (10 + expBonus + currentSympathy)% per diplomat per minute
+          const expBonus = 0.5 * Math.sqrt(ship.owner.expScore || 0);
+          const currentSym = closestPlanet.sympathy ? (closestPlanet.sympathy[ship.owner.id] || 0) : 0;
+          const ratePercentPerMinute = 10 + expBonus + currentSym;
+          const ratePercentPerSecond = ratePercentPerMinute / 60;
+          const probPerSec = ratePercentPerSecond / 100;
+          const probThisTick = probPerSec * dt * ship.diplomat;
+
+          if (Math.random() < probThisTick) {
+            closestPlanet.sympathy = closestPlanet.sympathy || {};
+            closestPlanet.sympathy[ship.owner.id] = currentSym + 1;
+            
+            // Check for Revolt!
+            if (closestPlanet.sympathy[ship.owner.id] > closestPlanet.ships) {
+              const oldShips = closestPlanet.ships;
+              const originalOwner = closestPlanet.owner;
+              
+              // Planet joins this player
+              closestPlanet.owner = ship.owner;
+              delete closestPlanet.sympathy[ship.owner.id];
+              closestPlanet.justAssigned = true;
+              closestPlanet.focusTransition = null;
+
+              // Retain ships logic: if it was neutral (originalOwner === null)
+              if (!originalOwner) {
+                // If it joins a player with more ships than economy, retain them
+                if (oldShips > closestPlanet.maxShips) {
+                  closestPlanet.retainedShips = true;
+                }
+                // Randomize neutral captures modes
+                const roll = Math.random();
+                if (roll < 0.10) {
+                  closestPlanet.isResearch = true;
+                } else if (roll < 0.20) {
+                  closestPlanet.isMilitary = true;
+                } else if (roll < 0.30) {
+                  closestPlanet.isSpeedPlanet = true;
+                }
+              }
+              console.log(`[REVOLT] Planet ${closestPlanet.name} revolted and joined player ${ship.owner.name}`);
+            }
+          }
+        }
+      }
+
+      // 5. Boarding Trigger Checks
+      // alone, enemy cruiser in 1/2 sensor range, marine count >= 2 * enemy crew
+      if ((ship.marineCount || 0) > 0) {
+        // check alone (no friendly cruisers in scan range)
+        let friendlyCruiserNearby = false;
+        for (const other of cruisers) {
+          if (other.id !== ship.id && other.owner.id === ship.owner.id) {
+            const dx = other.x - ship.x;
+            const dy = other.y - ship.y;
+            if (dx*dx + dy*dy <= radar * radar) {
+              friendlyCruiserNearby = true;
+              break;
+            }
+          }
+        }
+
+        if (!friendlyCruiserNearby) {
+          // Find enemy cruiser in 1/2 scan range
+          for (const enemy of cruisers) {
+            if (enemy.owner.id !== ship.owner.id) {
+              const dx = enemy.x - ship.x;
+              const dy = enemy.y - ship.y;
+              const dist = Math.sqrt(dx*dx + dy*dy);
+              if (dist <= 0.5 * radar) {
+                const requiredMarines = 2 * (enemy.crew || 0);
+                if (ship.marineCount >= requiredMarines && requiredMarines > 0) {
+                  // Launch Boarding Fleet Pod!
+                  const pod = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, enemy.x, enemy.y);
+                  pod.isBoardingFleet = true;
+                  pod.targetShipId = enemy.id;
+                  pod.sourceShipId = ship.id;
+                  pod.marineCount = ship.marineCount;
+                  pod.speed = 60; // moves at fast pace
+                  pod.isCruiser = false; // it is drawn uniquely, not as a cruiser body!
+                  this.ships.push(pod);
+
+                  console.log(`[BOARDING] Ship ${ship.id} launched pod targeting Ship ${enemy.id} carrying ${ship.marineCount} marines.`);
+                  ship.marineCount = 0;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 6. Boarding Battle Combat resolution
+      if (ship.isUnderBoarding && ship.boardingMarines > 0) {
+        let M_atk = ship.boardingMarines;
+        let M_def = ship.marineCount || 0;
+        let C_def = ship.crew || 0;
+
+        // Symmetric combat tick
+        const killRateAtk = Math.max(0.05, Math.min(0.95, (50 + M_atk - C_def - M_def) / 100));
+        const defendersKilled = M_atk * killRateAtk * dt;
+
+        const killRateDef = Math.max(0.05, Math.min(0.95, (25 + C_def + M_def - M_atk) / 100));
+        const attackersKilled = (C_def + M_def) * killRateDef * dt;
+
+        // Apply attackers casualties
+        M_atk = Math.max(0, M_atk - attackersKilled);
+
+        // Apply defenders casualties
+        let remDeaths = defendersKilled;
+        if (M_def > 0) {
+          const deaths = Math.min(M_def, remDeaths);
+          M_def -= deaths;
+          remDeaths -= deaths;
+        }
+        C_def = Math.max(0, C_def - remDeaths);
+
+        ship.boardingMarines = M_atk;
+        ship.marineCount = M_def;
+        ship.crew = C_def;
+
+        if (M_atk <= 0) {
+          // Boarding failed!
+          ship.isUnderBoarding = false;
+          ship.boardingMarines = 0;
+          console.log(`[BOARDING FAILED] Boarding of Ship ${ship.id} failed. Defenders survived.`);
+        } else if (M_def <= 0 && C_def <= 0) {
+          // Attacking victory! Capture successful!
+          const originalSourceId = ship.boardingSourceId;
+
+          ship.isUnderBoarding = false;
+          ship.boardingMarines = 0;
+
+          // Change ownership
+          ship.owner = this.allPlayers.find(p => p.id === ship.boardingPlayer.id);
+          
+          // Crew from survivors
+          const crewNeeded = 2 * ship.health;
+          const crewAssigned = Math.min(M_atk, crewNeeded);
+          ship.crew = crewAssigned;
+          M_atk -= crewAssigned;
+          ship.marineCount = 0;
+
+          console.log(`[BOARDING SUCCESS] Ship ${ship.id} captured by player ${ship.owner.name}.`);
+
+          // Spawn return pod if survivors remain
+          if (M_atk > 0) {
+            const launcher = this.ships.find(ss => ss.id === originalSourceId && ss.active);
+            if (launcher) {
+              const rPod = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, launcher.x, launcher.y);
+              rPod.isReturnPod = true;
+              rPod.targetShipId = launcher.id;
+              rPod.sourceShipId = ship.id;
+              rPod.marineCount = M_atk;
+              rPod.speed = 60;
+              this.ships.push(rPod);
+              console.log(`[RETURN POD] Returning ${M_atk} survivors from Ship ${ship.id} to Ship ${launcher.id}.`);
+            }
+          }
+        }
+      }
     }
   }
 

@@ -14,6 +14,8 @@ export class Planet {
     const modes = ['economy', 'research', 'garrison'];
     this.focusMode = modes[Math.floor(Math.random() * modes.length)];
     this.focusChanges = 0;
+    this.sympathy = {};
+    this.retainedShips = false;
     
     this.name = this.generatePlanetName();
   }
@@ -153,7 +155,7 @@ export class Planet {
               this.ships = Math.max(0, this.ships - 1);
             }
             // Decay ships back to maxShips
-            if (this.ships > this.maxShips) {
+            if (this.ships > this.maxShips && !this.retainedShips) {
               this.ships = this.maxShips;
             }
           } else if (focus === 'economy') {
@@ -166,7 +168,7 @@ export class Planet {
               this.increaseMaxShips(increaseAmount);
             }
             // Decay ships back to maxShips
-            if (this.ships > this.maxShips) {
+            if (this.ships > this.maxShips && !this.retainedShips) {
               this.ships = this.maxShips;
             }
           } else if (focus === 'garrison') {

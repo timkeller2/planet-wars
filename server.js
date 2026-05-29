@@ -137,7 +137,10 @@ async function bootstrap() {
                               (ship.engine || 0) +
                               (ship.munitions || 0) +
                               (ship.targeting || 0) +
-                              (ship.damagecontrol || 0);
+                              (ship.damagecontrol || 0) +
+                              (ship.fuel_tanker || 0) +
+                              (ship.diplomat || 0) +
+                              (ship.marines || 0);
         const cost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
 
         // Find if this cruiser is within a friendly gravity well of a planet with enough ships
@@ -171,7 +174,10 @@ async function bootstrap() {
                 engine: 'engine',
                 munitions: 'munitions',
                 targeting: 'targeting',
-                damagecontrol: 'damagecontrol'
+                damagecontrol: 'damagecontrol',
+                fueltanker: 'fuel_tanker',
+                diplomat: 'diplomat',
+                marines: 'marines'
               };
               const prop = typesMap[data.type];
               if (prop && (ship[prop] || 0) < 3 && !ship.isUpgrading) {
@@ -182,7 +188,10 @@ async function bootstrap() {
                                       (ship.engine || 0) +
                                       (ship.munitions || 0) +
                                       (ship.targeting || 0) +
-                                      (ship.damagecontrol || 0);
+                                      (ship.damagecontrol || 0) +
+                                      (ship.fuel_tanker || 0) +
+                                      (ship.diplomat || 0) +
+                                      (ship.marines || 0);
                 const cost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
                 ship.isUpgrading = true;
                 ship.upgradeTimer = cost * 0.2;
@@ -610,6 +619,7 @@ async function bootstrap() {
           isSpeedPlanet: p.isSpeedPlanet,
           focusMode: p.focusMode || 'economy',
           focusChanges: p.focusChanges || 0,
+          sympathy: p.sympathy || null,
           focusTransition: p.focusTransition ? {
             targetMode: p.focusTransition.targetMode,
             progress: Math.min(1.0, p.focusTransition.elapsed / 15000)
@@ -648,6 +658,13 @@ async function bootstrap() {
         splashDamage: s.splashDamage || 0,
         targeting: s.targeting || 0,
         damagecontrol: s.damagecontrol || 0,
+        fuel_tanker: s.fuel_tanker || 0,
+        diplomat: s.diplomat || 0,
+        marines: s.marines || 0,
+        crew: s.crew || 0,
+        marineCount: s.marineCount || 0,
+        isBoardingFleet: s.isBoardingFleet || false,
+        isReturnPod: s.isReturnPod || false,
         isUpgrading: s.isUpgrading || false,
         upgradeTimer: s.upgradeTimer || 0,
         upgradeType: s.upgradeType || null,

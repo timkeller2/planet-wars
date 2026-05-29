@@ -31,6 +31,11 @@ export class Ship {
     this.splashDamage = 0;
     this.targeting = 0;
     this.damagecontrol = 0;
+    this.fuel_tanker = 0;
+    this.diplomat = 0;
+    this.marines = 0;
+    this.crew = 0;
+    this.marineCount = 0;
     this.isUpgrading = false;
     this.upgradeTimer = 0;
     this.upgradeProp = null;
@@ -81,7 +86,7 @@ export class Ship {
         bonus += 1;
       }
     }
-    return baseFuel + bonus;
+    return baseFuel + bonus + (this.fuel_tanker || 0) * 5;
   }
 
   cruiserRadarRange() {
@@ -183,6 +188,8 @@ export class Ship {
             this.fuel = (this.fuel || 0) + bonus;
           } else if (this.upgradeProp === 'munitions') {
             this.splashDamage = this.munitions;
+          } else if (this.upgradeProp === 'fuel_tanker') {
+            this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + 5);
           }
           
           console.log(`[Cruiser Upgrade Complete] Ship ${this.id} upgraded ${this.upgradeProp} to level ${this[this.upgradeProp]}`);
@@ -800,6 +807,7 @@ export class Ship {
 
 
     if (this.maxHealth > 0 && !this.isAmoeba) {
+      this.crew = Math.min(this.crew || 0, 2 * this.health);
       if (this.fuel <= 0 && allShips) {
         for (const other of allShips) {
           if (other.active && other.maxHealth > 0 && !other.isAmoeba && other.id !== this.id && other.owner && this.owner && other.owner.id === this.owner.id && other.fuel > 1) {

@@ -931,7 +931,10 @@ window.addEventListener('DOMContentLoaded', () => {
                           (ship.engine || 0) +
                           (ship.munitions || 0) +
                           (ship.targeting || 0) +
-                          (ship.damagecontrol || 0);
+                          (ship.damagecontrol || 0) +
+                          (ship.fuel_tanker || 0) +
+                          (ship.diplomat || 0) +
+                          (ship.marines || 0);
     const cost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
 
     for (const p of serverState.planets) {
@@ -1777,6 +1780,21 @@ window.addEventListener('DOMContentLoaded', () => {
             if ((ship.damagecontrol || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'damagecontrol' });
             return;
           }
+          if (key === 'f') {
+            event.preventDefault();
+            if ((ship.fuel_tanker || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'fueltanker' });
+            return;
+          }
+          if (key === 'i') {
+            event.preventDefault();
+            if ((ship.diplomat || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'diplomat' });
+            return;
+          }
+          if (key === 'r') {
+            event.preventDefault();
+            if ((ship.marines || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'marines' });
+            return;
+          }
         }
       } else {
         upgradeModeActive = false;
@@ -1930,7 +1948,7 @@ window.addEventListener('DOMContentLoaded', () => {
       el.addEventListener('click', () => {
         const qual = getSelectedCruiserUpgradeQualifiers();
         if (qual && (qual.ship[type] || 0) < 3) {
-          const socketType = type === 'sensorarrays' ? 'sensorarray' : (type === 'shields' ? 'shield' : (type === 'labs' ? 'lab' : type));
+          const socketType = type === 'sensorarrays' ? 'sensorarray' : (type === 'shields' ? 'shield' : (type === 'labs' ? 'lab' : (type === 'fuel_tanker' ? 'fueltanker' : type)));
           socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
         }
       });
@@ -1945,6 +1963,9 @@ window.addEventListener('DOMContentLoaded', () => {
   registerUpgradeBtn('btn-up-munitions', 'munitions');
   registerUpgradeBtn('btn-up-targeting', 'targeting');
   registerUpgradeBtn('btn-up-damagecontrol', 'damagecontrol');
+  registerUpgradeBtn('btn-up-fueltanker', 'fuel_tanker');
+  registerUpgradeBtn('btn-up-diplomat', 'diplomat');
+  registerUpgradeBtn('btn-up-marines', 'marines');
 
   const btnUpCancel = document.getElementById('btn-up-cancel');
   if (btnUpCancel) {
@@ -2056,7 +2077,10 @@ window.addEventListener('DOMContentLoaded', () => {
       'btn-up-engine': 'engine',
       'btn-up-munitions': 'munitions',
       'btn-up-targeting': 'targeting',
-      'btn-up-damagecontrol': 'damagecontrol'
+      'btn-up-damagecontrol': 'damagecontrol',
+      'btn-up-fueltanker': 'fuel_tanker',
+      'btn-up-diplomat': 'diplomat',
+      'btn-up-marines': 'marines'
     };
 
     if (focusModeActive && selectedPlanetFocus) {
@@ -2121,7 +2145,10 @@ window.addEventListener('DOMContentLoaded', () => {
                             (selectedCruiser.engine || 0) +
                             (selectedCruiser.munitions || 0) +
                             (selectedCruiser.targeting || 0) +
-                            (selectedCruiser.damagecontrol || 0);
+                            (selectedCruiser.damagecontrol || 0) +
+                            (selectedCruiser.fuel_tanker || 0) +
+                            (selectedCruiser.diplomat || 0) +
+                            (selectedCruiser.marines || 0);
       const cost = Math.min(150, Math.round(25 + selectedCruiser.maxHealth * (3 + totalUpgrades / 3)));
       
       const namesMap = {
@@ -2132,7 +2159,10 @@ window.addEventListener('DOMContentLoaded', () => {
         'btn-up-engine': 'Engine (E)',
         'btn-up-munitions': 'Munitions (M)',
         'btn-up-targeting': 'Targeting Computer (T)',
-        'btn-up-damagecontrol': 'Damage Control (D)'
+        'btn-up-damagecontrol': 'Damage Control (D)',
+        'btn-up-fueltanker': 'Fuel Tanker (F)',
+        'btn-up-diplomat': 'Diplomat (I)',
+        'btn-up-marines': 'Marines (R)'
       };
 
       for (const [btnId, prop] of Object.entries(upButtonsMap)) {
@@ -2179,7 +2209,10 @@ window.addEventListener('DOMContentLoaded', () => {
                                 (upgradeQual.ship.engine || 0) +
                                 (upgradeQual.ship.munitions || 0) +
                                 (upgradeQual.ship.targeting || 0) +
-                                (upgradeQual.ship.damagecontrol || 0);
+                                (upgradeQual.ship.damagecontrol || 0) +
+                                (upgradeQual.ship.fuel_tanker || 0) +
+                                (upgradeQual.ship.diplomat || 0) +
+                                (upgradeQual.ship.marines || 0);
           const cost = Math.min(150, Math.round(25 + upgradeQual.ship.maxHealth * (3 + totalUpgrades / 3)));
           btnUpgradeMode.setAttribute('title', `Upgrade Mode (U) (Cost: ${cost} ships)`);
           const costSpan = btnUpgradeMode.querySelector('.btn-cost');
@@ -2398,6 +2431,23 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.shadowColor = '#ff0';
             ctx.shadowBlur = 10;
             ctx.stroke();
+          }
+        }
+
+        if (!owner && p.sympathy) {
+          let ringIndex = 0;
+          for (const player of serverState.players) {
+            const symLevel = p.sympathy[player.id] || 0;
+            if (symLevel > 0 && p.ships > 0) {
+              const pct = Math.min(1.0, symLevel / p.ships);
+              const ringRadius = p.radius + 6 + ringIndex * 4;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, ringRadius, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * pct));
+              ctx.strokeStyle = player.color;
+              ctx.lineWidth = 2;
+              ctx.stroke();
+              ringIndex++;
+            }
           }
         }
 
@@ -2897,6 +2947,10 @@ window.addEventListener('DOMContentLoaded', () => {
             if (hs.sensorarrays > 0) lines.push({ label: `Sensor Array (${hs.sensorarrays})`, value: `📡 Active`, color: '#ffb300' });
             if (hs.labs > 0) lines.push({ label: `Laboratories (${hs.labs})`, value: `🔬 Active`, color: '#00e5ff' });
             if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
+            if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ Active`, color: '#ffa500' });
+            if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
+            if (hs.marines > 0) lines.push({ label: `Marines (${hs.marines})`, value: `🪖 ${Math.floor(hs.marineCount || 0)} / ${hs.marines * hs.maxHealth}`, color: '#ffb74d' });
+            lines.push({ label: 'Crew', value: `👤 ${Math.floor(hs.crew || 0)} / ${2 * hs.health}`, color: '#81d4fa' });
 
             const maxBombs = getMaxBombs(hs);
             let munitionsDisplay = Math.floor(hs.bombs || 0) + ' / ' + maxBombs;
@@ -3354,6 +3408,48 @@ window.addEventListener('DOMContentLoaded', () => {
         if (!s.active) continue;
         const owner = serverState.players.find(pl => pl.id === s.ownerId);
 
+        if (s.isBoardingFleet) {
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.beginPath();
+          ctx.arc(0, 0, 4, 0, Math.PI * 2);
+          ctx.fillStyle = owner ? owner.color : '#ff0';
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = owner ? owner.color : '#ff0';
+          ctx.fill();
+          ctx.stroke();
+          
+          ctx.font = '8px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🪖', 0, -6);
+          ctx.restore();
+          continue;
+        }
+
+        if (s.isReturnPod) {
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.beginPath();
+          ctx.arc(0, 0, 4, 0, Math.PI * 2);
+          ctx.fillStyle = owner ? owner.color : '#0ff';
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = owner ? owner.color : '#0ff';
+          ctx.fill();
+          ctx.stroke();
+          
+          ctx.font = '8px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🤝', 0, -6);
+          ctx.restore();
+          continue;
+        }
+
         const isSelected = selectedShips.some(ss => ss.id === s.id);
         const maxSpread = Math.min(60, 10 + Math.sqrt(s.count || 1) * 2.5);
 
@@ -3694,6 +3790,9 @@ window.addEventListener('DOMContentLoaded', () => {
           if ((s.munitions || 0) > 0) activeUpgrades.push({ symbol: '💣', count: s.munitions });
           if ((s.targeting || 0) > 0) activeUpgrades.push({ symbol: '🎯', count: s.targeting });
           if ((s.damagecontrol || 0) > 0) activeUpgrades.push({ symbol: '🔧', count: s.damagecontrol });
+          if ((s.fuel_tanker || 0) > 0) activeUpgrades.push({ symbol: '⛽', count: s.fuel_tanker });
+          if ((s.diplomat || 0) > 0) activeUpgrades.push({ symbol: '🤝', count: s.diplomat });
+          if ((s.marines || 0) > 0) activeUpgrades.push({ symbol: '🪖', count: s.marines });
 
           let upgradesHeight = 0;
           if (cameraZoom >= 1.0 && activeUpgrades.length > 0) {
