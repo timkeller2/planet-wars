@@ -146,6 +146,29 @@ async function bootstrap() {
         };
         const prop = typesMap[data.type];
         if (prop && (ship[prop] || 0) < 3 && !ship.isUpgrading) {
+          const totalUpgrades = (ship.sensorarrays || 0) +
+                                (ship.labs || 0) +
+                                (ship.armor || 0) +
+                                (ship.shields || 0) +
+                                (ship.engine || 0) +
+                                (ship.munitions || 0) +
+                                (ship.targeting || 0) +
+                                (ship.damagecontrol || 0) +
+                                (ship.fuel_tanker || 0) +
+                                (ship.diplomat || 0) +
+                                (ship.marines || 0);
+
+          const maxIndividualLevel = Math.floor((ship.maxHealth || 0) / 10);
+          const maxTotalUpgrades = Math.floor((ship.maxHealth || 0) / 5);
+
+          const currentVal = ship[prop] || 0;
+          const nextLevel = currentVal + 1;
+
+          if (nextLevel > maxIndividualLevel || (totalUpgrades + 1) > maxTotalUpgrades) {
+            console.log(`[Server Upgrade Rejected] Health limits exceeded. shipId: ${ship.id}, maxHealth: ${ship.maxHealth}, currentVal: ${currentVal}, next: ${nextLevel}, maxLevel: ${maxIndividualLevel}, totalUpgrades: ${totalUpgrades}, maxTotalUpgrades: ${maxTotalUpgrades}`);
+            return;
+          }
+
           const cost = game.getUpgradeCost(ship, data.type);
 
           let upgradeStarted = false;

@@ -1910,59 +1910,79 @@ window.addEventListener('DOMContentLoaded', () => {
 
         const qual = getSelectedCruiserUpgradeQualifiers();
         if (qual) {
+          const totalUpgrades = (ship.sensorarrays || 0) +
+                                (ship.labs || 0) +
+                                (ship.armor || 0) +
+                                (ship.shields || 0) +
+                                (ship.engine || 0) +
+                                (ship.munitions || 0) +
+                                (ship.targeting || 0) +
+                                (ship.damagecontrol || 0) +
+                                (ship.fuel_tanker || 0) +
+                                (ship.diplomat || 0) +
+                                (ship.marines || 0);
+
+          const maxIndividualLevel = Math.floor((ship.maxHealth || 0) / 10);
+          const maxTotalUpgrades = Math.floor((ship.maxHealth || 0) / 5);
+
+          const isAllowed = (propName) => {
+            const currentVal = ship[propName] || 0;
+            return (currentVal < 3) && (currentVal + 1 <= maxIndividualLevel) && (totalUpgrades + 1 <= maxTotalUpgrades);
+          };
+
           if (key === 's') {
             event.preventDefault();
-            if ((ship.sensorarrays || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'sensorarray' });
+            if (isAllowed('sensorarrays')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'sensorarray' });
             return;
           }
           if (key === 'l') {
             event.preventDefault();
-            if ((ship.labs || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'lab' });
+            if (isAllowed('labs')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'lab' });
             return;
           }
           if (key === 'a') {
             event.preventDefault();
-            if ((ship.armor || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'armor' });
+            if (isAllowed('armor')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'armor' });
             return;
           }
           if (key === 'h') {
             event.preventDefault();
-            if ((ship.shields || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'shield' });
+            if (isAllowed('shields')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'shield' });
             return;
           }
           if (key === 'e') {
             event.preventDefault();
-            if ((ship.engine || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'engine' });
+            if (isAllowed('engine')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'engine' });
             return;
           }
           if (key === 'm') {
             event.preventDefault();
-            if ((ship.munitions || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'munitions' });
+            if (isAllowed('munitions')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'munitions' });
             return;
           }
           if (key === 't') {
             event.preventDefault();
-            if ((ship.targeting || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'targeting' });
+            if (isAllowed('targeting')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'targeting' });
             return;
           }
           if (key === 'd') {
             event.preventDefault();
-            if ((ship.damagecontrol || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'damagecontrol' });
+            if (isAllowed('damagecontrol')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'damagecontrol' });
             return;
           }
           if (key === 'f') {
             event.preventDefault();
-            if ((ship.fuel_tanker || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'fueltanker' });
+            if (isAllowed('fuel_tanker')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'fueltanker' });
             return;
           }
           if (key === 'i') {
             event.preventDefault();
-            if ((ship.diplomat || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'diplomat' });
+            if (isAllowed('diplomat')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'diplomat' });
             return;
           }
           if (key === 'r') {
             event.preventDefault();
-            if ((ship.marines || 0) < 3) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'marines' });
+            if (isAllowed('marines')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'marines' });
             return;
           }
         }
@@ -2131,12 +2151,33 @@ window.addEventListener('DOMContentLoaded', () => {
     if (el) {
       el.addEventListener('click', () => {
         const qual = getSelectedCruiserUpgradeQualifiers();
-        if (qual && (qual.ship[type] || 0) < 3) {
-          const socketType = upgradeToSocketTypeMap[type] || type;
-          console.log(`[Upgrade Click] Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${qual.ship.id}`);
-          socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
-        } else {
-          console.log(`[Upgrade Click Rejected] Button: ${id}, type: ${type}, hasQual: ${!!qual}, currentVal: ${qual ? (qual.ship[type] || 0) : 'N/A'}`);
+        if (qual) {
+          const ship = qual.ship;
+          const totalUpgrades = (ship.sensorarrays || 0) +
+                                (ship.labs || 0) +
+                                (ship.armor || 0) +
+                                (ship.shields || 0) +
+                                (ship.engine || 0) +
+                                (ship.munitions || 0) +
+                                (ship.targeting || 0) +
+                                (ship.damagecontrol || 0) +
+                                (ship.fuel_tanker || 0) +
+                                (ship.diplomat || 0) +
+                                (ship.marines || 0);
+
+          const maxIndividualLevel = Math.floor((ship.maxHealth || 0) / 10);
+          const maxTotalUpgrades = Math.floor((ship.maxHealth || 0) / 5);
+
+          const currentVal = ship[type] || 0;
+          const nextLevel = currentVal + 1;
+
+          if (currentVal < 3 && nextLevel <= maxIndividualLevel && (totalUpgrades + 1) <= maxTotalUpgrades) {
+            const socketType = upgradeToSocketTypeMap[type] || type;
+            console.log(`[Upgrade Click] Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${qual.ship.id}`);
+            socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
+          } else {
+            console.log(`[Upgrade Click Rejected] Limits failed. type: ${type}, currentVal: ${currentVal}, nextLevel: ${nextLevel}, maxLevel: ${maxIndividualLevel}, totalUpgrades: ${totalUpgrades}, maxTotalUpgrades: ${maxTotalUpgrades}`);
+          }
         }
       });
     }
@@ -2353,11 +2394,29 @@ window.addEventListener('DOMContentLoaded', () => {
         'btn-up-marines': 'Marines (R)'
       };
 
+      const totalUpgrades = (selectedCruiser.sensorarrays || 0) +
+                            (selectedCruiser.labs || 0) +
+                            (selectedCruiser.armor || 0) +
+                            (selectedCruiser.shields || 0) +
+                            (selectedCruiser.engine || 0) +
+                            (selectedCruiser.munitions || 0) +
+                            (selectedCruiser.targeting || 0) +
+                            (selectedCruiser.damagecontrol || 0) +
+                            (selectedCruiser.fuel_tanker || 0) +
+                            (selectedCruiser.diplomat || 0) +
+                            (selectedCruiser.marines || 0);
+
+      const maxIndividualLevel = Math.floor((selectedCruiser.maxHealth || 0) / 10);
+      const maxTotalUpgrades = Math.floor((selectedCruiser.maxHealth || 0) / 5);
+
       for (const [btnId, prop] of Object.entries(upButtonsMap)) {
         const el = document.getElementById(btnId);
         if (el) {
           const currentVal = selectedCruiser[prop] || 0;
-          el.style.display = (currentVal < 3 && !selectedCruiser.isUpgrading) ? 'inline-flex' : 'none';
+          const nextLevel = currentVal + 1;
+          const levelAllowed = nextLevel <= maxIndividualLevel;
+          const totalAllowed = (totalUpgrades + 1) <= maxTotalUpgrades;
+          el.style.display = (currentVal < 3 && !selectedCruiser.isUpgrading && levelAllowed && totalAllowed) ? 'inline-flex' : 'none';
           if (el.style.display === 'inline-flex') {
             const uCost = getUpgradeCostForShip(selectedCruiser, prop);
             const baseName = namesMap[btnId] || 'Upgrade';
