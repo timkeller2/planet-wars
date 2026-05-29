@@ -864,9 +864,14 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // startScreen is now hidden by startBtn click
-    if (state.isRunning && !endScreen.classList.contains('hidden')) {
-      endScreen.classList.add('hidden');
+    if (state.isRunning) {
+      if (!endScreen.classList.contains('hidden')) {
+        endScreen.classList.add('hidden');
+      }
+      if (scoreBoard && scoreBoard.parentNode !== gameUI) {
+        const chatContainer = document.getElementById('chat-container');
+        gameUI.insertBefore(scoreBoard, chatContainer);
+      }
     }
 
     updateUI();
@@ -961,6 +966,10 @@ window.addEventListener('DOMContentLoaded', () => {
       } else {
         endTitle.style.color = '#f0f';
         endTitle.style.textShadow = '0 0 10px #f0f, 0 0 20px #f0f';
+      }
+      if (scoreBoard) {
+        endScreen.appendChild(scoreBoard);
+        scoreBoard.classList.remove('hidden');
       }
     }
   }
