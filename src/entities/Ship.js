@@ -1070,11 +1070,7 @@ export class Ship {
                   const eRed = Math.sqrt(this.owner.expScore || 0);
                   const sRed = Math.sqrt(this.expScore || 0);
                   const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
-                  if (storm.type === 'nebula') {
-                    hazardPenalty += (eff / 4) / 100;
-                  } else {
-                    hazardPenalty += (eff / 2) / 100;
-                  }
+                  hazardPenalty += eff / 100;
                 }
               }
             }

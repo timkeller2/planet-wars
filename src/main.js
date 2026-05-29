@@ -2958,12 +2958,12 @@ window.addEventListener('DOMContentLoaded', () => {
                   const dx = p.x - storm.x;
                   const dy = p.y - storm.y;
                   if (dx * dx + dy * dy <= storm.radius * storm.radius) {
-                    const knowledge = storm.knowledge || 0;
+                    const knowledge = (storm.knowledge && typeof storm.knowledge === 'object') ? (storm.knowledge[localPlayer.id] || 0) : (storm.knowledge || 0);
                     const tRed = Math.sqrt(localPlayer.techScore || 0);
                     const eRed = Math.sqrt(localPlayer.expScore || 0);
                     const sRed = Math.sqrt(maxShipExp || 0);
                     const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
-                    hazardPenalty += (eff / 2) / 100;
+                    hazardPenalty += eff / 100;
                   }
                 }
               }
@@ -3120,6 +3120,28 @@ window.addEventListener('DOMContentLoaded', () => {
             }
           } else {
             lines.push({ label: 'Neutral', value: 'No defense bonuses', color: '#888' });
+          }
+
+          // Storm / Nebula defensive support
+          if (serverState.storms) {
+            const defenseOwner = hpOwner || { techScore: 0, expScore: 0, id: 'neutral' };
+            for (const storm of serverState.storms) {
+              if (storm.type === 'minefield') continue;
+              const sdx = hp.x - storm.x;
+              const sdy = hp.y - storm.y;
+              if (sdx * sdx + sdy * sdy <= storm.radius * storm.radius) {
+                const knowledge = (storm.knowledge && typeof storm.knowledge === 'object') ? (storm.knowledge[defenseOwner.id] || 0) : (storm.knowledge || 0);
+                const tRed = Math.sqrt(defenseOwner.techScore || 0);
+                const eRed = Math.sqrt(defenseOwner.expScore || 0);
+                const sRed = 0; // No ship exp on planet itself
+                const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+                if (eff > 0) {
+                  totalDefense += eff;
+                  const label = storm.type === 'nebula' ? 'Nebula Shielding' : 'Ion Interference';
+                  lines.push({ label: label, value: `${eff.toFixed(1)}%`, color: storm.type === 'nebula' ? '#ff4444' : '#ffff44' });
+                }
+              }
+            }
           }
 
           lines[0].value = totalDefense > 0 ? `🛡️ ${Math.round(totalDefense * 10) / 10}%` : '';

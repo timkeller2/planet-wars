@@ -598,7 +598,26 @@ async function bootstrap() {
             const defenderHomeworldPenalty = (humanInvolved && p.owner && p.owner.id === p.homeworldOf) ? 0.20 : 0;
             const attackerHomeworldBonus = (humanInvolved && owner.id === p.homeworldOf && p.owner !== owner) ? 0.20 : 0;
             
-            const killChance = Math.max(0, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus);
+            let hazardPenalty = 0;
+            if (game.storms) {
+              for (const storm of game.storms) {
+                if (storm.type === 'minefield') continue;
+                const sdx = p.x - storm.x;
+                const sdy = p.y - storm.y;
+                if (sdx * sdx + sdy * sdy <= storm.radius * storm.radius) {
+                  const knowledge = (storm.knowledge && typeof storm.knowledge === 'object') ? (storm.knowledge[owner.id] || 0) : (storm.knowledge || 0);
+                  const tRed = Math.sqrt(owner.techScore || 0);
+                  const eRed = Math.sqrt(owner.expScore || 0);
+                  const sRed = Math.sqrt(maxShipExp || 0);
+                  const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+                  hazardPenalty += eff / 100;
+                }
+              }
+            }
+
+            const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
+            let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus);
+            killChance = Math.max(minKillChance, killChance - hazardPenalty);
             if (maxKillChance === null || killChance > maxKillChance) {
               maxKillChance = killChance;
             }
