@@ -863,7 +863,10 @@ export class Ship {
           }
         }
       } else {
-        const fuelDrain = this.isWarp ? 8 : 4;
+        let fuelDrain = this.isWarp ? 8 : 4;
+        if (this.isCruiser && distance < 5) {
+          fuelDrain *= 0.5;
+        }
         this.fuel = (this.fuel || 0) - (deltaTime / 1000) / (60 / fuelDrain);
         if (this.fuel <= 0) {
           this.fuel = 0;
