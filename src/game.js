@@ -231,6 +231,52 @@ export class Game {
     return Math.max(1, Math.round(baseCost * (1 + modifier)));
   }
 
+  isPlanetInHumanGravityWell(p) {
+    const humanPlayers = this.allPlayers.filter(pl => pl && !pl.isAI);
+    for (const hp of humanPlayers) {
+      for (const pl of this.planets) {
+        if (pl.owner && pl.owner.id === hp.id) {
+          const gr = pl.getGravityRadius();
+          const dx = pl.x - p.x;
+          const dy = pl.y - p.y;
+          if (dx * dx + dy * dy < gr * gr) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  isPlanetVisibleToHuman(p) {
+    const humanPlayers = this.allPlayers.filter(pl => pl && !pl.isAI);
+    if (humanPlayers.length === 0) return false;
+
+    for (const hp of humanPlayers) {
+      // 1. Gravity well check
+      for (const pl of this.planets) {
+        if (pl.owner && pl.owner.id === hp.id) {
+          const gr = pl.getGravityRadius();
+          const dx = pl.x - p.x;
+          const dy = pl.y - p.y;
+          if (dx * dx + dy * dy <= gr * gr) return true;
+        }
+      }
+      
+      // 2. Sympathy check
+      if (p.sympathy && p.sympathy[hp.id] > 0) return true;
+
+      // 3. Ship sensor check
+      for (const s of this.ships) {
+        if (s.active && s.owner && s.owner.id === hp.id) {
+          const radarRange = (typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : 40;
+          const dx = s.x - p.x;
+          const dy = s.y - p.y;
+          if (dx * dx + dy * dy <= radarRange * radarRange) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   tryAssignPlanet(player) {
     if (player.needsPlanet && this.isRunning && player.isAlive !== undefined) {
       player.needsPlanet = false;
@@ -242,18 +288,36 @@ export class Game {
     const neutralPlanets = this.planets.filter(p => p.owner === null && !p.isSuperPlanet);
     if (neutralPlanets.length === 0) return false;
 
+    let availableCandidates = neutralPlanets;
+    if (player.isAI && player !== this.monsterPlayer) {
+      const preferred = neutralPlanets.filter(p => {
+        // Skip if in human gravity well
+        if (this.isPlanetInHumanGravityWell(p)) return false;
+        // Skip if FOW is enabled and visible to human (66% chance)
+        if (this.settings && this.settings.fogOfWar) {
+          if (this.isPlanetVisibleToHuman(p) && Math.random() < 0.66) {
+            return false;
+          }
+        }
+        return true;
+      });
+      if (preferred.length > 0) {
+        availableCandidates = preferred;
+      }
+    }
+
     let targetPlanet = null;
 
     if (player === this.monsterPlayer) {
       // Monster gets the smallest planet
-      neutralPlanets.sort((a, b) => a.maxShips - b.maxShips);
-      targetPlanet = neutralPlanets[0];
+      availableCandidates.sort((a, b) => a.maxShips - b.maxShips);
+      targetPlanet = availableCandidates[0];
     } else {
       const humanPlanets = this.planets.filter(p => p.owner && !p.owner.isAI);
       
       if (!player.isAI && humanPlanets.length > 0) {
         // Human player: prioritize candidates with maxShips > 115, sorted by distance to nearest human planet descending
-        const candidatePlanets = neutralPlanets.filter(p => p.maxShips > 115);
+        const candidatePlanets = availableCandidates.filter(p => p.maxShips > 115);
         if (candidatePlanets.length > 0) {
           candidatePlanets.sort((a, b) => {
             const distA = humanPlanets.reduce((min, hp) => Math.min(min, (a.x - hp.x)**2 + (a.y - hp.y)**2), Infinity);
@@ -265,7 +329,7 @@ export class Game {
       }
       
       if (!targetPlanet) {
-        const candidatePlanets = neutralPlanets.filter(p => p.maxShips > 115 && humanPlanets.every(hp => {
+        const candidatePlanets = availableCandidates.filter(p => p.maxShips > 115 && humanPlanets.every(hp => {
           const dx = p.x - hp.x;
           const dy = p.y - hp.y;
           return dx*dx + dy*dy >= 40000; // 200^2
@@ -276,14 +340,14 @@ export class Game {
           targetPlanet = candidatePlanets[0];
         } else {
           // Fallback 1: smallest > 115 regardless of distance
-          const anyLarge = neutralPlanets.filter(p => p.maxShips > 115);
+          const anyLarge = availableCandidates.filter(p => p.maxShips > 115);
           if (anyLarge.length > 0) {
             anyLarge.sort((a, b) => a.maxShips - b.maxShips);
             targetPlanet = anyLarge[0];
           } else {
             // Fallback 2: highest maxShips overall
-            neutralPlanets.sort((a, b) => b.maxShips - a.maxShips);
-            targetPlanet = neutralPlanets[0];
+            availableCandidates.sort((a, b) => b.maxShips - a.maxShips);
+            targetPlanet = availableCandidates[0];
           }
         }
       }
