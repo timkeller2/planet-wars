@@ -2859,7 +2859,7 @@ window.addEventListener('DOMContentLoaded', () => {
               const pdy = gp.y - p.y;
               if (pdx * pdx + pdy * pdy <= effGravity * effGravity) {
                 let mult = 0.002;
-                if (gp.isMilitary) {
+                if (gp.isMilitary || gp.focusMode === 'garrison') {
                   if (gp.ships >= gp.maxShips * 2) {
                     mult = 0.0045;
                   } else if (gp.ships >= gp.maxShips) {
@@ -3272,7 +3272,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 const pdx = gp.x - hs.x, pdy = gp.y - hs.y;
                 if (pdx * pdx + pdy * pdy <= gr * gr) {
                   let mult = 0.2;
-                  if (gp.isMilitary) {
+                  if (gp.isMilitary || gp.focusMode === 'garrison') {
                     if (gp.ships >= gp.maxShips * 2) {
                       mult = 0.45;
                     } else if (gp.ships >= gp.maxShips) {
@@ -3403,7 +3403,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 const pdx = gp.x - hs.x, pdy = gp.y - hs.y;
                 if (pdx * pdx + pdy * pdy <= gr * gr) {
                   let mult = 0.2;
-                  if (gp.isMilitary) {
+                  if (gp.isMilitary || gp.focusMode === 'garrison') {
                     if (gp.ships >= gp.maxShips * 2) {
                       mult = 0.45;
                     } else if (gp.ships >= gp.maxShips) {

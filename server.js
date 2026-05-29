@@ -544,7 +544,7 @@ async function bootstrap() {
                 if (dx*dx + dy*dy < gravityRadius * gravityRadius) {
                   if (otherPlanet.owner === owner) {
                     let mult = 0.002;
-                    if (otherPlanet.isMilitary) {
+                    if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
                       if (otherPlanet.ships >= otherPlanet.maxShips * 2) {
                         mult = 0.0045;
                       } else if (otherPlanet.ships >= otherPlanet.maxShips) {

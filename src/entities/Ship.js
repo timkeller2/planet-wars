@@ -128,7 +128,7 @@ export class Ship {
       const dx = gp.x - x;
       const dy = gp.y - y;
         let mult = 0.002;
-        if (gp.isMilitary) {
+        if (gp.isMilitary || gp.focusMode === 'garrison') {
           if (gp.ships >= gp.maxShips * 2) {
             mult = 0.0045;
           } else if (gp.ships >= gp.maxShips) {
@@ -1003,7 +1003,7 @@ export class Ship {
                   if (pDistSq < gravityRadius * gravityRadius) {
                     if (planet.owner === this.owner) {
                       let mult = 0.002;
-                      if (planet.isMilitary) {
+                      if (planet.isMilitary || planet.focusMode === 'garrison') {
                         if (planet.ships >= planet.maxShips * 2) {
                           mult = 0.0045;
                         } else if (planet.ships >= planet.maxShips) {
