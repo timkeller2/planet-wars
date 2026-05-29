@@ -3888,6 +3888,19 @@ window.addEventListener('DOMContentLoaded', () => {
             if (s.bombs > 0) {
               range += baseDogfightRange * 0.10;
             }
+            
+            // Apply targeting range bonus consistent with Ship.js
+            let targetingRangeBonus = 0;
+            if (s.targeting > 0) {
+              targetingRangeBonus += 0.10;
+              if (s.targeting > 1) {
+                targetingRangeBonus += 0.05;
+              }
+              if (s.targeting > 2) {
+                targetingRangeBonus += 0.05;
+              }
+            }
+            range *= (1 + targetingRangeBonus);
           } else {
             const healthBonus = Math.floor(s.health || 0);
             range = 40 * (1 + laserTechBonus) * (1 + healthBonus * 0.10);
@@ -3897,9 +3910,92 @@ window.addEventListener('DOMContentLoaded', () => {
           ctx.strokeStyle = 'rgba(255, 60, 60, 0.22)'; // Subtle red
           ctx.lineWidth = 1;
           ctx.setLineDash([2, 4]); // Light dotted
-          ctx.beginPath();
-          ctx.arc(s.x, s.y, range, 0, Math.PI * 2);
-          ctx.stroke();
+          
+          if (s.isCruiser && !s.isAmoeba) {
+            // Draw custom directional firing range envelope for cruisers
+            let rangeWithoutMunitions = range;
+            if (s.bombs > 0) {
+              const shipExpBonus = 0.5 * Math.sqrt(s.expScore || 0);
+              const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+              const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+              
+              let targetingRangeBonus = 0;
+              if (s.targeting > 0) {
+                targetingRangeBonus += 0.10;
+                if (s.targeting > 1) {
+                  targetingRangeBonus += 0.05;
+                }
+                if (s.targeting > 2) {
+                  targetingRangeBonus += 0.05;
+                }
+              }
+              const munitionsBonus = baseDogfightRange * 0.10 * (1 + targetingRangeBonus);
+              rangeWithoutMunitions = Math.max(0, range - munitionsBonus);
+            }
+            const rangeAft = rangeWithoutMunitions * 0.85;
+            const rangeFront = range * 1.2;
+            const rangeSide = range;
+            
+            // 1. Draw outer envelope perimeter
+            ctx.beginPath();
+            const steps = 180;
+            for (let i = 0; i <= steps; i++) {
+              const theta = (i * 2 * Math.PI) / steps;
+              let diff = theta - (s.angle || 0);
+              while (diff < -Math.PI) diff += Math.PI * 2;
+              while (diff > Math.PI) diff -= Math.PI * 2;
+              
+              const absDiff = Math.abs(diff);
+              let r = rangeSide;
+              if (absDiff <= Math.PI / 4) {
+                r = rangeFront;
+              } else if (absDiff >= 3 * Math.PI / 4) {
+                r = rangeAft;
+              }
+              
+              const px = s.x + Math.cos(theta) * r;
+              const py = s.y + Math.sin(theta) * r;
+              
+              if (i === 0) {
+                ctx.moveTo(px, py);
+              } else {
+                ctx.lineTo(px, py);
+              }
+            }
+            ctx.closePath();
+            ctx.stroke();
+            
+            // 2. Draw partition lines at arc boundaries (+/- 45° and +/- 135°)
+            ctx.beginPath();
+            const sectorAngles = [
+              (s.angle || 0) - Math.PI / 4,
+              (s.angle || 0) + Math.PI / 4,
+              (s.angle || 0) - 3 * Math.PI / 4,
+              (s.angle || 0) + 3 * Math.PI / 4
+            ];
+            for (const sa of sectorAngles) {
+              let diff = sa - (s.angle || 0);
+              while (diff < -Math.PI) diff += Math.PI * 2;
+              while (diff > Math.PI) diff -= Math.PI * 2;
+              
+              const absDiff = Math.abs(diff);
+              let r = rangeSide;
+              if (absDiff <= Math.PI / 4) {
+                r = rangeFront;
+              } else if (absDiff >= 3 * Math.PI / 4) {
+                r = rangeAft;
+              }
+              
+              ctx.moveTo(s.x, s.y);
+              ctx.lineTo(s.x + Math.cos(sa) * r, s.y + Math.sin(sa) * r);
+            }
+            ctx.stroke();
+          } else {
+            // Draw standard circular range circle for non-cruisers
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, range, 0, Math.PI * 2);
+            ctx.stroke();
+          }
           ctx.restore();
         }
 
