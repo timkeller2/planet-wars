@@ -199,6 +199,9 @@ window.addEventListener('DOMContentLoaded', () => {
   const prodMultipleSelect = document.getElementById('production-multiple-select');
   const customProdMultipleContainer = document.getElementById('custom-production-multiple-container');
   const prodMultipleInput = document.getElementById('production-multiple-input');
+  const timedGameSelect = document.getElementById('timed-game-select');
+  const customTimedGameContainer = document.getElementById('custom-timed-game-container');
+  const timedGameInput = document.getElementById('timed-game-input');
 
   if (prodMultipleSelect) {
     prodMultipleSelect.addEventListener('change', () => {
@@ -269,6 +272,19 @@ window.addEventListener('DOMContentLoaded', () => {
           planetCountInput.dispatchEvent(new Event('input'));
         }
         lastSuggestedPlanets = suggestedPlanets;
+      }
+    });
+  }
+
+  if (timedGameSelect) {
+    timedGameSelect.addEventListener('change', () => {
+      if (timedGameSelect.value === 'custom') {
+        if (customTimedGameContainer) customTimedGameContainer.style.display = 'flex';
+      } else {
+        if (customTimedGameContainer) customTimedGameContainer.style.display = 'none';
+        if (timedGameInput && timedGameSelect.value !== 'unlimited') {
+          timedGameInput.value = String(Math.round(parseFloat(timedGameSelect.value) / 60));
+        }
       }
     });
   }
@@ -938,7 +954,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!serverState.isRunning && gameUI.classList.contains('hidden') === false) {
       gameUI.classList.add('hidden');
       endScreen.classList.remove('hidden');
-      endTitle.textContent = serverState.gameOverMessage || 'GAME OVER';
+      endTitle.innerHTML = (serverState.gameOverMessage || 'GAME OVER').replace(/\n/g, '<br>');
       if (pCount > 0) {
         endTitle.style.color = '#0ff';
         endTitle.style.textShadow = '0 0 10px #0ff, 0 0 20px #0ff';
@@ -2158,7 +2174,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
     const timedGameSelect = document.getElementById('timed-game-select');
-    const timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
+    let timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
+    if (timedGameLimit === 'custom') {
+      const timedGameInput = document.getElementById('timed-game-input');
+      const customMin = timedGameInput ? parseFloat(timedGameInput.value) : 60;
+      timedGameLimit = String(Math.round((isNaN(customMin) ? 60 : customMin) * 60));
+    }
     const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm, timedGameLimit };
 
     if (startBtn.textContent === 'START GAME') {
@@ -2186,7 +2207,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
     const timedGameSelect = document.getElementById('timed-game-select');
-    const timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
+    let timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
+    if (timedGameLimit === 'custom') {
+      const timedGameInput = document.getElementById('timed-game-input');
+      const customMin = timedGameInput ? parseFloat(timedGameInput.value) : 60;
+      timedGameLimit = String(Math.round((isNaN(customMin) ? 60 : customMin) * 60));
+    }
     hasCenteredOnHomeworld = false;
     serverState = null;
     lastKnownPlanets = {}; // Clear cached planet details

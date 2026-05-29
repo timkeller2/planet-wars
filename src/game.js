@@ -2227,7 +2227,7 @@ export class Game {
         const winner = this.allPlayers.find(p => p.id === winnerId);
         if (winner) winnerName = winner.name || winner.id;
       }
-      this.gameOverMessage = `${winnerName.toUpperCase()} IS VICTORIOUS! (ELIMINATION)`;
+      this.gameOverMessage = `${winnerName.toUpperCase()} IS VICTORIOUS!\n(ELIMINATION)`;
       if (this.onGameOver) this.onGameOver(this.gameOverMessage);
       return;
     }
@@ -2246,7 +2246,7 @@ export class Game {
       const secondBonus = Math.floor(Math.sqrt(sortedByTech[1].techScore || 0));
       if (topBonus >= 15 && topBonus - secondBonus >= 10) {
         this.stop();
-        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS! (TECH DOMINATION)`;
+        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH DOMINATION)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
       }
     } else if (sortedByTech.length === 1) {
@@ -2254,7 +2254,7 @@ export class Game {
       const topBonus = Math.floor(Math.sqrt(topPlayer.techScore || 0));
       if (topBonus >= 15) {
         this.stop();
-        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS! (TECH DOMINATION)`;
+        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH DOMINATION)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
       }
     }
@@ -2264,7 +2264,7 @@ export class Game {
     for (const player of this.allPlayers) {
       if (player.isAlive && (player.totalCapacity || 0) > galacticCapacity * 0.75) {
         this.stop();
-        this.gameOverMessage = `${(player.name || player.id).toUpperCase()} IS VICTORIOUS! (ECONOMIC DOMINATION)`;
+        this.gameOverMessage = `${(player.name || player.id).toUpperCase()} IS VICTORIOUS!\n(ECONOMIC DOMINATION)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
         return;
       }
@@ -2277,7 +2277,7 @@ export class Game {
     // Find all alive players
     const players = this.allPlayers.filter(p => p.isAlive);
     if (players.length === 0) {
-      this.gameOverMessage = "TIMED GAME ENDED IN A DRAW!";
+      this.gameOverMessage = "TIMED GAME ENDED IN A DRAW!\n(DRAW)";
       if (this.onGameOver) this.onGameOver(this.gameOverMessage);
       return;
     }
@@ -2318,7 +2318,7 @@ export class Game {
       winnerName = bestPlayer.name || bestPlayer.id;
     }
 
-    this.gameOverMessage = `${winnerName.toUpperCase()} WINS A TIMED GAME VICTORY!`;
+    this.gameOverMessage = `${winnerName.toUpperCase()} IS VICTORIOUS!\n(TIMED GAME VICTORY)`;
     if (this.onGameOver) this.onGameOver(this.gameOverMessage);
   }
 }

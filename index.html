@@ -79,9 +79,14 @@
               <option value="5400">1.5 hours</option>
               <option value="7200">2 hours</option>
               <option value="10800">3 hours</option>
+              <option value="custom">Custom</option>
               <option value="unlimited">Unlimited</option>
             </select>
             Timed Game
+          </label>
+          <label id="custom-timed-game-container" style="display: none; cursor: pointer; align-items: center;">
+            <input type="number" id="timed-game-input" value="60" min="1" max="1440" style="width: 60px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            Custom Duration (Minutes)
           </label>
         </div>
         <button id="start-btn" class="cyber-btn" style="margin-top: 30px; padding: 20px 60px; font-size: 2.2rem; box-shadow: 0 0 20px rgba(0, 255, 255, 0.5), inset 0 0 15px rgba(0, 255, 255, 0.4);">ENTER GAME</button>
