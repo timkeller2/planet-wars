@@ -2858,7 +2858,14 @@ window.addEventListener('DOMContentLoaded', () => {
               const pdx = gp.x - p.x;
               const pdy = gp.y - p.y;
               if (pdx * pdx + pdy * pdy <= effGravity * effGravity) {
-                const mult = (gp.isMilitary && gp.ships >= gp.maxShips) ? 0.003 : 0.002;
+                let mult = 0.002;
+                if (gp.isMilitary) {
+                  if (gp.ships >= gp.maxShips * 2) {
+                    mult = 0.0045;
+                  } else if (gp.ships >= gp.maxShips) {
+                    mult = 0.003;
+                  }
+                }
                 friendlyPlanetBoost += mult * Math.floor(gp.ships / 10);
               }
             }
@@ -3264,7 +3271,14 @@ window.addEventListener('DOMContentLoaded', () => {
                 const gr = baseRadius * (1 + tb + eb);
                 const pdx = gp.x - hs.x, pdy = gp.y - hs.y;
                 if (pdx * pdx + pdy * pdy <= gr * gr) {
-                  const mult = (gp.isMilitary && gp.ships >= gp.maxShips) ? 0.3 : 0.2;
+                  let mult = 0.2;
+                  if (gp.isMilitary) {
+                    if (gp.ships >= gp.maxShips * 2) {
+                      mult = 0.45;
+                    } else if (gp.ships >= gp.maxShips) {
+                      mult = 0.3;
+                    }
+                  }
                   const strength = mult * Math.floor(gp.ships / 10);
                   if (gp.ownerId === hs.ownerId) {
                     friendlyGrav += strength;
@@ -3388,7 +3402,14 @@ window.addEventListener('DOMContentLoaded', () => {
                 const gr = baseRadius * (1 + tb + eb);
                 const pdx = gp.x - hs.x, pdy = gp.y - hs.y;
                 if (pdx * pdx + pdy * pdy <= gr * gr) {
-                  const mult = (gp.isMilitary && gp.ships >= gp.maxShips) ? 0.3 : 0.2;
+                  let mult = 0.2;
+                  if (gp.isMilitary) {
+                    if (gp.ships >= gp.maxShips * 2) {
+                      mult = 0.45;
+                    } else if (gp.ships >= gp.maxShips) {
+                      mult = 0.3;
+                    }
+                  }
                   const strength = mult * Math.floor(gp.ships / 10);
                   if (gp.ownerId === hs.ownerId) {
                     friendlyGrav += strength;

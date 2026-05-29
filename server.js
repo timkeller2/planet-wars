@@ -543,7 +543,14 @@ async function bootstrap() {
                 
                 if (dx*dx + dy*dy < gravityRadius * gravityRadius) {
                   if (otherPlanet.owner === owner) {
-                    const mult = (otherPlanet.isMilitary && otherPlanet.ships >= otherPlanet.maxShips) ? 0.003 : 0.002;
+                    let mult = 0.002;
+                    if (otherPlanet.isMilitary) {
+                      if (otherPlanet.ships >= otherPlanet.maxShips * 2) {
+                        mult = 0.0045;
+                      } else if (otherPlanet.ships >= otherPlanet.maxShips) {
+                        mult = 0.003;
+                      }
+                    }
                     friendlyPlanetBoost += mult * Math.floor(otherPlanet.ships / 10);
                   }
                 }

@@ -127,10 +127,15 @@ export class Ship {
       const gravityRadius = gp.getGravityRadius();
       const dx = gp.x - x;
       const dy = gp.y - y;
-      if (dx * dx + dy * dy < gravityRadius * gravityRadius) {
-        const mult = (gp.isMilitary && gp.ships >= gp.maxShips) ? 0.003 : 0.002;
+        let mult = 0.002;
+        if (gp.isMilitary) {
+          if (gp.ships >= gp.maxShips * 2) {
+            mult = 0.0045;
+          } else if (gp.ships >= gp.maxShips) {
+            mult = 0.003;
+          }
+        }
         totalBonus += mult * Math.floor(gp.ships / 10);
-      }
     }
     return totalBonus;
   }
@@ -997,7 +1002,14 @@ export class Ship {
                   
                   if (pDistSq < gravityRadius * gravityRadius) {
                     if (planet.owner === this.owner) {
-                      const mult = (planet.isMilitary && planet.ships >= planet.maxShips) ? 0.003 : 0.002;
+                      let mult = 0.002;
+                      if (planet.isMilitary) {
+                        if (planet.ships >= planet.maxShips * 2) {
+                          mult = 0.0045;
+                        } else if (planet.ships >= planet.maxShips) {
+                          mult = 0.003;
+                        }
+                      }
                       friendlyPlanetBoost += mult * Math.floor(planet.ships / 10);
                     }
                   }
