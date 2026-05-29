@@ -743,7 +743,7 @@ export class Game {
     const spaceDx = targetX - source.x;
     const spaceDy = targetY - source.y;
     const spaceDist = Math.sqrt(spaceDx * spaceDx + spaceDy * spaceDy);
-    ship.speedModifier = spaceDist < 100 ? 0.25 : 1.0;
+    ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
     ship.sourcePlanet = source;
     ship.expScore = source.expScore || 0;
     ship.bomberOffsetMag = 0;
