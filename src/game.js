@@ -1475,7 +1475,7 @@ export class Game {
               if (targetPlanet && targetPlanet.ships > 0) {
                 targetPlanet.ships -= 1;
                 if (laser.splashDamage && laser.splashDamage > 0) {
-                  const splashLimit = Math.floor(targetPlanet.ships / 25);
+                  const splashLimit = Math.floor(targetPlanet.ships / 50);
                   const splash = Math.min(laser.splashDamage, splashLimit);
                   const toDestroy = Math.min(targetPlanet.ships, splash);
                   targetPlanet.ships -= toDestroy;

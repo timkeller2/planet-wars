@@ -1501,7 +1501,7 @@ export class Ship {
         this.count -= 1;
         if (attacker && attacker.maxHealth > 0 && !attacker.isAmoeba && (attacker.bombs || 0) > 0 && (attacker.splashDamage || 0) > 0) {
           const baseSplash = attacker.splashDamage;
-          const splashLimit = Math.floor(this.count / 25);
+          const splashLimit = Math.floor(this.count / 50);
           const splash = Math.min(baseSplash, splashLimit);
           const toDestroy = Math.min(this.count, splash);
           this.count -= toDestroy;
@@ -1536,7 +1536,7 @@ export class Ship {
 
       if (attacker && attacker.maxHealth > 0 && !attacker.isAmoeba && (attacker.bombs || 0) > 0 && (attacker.splashDamage || 0) > 0) {
         const baseSplash = attacker.splashDamage;
-        const splashLimit = Math.floor(this.health / 25);
+        const splashLimit = Math.floor(this.health / 50);
         const splash = Math.min(baseSplash, splashLimit);
         for (let i = 0; i < splash; i++) {
           if (this.armorPoints && this.armorPoints > 0) {
