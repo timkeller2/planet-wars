@@ -913,7 +913,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const techScore = myPlayer.techScore || 0;
     const techBonus = (Math.sqrt(techScore)).toFixed(1);
     const expScore = myPlayer.expScore || 0;
-    const expBonus = (0.5 * Math.sqrt(expScore)).toFixed(1);
+    const expBonus = (Math.sqrt(expScore)).toFixed(1);
 
     if (leaderboardContent) {
       let galacticCapacity = serverState.galacticCapacity || 1;
@@ -922,7 +922,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const capacity = p.totalCapacity || 0;
         const capacityPercent = galacticCapacity > 0 ? Math.round((capacity / galacticCapacity) * 100) : 0;
         const pTech = Math.floor(Math.sqrt(p.techScore || 0));
-        const pExp = Math.floor(0.5 * Math.sqrt(p.expScore || 0));
+        const pExp = Math.floor(Math.sqrt(p.expScore || 0));
         return pTech + pExp + capacityPercent;
       };
 
@@ -949,7 +949,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const capacity = p.totalCapacity || 0;
         const capacityPercent = galacticCapacity > 0 ? Math.round((capacity / galacticCapacity) * 100) : 0;
         const pTech = Math.floor(Math.sqrt(p.techScore || 0));
-        const pExp = Math.floor(0.5 * Math.sqrt(p.expScore || 0));
+        const pExp = Math.floor(Math.sqrt(p.expScore || 0));
         const victoryScore = pTech + pExp + capacityPercent;
         const blinkClass = (p.id === techLeadingId || p.id === capLeadingId) ? ' leader-row' : '';
         const bullseye = bullseyeIds.has(p.id) ? '<span style="color: #f00; text-shadow: 0 0 5px #f00; margin-left: 2px;" title="Target!">🎯</span>' : '';
@@ -3323,8 +3323,8 @@ window.addEventListener('DOMContentLoaded', () => {
             }
             lines.push({ label: 'Attack Range', value: (50 + (hs.bombs ? hs.bombs * 5 : 0)) + 'px', color: '#f88' });
             const techBonus = Math.sqrt(hsOwner.techScore || 0);
-            const expBonus = 0.5 * Math.sqrt(hsOwner.expScore || 0);
-            const shipExpBonus = 0.5 * Math.sqrt(hs.expScore || 0);
+            const expBonus = Math.sqrt(hsOwner.expScore || 0);
+            const shipExpBonus = Math.sqrt(hs.expScore || 0);
             const bombBonus = (hs.bombs && hs.bombs > 0) ? (hs.bombs * 3) : 0;
             const amoebaHitChance = Math.min(100, 10 + techBonus + expBonus + shipExpBonus + hs.maxHealth * 5 + bombBonus).toFixed(1) + '%';
             lines.push({ label: 'Accuracy', value: amoebaHitChance, color: '#f88' });
@@ -3365,8 +3365,8 @@ window.addEventListener('DOMContentLoaded', () => {
             const shipExp = hs.expScore || 0;
 
             const techBonus = Math.sqrt(rawTech);
-            const expBonus = 0.5 * Math.sqrt(rawExp);
-            const shipExpBonus = 0.5 * Math.sqrt(shipExp);
+            const expBonus = Math.sqrt(rawExp);
+            const shipExpBonus = Math.sqrt(shipExp);
 
             let shieldBonus = 0;
             if (hs.shields > 0) {
@@ -3521,15 +3521,15 @@ window.addEventListener('DOMContentLoaded', () => {
             // Tech attack bonus
             const techAtk = Math.round(Math.sqrt(hsOwner.techScore || 0) * 100) / 100;
             if (techAtk > 0) {
-              totalAttackMod += techAtk;
-              lines.push({ label: 'Tech Attack', value: `${techAtk.toFixed(1)}%`, color: '#4f4' });
+               totalAttackMod += techAtk;
+               lines.push({ label: 'Tech Attack', value: `${techAtk.toFixed(1)}%`, color: '#4f4' });
             }
 
             // Exp attack bonus
-            const expAtk = Math.round(0.5 * Math.sqrt(hsOwner.expScore || 0) * 100) / 100;
+            const expAtk = Math.round(Math.sqrt(hsOwner.expScore || 0) * 100) / 100;
             if (expAtk > 0) {
-              totalAttackMod += expAtk;
-              lines.push({ label: 'Exp Attack', value: `${expAtk.toFixed(1)}%`, color: '#4f4' });
+               totalAttackMod += expAtk;
+               lines.push({ label: 'Exp Attack', value: `${expAtk.toFixed(1)}%`, color: '#4f4' });
             }
 
             // ship local exp
@@ -3874,14 +3874,14 @@ window.addEventListener('DOMContentLoaded', () => {
           if (owner) {
             const techBonus = Math.floor(Math.sqrt(owner.techScore || 0));
             laserTechBonus = 0.01 * techBonus;
-            expBonus = 0.5 * Math.sqrt(owner.expScore || 0);
+            expBonus = Math.sqrt(owner.expScore || 0);
           }
 
           let range = 40 * (1 + laserTechBonus);
           if (s.isAmoeba) {
             range = 50;
           } else if (s.maxHealth > 0) {
-            const shipExpBonus = 0.5 * Math.sqrt(s.expScore || 0);
+            const shipExpBonus = Math.sqrt(s.expScore || 0);
             const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
             const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
             range = baseDogfightRange * 1.10;
@@ -3915,7 +3915,7 @@ window.addEventListener('DOMContentLoaded', () => {
             // Draw custom directional firing range envelope for cruisers
             let rangeWithoutMunitions = range;
             if (s.bombs > 0) {
-              const shipExpBonus = 0.5 * Math.sqrt(s.expScore || 0);
+              const shipExpBonus = Math.sqrt(s.expScore || 0);
               const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
               const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
               
@@ -4393,8 +4393,8 @@ window.addEventListener('DOMContentLoaded', () => {
             const rawExp = ownerPlayer.expScore || 0;
             const shipExp = s.expScore || 0;
             const techBonus = Math.sqrt(rawTech);
-            const expBonus = 0.5 * Math.sqrt(rawExp);
-            const shipExpBonus = 0.5 * Math.sqrt(shipExp);
+            const expBonus = Math.sqrt(rawExp);
+            const shipExpBonus = Math.sqrt(shipExp);
             let hitChanceValue = 10;
             if (s.bombs > 0) hitChanceValue += 10;
             hitChanceValue += techBonus + expBonus + shipExpBonus;
@@ -4468,7 +4468,7 @@ window.addEventListener('DOMContentLoaded', () => {
               }
             }
             
-            const shipExpBonus = 0.5 * Math.sqrt(s.expScore || 0);
+            const shipExpBonus = Math.sqrt(s.expScore || 0);
             if (s.isCruiser && (s.expScore || 0) >= 1) {
               currentY -= barH;
               ctx.fillStyle = '#1a3344';

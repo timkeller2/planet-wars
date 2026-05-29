@@ -240,7 +240,7 @@ export class Ship {
     this.flightTime += deltaTime / 1000;
 
     const techBonus = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
-    const expBonus = this.owner ? 0.5 * Math.sqrt(this.owner.expScore || 0) : 0;
+    const expBonus = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
     const safeTime = techBonus + expBonus;
 
     let friendlyWellPlanet = null;
@@ -320,7 +320,7 @@ export class Ship {
 
     const playerTechBonus = this.owner ? Math.floor(Math.sqrt(this.owner.techScore || 0)) : 0;
     const laserTechBonus = 0.01 * playerTechBonus;
-    const shipExpBonus = 0.5 * Math.sqrt(this.expScore || 0);
+    const shipExpBonus = Math.sqrt(this.expScore || 0);
     
     // Range Calculation
     let effectiveRange = 40 * (1 + laserTechBonus);
@@ -1602,8 +1602,8 @@ export class Ship {
       }
       if (this.maxHealth > 0) {
         const techBonus = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
-        const expBonus = this.owner ? 0.5 * Math.sqrt(this.owner.expScore || 0) : 0;
-        const shipExpBonus = 0.5 * Math.sqrt(this.expScore || 0);
+        const expBonus = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
+        const shipExpBonus = Math.sqrt(this.expScore || 0);
         let shrugChance = 0;
         if (!this.isAmoeba) {
           shrugChance = (this.maxHealth + (techBonus + expBonus + shipExpBonus)) / 100;

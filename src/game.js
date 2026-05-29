@@ -1439,7 +1439,7 @@ export class Game {
         if (!ship.active) continue;
         if (ship.owner) ship.owner.isAlive = true;
         const techBonus = Math.sqrt(ship.owner ? (ship.owner.techScore || 0) : 0);
-        const expBonus = 0.5 * Math.sqrt(ship.owner ? (ship.owner.expScore || 0) : 0);
+        const expBonus = Math.sqrt(ship.owner ? (ship.owner.expScore || 0) : 0);
         const effectiveFlightTime = ship.flightTime - techBonus - expBonus;
         if (effectiveFlightTime < 0) continue; // Safe only for duration of bonuses
         
