@@ -1239,7 +1239,8 @@ window.addEventListener('DOMContentLoaded', () => {
           let currentFillNeeded = Infinity;
           if (fillModeNext) {
             if (clickedPlanet.ownerId === localPlayer.id) {
-              currentFillNeeded = Math.ceil(Math.max(0, clickedPlanet.maxShips - clickedPlanet.ships));
+              const maxS = (clickedPlanet.focusMode === 'garrison') ? (clickedPlanet.maxShips * 2) : clickedPlanet.maxShips;
+              currentFillNeeded = Math.ceil(Math.max(0, maxS - clickedPlanet.ships));
             } else {
               currentFillNeeded = Math.ceil(Math.max(0, clickedPlanet.ships + 5));
             }

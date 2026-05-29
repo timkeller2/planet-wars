@@ -604,10 +604,11 @@ export class Game {
     let shipsToSend;
     const isReinforcing = source.owner && target && target.owner && source.owner.id === target.owner.id;
     if (isReinforcing && !isBombing) {
-      if (target.ships >= target.maxShips) {
+      const maxS = (target.focusMode === 'garrison') ? (target.maxShips * 2) : target.maxShips;
+      if (target.ships >= maxS) {
         shipsToSend = 0;
       } else {
-        const fillNeeded = target.maxShips - target.ships;
+        const fillNeeded = maxS - target.ships;
         if (source.ships >= fillNeeded) {
           shipsToSend = fillNeeded;
         } else {
