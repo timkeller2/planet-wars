@@ -3623,8 +3623,7 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.beginPath();
             
             // Draw cyan sensor range circle (outline only, no fill!)
-            const shipExpBonus = (s.expScore || 0) * 2;
-            let cruiserRadar = Math.min(250, 5 * s.maxHealth) + shipExpBonus;
+            let cruiserRadar = Math.min(250, 5 * s.maxHealth);
             if (s.isWarp) cruiserRadar *= 0.25;
             if (s.sensorarrays && s.sensorarrays > 0) {
               let mult = 1.0;
@@ -3643,7 +3642,9 @@ window.addEventListener('DOMContentLoaded', () => {
               playerTechBonus = 0.01 * Math.sqrt(owner.techScore || 0);
               playerExpBonus = 0.01 * Math.sqrt(owner.expScore || 0);
             }
-            const sensorRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
+            const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
+            const shipXpBonus = Math.sqrt(s.expScore || 0);
+            const sensorRange = baseRange * (100 + shipXpBonus * 3) / 100;
             
             ctx.save();
             ctx.strokeStyle = 'rgba(0, 255, 255, 0.45)'; // Sleek cyan

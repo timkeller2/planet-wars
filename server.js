@@ -780,11 +780,10 @@ async function bootstrap() {
         let baseRadar = count * 1.5 * scaleMap;
         fleet.radarRange = Math.max(75 * scaleMap, Math.min(300 * scaleMap, baseRadar * (1 + playerTechBonus + playerExpBonus)));
 
-        let maxCruiserRadar = 0;
+        let maxCruiserRange = 0;
         for (const s of fleet.ships) {
           if (s.maxHealth > 0) {
-            const shipExpBonus = (s.expScore || 0) * 2;
-            let cruiserRadar = Math.min(250, 5 * s.maxHealth) + shipExpBonus;
+            let cruiserRadar = Math.min(250, 5 * s.maxHealth);
             if (s.isWarp) cruiserRadar *= 0.25;
             if (s.sensorarrays && s.sensorarrays > 0) {
               let mult = 1.0;
@@ -797,11 +796,14 @@ async function bootstrap() {
               }
               cruiserRadar *= mult;
             }
-            if (cruiserRadar > maxCruiserRadar) maxCruiserRadar = cruiserRadar;
+            const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
+            const shipXpBonus = Math.sqrt(s.expScore || 0);
+            const shipRange = baseRange * (100 + shipXpBonus * 3) / 100;
+            if (shipRange > maxCruiserRange) maxCruiserRange = shipRange;
           }
         }
-        if (maxCruiserRadar > 0) {
-          fleet.radarRange = Math.max(fleet.radarRange, maxCruiserRadar * scaleMap * (1 + playerTechBonus + playerExpBonus));
+        if (maxCruiserRange > 0) {
+          fleet.radarRange = Math.max(fleet.radarRange, maxCruiserRange * scaleMap);
         }
 
         if (fleet.ships.length > 0) {

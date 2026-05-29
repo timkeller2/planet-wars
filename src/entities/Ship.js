@@ -92,8 +92,7 @@ export class Ship {
 
   cruiserRadarRange() {
     if (this.maxHealth <= 0) return 0;
-    const shipExpBonus = (this.expScore || 0) * 2;
-    let cruiserRadar = Math.min(250, 5 * this.maxHealth) + shipExpBonus;
+    let cruiserRadar = Math.min(250, 5 * this.maxHealth);
     if (this.isWarp) cruiserRadar *= 0.25;
     if (this.sensorarrays > 0) {
       let mult = 1.0;
@@ -108,7 +107,9 @@ export class Ship {
     }
     const techBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
     const expBonus = this.owner ? (0.01 * Math.sqrt(this.owner.expScore || 0)) : 0;
-    return cruiserRadar * (1 + techBonus + expBonus);
+    const baseRange = cruiserRadar * (1 + techBonus + expBonus);
+    const shipXpBonus = Math.sqrt(this.expScore || 0);
+    return baseRange * (100 + shipXpBonus * 3) / 100;
   }
 
   checkSurvivalRoll() {
@@ -593,13 +594,14 @@ export class Ship {
         const isCruiser = !this.isAmoeba;
         let enemyNearby = false;
         if (isCruiser && allShips) {
-          const shipExpBonus = (this.expScore || 0) * 2;
-          let cruiserRadar = Math.min(250, 5 * this.maxHealth) + shipExpBonus;
+          let cruiserRadar = Math.min(250, 5 * this.maxHealth);
           if (this.isWarp) cruiserRadar *= 0.25;
 
           const playerTechBonus = 0.01 * techBonus;
           const playerExpBonus = 0.01 * expBonus;
-          const sensorRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
+          const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
+          const shipXpBonus = Math.sqrt(this.expScore || 0);
+          const sensorRange = baseRange * (100 + shipXpBonus * 3) / 100;
           const rangeSq = sensorRange * sensorRange;
 
           for (const otherShip of allShips) {
