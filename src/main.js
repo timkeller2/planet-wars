@@ -1123,7 +1123,13 @@ window.addEventListener('DOMContentLoaded', () => {
 
         const dx = ship.x - p.x;
         const dy = ship.y - p.y;
-        if (dx * dx + dy * dy <= effGravity * effGravity) {
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= effGravity * effGravity) {
+          // Rule: Limit such a garrison world from paying upgrade costs unless the upgrading ship is within 25px of the garrison world.
+          const isSuchGarrisonWorld = (p.isMilitary || p.focusMode === 'garrison') && (p.ships >= p.maxShips * 2 - 10);
+          if (isSuchGarrisonWorld && distSq > 25 * 25) {
+            continue;
+          }
           return { ship, planet: p };
         }
       }
