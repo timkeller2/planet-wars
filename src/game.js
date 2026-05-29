@@ -1674,6 +1674,39 @@ export class Game {
         }
       }
 
+      // 4b. Marine Planet Attack Check
+      if ((ship.marineCount || 0) > 0) {
+        // Find an enemy planet within sensor range
+        let targetPlanet = null;
+        for (const p of this.planets) {
+          const isEnemy = p.owner && p.owner.id !== ship.owner.id;
+          if (isEnemy) {
+            const dx = p.x - ship.x;
+            const dy = p.y - ship.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist <= radar) {
+              // Check if marine count > triple the planet's defending ships
+              if (ship.marineCount > 3 * p.ships) {
+                targetPlanet = p;
+                break;
+              }
+            }
+          }
+        }
+
+        if (targetPlanet) {
+          // Launch standard fleet representing the marines
+          const marineFleet = new Ship(this.nextShipId++, ship.x, ship.y, targetPlanet, ship.owner);
+          marineFleet.count = Math.floor(ship.marineCount);
+          marineFleet.speedModifier = 1.0;
+          marineFleet.expScore = ship.expScore || 0;
+          this.ships.push(marineFleet);
+
+          console.log(`[MARINE PLANET INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to attack enemy planet ${targetPlanet.name}.`);
+          ship.marineCount = 0;
+        }
+      }
+
       // 5. Boarding Trigger Checks
       // alone, enemy cruiser in 1/2 sensor range, marine count >= 2 * enemy crew
       if ((ship.marineCount || 0) > 0) {
