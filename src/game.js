@@ -1295,7 +1295,7 @@ export class Game {
               if (targetPlanet && targetPlanet.ships > 0) {
                 targetPlanet.ships -= 1;
                 if (laser.splashDamage && laser.splashDamage > 0) {
-                  const splashLimit = Math.floor(targetPlanet.ships / 10);
+                  const splashLimit = Math.floor(targetPlanet.ships / 25);
                   const splash = Math.min(laser.splashDamage, splashLimit);
                   const toDestroy = Math.min(targetPlanet.ships, splash);
                   targetPlanet.ships -= toDestroy;
@@ -1318,13 +1318,10 @@ export class Game {
                       const roll = Math.random();
                       if (roll < 0.10) {
                         targetPlanet.isResearch = true;
-                        targetPlanet.focusMode = 'research';
                       } else if (roll < 0.20) {
                         targetPlanet.isMilitary = true;
-                        targetPlanet.focusMode = 'garrison';
                       } else if (roll < 0.30) {
                         targetPlanet.isSpeedPlanet = true;
-                        targetPlanet.focusMode = 'garrison';
                       }
                     }
                     targetPlanet.owner = sourceShip.owner;

@@ -939,7 +939,10 @@ window.addEventListener('DOMContentLoaded', () => {
         const techBonus = 0.01 * Math.sqrt(localPlayer.techScore || 0);
         const expBonus = 0.01 * Math.sqrt(localPlayer.expScore || 0);
         let baseRadius = p.maxShips * 1.5;
-        if (p.focusMode === 'garrison') {
+        if (p.isMilitary && p.ships >= p.maxShips) {
+          baseRadius *= 1.5;
+        }
+        if (p.focusMode === 'garrison' && p.ships >= p.maxShips) {
           baseRadius += (p.ships / 2);
         }
         const gravityRadius = baseRadius * (1 + techBonus + expBonus);
@@ -2337,8 +2340,11 @@ window.addEventListener('DOMContentLoaded', () => {
           const techBonus = 0.01 * Math.sqrt(owner.techScore || 0);
           const expBonus = 0.01 * Math.sqrt(owner.expScore || 0);
           let baseRadius = p.maxShips * 1.5;
+          if (p.isMilitary && p.ships >= p.maxShips) {
+            baseRadius *= 1.5;
+          }
           const isHuman = owner && !owner.isAI;
-          if (isHuman && p.focusMode === 'garrison') {
+          if (isHuman && p.focusMode === 'garrison' && p.ships >= p.maxShips) {
             baseRadius += (p.ships / 2);
           }
           const gravityRadius = baseRadius * (1 + techBonus + expBonus);
@@ -2576,8 +2582,11 @@ window.addEventListener('DOMContentLoaded', () => {
               const techBonus = 0.01 * Math.sqrt(localPlayer.techScore || 0);
               const expBonus = 0.01 * Math.sqrt(localPlayer.expScore || 0);
               let baseRadius = gp.maxShips * 1.5;
+              if (gp.isMilitary && gp.ships >= gp.maxShips) {
+                baseRadius *= 1.5;
+              }
               const isGpHuman = localPlayer && !localPlayer.isAI;
-              if (isGpHuman && gp.focusMode === 'garrison') {
+              if (isGpHuman && gp.focusMode === 'garrison' && gp.ships >= gp.maxShips) {
                 baseRadius += (gp.ships / 2);
               }
               const gravityRadius = baseRadius * (1 + techBonus + expBonus);
@@ -2955,8 +2964,11 @@ window.addEventListener('DOMContentLoaded', () => {
                 const tb = 0.01 * Math.sqrt(gpOwner.techScore || 0);
                 const eb = 0.01 * Math.sqrt(gpOwner.expScore || 0);
                 let baseRadius = gp.maxShips * 1.5;
+                if (gp.isMilitary && gp.ships >= gp.maxShips) {
+                  baseRadius *= 1.5;
+                }
                 const isGpHuman = gpOwner && !gpOwner.isAI;
-                if (isGpHuman && gp.focusMode === 'garrison') {
+                if (isGpHuman && gp.focusMode === 'garrison' && gp.ships >= gp.maxShips) {
                   baseRadius += (gp.ships / 2);
                 }
                 const gr = baseRadius * (1 + tb + eb);
@@ -3076,8 +3088,11 @@ window.addEventListener('DOMContentLoaded', () => {
                 const tb = 0.01 * Math.sqrt(gpOwner.techScore || 0);
                 const eb = 0.01 * Math.sqrt(gpOwner.expScore || 0);
                 let baseRadius = gp.maxShips * 1.5;
+                if (gp.isMilitary && gp.ships >= gp.maxShips) {
+                  baseRadius *= 1.5;
+                }
                 const isGpHuman = gpOwner && !gpOwner.isAI;
-                if (isGpHuman && gp.focusMode === 'garrison') {
+                if (isGpHuman && gp.focusMode === 'garrison' && gp.ships >= gp.maxShips) {
                   baseRadius += (gp.ships / 2);
                 }
                 const gr = baseRadius * (1 + tb + eb);
@@ -3165,8 +3180,11 @@ window.addEventListener('DOMContentLoaded', () => {
                   const tb = 0.01 * Math.sqrt(pOwner.techScore || 0);
                   const eb = 0.01 * Math.sqrt(pOwner.expScore || 0);
                   let baseRadius = planet.maxShips * 1.5;
+                  if (planet.isMilitary && planet.ships >= planet.maxShips) {
+                    baseRadius *= 1.5;
+                  }
                   const isPlanetHuman = pOwner && !pOwner.isAI;
-                  if (isPlanetHuman && planet.focusMode === 'garrison') {
+                  if (isPlanetHuman && planet.focusMode === 'garrison' && planet.ships >= planet.maxShips) {
                     baseRadius += (planet.ships / 2);
                   }
                   const gr = baseRadius * (1 + tb + eb);

@@ -228,8 +228,11 @@ export class Planet {
 
   getGravityRadius(mapScale = 1.0) {
     let baseRadius = this.maxShips * 1.5 * mapScale;
+    if (this.isMilitary && this.ships >= this.maxShips) {
+      baseRadius *= 1.5;
+    }
     const isHuman = this.owner && !this.owner.isAI;
-    if (isHuman && this.focusMode === 'garrison') {
+    if (isHuman && this.focusMode === 'garrison' && this.ships >= this.maxShips) {
       baseRadius += (this.ships / 2) * mapScale;
     }
     const tb = 0.01 * Math.sqrt(this.owner ? (this.owner.techScore || 0) : 0);
