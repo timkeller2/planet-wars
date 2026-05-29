@@ -1764,10 +1764,10 @@ export class Game {
         }
 
         if (closestPlanet) {
-          // Sympathy increase probability: (10 + expBonus + currentSympathy)% per diplomat per minute
+          // Sympathy increase probability: (30 + expBonus * 3 + currentSympathy)% per diplomat per minute
           const expBonus = 0.5 * Math.sqrt(ship.owner.expScore || 0);
           const currentSym = closestPlanet.sympathy ? (closestPlanet.sympathy[ship.owner.id] || 0) : 0;
-          const ratePercentPerMinute = 10 + expBonus + currentSym;
+          const ratePercentPerMinute = 30 + expBonus * 3 + currentSym;
           const ratePercentPerSecond = ratePercentPerMinute / 60;
           const probPerSec = ratePercentPerSecond / 100;
           const probThisTick = probPerSec * dt * ship.diplomat;
