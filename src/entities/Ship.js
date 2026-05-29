@@ -387,13 +387,22 @@ export class Ship {
 
     this.fireCooldown -= (deltaTime / 1000);
     if (this.fireCooldown <= 0) {
-      const amoebaCount = allShips ? allShips.filter(s => s.active && s.isAmoeba).length : 1;
+      const amoebaCount = allShips ? ((allShips.amoebaCount !== undefined) ? allShips.amoebaCount : allShips.filter(s => s.active && s.isAmoeba).length) : 1;
       const mapScale = 1600 / (mapWidth || 1600);
       const amoebaTimer = 10 * amoebaCount * mapScale;
 
       let validTargets = [];
       if (allShips) {
-        for (const enemyShip of allShips) {
+        let maxQueryRange = effectiveRange;
+        if (this.maxHealth > 0 && !this.isAmoeba) {
+          maxQueryRange = effectiveRange * 1.2;
+        }
+        const queryRadiusSq = maxQueryRange * maxQueryRange;
+        const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function') 
+          ? allShips.getShipsInRadiusSq(this.x, this.y, queryRadiusSq)
+          : allShips;
+
+        for (const enemyShip of candidateShips) {
           if (!enemyShip.active || enemyShip.owner === this.owner) continue;
           if (this.isAmoeba && enemyShip.isAmoeba) continue;
           
@@ -714,7 +723,11 @@ export class Ship {
           const sensorRange = baseRange * (100 + shipXpBonus * 3) / 100;
           const rangeSq = sensorRange * sensorRange;
 
-          for (const otherShip of allShips) {
+          const candidateThreats = (typeof allShips.getShipsInRadiusSq === 'function')
+            ? allShips.getShipsInRadiusSq(this.x, this.y, rangeSq)
+            : allShips;
+
+          for (const otherShip of candidateThreats) {
             if (otherShip.active && otherShip.owner !== this.owner) {
               const odx = otherShip.x - this.x;
               const ody = otherShip.y - this.y;
@@ -1000,12 +1013,17 @@ export class Ship {
     if (this.maxHealth > 0 && !this.isAmoeba) {
       this.crew = Math.min(this.crew || 0, 2 * this.health);
       if (this.fuel <= 0 && allShips) {
-        for (const other of allShips) {
+        const sensorRange = this.cruiserRadarRange();
+        const rangeSq = sensorRange * sensorRange;
+        const candidateOthers = (typeof allShips.getShipsInRadiusSq === 'function')
+          ? allShips.getShipsInRadiusSq(this.x, this.y, rangeSq)
+          : allShips;
+
+        for (const other of candidateOthers) {
           if (other.active && other.maxHealth > 0 && !other.isAmoeba && other.id !== this.id && other.owner && this.owner && other.owner.id === this.owner.id && other.fuel > 1) {
             const dx = other.x - this.x;
             const dy = other.y - this.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            const sensorRange = this.cruiserRadarRange();
             if (dist <= sensorRange) {
               other.fuel -= 1;
               this.fuel += 1;
@@ -1160,7 +1178,11 @@ export class Ship {
             // Calculate kill chance
             let nearbyFriendlyCount = 0;
             if (allShips) {
-              for (const ship of allShips) {
+              const candidateFriendlies = (typeof allShips.getShipsInRadiusSq === 'function')
+                ? allShips.getShipsInRadiusSq(this.x, this.y, 10000)
+                : allShips;
+
+              for (const ship of candidateFriendlies) {
                 if (ship !== this && ship.owner === this.owner && ship.active) {
                   const sdx = ship.x - this.x;
                   const sdy = ship.y - this.y;

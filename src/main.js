@@ -543,10 +543,64 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  const spriteSheets = {};
+
+  function preRenderSprites(players) {
+    for (const player of players) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 360 * 16;
+      canvas.height = 48;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = player.color;
+      
+      for (let angleDeg = 0; angleDeg < 360; angleDeg++) {
+        const angleRad = angleDeg * Math.PI / 180;
+        const xOffset = angleDeg * 16 + 8;
+        
+        // Row 0: Standard ship (circle)
+        ctx.save();
+        ctx.translate(xOffset, 8);
+        ctx.beginPath();
+        ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        
+        // Row 1: Bomber (triangle size 4)
+        ctx.save();
+        ctx.translate(xOffset, 24);
+        ctx.rotate(angleRad + Math.PI / 2);
+        ctx.beginPath();
+        ctx.moveTo(0, -4);
+        ctx.lineTo(4, 4);
+        ctx.lineTo(-4, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        
+        // Row 2: Interceptor (triangle size 3)
+        ctx.save();
+        ctx.translate(xOffset, 40);
+        ctx.rotate(angleRad + Math.PI / 2);
+        ctx.beginPath();
+        ctx.moveTo(0, -3);
+        ctx.lineTo(3, 3);
+        ctx.lineTo(-3, 3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      spriteSheets[player.id] = canvas;
+    }
+  }
+
   let lastExplosionCount = 0;
   let lastLaserCount = 0;
 
   socket.on('gameStateUpdate', (state) => {
+    if (Object.keys(spriteSheets).length === 0 && state.players && state.players.length > 0) {
+      preRenderSprites([...state.players, { id: 'neutral', color: '#ffffff' }]);
+    }
+
     if (state.settings && !lockedSettings && !startScreen.classList.contains('hidden')) {
       const fogCheck = document.getElementById('fog-of-war-checkbox');
       const aiInput = document.getElementById('ai-count-input');
@@ -815,6 +869,36 @@ window.addEventListener('DOMContentLoaded', () => {
             });
           }
         }
+      }
+    }
+
+    if (state.flatShips) {
+      const flat = state.flatShips;
+      const len = flat.length;
+      state.ships = state.ships || [];
+      for (let i = 0; i < len; i += 17) {
+        const owner = state.players[flat[i + 4]];
+        state.ships.push({
+          id: flat[i],
+          x: flat[i + 1],
+          y: flat[i + 2],
+          count: flat[i + 3],
+          ownerId: owner ? owner.id : null,
+          active: flat[i + 5] === 1,
+          isBomber: flat[i + 6] === 1,
+          isInterceptor: flat[i + 7] === 1,
+          isBoardingFleet: flat[i + 8] === 1,
+          isReturnPod: flat[i + 9] === 1,
+          angle: flat[i + 10],
+          targetX: flat[i + 11],
+          targetY: flat[i + 12],
+          health: flat[i + 13],
+          expScore: flat[i + 14],
+          flightTime: flat[i + 15],
+          formation: 'arrow',
+          isCruiser: false,
+          isAmoeba: false
+        });
       }
     }
 
@@ -4152,38 +4236,57 @@ window.addEventListener('DOMContentLoaded', () => {
             const drawX = s.x + lx * cos - ly * sin;
             const drawY = s.y + lx * sin + ly * cos;
             
-            ctx.beginPath();
             if (s.isBomber) {
               let angle = 0;
               if (s.targetX !== undefined && s.targetY !== undefined) {
                 angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
               }
-              ctx.save();
-              ctx.translate(drawX, drawY);
-              ctx.rotate(angle + Math.PI / 2);
-              ctx.moveTo(0, -4);
-              ctx.lineTo(4, 4);
-              ctx.lineTo(-4, 4);
-              ctx.restore();
-              ctx.closePath();
-              ctx.fill();
+              const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
+              const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
+              if (sheet) {
+                ctx.drawImage(sheet, angleDeg * 16, 16, 16, 16, drawX - 8, drawY - 8, 16, 16);
+              } else {
+                ctx.save();
+                ctx.translate(drawX, drawY);
+                ctx.rotate(angle + Math.PI / 2);
+                ctx.beginPath();
+                ctx.moveTo(0, -4);
+                ctx.lineTo(4, 4);
+                ctx.lineTo(-4, 4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+              }
             } else if (s.isInterceptor) {
               let angle = 0;
               if (s.targetX !== undefined && s.targetY !== undefined) {
                 angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
               }
-              ctx.save();
-              ctx.translate(drawX, drawY);
-              ctx.rotate(angle + Math.PI / 2);
-              ctx.moveTo(0, -3);
-              ctx.lineTo(3, 3);
-              ctx.lineTo(-3, 3);
-              ctx.restore();
-              ctx.closePath();
-              ctx.fill();
+              const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
+              const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
+              if (sheet) {
+                ctx.drawImage(sheet, angleDeg * 16, 32, 16, 16, drawX - 8, drawY - 8, 16, 16);
+              } else {
+                ctx.save();
+                ctx.translate(drawX, drawY);
+                ctx.rotate(angle + Math.PI / 2);
+                ctx.beginPath();
+                ctx.moveTo(0, -3);
+                ctx.lineTo(3, 3);
+                ctx.lineTo(-3, 3);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+              }
             } else {
-              ctx.arc(drawX, drawY, 1.5, 0, Math.PI * 2);
-              ctx.fill();
+              const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
+              if (sheet) {
+                ctx.drawImage(sheet, 0, 0, 16, 16, drawX - 8, drawY - 8, 16, 16);
+              } else {
+                ctx.beginPath();
+                ctx.arc(drawX, drawY, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+              }
             }
           }
 
@@ -4209,27 +4312,41 @@ window.addEventListener('DOMContentLoaded', () => {
           if (s.targetX !== undefined && s.targetY !== undefined) {
             angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
           }
-          ctx.save();
-          ctx.translate(s.x, s.y);
-          ctx.rotate(angle + Math.PI / 2);
-          ctx.moveTo(0, -5);
-          ctx.lineTo(5, 5);
-          ctx.lineTo(-5, 5);
-          ctx.restore();
-          ctx.closePath();
+          const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
+          const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
+          if (sheet) {
+            ctx.drawImage(sheet, angleDeg * 16, 16, 16, 16, s.x - 8, s.y - 8, 16, 16);
+            continue;
+          } else {
+            ctx.save();
+            ctx.translate(s.x, s.y);
+            ctx.rotate(angle + Math.PI / 2);
+            ctx.moveTo(0, -5);
+            ctx.lineTo(5, 5);
+            ctx.lineTo(-5, 5);
+            ctx.restore();
+            ctx.closePath();
+          }
         } else if (s.isInterceptor) {
           let angle = 0;
           if (s.targetX !== undefined && s.targetY !== undefined) {
             angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
           }
-          ctx.save();
-          ctx.translate(s.x, s.y);
-          ctx.rotate(angle + Math.PI / 2);
-          ctx.moveTo(0, -3);
-          ctx.lineTo(3, 3);
-          ctx.lineTo(-3, 3);
-          ctx.restore();
-          ctx.closePath();
+          const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
+          const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
+          if (sheet) {
+            ctx.drawImage(sheet, angleDeg * 16, 32, 16, 16, s.x - 8, s.y - 8, 16, 16);
+            continue;
+          } else {
+            ctx.save();
+            ctx.translate(s.x, s.y);
+            ctx.rotate(angle + Math.PI / 2);
+            ctx.moveTo(0, -3);
+            ctx.lineTo(3, 3);
+            ctx.lineTo(-3, 3);
+            ctx.restore();
+            ctx.closePath();
+          }
         } else if (s.isAmoeba) {
           const size = (6 + (s.maxHealth || 0) * 1.5);
           ctx.save();

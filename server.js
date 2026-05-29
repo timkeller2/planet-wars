@@ -800,25 +800,7 @@ async function bootstrap() {
           cruiserTargetId: s.cruiserTargetId || null
         };
       } else {
-        return {
-          id: s.id,
-          x: s.x,
-          y: s.y,
-          count: s.count || 1,
-          ownerId: s.owner ? s.owner.id : null,
-          active: s.active,
-          isBomber: s.isBomber,
-          isInterceptor: s.isInterceptor,
-          isBoardingFleet: s.isBoardingFleet || false,
-          isReturnPod: s.isReturnPod || false,
-          angle: s.angle || 0,
-          targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,
-          targetY: s.targetPlanet ? s.targetPlanet.y : s.targetY,
-          formation: s.formation,
-          health: s.health || 0,
-          expScore: s.expScore || 0,
-          flightTime: s.flightTime || 0
-        };
+        return null;
       }
     });
 
@@ -1038,10 +1020,34 @@ async function bootstrap() {
         }
       }
 
+      const visibleFlatShips = [];
       for (let i = 0; i < game.ships.length; i++) {
         const s = game.ships[i];
         if ((s.owner && s.owner.id === player.id) || isVisible(s.x, s.y)) {
-          visibleShips.push(allShipsMapped[i]);
+          if (s.isCruiser || s.isAmoeba) {
+            visibleShips.push(allShipsMapped[i]);
+          } else {
+            const ownerIdx = s.owner ? game.allPlayers.indexOf(s.owner) : -1;
+            visibleFlatShips.push(
+              s.id,
+              Math.round(s.x * 10) / 10,
+              Math.round(s.y * 10) / 10,
+              s.count || 1,
+              ownerIdx,
+              s.active ? 1 : 0,
+              s.isBomber ? 1 : 0,
+              s.isInterceptor ? 1 : 0,
+              s.isBoardingFleet ? 1 : 0,
+              s.isReturnPod ? 1 : 0,
+              Math.round(s.angle * 100) / 100,
+              Math.round((s.targetPlanet ? s.targetPlanet.x : (s.targetX || 0)) * 10) / 10,
+              Math.round((s.targetPlanet ? s.targetPlanet.y : (s.targetY || 0)) * 10) / 10,
+              Math.round((s.health || 0) * 10) / 10,
+              Math.round((s.expScore || 0) * 10) / 10,
+              Math.round((s.flightTime || 0) * 10) / 10,
+              0
+            );
+          }
         }
       }
 
@@ -1099,6 +1105,7 @@ async function bootstrap() {
       const state = {
         planets: visiblePlanets,
         ships: visibleShips,
+        flatShips: visibleFlatShips,
         fleets: visibleFleets,
         explosions: visibleExplosions,
         lasers: visibleLasers,

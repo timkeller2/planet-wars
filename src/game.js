@@ -4,6 +4,81 @@ import { Ship } from './entities/Ship.js';
 import { InputHandler } from './systems/InputHandler.js';
 import { AIController } from './systems/AIController.js';
 
+class RecycledArray extends Array {
+  constructor(capacity) {
+    super();
+    this.pool = Array.from({ length: capacity }, () => ({}));
+    this.poolIndex = 0;
+  }
+  push(item) {
+    const recycled = this.pool[this.poolIndex];
+    this.poolIndex = (this.poolIndex + 1) % this.pool.length;
+    for (const key in recycled) {
+      delete recycled[key];
+    }
+    Object.assign(recycled, item);
+    super.push(recycled);
+  }
+  clear() {
+    this.length = 0;
+  }
+}
+
+class SpatialGridArray extends Array {
+  constructor() {
+    super();
+    this.grid = new Map();
+    this.amoebaCount = 0;
+  }
+  updateGrid() {
+    this.grid.clear();
+    let aCount = 0;
+    for (let i = 0; i < this.length; i++) {
+      const s = this[i];
+      if (!s || !s.active) continue;
+      if (s.isAmoeba) {
+        aCount++;
+      }
+      const col = Math.floor(s.x / 100);
+      const row = Math.floor(s.y / 100);
+      const key = `${col},${row}`;
+      let cell = this.grid.get(key);
+      if (!cell) {
+        cell = [];
+        this.grid.set(key, cell);
+      }
+      cell.push(s);
+    }
+    this.amoebaCount = aCount;
+  }
+  getShipsInRadiusSq(x, y, radiusSq) {
+    const results = [];
+    const radius = Math.sqrt(radiusSq);
+    const minCol = Math.floor((x - radius) / 100);
+    const maxCol = Math.floor((x + radius) / 100);
+    const minRow = Math.floor((y - radius) / 100);
+    const maxRow = Math.floor((y + radius) / 100);
+    
+    for (let col = minCol; col <= maxCol; col++) {
+      for (let row = minRow; row <= maxRow; row++) {
+        const key = `${col},${row}`;
+        const cell = this.grid.get(key);
+        if (cell) {
+          for (let i = 0; i < cell.length; i++) {
+            const s = cell[i];
+            const dx = s.x - x;
+            const dy = s.y - y;
+            if (dx * dx + dy * dy <= radiusSq) {
+              results.push(s);
+            }
+          }
+        }
+      }
+    }
+    return results;
+  }
+}
+
 export class Game {
   constructor(options) {
     if (options && options.getContext) {
@@ -61,9 +136,9 @@ export class Game {
     this.allPlayers = [this.humanPlayer, this.monsterPlayer, ...this.aiPlayers];
     
     this.planets = [];
-    this.ships = [];
-    this.lasers = [];
-    this.explosions = [];
+    this.ships = new SpatialGridArray();
+    this.lasers = new RecycledArray(1500);
+    this.explosions = new RecycledArray(1000);
     
     this.lastTime = 0;
     this.isRunning = false;
@@ -280,9 +355,9 @@ export class Game {
 
   initMap() {
     this.planets = [];
-    this.ships = [];
-    this.explosions = [];
-    this.lasers = [];
+    this.ships = new SpatialGridArray();
+    this.explosions.clear();
+    this.lasers.clear();
     this.ionStorms = [];
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
@@ -1042,6 +1117,7 @@ export class Game {
   }
 
   update(deltaTime) {
+    this.ships.updateGrid();
     this.revoltCheckTimer = (this.revoltCheckTimer || 0) + deltaTime;
     if (this.revoltCheckTimer >= 60000) {
       this.revoltCheckTimer -= 60000;
