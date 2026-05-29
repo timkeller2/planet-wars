@@ -46,6 +46,7 @@ export class Ship {
     this.planetBombardTimer = 0;
     this.combatCooldown = 0;
     this.name = null;
+    this.expScore = 0;
     this.cruiserTargetOffsetX = 0;
     this.cruiserTargetOffsetY = 0;
     this.bomberOffsetMag = 0; // Assigned in game.js during launch

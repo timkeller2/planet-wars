@@ -1792,9 +1792,10 @@ export class Game {
 
             // XP Bonus: sqrt( XP score )
             const expBonus = Math.sqrt(ship.owner.expScore || 0);
+            const shipExpBonus = Math.sqrt(ship.expScore || 0);
             const currentSym = closestPlanet.sympathy ? (closestPlanet.sympathy[ship.owner.id] || 0) : 0;
-            // Success rate: (30 + XP bonus * 3 + current player sympathy)%
-            const chancePercent = 30 + expBonus * 3 + currentSym;
+            // Success rate: (30 + player XP bonus * 3 + ship XP bonus * 3 + current player sympathy)%
+            const chancePercent = 30 + expBonus * 3 + shipExpBonus * 3 + currentSym;
             const prob = chancePercent / 100;
 
             if (Math.random() < prob) {
@@ -1807,12 +1808,14 @@ export class Game {
               // Roll disposition if not yet set
               if (closestPlanet.disposition[ship.owner.id] === undefined) {
                 const d20 = Math.floor(Math.random() * 20) + 1;
-                const expBonus = Math.sqrt(ship.owner.expScore || 0);
-                closestPlanet.disposition[ship.owner.id] = Math.floor((d20 + expBonus) / 6);
+                closestPlanet.disposition[ship.owner.id] = Math.floor((d20 + expBonus + shipExpBonus) / 6);
               }
 
               const disp = closestPlanet.disposition[ship.owner.id];
               const increaseAmt = 1 + Math.floor(Math.random() * (disp + 1));
+
+              // Give ship XP score equal to the sympathy created
+              ship.expScore = (ship.expScore || 0) + increaseAmt;
 
               closestPlanet.sympathy[ship.owner.id] = currentSym + increaseAmt;
               
