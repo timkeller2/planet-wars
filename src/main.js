@@ -351,7 +351,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const bgMusic = document.getElementById('bg-music');
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
       bgMusic.src = '/Music/Battletime.mp3';
-      bgMusic.volume = 0.8;
+      bgMusic.volume = 1.0;
       bgMusic.play().catch(e => console.warn('Music play blocked:', e));
     } else if (bgMusic) {
       bgMusic.pause();
@@ -753,7 +753,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const bgMusic = document.getElementById('bg-music');
             if (musicCheckbox && musicCheckbox.checked && bgMusic) {
               bgMusic.src = '/Music/Megalovania.mp3';
-              bgMusic.volume = 0.8;
+              bgMusic.volume = 1.0;
               bgMusic.play().catch(e => console.warn('Megalovania play blocked:', e));
             }
           }
