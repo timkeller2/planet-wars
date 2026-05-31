@@ -66,8 +66,17 @@ export class Planet {
         const toConsume = consumedSoFar - alreadyConsumed;
         
         if (toConsume > 0) {
-          const actualConsume = Math.min(this.ships, toConsume);
-          this.ships = Math.max(0, this.ships - actualConsume);
+          let unpaid = toConsume;
+          const currentCredits = this.owner.credits || 0;
+          if (currentCredits > 0) {
+            const creditsToUse = Math.min(currentCredits, unpaid);
+            this.owner.credits -= creditsToUse;
+            unpaid -= creditsToUse;
+          }
+          if (unpaid > 0) {
+            const actualConsume = Math.min(this.ships, unpaid);
+            this.ships = Math.max(0, this.ships - actualConsume);
+          }
           this.focusTransition.costRemaining -= toConsume;
         }
         
@@ -93,6 +102,12 @@ export class Planet {
 
     const isHuman = this.owner && !this.owner.isAI;
     const focus = this.focusMode || 'economy';
+
+    if (this.owner && focus === 'commerce' && this.ships >= this.maxShips) {
+      const shipsOver100 = Math.max(0, this.ships - 100);
+      const generatedCredits = (shipsOver100 / 100) * (deltaTime / 1000);
+      this.owner.credits = (this.owner.credits || 0) + generatedCredits;
+    }
 
     if (this.owner) {
       const growthLimit = (isHuman && focus === 'garrison') ? this.maxShips * 2 : this.maxShips;
@@ -156,9 +171,10 @@ export class Planet {
               }
               this.ships = Math.max(0, this.ships - 1);
             }
-            // Decay ships back to maxShips
-            if (this.ships > this.maxShips && !this.retainedShips) {
-              this.ships = this.maxShips;
+            // Decay ships back to maxShips (or twice maxShips if Garrison)
+            const limit = (this.owner && !this.owner.isAI && this.focusMode === 'garrison') ? this.maxShips * 2 : this.maxShips;
+            if (this.ships > limit && !this.retainedShips) {
+              this.ships = limit;
             }
           } else if (focus === 'economy') {
             // Grow max capacity, no tech score
@@ -169,9 +185,10 @@ export class Planet {
               const increaseAmount = this.homeworldOf ? 2 : 1;
               this.increaseMaxShips(increaseAmount);
             }
-            // Decay ships back to maxShips
-            if (this.ships > this.maxShips && !this.retainedShips) {
-              this.ships = this.maxShips;
+            // Decay ships back to maxShips (or twice maxShips if Garrison)
+            const limit = (this.owner && !this.owner.isAI && this.focusMode === 'garrison') ? this.maxShips * 2 : this.maxShips;
+            if (this.ships > limit && !this.retainedShips) {
+              this.ships = limit;
             }
           } else if (focus === 'garrison') {
             // Grow up to twice max capacity, no grow max capacity or tech score
@@ -179,6 +196,12 @@ export class Planet {
             const cap = this.maxShips * 2;
             if (this.ships > cap) {
               this.ships = cap;
+            }
+          } else if (focus === 'commerce') {
+            // Decay ships back to maxShips
+            const limit = this.maxShips;
+            if (this.ships > limit && !this.retainedShips) {
+              this.ships = limit;
             }
           }
         } else {

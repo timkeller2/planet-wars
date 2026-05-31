@@ -125,11 +125,24 @@ canvas {
   border-radius: 5px;
   font-size: 1.1rem;
   line-height: 1;
+  position: relative;
 }
 
 .btn-icon {
   font-size: 1rem;
   line-height: 1;
+}
+
+.btn-discount {
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  font-size: 0.6rem;
+  color: #ffeb3b;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: bold;
+  pointer-events: none;
+  text-shadow: 0 0 2px rgba(255, 235, 59, 0.6);
 }
 
 .score-entry {

@@ -117,6 +117,23 @@ async function bootstrap() {
       }
     });
 
+    socket.on('buildCapitalShip', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      player.lastCommandTime = Date.now();
+      player.afkWarningSent = false;
+      if (player.isAI) {
+        player.isAI = false;
+      }
+
+      const p = game.planets.find(pl => pl.id === data.planetId);
+      if (p && p.owner && p.owner.id === player.id) {
+        game.buildCapitalShip(p, data.classType);
+      }
+    });
+
     socket.on('upgradeCruiser', (data) => {
       if (!game.isRunning || game.isPaused) return;
       const player = connectedClients.get(socket.id);
@@ -145,7 +162,7 @@ async function bootstrap() {
           marines: 'marines'
         };
         const prop = typesMap[data.type];
-        if (prop && (ship[prop] || 0) < 3 && !ship.isUpgrading) {
+         if (prop && (ship[prop] || 0) < 5 && !ship.isUpgrading) {
           const totalUpgrades = (ship.sensorarrays || 0) +
                                 (ship.labs || 0) +
                                 (ship.armor || 0) +
@@ -164,6 +181,11 @@ async function bootstrap() {
           const currentVal = ship[prop] || 0;
           const nextLevel = currentVal + 1;
 
+          if (prop === 'shields' && nextLevel * 0.10 > 0.80) {
+            console.log(`[Server Upgrade Rejected] Deflect chance exceeds 80%.`);
+            return;
+          }
+
           if (nextLevel > maxIndividualLevel || (totalUpgrades + 1) > maxTotalUpgrades) {
             console.log(`[Server Upgrade Rejected] Health limits exceeded. shipId: ${ship.id}, maxHealth: ${ship.maxHealth}, currentVal: ${currentVal}, next: ${nextLevel}, maxLevel: ${maxIndividualLevel}, totalUpgrades: ${totalUpgrades}, maxTotalUpgrades: ${maxTotalUpgrades}`);
             return;
@@ -172,9 +194,9 @@ async function bootstrap() {
           const cost = game.getUpgradeCost(ship, data.type);
 
           let upgradeStarted = false;
-          // Find if this cruiser is within a friendly gravity well of a planet with enough ships
+          // Find if this cruiser is within a friendly gravity well of a planet with enough ships/credits
           for (const p of game.planets) {
-            if (p.owner && p.owner.id === player.id && p.ships >= cost) {
+            if (p.owner && p.owner.id === player.id && (p.ships + (player.credits || 0)) >= cost) {
               const gravityRadius = p.getGravityRadius();
               
               let penaltyPct = 0;
@@ -222,6 +244,11 @@ async function bootstrap() {
                 };
                 const normType = typeKeyMap[data.type] || data.type;
                 game.globalUpgradeModifiers[normType] = (game.globalUpgradeModifiers[normType] || 0) + 0.05;
+                if (player.upgradeModifiers && player.upgradeModifiers[normType] !== undefined) {
+                  if (player.upgradeModifiers[normType] > -0.50) {
+                    player.upgradeModifiers[normType] = Math.max(-0.50, player.upgradeModifiers[normType] - 0.01);
+                  }
+                }
 
                 ship.isUpgrading = true;
                 ship.upgradeTimer = cost * 0.2;
@@ -259,7 +286,7 @@ async function bootstrap() {
         player.isAI = false;
       }
 
-      game.moveShipsToSpace(player, data.shipIds, data.targetX, data.targetY, data.isWarp, data.speedModifier, data.isBombing);
+      game.moveShipsToSpace(player, data.shipIds, data.targetX, data.targetY, data.isWarp, data.speedModifier, data.isShift);
     });
 
     socket.on('chatMessage', (text) => {
@@ -304,7 +331,7 @@ async function bootstrap() {
       const targetPlanet = game.planets.find(p => p.id === data.targetId);
       if (!targetPlanet) return;
 
-      game.moveShipsToPlanet(player, data.shipIds, targetPlanet, data.isWarp, data.speedModifier, data.isBombing);
+      game.moveShipsToPlanet(player, data.shipIds, targetPlanet, data.isWarp, data.speedModifier, data.isShift);
     });
 
     socket.on('setCruiserTarget', (data) => {
@@ -312,14 +339,81 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (!player) return;
 
-      const { shipIds, targetType, targetId } = data;
+      const { shipIds, targetType, targetId, clickX, clickY, isShift } = data;
       if (!shipIds || !targetType || targetId === undefined) return;
 
       for (const id of shipIds) {
         const ship = game.ships.find(s => s.id === id);
         if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
-          ship.cruiserTargetType = targetType;
-          ship.cruiserTargetId = targetId;
+          if (isShift) {
+            if (!ship.orderQueue) ship.orderQueue = [];
+            ship.orderQueue.push({
+              type: 'target',
+              targetType,
+              targetId,
+              clickX,
+              clickY
+            });
+            let isCurrentlyIdle = !ship.cruiserTargetType;
+            if (isCurrentlyIdle) {
+              if (ship.targetPlanet) {
+                const dx = ship.targetPlanet.x - ship.x;
+                const dy = ship.targetPlanet.y - ship.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                isCurrentlyIdle = dist < ship.targetPlanet.radius + 45;
+              } else if (ship.targetX !== null) {
+                isCurrentlyIdle = Math.abs(ship.targetX - ship.x) < 15 && Math.abs(ship.targetY - ship.y) < 15;
+              } else {
+                isCurrentlyIdle = true;
+              }
+            }
+            if (isCurrentlyIdle) {
+              ship.executeNextOrder(game.planets, game.ships, game);
+            }
+          } else {
+            ship.orderQueue = [];
+            ship.isPatrolling = false;
+            ship.cruiserTargetType = targetType;
+            ship.cruiserTargetId = targetId;
+            ship.cruiserTargetClickX = clickX !== undefined ? clickX : null;
+            ship.cruiserTargetClickY = clickY !== undefined ? clickY : null;
+          }
+        }
+      }
+    });
+
+    socket.on('toggleCruiserBomb', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const { shipId, enabled } = data;
+      if (shipId === undefined || enabled === undefined) return;
+
+      const ship = game.ships.find(s => s.id === shipId);
+      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+        ship.bombPlanetsEnabled = !!enabled;
+      }
+    });
+
+    socket.on('toggleCruiserPatrol', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const { shipId, enabled } = data;
+      if (shipId === undefined || enabled === undefined) return;
+
+      const ship = game.ships.find(s => s.id === shipId);
+      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+        ship.isPatrolling = !!enabled;
+        ship.patrolReloading = false;
+        if (ship.isPatrolling) {
+          ship.orderQueue = [];
+          ship.cruiserTargetType = null;
+          ship.cruiserTargetId = null;
+          ship.patrolStationX = ship.x;
+          ship.patrolStationY = ship.y;
         }
       }
     });
@@ -351,12 +445,14 @@ async function bootstrap() {
       const planet = game.planets.find(p => p.id === data.planetId);
       if (!planet || !planet.owner || planet.owner.id !== player.id) return;
 
-      const validModes = ['economy', 'research', 'garrison'];
+      const validModes = ['economy', 'research', 'garrison', 'commerce'];
       if (!validModes.includes(data.focusMode)) return;
+      if (data.focusMode === 'commerce' && planet.maxShips <= 100) return;
 
       if (planet.focusTransition) return; // Prevent concurrent focus shifts on same planet
       const cost = Math.floor(planet.maxShips / 2);
-      if (planet.ships >= cost) {
+      const creditsAvailable = player.credits || 0;
+      if ((planet.ships + creditsAvailable) >= cost) {
         planet.focusTransition = {
           targetMode: data.focusMode,
           totalCost: cost,
@@ -422,8 +518,8 @@ async function bootstrap() {
     socket.on('enterGame', (options) => {
       if (!game.settings) {
         game.settings = {
-          fogOfWar: options && options.fogOfWar,
-          smallEmpires: options && options.smallEmpires,
+          fogOfWar: options && options.fogOfWar !== undefined ? !!options.fogOfWar : true,
+          smallEmpires: options && options.smallEmpires !== undefined ? !!options.smallEmpires : true,
           noRampagers: options && options.noRampagers,
           aiCount: options && options.aiCount !== undefined ? options.aiCount : 5,
           productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
@@ -452,8 +548,8 @@ async function bootstrap() {
       game.lastRestartTime = now;
       
       game.settings = { 
-          fogOfWar: options && options.fogOfWar,
-          smallEmpires: options && options.smallEmpires,
+          fogOfWar: options && options.fogOfWar !== undefined ? !!options.fogOfWar : true,
+          smallEmpires: options && options.smallEmpires !== undefined ? !!options.smallEmpires : true,
           noRampagers: options && options.noRampagers,
           aiCount: options && options.aiCount !== undefined ? options.aiCount : 5,
           productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
@@ -476,6 +572,14 @@ async function bootstrap() {
       game.isRunning = true;
       game.isPaused = false;
       
+      for (const [socketId, oldPlayer] of connectedClients.entries()) {
+        const newPlayer = game.allPlayers.find(p => p.id === oldPlayer.id);
+        if (newPlayer) {
+          newPlayer.clientPlayerId = oldPlayer.clientPlayerId;
+          connectedClients.set(socketId, newPlayer);
+        }
+      }
+
       for (const p of connectedClients.values()) {
         p.isAI = false;
         p.isAlive = true;
@@ -484,6 +588,7 @@ async function bootstrap() {
         p.discoveredPlanets = new Set();
         p.attackedPlanets = new Map();
         p.cruiserStyle = null;
+        p.credits = 0;
         
         console.log(`RESTART: Assigning planet for ${p.id}`);
         game.tryAssignPlanet(p);
@@ -743,6 +848,8 @@ async function bootstrap() {
       s.diplomatSuccessEvent = 0;
       const dipFailure = s.diplomatFailureEvent || 0;
       s.diplomatFailureEvent = 0;
+      const dipFailureChance = s.diplomatFailureChance || 0;
+      s.diplomatFailureChance = 0;
 
       if (s.isCruiser || s.isAmoeba) {
         return {
@@ -756,6 +863,7 @@ async function bootstrap() {
           isBomber: s.isBomber,
           isCruiser: s.isCruiser || false,
           name: s.name || null,
+          classType: s.classType || null,
           isAmoeba: s.isAmoeba || false,
           health: s.health || 0,
           maxHealth: s.maxHealth || 0,
@@ -796,8 +904,24 @@ async function bootstrap() {
           beakerIncreaseEvent: bEvent,
           diplomatSuccessEvent: dipSuccess,
           diplomatFailureEvent: dipFailure,
+          diplomatFailureChance: dipFailureChance,
           cruiserTargetType: s.cruiserTargetType || null,
-          cruiserTargetId: s.cruiserTargetId || null
+          cruiserTargetId: s.cruiserTargetId || null,
+          cruiserTargetClickX: s.cruiserTargetClickX !== undefined ? s.cruiserTargetClickX : null,
+          cruiserTargetClickY: s.cruiserTargetClickY !== undefined ? s.cruiserTargetClickY : null,
+          orderQueue: s.orderQueue ? s.orderQueue.map(o => {
+            if (o.type === 'moveSpace') {
+              return { type: o.type, targetX: o.targetX, targetY: o.targetY };
+            } else if (o.type === 'movePlanet') {
+              return { type: o.type, targetId: o.targetId, offsetX: o.offsetX || 0, offsetY: o.offsetY || 0 };
+            } else if (o.type === 'target') {
+              return { type: o.type, targetType: o.targetType, targetId: o.targetId, clickX: o.clickX || null, clickY: o.clickY || null };
+            }
+            return null;
+          }).filter(Boolean) : [],
+          bombPlanetsEnabled: s.bombPlanetsEnabled !== false,
+          isPatrolling: s.isPatrolling || false,
+          cruiserStyle: s.cruiserStyle || null
         };
       } else {
         return null;
@@ -913,16 +1037,40 @@ async function bootstrap() {
 
         if (fleet.ships.length > 0) {
           const clusters = [];
+          const clusterGrid = new Map();
+          const r = fleet.radarRange;
+          const cellSize = r > 0 ? r : 75;
           for (const s of fleet.ships) {
-            let cluster = clusters.find(c => {
-              const dx = c.x - s.x;
-              const dy = c.y - s.y;
-              return dx*dx + dy*dy < fleet.radarRange * fleet.radarRange;
-            });
-            if (!cluster) {
-              clusters.push({ x: s.x, y: s.y, radarRange: fleet.radarRange, ownerId: player.id, isCruiser: s.isCruiser || false });
-            } else if (s.isCruiser) {
-              cluster.isCruiser = true;
+            const col = Math.floor(s.x / cellSize);
+            const row = Math.floor(s.y / cellSize);
+            let found = false;
+            for (let dc = -1; dc <= 1; dc++) {
+              for (let dr = -1; dr <= 1; dr++) {
+                const key = `${col + dc},${row + dr}`;
+                const cellClusters = clusterGrid.get(key);
+                if (cellClusters) {
+                  for (const c of cellClusters) {
+                    const dx = c.x - s.x;
+                    const dy = c.y - s.y;
+                    if (dx*dx + dy*dy < r * r) {
+                      if (s.isCruiser) c.isCruiser = true;
+                      found = true;
+                      break;
+                    }
+                  }
+                }
+                if (found) break;
+              }
+              if (found) break;
+            }
+            if (!found) {
+              const newCluster = { x: s.x, y: s.y, radarRange: r, ownerId: player.id, isCruiser: s.isCruiser || false };
+              clusters.push(newCluster);
+              const key = `${col},${row}`;
+              if (!clusterGrid.has(key)) {
+                clusterGrid.set(key, []);
+              }
+              clusterGrid.get(key).push(newCluster);
             }
           }
           visibleFleets.push(...clusters.map(c => {

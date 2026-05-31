@@ -7,6 +7,7 @@ export class Player {
     this.expScore = 0;
     this.expProgress = 0;
     this.cruiserStyle = null;
+    this.credits = 0;
     this.upgradeModifiers = {
       sensorarray: 0,
       lab: 0,
