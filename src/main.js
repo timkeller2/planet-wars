@@ -351,6 +351,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const bgMusic = document.getElementById('bg-music');
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
       bgMusic.src = '/Music/ImperialMarch.wav';
+      bgMusic.loop = true;
       bgMusic.volume = 1.0;
       bgMusic.play().catch(e => console.warn('Music play blocked:', e));
     } else if (bgMusic) {
@@ -421,6 +422,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const bgMusic = document.getElementById('bg-music');
         if (musicCheckbox && musicCheckbox.checked && bgMusic) {
           bgMusic.src = '/Music/Battletime.mp3';
+          bgMusic.loop = false;
           bgMusic.volume = 1.0;
           bgMusic.play().catch(e => console.warn('Battletime play blocked:', e));
         }
@@ -763,6 +765,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const bgMusic = document.getElementById('bg-music');
             if (musicCheckbox && musicCheckbox.checked && bgMusic) {
               bgMusic.src = '/Music/Megalovania.mp3';
+              bgMusic.loop = true;
               bgMusic.volume = 1.0;
               bgMusic.play().catch(e => console.warn('Megalovania play blocked:', e));
             }
