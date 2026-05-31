@@ -1050,7 +1050,7 @@ export class Game {
       const creditsPaid = Math.min(creditsAvailable, costShips);
       const remainingCostShips = costShips - creditsPaid;
 
-      if (source.ships >= remainingCostShips && (source.maxShips - costCap) >= 55) {
+      if (source.ships >= costShips && (source.maxShips - costCap) >= 55) {
         const extraShips = source.ships - remainingCostShips;
         const bonusHp = Math.min(4, Math.floor(Math.max(0, extraShips) / 25));
         const finalMaxHealth = maxHealth + bonusHp;

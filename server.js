@@ -193,8 +193,9 @@ async function bootstrap() {
 
           const cost = game.getUpgradeCost(ship, data.type);
 
-          let upgradeStarted = false;
-          // Find if this cruiser is within a friendly gravity well of a planet with enough ships/credits
+          let closestPlanet = null;
+          let closestDistSq = Infinity;
+
           for (const p of game.planets) {
             if (p.owner && p.owner.id === player.id && (p.ships + (player.credits || 0)) >= cost) {
               const gravityRadius = p.getGravityRadius();
@@ -223,46 +224,55 @@ async function bootstrap() {
                 if (isSuchGarrisonWorld && distSq > 25 * 25) {
                   continue;
                 }
-                // Increase the global cost modifier by 5% when starting/purchasing the upgrade
-                const typeKeyMap = {
-                  sensorarrays: 'sensorarray',
-                  labs: 'lab',
-                  armor: 'armor',
-                  shields: 'shield',
-                  engine: 'engine',
-                  munitions: 'munitions',
-                  targeting: 'targeting',
-                  damagecontrol: 'damagecontrol',
-                  fuel_tanker: 'fueltanker',
-                  diplomat: 'diplomat',
-                  marines: 'marines',
-                  
-                  sensorarray: 'sensorarray',
-                  lab: 'lab',
-                  shield: 'shield',
-                  fueltanker: 'fueltanker'
-                };
-                const normType = typeKeyMap[data.type] || data.type;
-                game.globalUpgradeModifiers[normType] = (game.globalUpgradeModifiers[normType] || 0) + 0.05;
-                if (player.upgradeModifiers && player.upgradeModifiers[normType] !== undefined) {
-                  if (player.upgradeModifiers[normType] > -0.50) {
-                    player.upgradeModifiers[normType] = Math.max(-0.50, player.upgradeModifiers[normType] - 0.01);
-                  }
-                }
-
-                ship.isUpgrading = true;
-                ship.upgradeTimer = cost * 0.2;
-                ship.upgradeProp = prop;
-                ship.upgradeType = data.type;
-                ship.upgradePlanetId = p.id;
-                ship.upgradeShipsPaid = 0;
-                ship.upgradeAccumulator = 0;
                 
-                console.log(`Started progressive upgrade for cruiser ${ship.id} with ${data.type}, financing from planet ${p.id} at cost ${cost}`);
-                upgradeStarted = true;
-                break;
+                if (distSq < closestDistSq) {
+                  closestDistSq = distSq;
+                  closestPlanet = p;
+                }
               }
             }
+          }
+
+          let upgradeStarted = false;
+          if (closestPlanet) {
+            const p = closestPlanet;
+            // Increase the global cost modifier by 5% when starting/purchasing the upgrade
+            const typeKeyMap = {
+              sensorarrays: 'sensorarray',
+              labs: 'lab',
+              armor: 'armor',
+              shields: 'shield',
+              engine: 'engine',
+              munitions: 'munitions',
+              targeting: 'targeting',
+              damagecontrol: 'damagecontrol',
+              fuel_tanker: 'fueltanker',
+              diplomat: 'diplomat',
+              marines: 'marines',
+              
+              sensorarray: 'sensorarray',
+              lab: 'lab',
+              shield: 'shield',
+              fueltanker: 'fueltanker'
+            };
+            const normType = typeKeyMap[data.type] || data.type;
+            game.globalUpgradeModifiers[normType] = (game.globalUpgradeModifiers[normType] || 0) + 0.05;
+            if (player.upgradeModifiers && player.upgradeModifiers[normType] !== undefined) {
+              if (player.upgradeModifiers[normType] > -0.50) {
+                player.upgradeModifiers[normType] = Math.max(-0.50, player.upgradeModifiers[normType] - 0.01);
+              }
+            }
+
+            ship.isUpgrading = true;
+            ship.upgradeTimer = cost * 0.2;
+            ship.upgradeProp = prop;
+            ship.upgradeType = data.type;
+            ship.upgradePlanetId = p.id;
+            ship.upgradeShipsPaid = 0;
+            ship.upgradeAccumulator = 0;
+            
+            console.log(`Started progressive upgrade for cruiser ${ship.id} with ${data.type}, financing from closest planet ${p.id} at cost ${cost}`);
+            upgradeStarted = true;
           }
           if (!upgradeStarted) {
             console.log(`[Server Rejected Upgrade] Financing or distance check failed. shipId: ${ship.id}, type: ${data.type}, prop: ${prop}, cost: ${cost}`);

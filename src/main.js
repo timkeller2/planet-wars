@@ -1281,6 +1281,9 @@ window.addEventListener('DOMContentLoaded', () => {
     const myPlayer = serverState.players.find(pl => pl.id === localPlayer.id);
     const creditsAvailable = myPlayer ? (myPlayer.credits || 0) : 0;
 
+    let closestPlanet = null;
+    let closestDistSq = Infinity;
+
     for (const p of serverState.planets) {
       if (p.ownerId === localPlayer.id && (p.ships + creditsAvailable) >= minCost) {
         const techBonus = 0.01 * Math.sqrt(localPlayer.techScore || 0);
@@ -1305,9 +1308,17 @@ window.addEventListener('DOMContentLoaded', () => {
           if (isSuchGarrisonWorld && distSq > 25 * 25) {
             continue;
           }
-          return { ship, planet: p };
+          
+          if (distSq < closestDistSq) {
+            closestDistSq = distSq;
+            closestPlanet = p;
+          }
         }
       }
+    }
+
+    if (closestPlanet) {
+      return { ship, planet: closestPlanet };
     }
     return null;
   }
@@ -2944,10 +2955,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const el = document.getElementById(cfg.btnId);
         if (el) {
           el.style.display = 'inline-flex';
-          const creditsAvailable = myPlayer ? (myPlayer.credits || 0) : 0;
-          const creditsPaid = Math.min(creditsAvailable, cfg.costShips);
-          const remainingCostShips = cfg.costShips - creditsPaid;
-          const canAfford = selectedPlanetBuild.ships >= remainingCostShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+          const canAfford = selectedPlanetBuild.ships >= cfg.costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
           if (!canAfford) {
             el.style.opacity = '0.5';
             el.style.pointerEvents = 'none';

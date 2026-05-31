@@ -59,6 +59,7 @@ export class Ship {
     this.upgradePlanetId = null;
     this.upgradeShipsPaid = 0;
     this.upgradeAccumulator = 0;
+    this.patrolReloadTargetPlanetId = null;
     this.planetBombardTimer = 0;
     this.combatCooldown = 0;
     this.name = null;
@@ -389,6 +390,8 @@ export class Ship {
             this.splashDamage = this.munitions;
           } else if (this.upgradeProp === 'fuel_tanker') {
             this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + 5);
+          } else if (this.upgradeProp === 'marines') {
+            this.marineCount = Math.min(this.marines * this.maxHealth, (this.marineCount || 0) + this.maxHealth);
           }
           
           console.log(`[Cruiser Upgrade Complete] Ship ${this.id} upgraded ${this.upgradeProp} to level ${this[this.upgradeProp]}`);
@@ -1025,248 +1028,106 @@ export class Ship {
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isPatrolling) {
       // 1. Check if out of bombs -> Reloading State
       if (this.bombs <= 0 || (this.patrolReloading && this.bombs < this.getMaxBombs())) {
+        const wasReloading = this.patrolReloading;
         this.patrolReloading = true;
         
-        // Check if an enemy unit is within 150px of the cruiser
-        let enemyCloseToCruiser = false;
-        if (allShips) {
-          for (const other of allShips) {
-            if (other.active && other.id !== this.id) {
-              const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
-              if (isEnemy) {
-                const edx = other.x - this.x;
-                const edy = other.y - this.y;
-                if (edx * edx + edy * edy <= 150 * 150) {
-                  enemyCloseToCruiser = true;
-                  break;
-                }
-              }
-            }
+        let needNewTarget = !wasReloading || this.targetX === null || this.targetY === null;
+        if (!needNewTarget && this.patrolReloadTargetPlanetId !== null && this.patrolReloadTargetPlanetId !== undefined) {
+          const tp = allPlanets ? allPlanets.find(p => p.id === this.patrolReloadTargetPlanetId) : null;
+          if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
+            needNewTarget = true;
           }
         }
-
-        // If an enemy unit is within 150px, find another random destination 
-        // within a friendly gravity well and within 500px that is more than 200px away from any enemy unit.
-        let divertedDestination = null;
-        if (enemyCloseToCruiser) {
+        
+        if (needNewTarget) {
           const candidates = [];
-          if (allPlanets) {
-            for (const p of allPlanets) {
-              if (p.owner && p.owner.id === this.owner.id) {
-                const pdx = p.x - this.x;
-                const pdy = p.y - this.y;
-                const pDist = Math.sqrt(pdx * pdx + pdy * pdy);
-                if (pDist <= 500 + p.getGravityRadius()) {
-                  const gRad = p.getGravityRadius();
-                  for (let attempt = 0; attempt < 20; attempt++) {
-                    const theta = Math.random() * Math.PI * 2;
-                    const r = Math.random() * gRad;
-                    const tx = p.x + r * Math.cos(theta);
-                    const ty = p.y + r * Math.sin(theta);
-                    
-                    const cdx = tx - this.x;
-                    const cdy = ty - this.y;
-                    if (cdx * cdx + cdy * cdy <= 500 * 500) {
-                      let farFromEnemies = true;
-                      if (allShips) {
-                        for (const other of allShips) {
-                          if (other.active && other.id !== this.id) {
-                            const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
-                            if (isEnemy) {
-                              const odx = other.x - tx;
-                              const ody = other.y - ty;
-                              if (odx * odx + ody * ody <= 200 * 200) {
-                                farFromEnemies = false;
-                                break;
-                              }
-                            }
-                          }
-                        }
-                      }
-                      
-                      if (farFromEnemies) {
-                        candidates.push({ x: tx, y: ty, planet: p });
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-          
-          if (candidates.length > 0) {
-            divertedDestination = candidates[Math.floor(Math.random() * candidates.length)];
-          }
-        }
-
-        if (divertedDestination) {
-          this.targetPlanet = divertedDestination.planet;
-          this.targetX = divertedDestination.x;
-          this.targetY = divertedDestination.y;
-          this.cruiserTargetType = null;
-          this.cruiserTargetId = null;
-        } else {
-          // Normal retreat logic:
-          // Check if there are enemies close to all the normal retreat locations (friendly planets within 500px)
-          let allPlanetsUnsafe = true;
-          const friendlyPlanetsInRange = [];
-          
-          if (allPlanets) {
-            for (const p of allPlanets) {
-              if (p.owner && p.owner.id === this.owner.id) {
-                const dx = p.x - this.x;
-                const dy = p.y - this.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist <= 500) {
-                  friendlyPlanetsInRange.push({ planet: p, dist: dist });
-                  
-                  // Check if there is an enemy close to this planet's center (within 150px)
-                  let isPlanetSafe = true;
-                  if (allShips) {
-                    for (const other of allShips) {
-                      if (other.active && other.id !== this.id) {
-                        const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
-                        if (isEnemy) {
-                          const edx = other.x - p.x;
-                          const edy = other.y - p.y;
-                          if (edx * edx + edy * edy <= 150 * 150) {
-                            isPlanetSafe = false;
-                            break;
-                          }
-                        }
-                      }
-                    }
-                  }
-                  if (isPlanetSafe) {
-                    allPlanetsUnsafe = false;
-                  }
-                }
-              }
-            }
-          }
-          
-          let alternateSafeDestination = null;
-          // If enemies are close to all the normal retreat locations, attempt to find a safe reload place 
-          // at exactly 80% of the gravity well radius away along a random heading.
-          if (allPlanetsUnsafe && friendlyPlanetsInRange.length > 0) {
-            const alternateCandidates = [];
-            for (const item of friendlyPlanetsInRange) {
-              const p = item.planet;
+          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+          if (friendlyPlanets.length > 0) {
+            for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
+              const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
               const gRad = p.getGravityRadius();
-              const r = gRad * 0.8;
+              const theta = Math.random() * Math.PI * 2;
+              const r = Math.random() * gRad;
+              const tx = p.x + r * Math.cos(theta);
+              const ty = p.y + r * Math.sin(theta);
               
-              // Attempt 15 random headings
-              for (let attempt = 0; attempt < 15; attempt++) {
-                const theta = Math.random() * Math.PI * 2;
-                const tx = p.x + r * Math.cos(theta);
-                const ty = p.y + r * Math.sin(theta);
-                
-                // Ensure candidate coordinate is within 500px of the cruiser
-                const cdx = tx - this.x;
-                const cdy = ty - this.y;
-                if (cdx * cdx + cdy * cdy <= 500 * 500) {
-                  // Check if safe (no enemies within 150px of this candidate point)
-                  let isSafe = true;
-                  if (allShips) {
-                    for (const other of allShips) {
-                      if (other.active && other.id !== this.id) {
-                        const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
-                        if (isEnemy) {
-                          const edx = other.x - tx;
-                          const edy = other.y - ty;
-                          if (edx * edx + edy * edy <= 150 * 150) {
-                            isSafe = false;
-                            break;
-                          }
-                        }
-                      }
-                    }
-                  }
-                  
-                  if (isSafe) {
-                    alternateCandidates.push({ x: tx, y: ty, planet: p, dist: item.dist });
-                  }
-                }
+              const dx = tx - this.x;
+              const dy = ty - this.y;
+              if (dx * dx + dy * dy <= 500 * 500) {
+                candidates.push({ x: tx, y: ty, planet: p });
               }
-            }
-            
-            if (alternateCandidates.length > 0) {
-              alternateSafeDestination = alternateCandidates[Math.floor(Math.random() * alternateCandidates.length)];
             }
           }
           
-          if (alternateSafeDestination) {
-            this.targetPlanet = alternateSafeDestination.planet;
-            this.targetX = alternateSafeDestination.x;
-            this.targetY = alternateSafeDestination.y;
-            this.cruiserTargetType = null;
-            this.cruiserTargetId = null;
-          } else {
-            // Find friendly planet within 500px, avoiding destinations within 150px of an enemy if possible
-            let bestFriendly = null;
-            let bestFriendlyDist = Infinity;
-            let bestFriendlyIsSafe = false;
-            
-            for (const item of friendlyPlanetsInRange) {
-              const p = item.planet;
-              const dist = item.dist;
-              
-              // Check if this friendly planet is "safe" (no enemy units within 150px of its center)
-              let isSafe = true;
+          let bestCandidate = null;
+          if (candidates.length > 0) {
+            let maxMinEnemyDistSq = -1;
+            for (const c of candidates) {
+              let minEnemyDistSq = Infinity;
               if (allShips) {
                 for (const other of allShips) {
                   if (other.active && other.id !== this.id) {
                     const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
                     if (isEnemy) {
-                      const edx = other.x - p.x;
-                      const edy = other.y - p.y;
-                      if (edx * edx + edy * edy <= 150 * 150) {
-                        isSafe = false;
-                        break;
+                      const edx = other.x - c.x;
+                      const edy = other.y - c.y;
+                      const distSq = edx * edx + edy * edy;
+                      if (distSq < minEnemyDistSq) {
+                        minEnemyDistSq = distSq;
                       }
                     }
                   }
                 }
               }
-              
-              // Prioritize safe planets.
-              if (bestFriendly === null) {
-                bestFriendly = p;
-                bestFriendlyDist = dist;
-                bestFriendlyIsSafe = isSafe;
-              } else if (isSafe && !bestFriendlyIsSafe) {
-                bestFriendly = p;
-                bestFriendlyDist = dist;
-                bestFriendlyIsSafe = isSafe;
-              } else if (isSafe === bestFriendlyIsSafe) {
-                if (dist < bestFriendlyDist) {
-                  bestFriendly = p;
-                  bestFriendlyDist = dist;
+              if (minEnemyDistSq > maxMinEnemyDistSq) {
+                maxMinEnemyDistSq = minEnemyDistSq;
+                bestCandidate = c;
+              }
+            }
+          }
+          
+          if (bestCandidate) {
+            this.targetPlanet = null; // don't go directly to the planet
+            this.patrolReloadTargetPlanetId = bestCandidate.planet.id;
+            this.targetX = bestCandidate.x;
+            this.targetY = bestCandidate.y;
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+          } else {
+            // Fallback: If no friendly planet gravity well is within 500px, find the closest friendly planet and go to it
+            let closestFriendly = null;
+            let minFriendlyDistSq = Infinity;
+            if (friendlyPlanets.length > 0) {
+              for (const p of friendlyPlanets) {
+                const dx = p.x - this.x;
+                const dy = p.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < minFriendlyDistSq) {
+                  minFriendlyDistSq = distSq;
+                  closestFriendly = p;
                 }
               }
             }
-            
-            if (bestFriendly) {
-              this.targetPlanet = bestFriendly;
-              this.targetX = bestFriendly.x;
-              this.targetY = bestFriendly.y;
+            if (closestFriendly) {
+              this.targetPlanet = closestFriendly;
+              this.targetX = closestFriendly.x;
+              this.targetY = closestFriendly.y;
+              this.patrolReloadTargetPlanetId = closestFriendly.id;
               this.cruiserTargetType = null;
               this.cruiserTargetId = null;
             }
           }
         }
       } else {
-        // We have bombs, so we can active patrol!
         this.patrolReloading = false;
+        this.patrolReloadTargetPlanetId = null;
         
-        // Find closest enemy unit (standard ship, bomber, cruiser, or Space Amoeba)
-        // that is BOTH within a friendly gravity well AND within 800px of this cruiser.
         let closestEnemy = null;
-        let minEnemyDistSq = 800 * 800; // max engagement range is 800px
+        let minEnemyDistSq = 500 * 500; // max engagement range is 500px
         
         if (allShips) {
           const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function')
-            ? allShips.getShipsInRadiusSq(this.x, this.y, 800 * 800)
+            ? allShips.getShipsInRadiusSq(this.x, this.y, 500 * 500)
             : allShips;
             
           for (const other of candidateShips) {
@@ -1278,7 +1139,7 @@ export class Ship {
                 const distSq = dx * dx + dy * dy;
                 
                 let eligible = false;
-                if (distSq <= 800 * 800 && allPlanets) {
+                if (distSq <= 500 * 500 && allPlanets) {
                   for (const p of allPlanets) {
                     if (p.owner && p.owner.id === this.owner.id) {
                       const pdx = other.x - p.x;
