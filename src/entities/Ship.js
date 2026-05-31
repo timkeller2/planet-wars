@@ -1040,49 +1040,69 @@ export class Ship {
         }
         
         if (needNewTarget) {
-          const candidates = [];
           const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
-          if (friendlyPlanets.length > 0) {
-            for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
-              const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
-              const gRad = p.getGravityRadius();
-              const theta = Math.random() * Math.PI * 2;
-              const r = Math.random() * gRad;
-              const tx = p.x + r * Math.cos(theta);
-              const ty = p.y + r * Math.sin(theta);
-              
-              const dx = tx - this.x;
-              const dy = ty - this.y;
-              if (dx * dx + dy * dy <= 500 * 500) {
-                candidates.push({ x: tx, y: ty, planet: p });
-              }
-            }
-          }
-          
           let bestCandidate = null;
-          if (candidates.length > 0) {
-            let maxMinEnemyDistSq = -1;
-            for (const c of candidates) {
-              let minEnemyDistSq = Infinity;
-              if (allShips) {
-                for (const other of allShips) {
-                  if (other.active && other.id !== this.id) {
-                    const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
-                    if (isEnemy) {
-                      const edx = other.x - c.x;
-                      const edy = other.y - c.y;
-                      const distSq = edx * edx + edy * edy;
-                      if (distSq < minEnemyDistSq) {
-                        minEnemyDistSq = distSq;
+
+          if (friendlyPlanets.length > 0) {
+            const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
+              const candidates = [];
+              for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
+                const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
+                const gRad = p.getGravityRadius();
+                const theta = Math.random() * Math.PI * 2;
+                const r = Math.random() * gRad;
+                const tx = p.x + r * Math.cos(theta);
+                const ty = p.y + r * Math.sin(theta);
+                
+                const dx = tx - this.x;
+                const dy = ty - this.y;
+                if (dx * dx + dy * dy <= radius * radius) {
+                  let minEnemyDistSq = Infinity;
+                  if (allShips) {
+                    for (const other of allShips) {
+                      if (other.active && other.id !== this.id) {
+                        const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                        if (isEnemy) {
+                          const edx = other.x - tx;
+                          const edy = other.y - ty;
+                          const distSq = edx * edx + edy * edy;
+                          if (distSq < minEnemyDistSq) {
+                            minEnemyDistSq = distSq;
+                          }
+                        }
                       }
                     }
                   }
+                  
+                  if (!strictSafe || minEnemyDistSq >= minEnemyDistReq * minEnemyDistReq) {
+                    candidates.push({ x: tx, y: ty, planet: p, minEnemyDistSq });
+                  }
                 }
               }
-              if (minEnemyDistSq > maxMinEnemyDistSq) {
-                maxMinEnemyDistSq = minEnemyDistSq;
-                bestCandidate = c;
+              
+              if (candidates.length > 0) {
+                candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
+                return candidates[0];
               }
+              return null;
+            };
+
+            // Stage 1: Search within 300px, requiring at least 150px safety distance from enemies
+            bestCandidate = findBestCandidate(300, 150, true);
+            
+            // Stage 2: If none found within 300px that are >= 150px away from enemies, expand search to 500px
+            if (!bestCandidate) {
+              bestCandidate = findBestCandidate(500, 150, true);
+            }
+
+            // Stage 3: If STILL none found that are >= 150px away, fallback to best overall within 300px
+            if (!bestCandidate) {
+              bestCandidate = findBestCandidate(300, 0, false);
+            }
+
+            // Stage 4: If STILL none, fallback to best overall within 500px
+            if (!bestCandidate) {
+              bestCandidate = findBestCandidate(500, 0, false);
             }
           }
           
