@@ -350,7 +350,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const musicCheckbox = document.getElementById('music-checkbox');
     const bgMusic = document.getElementById('bg-music');
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
-      bgMusic.src = '/Music/Battletime.mp3';
+      bgMusic.src = '/Music/ImperialMarch.wav';
       bgMusic.volume = 1.0;
       bgMusic.play().catch(e => console.warn('Music play blocked:', e));
     } else if (bgMusic) {
@@ -415,6 +415,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
       // Play chime sound
       playChatNotificationSound();
+
+      if (msg.text && msg.text.trim().toLowerCase() === 'battle time!') {
+        const musicCheckbox = document.getElementById('music-checkbox');
+        const bgMusic = document.getElementById('bg-music');
+        if (musicCheckbox && musicCheckbox.checked && bgMusic) {
+          bgMusic.src = '/Music/Battletime.mp3';
+          bgMusic.volume = 1.0;
+          bgMusic.play().catch(e => console.warn('Battletime play blocked:', e));
+        }
+      }
 
       // Remove element after 90 seconds to clean up DOM
       setTimeout(() => {
