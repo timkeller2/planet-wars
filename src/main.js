@@ -350,6 +350,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const musicCheckbox = document.getElementById('music-checkbox');
     const bgMusic = document.getElementById('bg-music');
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
+      bgMusic.src = '/Music/Battletime.mp3';
       bgMusic.volume = 0.3;
       bgMusic.play().catch(e => console.warn('Music play blocked:', e));
     } else if (bgMusic) {
@@ -745,6 +746,17 @@ window.addEventListener('DOMContentLoaded', () => {
           });
           playSound('rampage');
           lastPlanetRampages[p.id] = true;
+
+          const pOwner = state.players ? state.players.find(pl => pl.id === p.ownerId) : null;
+          if (pOwner && pOwner.isAI) {
+            const musicCheckbox = document.getElementById('music-checkbox');
+            const bgMusic = document.getElementById('bg-music');
+            if (musicCheckbox && musicCheckbox.checked && bgMusic) {
+              bgMusic.src = '/Music/Megalovania.mp3';
+              bgMusic.volume = 0.3;
+              bgMusic.play().catch(e => console.warn('Megalovania play blocked:', e));
+            }
+          }
         } else if (!p.rampageEvent) {
           lastPlanetRampages[p.id] = false;
         }
