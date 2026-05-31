@@ -428,6 +428,17 @@ window.addEventListener('DOMContentLoaded', () => {
         }
       }
 
+      if (msg.text && msg.text.trim().toLowerCase() === 'meg!') {
+        const musicCheckbox = document.getElementById('music-checkbox');
+        const bgMusic = document.getElementById('bg-music');
+        if (musicCheckbox && musicCheckbox.checked && bgMusic) {
+          bgMusic.src = '/Music/Megalovania.mp3';
+          bgMusic.loop = false;
+          bgMusic.volume = 1.0;
+          bgMusic.play().catch(e => console.warn('Megalovania play blocked:', e));
+        }
+      }
+
       // Remove element after 90 seconds to clean up DOM
       setTimeout(() => {
         if (div.parentNode === chatMessages) {
