@@ -2914,6 +2914,20 @@ window.addEventListener('DOMContentLoaded', () => {
         'btn-up-marines': 'Marines (R)'
       };
 
+      const descMap = {
+        'sensorarrays': 'Expands radar range to reveal fog-of-war areas',
+        'labs': 'Generates science credits dynamically to fund technology',
+        'armor': 'Adds +5 points to the cruiser\'s maximum hull health',
+        'shields': 'Adds shield deflection to shrug off incoming damage',
+        'engine': 'Boosts ship sub-light flight speed and steering turn rate',
+        'munitions': 'Increases base laser weapon damage and adds splash capacity',
+        'targeting': 'Increases weapon accuracy and extends active firing range',
+        'damagecontrol': 'Accelerates hull self-repair rate and offsets damaged speed loss',
+        'fuel_tanker': 'Expands max warp fuel capacity to prevent deep-space health drain',
+        'diplomat': 'Exerts passive sympathy on targets or reduces enemy subversion',
+        'marines': 'Boosts planet conquest strength and planetary capture success rate'
+      };
+
       const totalUpgrades = (selectedCruiser.sensorarrays || 0) +
                             (selectedCruiser.labs || 0) +
                             (selectedCruiser.armor || 0) +
@@ -2941,7 +2955,8 @@ window.addEventListener('DOMContentLoaded', () => {
           if (el.style.display === 'inline-flex') {
             const uCost = getUpgradeCostForShip(selectedCruiser, prop);
             const baseName = namesMap[btnId] || 'Upgrade';
-            el.setAttribute('title', `${baseName} (Cost: ${uCost} ships)`);
+            const desc = descMap[prop] || 'Upgrades cruiser capabilities';
+            el.setAttribute('title', `${baseName}: ${desc}`);
             const costSpan = el.querySelector('.btn-cost');
             if (costSpan) costSpan.textContent = uCost;
 
