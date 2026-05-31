@@ -391,7 +391,7 @@ export class Ship {
           } else if (this.upgradeProp === 'fuel_tanker') {
             this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + 5);
           } else if (this.upgradeProp === 'marines') {
-            this.marineCount = Math.min(this.marines * this.maxHealth, (this.marineCount || 0) + this.maxHealth);
+            // Just capacity increases; do not load free marines upon upgrade completion
           }
           
           console.log(`[Cruiser Upgrade Complete] Ship ${this.id} upgraded ${this.upgradeProp} to level ${this[this.upgradeProp]}`);
