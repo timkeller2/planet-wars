@@ -2746,40 +2746,21 @@ export class Game {
             const dy = enemy.y - ship.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist <= radar) {
-              // Alone check: The defending ship (enemy) must be alone
-              // i.e., no other friendly cruisers to it within 1/2 of its own radar range
-              let defenderCruiserNearby = false;
-              const enemyRadar = enemy.cruiserRadarRange();
-              const enemyAloneDistSq = (0.5 * enemyRadar) * (0.5 * enemyRadar);
-              
-              for (const other of cruisers) {
-                if (other.id !== enemy.id && other.owner.id === enemy.owner.id) {
-                  const edx = other.x - enemy.x;
-                  const edy = other.y - enemy.y;
-                  if (edx * edx + edy * edy <= enemyAloneDistSq) {
-                    defenderCruiserNearby = true;
-                    break;
-                  }
-                }
-              }
-              
-              if (!defenderCruiserNearby) {
-                const requiredMarines = 2 * (enemy.crew || 0);
-                if (ship.marineCount >= requiredMarines && requiredMarines > 0) {
-                  // Launch Boarding Fleet Pod!
-                  const pod = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, enemy.x, enemy.y);
-                  pod.isBoardingFleet = true;
-                  pod.targetShipId = enemy.id;
-                  pod.sourceShipId = ship.id;
-                  pod.marineCount = ship.marineCount;
-                  pod.speed = 60; // moves at fast pace
-                  pod.isCruiser = false; // it is drawn uniquely, not as a cruiser body!
-                  this.ships.push(pod);
+              const requiredMarines = 2 * (enemy.crew || 0);
+              if (ship.marineCount >= requiredMarines && requiredMarines > 0) {
+                // Launch Boarding Fleet Pod!
+                const pod = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, enemy.x, enemy.y);
+                pod.isBoardingFleet = true;
+                pod.targetShipId = enemy.id;
+                pod.sourceShipId = ship.id;
+                pod.marineCount = ship.marineCount;
+                pod.speed = 60; // moves at fast pace
+                pod.isCruiser = false; // it is drawn uniquely, not as a cruiser body!
+                this.ships.push(pod);
 
-                  console.log(`[BOARDING] Ship ${ship.id} launched pod targeting Ship ${enemy.id} carrying ${ship.marineCount} marines.`);
-                  ship.marineCount = 0;
-                  break;
-                }
+                console.log(`[BOARDING] Ship ${ship.id} launched pod targeting Ship ${enemy.id} carrying ${ship.marineCount} marines.`);
+                ship.marineCount = 0;
+                break;
               }
             }
           }

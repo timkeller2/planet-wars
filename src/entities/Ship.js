@@ -582,6 +582,22 @@ export class Ship {
           if (!enemyShip.active || enemyShip.owner === this.owner) continue;
           if (this.isAmoeba && enemyShip.isAmoeba) continue;
           
+          if (this.owner) {
+            let targetedByOurBoarding = false;
+            if (allShips) {
+              for (const other of allShips) {
+                if (other.active && other.isBoardingFleet && other.targetShipId === enemyShip.id && other.owner && other.owner.id === this.owner.id) {
+                  targetedByOurBoarding = true;
+                  break;
+                }
+              }
+            }
+            if (enemyShip.isUnderBoarding && enemyShip.boardingPlayer && enemyShip.boardingPlayer.id === this.owner.id && (enemyShip.boardingMarines || 0) > 0) {
+              targetedByOurBoarding = true;
+            }
+            if (targetedByOurBoarding) continue;
+          }
+          
           const edx = enemyShip.x - this.x;
           const edy = enemyShip.y - this.y;
           const distSq = edx * edx + edy * edy;
@@ -1154,6 +1170,20 @@ export class Ship {
             if (other.active && other.id !== this.id) {
               const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
               if (isEnemy) {
+                let beingBoardedByUs = false;
+                if (allShips) {
+                  for (const pod of allShips) {
+                    if (pod.active && pod.isBoardingFleet && pod.targetShipId === other.id && pod.owner && pod.owner.id === this.owner.id) {
+                      beingBoardedByUs = true;
+                      break;
+                    }
+                  }
+                }
+                if (other.isUnderBoarding && other.boardingPlayer && other.boardingPlayer.id === this.owner.id && (other.boardingMarines || 0) > 0) {
+                  beingBoardedByUs = true;
+                }
+                if (beingBoardedByUs) continue;
+
                 const dx = other.x - this.x;
                 const dy = other.y - this.y;
                 const distSq = dx * dx + dy * dy;
