@@ -4085,7 +4085,7 @@ window.addEventListener('DOMContentLoaded', () => {
               }
             }
 
-            const hitChance = Math.round(Math.min(100, Math.max(10.0, hitChanceValue * 2 + friendlyGrav - enemyGrav - hazardPenalty))) + '%';
+            const hitChance = Math.round(Math.min(100, Math.max(10.0, hitChanceValue + friendlyGrav - enemyGrav - hazardPenalty))) + '%';
 
             const volleySize = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
             lines.push({ label: 'Range', value: effectiveRange, color: '#f88' });
@@ -5181,9 +5181,11 @@ window.addEventListener('DOMContentLoaded', () => {
             const expBonus = Math.sqrt(rawExp);
             const shipExpBonus = Math.sqrt(shipExp);
             let hitChanceValue = 10;
+            const targetingBonus = (s.targeting || 0) * 10;
+            hitChanceValue += targetingBonus;
             if (s.bombs > 0) hitChanceValue += 10;
             hitChanceValue += techBonus + expBonus + shipExpBonus;
-            if (hitChanceValue * 2 >= 100) {
+            if (hitChanceValue >= 100) {
               ctx.save();
               const starX = s.x + size * 0.6;
               const starY = s.y - size * 0.6;
