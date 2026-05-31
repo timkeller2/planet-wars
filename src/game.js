@@ -1131,11 +1131,64 @@ export class Game {
       }
     }
 
+    let dispersedSpace = false;
+    if (numCruisers > 1) {
+      for (let j = 0; j < numCruisers; j++) {
+        for (let k = j + 1; k < numCruisers; k++) {
+          const dx = cruisers[j].x - cruisers[k].x;
+          const dy = cruisers[j].y - cruisers[k].y;
+          if (dx * dx + dy * dy > 150 * 150) {
+            dispersedSpace = true;
+            break;
+          }
+        }
+        if (dispersedSpace) break;
+      }
+    }
+
+    let offsetsSpace = [];
+    if (dispersedSpace) {
+      const minSpacing = 40;
+      for (let i = 0; i < numCruisers; i++) {
+        let found = false;
+        let oX = 0, oY = 0;
+        let attempts = 0;
+        let maxRadius = 30;
+        while (!found && attempts < 500) {
+          attempts++;
+          if (attempts % 50 === 0) {
+            maxRadius += 20;
+          }
+          const angle = Math.random() * Math.PI * 2;
+          const radius = Math.random() * maxRadius;
+          oX = Math.cos(angle) * radius;
+          oY = Math.sin(angle) * radius;
+          
+          let overlap = false;
+          for (const other of offsetsSpace) {
+            const dx = oX - other.x;
+            const dy = oY - other.y;
+            if (dx * dx + dy * dy < minSpacing * minSpacing) {
+              overlap = true;
+              break;
+            }
+          }
+          if (!overlap) {
+            found = true;
+          }
+        }
+        offsetsSpace.push({ x: oX, y: oY });
+      }
+    }
+
     for (let i = 0; i < numCruisers; i++) {
       const ship = cruisers[i];
       let tX = targetX;
       let tY = targetY;
-      if (numCruisers !== 1 && anchor) {
+      if (dispersedSpace) {
+        tX = targetX + offsetsSpace[i].x;
+        tY = targetY + offsetsSpace[i].y;
+      } else if (numCruisers !== 1 && anchor) {
         tX = targetX + (ship.x - anchor.x);
         tY = targetY + (ship.y - anchor.y);
       }
@@ -1237,11 +1290,64 @@ export class Game {
       }
     }
 
+    let dispersedPlanet = false;
+    if (numCruisers > 1) {
+      for (let j = 0; j < numCruisers; j++) {
+        for (let k = j + 1; k < numCruisers; k++) {
+          const dx = cruisers[j].x - cruisers[k].x;
+          const dy = cruisers[j].y - cruisers[k].y;
+          if (dx * dx + dy * dy > 150 * 150) {
+            dispersedPlanet = true;
+            break;
+          }
+        }
+        if (dispersedPlanet) break;
+      }
+    }
+
+    let offsetsPlanet = [];
+    if (dispersedPlanet) {
+      const minSpacing = 40;
+      for (let i = 0; i < numCruisers; i++) {
+        let found = false;
+        let oX = 0, oY = 0;
+        let attempts = 0;
+        let maxRadius = 30;
+        while (!found && attempts < 500) {
+          attempts++;
+          if (attempts % 50 === 0) {
+            maxRadius += 20;
+          }
+          const angle = Math.random() * Math.PI * 2;
+          const radius = Math.random() * maxRadius;
+          oX = Math.cos(angle) * radius;
+          oY = Math.sin(angle) * radius;
+          
+          let overlap = false;
+          for (const other of offsetsPlanet) {
+            const dx = oX - other.x;
+            const dy = oY - other.y;
+            if (dx * dx + dy * dy < minSpacing * minSpacing) {
+              overlap = true;
+              break;
+            }
+          }
+          if (!overlap) {
+            found = true;
+          }
+        }
+        offsetsPlanet.push({ x: oX, y: oY });
+      }
+    }
+
     for (let i = 0; i < numCruisers; i++) {
       const ship = cruisers[i];
       let oX = 0;
       let oY = 0;
-      if (numCruisers !== 1 && anchor) {
+      if (dispersedPlanet) {
+        oX = offsetsPlanet[i].x;
+        oY = offsetsPlanet[i].y;
+      } else if (numCruisers !== 1 && anchor) {
         oX = ship.x - anchor.x;
         oY = ship.y - anchor.y;
       }
