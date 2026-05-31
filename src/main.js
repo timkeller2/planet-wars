@@ -2297,7 +2297,7 @@ window.addEventListener('DOMContentLoaded', () => {
           focusModeActive = false;
           return;
         }
-        if (key === 'c' || key === 'o') {
+        if (key === 'c' || key === 'o' || event.key === 'Escape') {
           event.preventDefault();
           focusModeActive = false;
           return;
@@ -2314,14 +2314,14 @@ window.addEventListener('DOMContentLoaded', () => {
         const key = event.key.toLowerCase();
         
         if (ship.isUpgrading) {
-          if (key === 'c' || key === 'u') {
+          if (key === 'c' || key === 'u' || event.key === 'Escape') {
             event.preventDefault();
             upgradeModeActive = false;
           }
           return;
         }
         
-        if (key === 'c' || key === 'u') {
+        if (key === 'c' || key === 'u' || event.key === 'Escape') {
           event.preventDefault();
           upgradeModeActive = false;
           return;
@@ -2915,17 +2915,17 @@ window.addEventListener('DOMContentLoaded', () => {
       };
 
       const descMap = {
-        'sensorarrays': 'Expands radar range to reveal fog-of-war areas',
-        'labs': 'Generates science credits dynamically to fund technology',
-        'armor': 'Adds +5 points to the cruiser\'s maximum hull health',
-        'shields': 'Adds shield deflection to shrug off incoming damage',
-        'engine': 'Boosts ship sub-light flight speed and steering turn rate',
-        'munitions': 'Increases base laser weapon damage and adds splash capacity',
-        'targeting': 'Increases weapon accuracy and extends active firing range',
-        'damagecontrol': 'Accelerates hull self-repair rate and offsets damaged speed loss',
-        'fuel_tanker': 'Expands max warp fuel capacity to prevent deep-space health drain',
-        'diplomat': 'Exerts passive sympathy on targets or reduces enemy subversion',
-        'marines': 'Boosts planet conquest strength and planetary capture success rate'
+        'sensorarrays': 'Adds +25% radar range per level (up to +125%) to reveal the fog of war',
+        'labs': 'Adds +1 Lab research tick speed per level (up to +5) to generate tech points',
+        'armor': 'Adds +4 flat + 10% max health armor points per level to withstand damage',
+        'shields': 'Adds +10% damage deflect/shrug chance per level (max 80% deflection cap)',
+        'engine': 'Adds +3 speed and +3°/sec turn rate per level for highly responsive steering',
+        'munitions': 'Adds +1 bomb capacity and +1 splash damage rating per level to standard weapon dogfights',
+        'targeting': 'Adds +10% weapon range and +10% laser accuracy hit chance per level in combat',
+        'damagecontrol': 'Adds +50% out-of-combat repair and +20% deep-space/in-combat repair rate per level',
+        'fuel_tanker': 'Adds +5 fuel capacity per level and reduces flight speed by -3 per level',
+        'diplomat': 'Adds diplomat subversion to project 1 passive sympathy/min or reduce 1 enemy sympathy/min',
+        'marines': 'Adds +1 marine capacity factor per level to drastically boost planetary boarding success'
       };
 
       const totalUpgrades = (selectedCruiser.sensorarrays || 0) +
