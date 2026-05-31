@@ -5284,6 +5284,23 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.restore();
           }
 
+          let groupNum = null;
+          for (let g = 0; g <= 9; g++) {
+            if (controlGroups[g] && controlGroups[g].includes(s.id)) {
+              groupNum = g;
+              break;
+            }
+          }
+          if (groupNum !== null) {
+            ctx.save();
+            ctx.font = 'bold 7px Orbitron';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(groupNum.toString(), s.x - size * 0.7, s.y - size * 0.7);
+            ctx.restore();
+          }
+
           ctx.beginPath();
         } else {
           ctx.arc(s.x, s.y, 1.5, 0, Math.PI * 2);
