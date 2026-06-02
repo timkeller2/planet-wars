@@ -1404,6 +1404,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           card.style.fontWeight = 'bold';
           card.style.transition = 'all 0.2s';
           
+          const timeRemainingMs = order.expiresAt - Date.now();
           if (isMine) {
             card.style.borderColor = 'rgba(76, 175, 80, 0.4)';
             card.style.background = 'rgba(76, 175, 80, 0.1)';
@@ -1411,17 +1412,23 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             card.style.textShadow = '0 0 4px #4caf50';
             card.title = `Your Order - Click to Cancel (Refunds 1 ${order.resource})`;
           } else {
-            card.style.borderColor = 'rgba(33, 150, 243, 0.4)';
-            card.style.background = 'rgba(33, 150, 243, 0.1)';
-            card.style.color = '#2196f3';
-            card.style.textShadow = '0 0 4px #2196f3';
+            if (timeRemainingMs > 0 && timeRemainingMs <= 60000) {
+              card.style.borderColor = 'rgba(244, 67, 54, 0.4)';
+              card.style.background = 'rgba(244, 67, 54, 0.1)';
+              card.style.color = '#f44336';
+              card.style.textShadow = '0 0 4px #f44336';
+            } else {
+              card.style.borderColor = 'rgba(33, 150, 243, 0.4)';
+              card.style.background = 'rgba(33, 150, 243, 0.1)';
+              card.style.color = '#2196f3';
+              card.style.textShadow = '0 0 4px #2196f3';
+            }
             card.title = `Owner: ${order.ownerName} - Click to Buy for ${order.price} credits (Costs 1 option)`;
           }
           
           card.textContent = `${emoji}: ${order.price}`;
           
           // Make order blink if it is within 30 seconds of expiring (Task 104)
-          const timeRemainingMs = order.expiresAt - Date.now();
           if (timeRemainingMs > 0 && timeRemainingMs <= 30000) {
             card.classList.add('blink-warning');
           }
