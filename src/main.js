@@ -1184,27 +1184,61 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     if (creditsDisplay) {
       const creditsVal = myPlayer.credits || 0;
 
-      // OVERHAULED TOOLTIP (Task 101)
-      let tooltipText = "";
-      if (myPlayer.tradingPartners && myPlayer.tradingPartners.length > 0) {
-        tooltipText += "TRADING PARTNERS:\n";
-        let totalRate = 0;
-        const maxLen = Math.max(...myPlayer.tradingPartners.map(tp => tp.name.length), 10);
-        for (const partner of myPlayer.tradingPartners) {
-          const paddedName = partner.name.padEnd(maxLen, ' ');
-          const formattedRate = partner.rate.toFixed(3);
-          tooltipText += `${paddedName} : ${Math.floor(partner.ships)} ships (+${formattedRate}/s)\n`;
-          totalRate += partner.rate;
+      // Render custom tooltip panel HTML (Task 101 Overhaul)
+      const tooltipPanel = document.getElementById('credits-tooltip-panel');
+      if (tooltipPanel) {
+        if (myPlayer.tradingPartners && myPlayer.tradingPartners.length > 0) {
+          let rowsHtml = "";
+          let totalRate = 0;
+          for (const partner of myPlayer.tradingPartners) {
+            const partnerName = partner.name;
+            const ratePerMin = partner.rate * 60;
+            rowsHtml += `
+              <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.05);">
+                <td style="padding: 6px 0; color: #fff; text-align: left;">${partnerName}</td>
+                <td style="padding: 6px 0; text-align: center; color: #aaa;">${Math.floor(partner.ships)}</td>
+                <td style="padding: 6px 0; text-align: right; color: #ffeb3b; font-weight: bold;">+${ratePerMin.toFixed(2)}/m</td>
+              </tr>
+            `;
+            totalRate += partner.rate;
+          }
+          const totalRatePerMin = totalRate * 60;
+          tooltipPanel.innerHTML = `
+            <div style="font-weight: bold; font-size: 0.85rem; color: #ffeb3b; border-bottom: 1px solid rgba(255, 235, 59, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Trading Partners</div>
+            <table style="width: 100%; border-collapse: collapse; font-family: 'Rajdhani', sans-serif; font-size: 0.9rem;">
+              <thead>
+                <tr style="color: #0ff; font-family: 'Orbitron', sans-serif; font-size: 0.7rem; border-bottom: 1px dashed rgba(0, 229, 255, 0.2); text-align: left;">
+                  <th style="padding: 4px 0; text-align: left;">Partner</th>
+                  <th style="padding: 4px 0; text-align: center;">Ships</th>
+                  <th style="padding: 4px 0; text-align: right;">Income</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+              <tfoot>
+                <tr style="border-top: 1px solid rgba(255, 235, 59, 0.3); font-weight: bold;">
+                  <td style="padding: 6px 0; color: #ffeb3b; text-align: left;">Total Income</td>
+                  <td style="padding: 6px 0;"></td>
+                  <td style="padding: 6px 0; text-align: right; color: #ffeb3b;">+${totalRatePerMin.toFixed(2)}/m</td>
+                </tr>
+              </tfoot>
+            </table>
+          `;
+        } else {
+          tooltipPanel.innerHTML = `
+            <div style="font-weight: bold; font-size: 0.85rem; color: #ffeb3b; border-bottom: 1px solid rgba(255, 235, 59, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Trading Partners</div>
+            <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; text-align: center; padding: 10px 0; line-height: 1.3;">
+              No active trading lines<br>
+              <span style="font-size: 0.75rem; color: #668;">(Requires visible friendly/neutral planets & own ships)</span>
+            </div>
+          `;
         }
-        tooltipText += "-".repeat(maxLen + 24) + "\n";
-        tooltipText += `${"Total Rate".padEnd(maxLen, ' ')} : +${totalRate.toFixed(3)}/s`;
-      } else {
-        tooltipText = "No active trading lines\n(Requires visible friendly/neutral planets & own ships)";
       }
 
       creditsDisplay.style.display = 'block';
       creditsDisplay.textContent = `💲 ${Math.floor(creditsVal)}`;
-      creditsDisplay.setAttribute('title', tooltipText);
+      creditsDisplay.removeAttribute('title');
 
       if (myPlayer.useCredits !== false) {
         creditsDisplay.style.color = '#ffeb3b';
@@ -1217,7 +1251,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         creditsDisplay.style.textShadow = 'none';
         creditsDisplay.style.background = 'rgba(255, 255, 255, 0.05)';
         creditsDisplay.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-        creditsDisplay.style.textDecoration = 'line-through';
+        creditsDisplay.style.textDecoration = 'none';
       }
     }
 
@@ -3253,6 +3287,23 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     btnCreditsDisplay.addEventListener('click', (e) => {
       e.stopPropagation();
       socket.emit('toggleUseCredits');
+    });
+
+    btnCreditsDisplay.addEventListener('mouseenter', () => {
+      const tooltipPanel = document.getElementById('credits-tooltip-panel');
+      if (tooltipPanel) {
+        const rect = btnCreditsDisplay.getBoundingClientRect();
+        tooltipPanel.style.left = `${rect.left + window.scrollX}px`;
+        tooltipPanel.style.top = `${rect.bottom + window.scrollY + 5}px`;
+        tooltipPanel.style.display = 'block';
+      }
+    });
+
+    btnCreditsDisplay.addEventListener('mouseleave', () => {
+      const tooltipPanel = document.getElementById('credits-tooltip-panel');
+      if (tooltipPanel) {
+        tooltipPanel.style.display = 'none';
+      }
     });
   }
 

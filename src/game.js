@@ -2128,7 +2128,7 @@ export class Game {
         let otherFriendlyShips = 0;
         
         const visiblePartnerShips = {};
-        visiblePartnerShips["Own Planets"] = 0;
+        visiblePartnerShips["Domestic Ships"] = 0;
         visiblePartnerShips["Neutral"] = 0;
         for (const p of this.allPlayers) {
           if (p !== player && p !== this.monsterPlayer) {
@@ -2149,7 +2149,7 @@ export class Game {
 
           if ((isOwn || isNotAtWar) && this.isPlanetVisibleTo(planet, player)) {
             if (isOwn) {
-              visiblePartnerShips["Own Planets"] += planet.ships;
+              visiblePartnerShips["Domestic Ships"] += planet.ships;
             } else if (planet.owner) {
               if (planet.owner !== this.monsterPlayer) {
                 visiblePartnerShips[planet.owner.name] = (visiblePartnerShips[planet.owner.name] || 0) + planet.ships;
