@@ -2115,11 +2115,13 @@ export class Game {
         player.tradeOptions = Math.min(player.tradeCapacity, player.tradeOptions);
       }
 
-      // Handle Trade Options Regeneration
+      // Handle Trade Options Regeneration at decreasing intervals
+      const tradeRegenRate = 1 + commerceWorlds;
+      const tradeRegenInterval = 60000 / tradeRegenRate;
       player.tradeRegenAccumulator = (player.tradeRegenAccumulator || 0) + deltaTime;
-      if (player.tradeRegenAccumulator >= 60000) {
-        player.tradeRegenAccumulator -= 60000;
-        player.tradeOptions = Math.min(player.tradeCapacity, (player.tradeOptions || 0) + (1 + commerceWorlds));
+      while (player.tradeRegenAccumulator >= tradeRegenInterval) {
+        player.tradeRegenAccumulator -= tradeRegenInterval;
+        player.tradeOptions = Math.min(player.tradeCapacity, (player.tradeOptions || 0) + 1);
       }
 
       // Passive trading income of 1/10000 credits per ship per second of all ships on planets not at war with the player and visible to the player including the player's own planets, capped at the lower of ( 3 * number of ships the player has on all his planets ) or ( the sum of all other friendly planetary ships, not counting the player's ships )

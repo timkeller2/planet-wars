@@ -478,7 +478,14 @@ export class Ship {
           this[this.upgradeProp] = currentLevel + 1;
           
           if (this.upgradeProp === 'armor') {
-            const bonus = 4 + 0.10 * this.maxHealth;
+            const upgradeCost = this.upgradeShipsPaid || 0;
+            const duraniumThreshold = upgradeCost / 25;
+            let bonus = 4 + 0.10 * this.maxHealth;
+            if (this.owner && this.owner.resources && (this.owner.resources.duranium || 0) > duraniumThreshold) {
+              this.owner.resources.duranium = Math.max(0, (this.owner.resources.duranium || 0) - duraniumThreshold);
+              bonus *= 3;
+              console.log(`[Armor Upgrade Boosted] Consumed ${duraniumThreshold} duranium. Tripled bonus to ${bonus}`);
+            }
             this.maxArmor = (this.maxArmor || 0) + bonus;
             this.armorPoints = (this.armorPoints || 0) + bonus;
           } else if (this.upgradeProp === 'munitions') {
@@ -3014,11 +3021,11 @@ export class Ship {
           const oldFuel = this.fuel || 0;
 
           const owner = this.owner;
-          const hasExcessAntimatter = owner && owner.resources && Math.floor(owner.resources.antimatter || 0) >= 1;
-          const antimatterSellPrice = owner ? (owner.offerPrice?.antimatter ?? 3) : 3;
+          const hasExcessDeuterium = owner && owner.resources && Math.floor(owner.resources.deuterium || 0) >= 1;
+          const deuteriumSellPrice = owner ? (owner.offerPrice?.deuterium ?? 3) : 3;
 
           let canAffordRefuel = false;
-          if (hasExcessAntimatter && antimatterSellPrice < 12) {
+          if (hasExcessDeuterium && deuteriumSellPrice < 12) {
             canAffordRefuel = true;
           } else if (owner && owner.useCredits !== false) {
             canAffordRefuel = true;
@@ -3036,8 +3043,8 @@ export class Ship {
                 costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.fuel_tanker));
               }
 
-              if (hasExcessAntimatter && antimatterSellPrice < 12) {
-                owner.resources.antimatter = (owner.resources.antimatter || 0) - (1/12) * amountRefueled * costMultiplier;
+              if (hasExcessDeuterium && deuteriumSellPrice < 12) {
+                owner.resources.deuterium = (owner.resources.deuterium || 0) - (1/12) * amountRefueled * costMultiplier;
               } else if (owner.useCredits !== false) {
                 owner.credits = (owner.credits || 0) - 1.0 * amountRefueled * costMultiplier;
               } else if (friendlyWellPlanet) {
@@ -3052,13 +3059,21 @@ export class Ship {
             const reloadMultiplier = 0.5 * (1 + 0.1 * maxBombs);
             this.bombReloadTimer += (deltaTime / 1000) * reloadMultiplier * recoveryRate;
             if (this.bombReloadTimer >= 5) {
-              const hasExcessMerculite = owner && owner.resources && Math.floor(owner.resources.merculite || 0) >= 1;
-              const merculiteSellPrice = owner ? (owner.offerPrice?.merculite ?? 3) : 3;
+              let bombResource = 'merculite';
+              const style = this.cruiserStyle || (owner ? owner.cruiserStyle : null);
+              if (style === 'Romulan' || style === 'Gorn') {
+                bombResource = 'antimatter';
+              } else if (style === 'Tholian' || style === 'Lyran') {
+                bombResource = 'dilithium';
+              }
+
+              const hasExcessResource = owner && owner.resources && Math.floor(owner.resources[bombResource] || 0) >= 1;
+              const resourceSellPrice = owner ? (owner.offerPrice?.[bombResource] ?? 3) : 3;
 
               let canAffordReload = false;
               if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
                 canAffordReload = true;
-              } else if (hasExcessMerculite && merculiteSellPrice < 12) {
+              } else if (hasExcessResource && resourceSellPrice < 12) {
                 canAffordReload = true;
               } else if (owner && owner.useCredits !== false) {
                 canAffordReload = true;
@@ -3072,8 +3087,8 @@ export class Ship {
                 if (owner && !owner.isMonster && owner.id !== 'monsters') {
                   if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
                     supplyShipForBombs.supplies -= 1.0;
-                  } else if (hasExcessMerculite && merculiteSellPrice < 12) {
-                    owner.resources.merculite = (owner.resources.merculite || 0) - (1/12);
+                  } else if (hasExcessResource && resourceSellPrice < 12) {
+                    owner.resources[bombResource] = (owner.resources[bombResource] || 0) - (1/12);
                   } else if (owner.useCredits !== false) {
                     owner.credits = (owner.credits || 0) - 1.0;
                   } else if (friendlyWellPlanet) {
