@@ -2874,19 +2874,32 @@ export class Ship {
       }
 
       if (this.health < this.maxHealth && finalHealRate > 0) {
-        let healAmount = (deltaTime / 60000) * finalHealRate;
-        const oldHealth = this.health || 0;
-        this.health = Math.min(this.maxHealth, this.health + healAmount);
-        const amountHealed = this.health - oldHealth;
-        if (amountHealed > 0 && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
-          const owner = this.owner;
-          const hasExcessTritanium = owner.resources && Math.floor(owner.resources.tritanium || 0) >= 1;
-          const tritaniumSellPrice = owner.offerPrice?.tritanium ?? 3;
-          
-          if (hasExcessTritanium && tritaniumSellPrice < 12) {
-            owner.resources.tritanium = (owner.resources.tritanium || 0) - (1/12) * amountHealed;
-          } else {
-            owner.credits = (owner.credits || 0) - 1.0 * amountHealed;
+        const owner = this.owner;
+        const hasExcessTritanium = owner && owner.resources && Math.floor(owner.resources.tritanium || 0) >= 1;
+        const tritaniumSellPrice = owner ? (owner.offerPrice?.tritanium ?? 3) : 3;
+
+        let canAffordHeal = false;
+        if (hasExcessTritanium && tritaniumSellPrice < 12) {
+          canAffordHeal = true;
+        } else if (owner && owner.useCredits !== false) {
+          canAffordHeal = true;
+        } else if (friendlyWellPlanet && friendlyWellPlanet.ships > 0) {
+          canAffordHeal = true;
+        }
+
+        if (canAffordHeal) {
+          let healAmount = (deltaTime / 60000) * finalHealRate;
+          const oldHealth = this.health || 0;
+          this.health = Math.min(this.maxHealth, this.health + healAmount);
+          const amountHealed = this.health - oldHealth;
+          if (amountHealed > 0 && owner && !owner.isMonster && owner.id !== 'monsters') {
+            if (hasExcessTritanium && tritaniumSellPrice < 12) {
+              owner.resources.tritanium = (owner.resources.tritanium || 0) - (1/12) * amountHealed;
+            } else if (owner.useCredits !== false) {
+              owner.credits = (owner.credits || 0) - 1.0 * amountHealed;
+            } else if (friendlyWellPlanet) {
+              friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * amountHealed);
+            }
           }
         }
       }
@@ -2901,22 +2914,37 @@ export class Ship {
         if (!this.isWarp) {
           const recoveryRate = (this.combatCooldown && this.combatCooldown > 0) ? 0.5 : 1.0;
           const oldFuel = this.fuel || 0;
-          this.fuel = Math.min(this.getMaxFuel(), oldFuel + ((deltaTime / 1000) / 10) * recoveryRate);
-          const amountRefueled = (this.fuel || 0) - oldFuel;
-          if (amountRefueled > 0 && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
-            const owner = this.owner;
-            const hasExcessAntimatter = owner.resources && Math.floor(owner.resources.antimatter || 0) >= 1;
-            const antimatterSellPrice = owner.offerPrice?.antimatter ?? 3;
-            
-            let costMultiplier = 1.0;
-            if (this.fuel_tanker && this.fuel_tanker > 0) {
-              costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.fuel_tanker));
-            }
 
-            if (hasExcessAntimatter && antimatterSellPrice < 12) {
-              owner.resources.antimatter = (owner.resources.antimatter || 0) - (1/12) * amountRefueled * costMultiplier;
-            } else {
-              owner.credits = (owner.credits || 0) - 1.0 * amountRefueled * costMultiplier;
+          const owner = this.owner;
+          const hasExcessAntimatter = owner && owner.resources && Math.floor(owner.resources.antimatter || 0) >= 1;
+          const antimatterSellPrice = owner ? (owner.offerPrice?.antimatter ?? 3) : 3;
+
+          let canAffordRefuel = false;
+          if (hasExcessAntimatter && antimatterSellPrice < 12) {
+            canAffordRefuel = true;
+          } else if (owner && owner.useCredits !== false) {
+            canAffordRefuel = true;
+          } else if (friendlyWellPlanet && friendlyWellPlanet.ships > 0) {
+            canAffordRefuel = true;
+          }
+
+          if (canAffordRefuel) {
+            const fuelToGain = ((deltaTime / 1000) / 10) * recoveryRate;
+            this.fuel = Math.min(this.getMaxFuel(), oldFuel + fuelToGain);
+            const amountRefueled = (this.fuel || 0) - oldFuel;
+            if (amountRefueled > 0 && owner && !owner.isMonster && owner.id !== 'monsters') {
+              let costMultiplier = 1.0;
+              if (this.fuel_tanker && this.fuel_tanker > 0) {
+                costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.fuel_tanker));
+              }
+
+              if (hasExcessAntimatter && antimatterSellPrice < 12) {
+                owner.resources.antimatter = (owner.resources.antimatter || 0) - (1/12) * amountRefueled * costMultiplier;
+              } else if (owner.useCredits !== false) {
+                owner.credits = (owner.credits || 0) - 1.0 * amountRefueled * costMultiplier;
+              } else if (friendlyWellPlanet) {
+                friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * amountRefueled * costMultiplier);
+              }
             }
           }
           
@@ -2925,18 +2953,32 @@ export class Ship {
             const reloadMultiplier = 0.5 * (1 + 0.1 * maxBombs);
             this.bombReloadTimer += (deltaTime / 1000) * reloadMultiplier * recoveryRate;
             if (this.bombReloadTimer >= 5) {
-              this.bombReloadTimer = 0;
-              this.bombs++;
-              if (this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
-                const owner = this.owner;
-                const hasExcessMerculite = owner.resources && Math.floor(owner.resources.merculite || 0) >= 1;
-                const merculiteSellPrice = owner.offerPrice?.merculite ?? 3;
-                
-                if (hasExcessMerculite && merculiteSellPrice < 12) {
-                  owner.resources.merculite = (owner.resources.merculite || 0) - (1/12);
-                } else {
-                  owner.credits = (owner.credits || 0) - 1.0;
+              const hasExcessMerculite = owner && owner.resources && Math.floor(owner.resources.merculite || 0) >= 1;
+              const merculiteSellPrice = owner ? (owner.offerPrice?.merculite ?? 3) : 3;
+
+              let canAffordReload = false;
+              if (hasExcessMerculite && merculiteSellPrice < 12) {
+                canAffordReload = true;
+              } else if (owner && owner.useCredits !== false) {
+                canAffordReload = true;
+              } else if (friendlyWellPlanet && friendlyWellPlanet.ships >= 1.0) {
+                canAffordReload = true;
+              }
+
+              if (canAffordReload) {
+                this.bombReloadTimer = 0;
+                this.bombs++;
+                if (owner && !owner.isMonster && owner.id !== 'monsters') {
+                  if (hasExcessMerculite && merculiteSellPrice < 12) {
+                    owner.resources.merculite = (owner.resources.merculite || 0) - (1/12);
+                  } else if (owner.useCredits !== false) {
+                    owner.credits = (owner.credits || 0) - 1.0;
+                  } else {
+                    friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0);
+                  }
                 }
+              } else {
+                this.bombReloadTimer = 5;
               }
             }
           }
