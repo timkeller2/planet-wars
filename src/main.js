@@ -230,6 +230,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   const customTimedGameContainer = document.getElementById('custom-timed-game-container');
   const timedGameInput = document.getElementById('timed-game-input');
 
+  const homeworldSizeSelect = document.getElementById('homeworld-size-select');
+  const customHomeworldSizeContainer = document.getElementById('custom-homeworld-size-container');
+  const homeworldSizeInput = document.getElementById('homeworld-size-input');
+
   if (prodMultipleSelect) {
     prodMultipleSelect.addEventListener('change', () => {
       if (prodMultipleSelect.value === 'custom') {
@@ -312,6 +316,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         if (timedGameInput && timedGameSelect.value !== 'unlimited') {
           timedGameInput.value = String(Math.round(parseFloat(timedGameSelect.value) / 60));
         }
+      }
+    });
+  }
+
+  if (homeworldSizeSelect) {
+    homeworldSizeSelect.addEventListener('change', () => {
+      if (homeworldSizeSelect.value === 'custom') {
+        if (customHomeworldSizeContainer) customHomeworldSizeContainer.style.display = 'flex';
+      } else {
+        if (customHomeworldSizeContainer) customHomeworldSizeContainer.style.display = 'none';
       }
     });
   }
@@ -1169,26 +1183,42 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     const creditsDisplay = document.getElementById('player-credits-display');
     if (creditsDisplay) {
       const creditsVal = myPlayer.credits || 0;
-      const tradingBonusVal = myPlayer.tradingBonus || 0;
-      let actualIncomeRate = ((myPlayer.totalCapacity || 0) / 200) * tradingBonusVal;
 
-      // Add commerce focus credit generation (boosted by trading bonus)
-      if (serverState && serverState.planets) {
-        for (const p of serverState.planets) {
-          if (p.ownerId === localPlayer.id && p.focusMode === 'commerce' && p.ships >= p.maxShips) {
-            const shipsOver100 = Math.max(0, p.ships - 100);
-            actualIncomeRate += (shipsOver100 / 100) * (1 + tradingBonusVal);
-          }
+      // OVERHAULED TOOLTIP (Task 101)
+      let tooltipText = "";
+      if (myPlayer.tradingPartners && myPlayer.tradingPartners.length > 0) {
+        tooltipText += "TRADING PARTNERS:\n";
+        let totalRate = 0;
+        const maxLen = Math.max(...myPlayer.tradingPartners.map(tp => tp.name.length), 10);
+        for (const partner of myPlayer.tradingPartners) {
+          const paddedName = partner.name.padEnd(maxLen, ' ');
+          const formattedRate = partner.rate.toFixed(3);
+          tooltipText += `${paddedName} : ${Math.floor(partner.ships)} ships (+${formattedRate}/s)\n`;
+          totalRate += partner.rate;
         }
-      }
-
-      if (myPlayer.passiveIncomeRate !== undefined) {
-        actualIncomeRate += myPlayer.passiveIncomeRate;
+        tooltipText += "-".repeat(maxLen + 24) + "\n";
+        tooltipText += `${"Total Rate".padEnd(maxLen, ' ')} : +${totalRate.toFixed(3)}/s`;
+      } else {
+        tooltipText = "No active trading lines\n(Requires visible friendly/neutral planets & own ships)";
       }
 
       creditsDisplay.style.display = 'block';
       creditsDisplay.textContent = `💲 ${Math.floor(creditsVal)}`;
-      creditsDisplay.setAttribute('title', `Income Rate: +${actualIncomeRate.toFixed(2)}/s`);
+      creditsDisplay.setAttribute('title', tooltipText);
+
+      if (myPlayer.useCredits !== false) {
+        creditsDisplay.style.color = '#ffeb3b';
+        creditsDisplay.style.textShadow = '0 0 5px #ffeb3b';
+        creditsDisplay.style.background = 'rgba(255, 235, 59, 0.15)';
+        creditsDisplay.style.borderColor = '#ffeb3b';
+        creditsDisplay.style.textDecoration = 'none';
+      } else {
+        creditsDisplay.style.color = '#888';
+        creditsDisplay.style.textShadow = 'none';
+        creditsDisplay.style.background = 'rgba(255, 255, 255, 0.05)';
+        creditsDisplay.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+        creditsDisplay.style.textDecoration = 'line-through';
+      }
     }
 
     const commandLimitDisplay = document.getElementById('player-command-limit-display');
@@ -1344,6 +1374,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
           
           card.textContent = `${emoji}: ${order.price}`;
+          
+          // Make order blink if it is within 30 seconds of expiring (Task 104)
+          const timeRemainingMs = order.expiresAt - Date.now();
+          if (timeRemainingMs > 0 && timeRemainingMs <= 30000) {
+            card.classList.add('blink-warning');
+          }
           
           // Disable / gray out orders if optionless or creditless (except for own orders)
           if (!isMine) {
@@ -1618,7 +1654,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     if (minCost === Infinity) return null;
 
     const myPlayer = serverState.players.find(pl => pl.id === localPlayer.id);
-    const creditsAvailable = myPlayer ? (myPlayer.credits || 0) : 0;
+    const creditsAvailable = (myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0;
 
     let closestPlanet = null;
     let closestDistSq = Infinity;
@@ -1676,7 +1712,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     const planet = serverState.planets.find(p => p.id === selectedPlanets[0].id);
     if (!planet || planet.ownerId !== localPlayer.id) return null;
     const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
-    const creditsAvailable = myPlayer ? (myPlayer.credits || 0) : 0;
+    const creditsAvailable = (myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0;
     const cost = Math.floor(planet.maxShips / 2);
     if ((planet.ships + creditsAvailable) < cost) return null;
     return planet;
@@ -3212,6 +3248,14 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     });
   }
 
+  const btnCreditsDisplay = document.getElementById('player-credits-display');
+  if (btnCreditsDisplay) {
+    btnCreditsDisplay.addEventListener('click', (e) => {
+      e.stopPropagation();
+      socket.emit('toggleUseCredits');
+    });
+  }
+
   const resourcesListForClicks = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
   for (const res of resourcesListForClicks) {
     const card = document.getElementById(`res-card-${res}`);
@@ -3356,14 +3400,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
-    const timedGameSelect = document.getElementById('timed-game-select');
-    let timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
-    if (timedGameLimit === 'custom') {
-      const timedGameInput = document.getElementById('timed-game-input');
-      const customMin = timedGameInput ? parseFloat(timedGameInput.value) : 60;
-      timedGameLimit = String(Math.round((isNaN(customMin) ? 60 : customMin) * 60));
+    let homeworldSizeSetting = homeworldSizeSelect ? homeworldSizeSelect.value : "120";
+    if (homeworldSizeSetting === 'custom') {
+      const homeworldSizeInput = document.getElementById('homeworld-size-input');
+      const customVal = homeworldSizeInput ? parseInt(homeworldSizeInput.value, 10) : 120;
+      homeworldSizeSetting = isNaN(customVal) ? "120" : String(customVal);
     }
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit };
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
@@ -3391,17 +3434,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
-    const timedGameSelect = document.getElementById('timed-game-select');
-    let timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
-    if (timedGameLimit === 'custom') {
-      const timedGameInput = document.getElementById('timed-game-input');
-      const customMin = timedGameInput ? parseFloat(timedGameInput.value) : 60;
-      timedGameLimit = String(Math.round((isNaN(customMin) ? 60 : customMin) * 60));
+    let homeworldSizeSetting = homeworldSizeSelect ? homeworldSizeSelect.value : "120";
+    if (homeworldSizeSetting === 'custom') {
+      const homeworldSizeInput = document.getElementById('homeworld-size-input');
+      const customVal = homeworldSizeInput ? parseInt(homeworldSizeInput.value, 10) : 120;
+      homeworldSizeSetting = isNaN(customVal) ? "120" : String(customVal);
     }
     hasCenteredOnHomeworld = false;
     serverState = null;
     lastKnownPlanets = {}; // Clear cached planet details
-    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit });
+    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting });
   });
 
   function draw() {
@@ -3473,7 +3515,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       if (elUpCancel) elUpCancel.style.display = 'none';
 
       const focusCost = Math.floor(selectedPlanetFocus.maxShips / 2);
-      const creditsAvailable = myPlayer ? (myPlayer.credits || 0) : 0;
+      const creditsAvailable = (myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0;
       const canAffordFocus = (selectedPlanetFocus.ships + creditsAvailable) >= focusCost;
       for (const [btnId, mode] of Object.entries(focusButtonsMap)) {
         const el = document.getElementById(btnId);
@@ -3588,7 +3630,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               discountSpan.textContent = disc !== 0 ? (disc > 0 ? `+${disc}%` : `${disc}%`) : '';
             }
 
-            const creditsAvailable = myPlayer ? (myPlayer.credits || 0) : 0;
+            const creditsAvailable = (myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0;
             const canAfford = upgradeQual && (upgradeQual.planet.ships + creditsAvailable) >= uCost;
             if (!canAfford) {
               el.style.opacity = '0.5';
@@ -3628,7 +3670,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         const el = document.getElementById(cfg.btnId);
         if (el) {
           el.style.display = 'inline-flex';
-          const canAfford = selectedPlanetBuild.ships >= cfg.costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+          const creditsAvailable = (myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0;
+          const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= cfg.costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
           if (!canAfford) {
             el.style.opacity = '0.5';
             el.style.pointerEvents = 'none';

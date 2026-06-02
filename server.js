@@ -209,7 +209,8 @@ async function bootstrap() {
           let closestDistSq = Infinity;
 
           for (const p of game.planets) {
-            if (p.owner && p.owner.id === player.id && (p.ships + (player.credits || 0)) >= cost) {
+            const creditsAvailable = player.useCredits !== false ? (player.credits || 0) : 0;
+            if (p.owner && p.owner.id === player.id && (p.ships + creditsAvailable) >= cost) {
               const gravityRadius = p.getGravityRadius();
               
               let penaltyPct = 0;
@@ -649,7 +650,7 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (player) {
         player.sellPriceSetting = (player.sellPriceSetting || 2) + 1;
-        if (player.sellPriceSetting > 10) {
+        if (player.sellPriceSetting > 12) {
           player.sellPriceSetting = 2;
         }
       }
@@ -753,7 +754,7 @@ async function bootstrap() {
 
       if (planet.focusTransition) return; // Prevent concurrent focus shifts on same planet
       const cost = Math.floor(planet.maxShips / 2);
-      const creditsAvailable = player.credits || 0;
+      const creditsAvailable = player.useCredits !== false ? (player.credits || 0) : 0;
       if ((planet.ships + creditsAvailable) >= cost) {
         planet.focusTransition = {
           targetMode: data.focusMode,
@@ -809,6 +810,13 @@ async function bootstrap() {
       }
     });
 
+    socket.on('toggleUseCredits', () => {
+      const player = connectedClients.get(socket.id);
+      if (player) {
+        player.useCredits = player.useCredits !== false ? false : true;
+      }
+    });
+
     socket.on('resetAFK', () => {
       const player = connectedClients.get(socket.id);
       if (player) {
@@ -829,7 +837,8 @@ async function bootstrap() {
           planetCount: options && options.planetCount !== undefined ? options.planetCount : 60,
           clusters: options && options.clusters !== undefined ? parseInt(options.clusters, 10) : 0,
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
-          timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600"
+          timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
+          homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120"
         };
         if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
           game.timeRemaining = parseFloat(game.settings.timedGameLimit);
@@ -860,7 +869,8 @@ async function bootstrap() {
           planetCount: options && options.planetCount !== undefined ? options.planetCount : 60,
           clusters: options && options.clusters !== undefined ? parseInt(options.clusters, 10) : 0,
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
-          timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600"
+          timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
+          homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120"
       };
       
       if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {

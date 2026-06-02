@@ -412,6 +412,13 @@ export class Game {
 
     if (targetPlanet) {
       targetPlanet.owner = player;
+      const hwSizeSetting = (this.settings && this.settings.homeworldSize) ? this.settings.homeworldSize : "120";
+      if (hwSizeSetting !== 'natural') {
+        const parsedVal = parseInt(hwSizeSetting, 10);
+        if (!isNaN(parsedVal) && parsedVal > 0) {
+          targetPlanet.maxShips = parsedVal;
+        }
+      }
       targetPlanet.ships = targetPlanet.maxShips;
       targetPlanet.justAssigned = true;
       targetPlanet.justAssignedTimer = 0;
@@ -1108,11 +1115,11 @@ export class Game {
       const costCap = cfg.costCap;
       const maxHealth = cfg.hp;
 
-      const creditsAvailable = source.owner ? (source.owner.credits || 0) : 0;
+      const creditsAvailable = (source.owner && source.owner.useCredits !== false) ? (source.owner.credits || 0) : 0;
       const creditsPaid = Math.min(creditsAvailable, costShips);
       const remainingCostShips = costShips - creditsPaid;
 
-      if (source.ships >= costShips && (source.maxShips - costCap) >= 55) {
+      if ((source.ships + creditsAvailable) >= costShips && (source.maxShips - costCap) >= 55) {
         const extraShips = source.ships - remainingCostShips;
         const bonusHp = Math.min(4, Math.floor(Math.max(0, extraShips) / 25));
         const finalMaxHealth = maxHealth + bonusHp;
@@ -2063,7 +2070,21 @@ export class Game {
         planet.owner.totalCapacity += planet.maxShips;
         planet.owner.isAlive = true;
         planet.owner.planetCount++;
+        planet.owner.totalShips += planet.ships;
       }
+    }
+
+    for (const ship of this.ships) {
+      if (ship.active && ship.owner) {
+        ship.owner.isAlive = true;
+        if (!ship.isCruiser) {
+          ship.owner.totalShips += (ship.count || 1);
+        }
+      }
+    }
+
+    for (const player of this.allPlayers) {
+      player.cruiserCount = this.ships.filter(s => s.active && s.owner === player && s.isCruiser).length;
     }
 
     // Dynamic calculations for player limits and trade options
@@ -2105,7 +2126,15 @@ export class Game {
       if (player !== this.monsterPlayer) {
         let playerShips = 0;
         let otherFriendlyShips = 0;
-        let qualifyingShipsSum = 0;
+        
+        const visiblePartnerShips = {};
+        visiblePartnerShips["Own Planets"] = 0;
+        visiblePartnerShips["Neutral"] = 0;
+        for (const p of this.allPlayers) {
+          if (p !== player && p !== this.monsterPlayer) {
+            visiblePartnerShips[p.name] = 0;
+          }
+        }
 
         for (const planet of this.planets) {
           if (planet.dead) continue;
@@ -2119,18 +2148,46 @@ export class Game {
           }
 
           if ((isOwn || isNotAtWar) && this.isPlanetVisibleTo(planet, player)) {
-            qualifyingShipsSum += planet.ships;
+            if (isOwn) {
+              visiblePartnerShips["Own Planets"] += planet.ships;
+            } else if (planet.owner) {
+              if (planet.owner !== this.monsterPlayer) {
+                visiblePartnerShips[planet.owner.name] = (visiblePartnerShips[planet.owner.name] || 0) + planet.ships;
+              }
+            } else {
+              visiblePartnerShips["Neutral"] += planet.ships;
+            }
           }
+        }
+
+        let qualifyingShipsSum = 0;
+        for (const key in visiblePartnerShips) {
+          qualifyingShipsSum += visiblePartnerShips[key];
         }
 
         const cap = Math.min(3 * playerShips, otherFriendlyShips);
         const activeTradingShips = Math.min(qualifyingShipsSum, cap);
+        const prorationFactor = qualifyingShipsSum > 0 ? (activeTradingShips / qualifyingShipsSum) : 0;
+
         const tradingIncomeRate = activeTradingShips * 0.0001; // credits per second
         const tradingIncome = tradingIncomeRate * (deltaTime / 1000);
         player.credits = (player.credits || 0) + tradingIncome;
         player.passiveIncomeRate = tradingIncomeRate; // Store for client UI display!
+
+        player.tradingPartners = [];
+        for (const key in visiblePartnerShips) {
+          const ships = visiblePartnerShips[key];
+          if (ships > 0) {
+            player.tradingPartners.push({
+              name: key,
+              ships: ships,
+              rate: ships * prorationFactor * 0.0001
+            });
+          }
+        }
       } else {
         player.passiveIncomeRate = 0;
+        player.tradingPartners = [];
       }
     }
     

@@ -24,6 +24,7 @@ export class Player {
     this.prevTechBonus = 0;
     this.atWarWith = {};
     this.tradingBonus = 0;
+    this.useCredits = true;
     
     // Sci-Fi Planetary Resources System
     this.resources = {

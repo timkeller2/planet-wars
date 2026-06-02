@@ -77,6 +77,22 @@
             Clusters
           </label>
           <label style="cursor: pointer; display: flex; align-items: center;">
+            <select id="homeworld-size-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
+              <option value="80">Pitiful: 80</option>
+              <option value="100">Small: 100</option>
+              <option value="120" selected>Normal: 120</option>
+              <option value="150">Large: 150</option>
+              <option value="180">Huge: 180</option>
+              <option value="natural">Natural</option>
+              <option value="custom">Custom</option>
+            </select>
+            Homeworld Size
+          </label>
+          <label id="custom-homeworld-size-container" style="display: none; cursor: pointer; align-items: center;">
+            <input type="number" id="homeworld-size-input" value="120" min="10" max="1000" style="width: 60px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            Custom Homeworld Size
+          </label>
+          <label style="cursor: pointer; display: flex; align-items: center;">
             <select id="timed-game-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
               <option value="1800">30 minutes</option>
               <option value="3600" selected>1 hour</option>
@@ -148,7 +164,7 @@
               </button>
               
               <!-- Credits Display Card -->
-              <div id="player-credits-display" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ffeb3b; text-shadow: 0 0 5px #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; pointer-events: auto;">💲 0</div>
+              <button id="player-credits-display" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ffeb3b; text-shadow: 0 0 5px #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; pointer-events: auto; outline: none; box-shadow: none;">💲 0</button>
             </div>
             <div id="sell-orders-hud" style="display: none; align-items: center; gap: 6px; pointer-events: auto; font-family: 'Orbitron', sans-serif; font-size: 0.7rem; color: #fff; padding: 2px 5px; user-select: none; flex-wrap: wrap;"></div>
           </div>

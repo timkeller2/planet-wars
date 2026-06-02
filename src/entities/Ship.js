@@ -425,11 +425,11 @@ export class Ship {
 
     if (this.isCruiser && this.isUpgrading) {
       const planet = allPlanets ? allPlanets.find(p => p.id === this.upgradePlanetId) : null;
-      const creditsAvailable = (this.owner && this.owner.credits !== undefined) ? this.owner.credits : 0;
+      const creditsAvailable = (this.owner && this.owner.useCredits !== false && this.owner.credits !== undefined) ? this.owner.credits : 0;
       if (planet && planet.owner && this.owner && planet.owner.id === this.owner.id && (planet.ships >= 1 || creditsAvailable >= 1)) {
         this.upgradeAccumulator += deltaTime / 1000;
         while (this.upgradeAccumulator >= 0.2 && this.upgradeTimer > 0) {
-          const currentCredits = this.owner.credits || 0;
+          const currentCredits = (this.owner.useCredits !== false) ? (this.owner.credits || 0) : 0;
           if (currentCredits >= 1) {
             this.owner.credits -= 1;
             this.upgradeShipsPaid += 1;

@@ -87,7 +87,7 @@ export class Planet {
         
         if (toConsume > 0) {
           let unpaid = toConsume;
-          const currentCredits = this.owner.credits || 0;
+          const currentCredits = (this.owner.useCredits !== false) ? (this.owner.credits || 0) : 0;
           if (currentCredits > 0) {
             const creditsToUse = Math.min(currentCredits, unpaid);
             this.owner.credits -= creditsToUse;
