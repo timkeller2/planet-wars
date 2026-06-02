@@ -3400,6 +3400,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
+    const timedGameSelect = document.getElementById('timed-game-select');
+    let timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
+    if (timedGameLimit === 'custom') {
+      const timedGameInput = document.getElementById('timed-game-input');
+      const customMin = timedGameInput ? parseFloat(timedGameInput.value) : 60;
+      timedGameLimit = String(Math.round((isNaN(customMin) ? 60 : customMin) * 60));
+    }
     let homeworldSizeSetting = homeworldSizeSelect ? homeworldSizeSelect.value : "120";
     if (homeworldSizeSetting === 'custom') {
       const homeworldSizeInput = document.getElementById('homeworld-size-input');
@@ -3434,6 +3441,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
+    const timedGameSelect = document.getElementById('timed-game-select');
+    let timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
+    if (timedGameLimit === 'custom') {
+      const timedGameInput = document.getElementById('timed-game-input');
+      const customMin = timedGameInput ? parseFloat(timedGameInput.value) : 60;
+      timedGameLimit = String(Math.round((isNaN(customMin) ? 60 : customMin) * 60));
+    }
     let homeworldSizeSetting = homeworldSizeSelect ? homeworldSizeSelect.value : "120";
     if (homeworldSizeSetting === 'custom') {
       const homeworldSizeInput = document.getElementById('homeworld-size-input');
