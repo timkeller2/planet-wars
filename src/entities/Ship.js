@@ -67,6 +67,8 @@ export class Ship {
     this.targeting = 0;
     this.damagecontrol = 0;
     this.fuel_tanker = 0;
+    this.supplies = 0;
+    this.maxsupplies = 0;
     this.diplomat = 0;
     this.marines = 0;
     this.crew = 0;
@@ -120,6 +122,29 @@ export class Ship {
       }
     }
     return { startX, startY };
+  }
+
+  findNearbySupplyShip(allShips) {
+    if (!allShips || !this.owner) return null;
+    let closestSupplyShip = null;
+    let closestDistSq = Infinity;
+    const radarRange = this.cruiserRadarRange();
+    const radarRangeSq = radarRange * radarRange;
+
+    for (const other of allShips) {
+      if (other.active && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.supplies || 0) > 0) {
+        const dx = other.x - this.x;
+        const dy = other.y - this.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= radarRangeSq) {
+          if (distSq < closestDistSq) {
+            closestDistSq = distSq;
+            closestSupplyShip = other;
+          }
+        }
+      }
+    }
+    return closestSupplyShip;
   }
 
   getMaxBombs() {
@@ -460,6 +485,7 @@ export class Ship {
             this.splashDamage = this.munitions;
           } else if (this.upgradeProp === 'fuel_tanker') {
             this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + 5);
+            this.maxsupplies = (this.fuel_tanker || 0) * 15;
           } else if (this.upgradeProp === 'marines') {
             // Just capacity increases; do not load free marines upon upgrade completion
           }
@@ -656,6 +682,9 @@ export class Ship {
       }
       const targetingRangeBonus = (this.targeting || 0) * 0.10;
       effectiveRange *= (1 + targetingRangeBonus);
+      if (this.fuel_tanker && this.fuel_tanker > 0) {
+        effectiveRange = Math.max(5, effectiveRange - this.fuel_tanker * 5);
+      }
     } else {
       const healthBonus = Math.floor(this.health);
       effectiveRange = 40 * (1 + laserTechBonus) * (1 + healthBonus * 0.10);
@@ -670,6 +699,9 @@ export class Ship {
       hitChance += (techBonus + expBonus + shipExpBonus) / 100;
       const targetingBonus = (this.targeting || 0) * 0.10;
       hitChance += targetingBonus;
+      if (this.fuel_tanker && this.fuel_tanker > 0) {
+        hitChance -= this.fuel_tanker * 0.05;
+      }
     } else {
       const bombBonus = (this.bombs && this.bombs > 0) ? (this.bombs * 3) : 0;
       hitChance = (10 + techBonus + expBonus + shipExpBonus + this.maxHealth * 5 + bombBonus) / 100;
@@ -1324,7 +1356,9 @@ export class Ship {
         this.patrolFuelRetreatTargetPlanetId = null;
 
         // 1. Check if out of bombs -> Reloading State
-        if (this.bombs <= 0 || (this.patrolReloading && this.bombs < this.getMaxBombs())) {
+        const supplyShip = this.findNearbySupplyShip(allShips);
+        const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
+        if ((this.bombs <= 0 && !hasNearbySupply) || (this.patrolReloading && this.bombs < this.getMaxBombs())) {
         const wasReloading = this.patrolReloading;
         this.patrolReloading = true;
         
@@ -1519,7 +1553,9 @@ export class Ship {
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isScouting) {
       // 1. Refueling & Rearming Retreat Check: if fuel is half or less, OR if attack is on and bombs are depleted
       const needsRefuel = this.fuel <= this.getMaxFuel() * 0.5;
-      const needsRearm = this.scoutAttackEnabled && this.bombs <= 0;
+      const supplyShip = this.findNearbySupplyShip(allShips);
+      const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
+      const needsRearm = this.scoutAttackEnabled && this.bombs <= 0 && !hasNearbySupply;
       if (needsRefuel || needsRearm) {
         this.scoutFuelRetreating = true;
         this.scoutTargetX = null;
@@ -1944,7 +1980,9 @@ export class Ship {
         }
       } else {
         // 2. Rearming Retreat Check: if attack mode is also on and bombs are depleted
-        const needsRearm = this.scoutAttackEnabled && this.bombs <= 0;
+        const supplyShip = this.findNearbySupplyShip(allShips);
+        const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
+        const needsRearm = this.scoutAttackEnabled && this.bombs <= 0 && !hasNearbySupply;
         if (needsRearm || this.researchRearming) {
           this.researchRearming = true;
           if (this.bombs >= this.getMaxBombs()) {
@@ -2444,7 +2482,9 @@ export class Ship {
     // Cruiser Bombard Mode Decision Engine
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && !this.isPatrolling && this.bombPlanetsEnabled !== false && this.scoutAttackEnabled) {
       // If out of bombs and not in a friendly gravity well, enter rearming retreat mode
-      if (this.bombs <= 0 && !this.inFriendlyWell) {
+      const supplyShip = this.findNearbySupplyShip(allShips);
+      const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
+      if (this.bombs <= 0 && !this.inFriendlyWell && !hasNearbySupply) {
         this.bombardRearming = true;
       }
       
@@ -2863,6 +2903,42 @@ export class Ship {
       
       // Don't convert fuel to munitions.
       
+      // Load supplies if in friendly gravity well, up to maxsupplies, 1 every 10 seconds.
+      if (this.maxsupplies > 0 && this.supplies < this.maxsupplies && this.inFriendlyWell && !this.isWarp) {
+        this.supplyLoadAccumulator = (this.supplyLoadAccumulator || 0) + deltaTime;
+        while (this.supplyLoadAccumulator >= 10000 && this.supplies < this.maxsupplies) {
+          const owner = this.owner;
+          if (owner) {
+            const discount = 0.10 * (this.fuel_tanker || 0);
+            const costMultiplier = Math.max(0, 1.0 - discount);
+            let loaded = false;
+
+            if (owner.useCredits !== false) {
+              const costCredits = 1.0 * costMultiplier;
+              if ((owner.credits || 0) >= costCredits) {
+                owner.credits -= costCredits;
+                this.supplies++;
+                loaded = true;
+              }
+            } else if (friendlyWellPlanet && friendlyWellPlanet.ships >= 1.0 * costMultiplier) {
+              const costShips = 1.0 * costMultiplier;
+              friendlyWellPlanet.ships -= costShips;
+              this.supplies++;
+              loaded = true;
+            }
+
+            if (loaded) {
+              this.supplyLoadAccumulator -= 10000;
+            } else {
+              break;
+            }
+          } else {
+            break;
+          }
+        }
+      } else {
+        this.supplyLoadAccumulator = 0;
+      }
       
       const inCombat = this.combatCooldown && this.combatCooldown > 0;
       let finalHealRate = 0;
@@ -2878,8 +2954,13 @@ export class Ship {
         const hasExcessTritanium = owner && owner.resources && Math.floor(owner.resources.tritanium || 0) >= 1;
         const tritaniumSellPrice = owner ? (owner.offerPrice?.tritanium ?? 3) : 3;
 
+        // Check for nearby supply ship first!
+        const supplyShip = this.findNearbySupplyShip(allShips);
+
         let canAffordHeal = false;
-        if (hasExcessTritanium && tritaniumSellPrice < 12) {
+        if (supplyShip && (supplyShip.supplies || 0) > 0) {
+          canAffordHeal = true;
+        } else if (hasExcessTritanium && tritaniumSellPrice < 12) {
           canAffordHeal = true;
         } else if (owner && owner.useCredits !== false) {
           canAffordHeal = true;
@@ -2893,12 +2974,29 @@ export class Ship {
           this.health = Math.min(this.maxHealth, this.health + healAmount);
           const amountHealed = this.health - oldHealth;
           if (amountHealed > 0 && owner && !owner.isMonster && owner.id !== 'monsters') {
-            if (hasExcessTritanium && tritaniumSellPrice < 12) {
-              owner.resources.tritanium = (owner.resources.tritanium || 0) - (1/12) * amountHealed;
-            } else if (owner.useCredits !== false) {
-              owner.credits = (owner.credits || 0) - 1.0 * amountHealed;
-            } else if (friendlyWellPlanet) {
-              friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * amountHealed);
+            if (supplyShip && (supplyShip.supplies || 0) > 0) {
+              const suppliesUsed = amountHealed;
+              if (supplyShip.supplies >= suppliesUsed) {
+                supplyShip.supplies -= suppliesUsed;
+              } else {
+                const remainingHeal = suppliesUsed - supplyShip.supplies;
+                supplyShip.supplies = 0;
+                if (hasExcessTritanium && tritaniumSellPrice < 12) {
+                  owner.resources.tritanium = (owner.resources.tritanium || 0) - (1/12) * remainingHeal;
+                } else if (owner.useCredits !== false) {
+                  owner.credits = (owner.credits || 0) - 1.0 * remainingHeal;
+                } else if (friendlyWellPlanet) {
+                  friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * remainingHeal);
+                }
+              }
+            } else {
+              if (hasExcessTritanium && tritaniumSellPrice < 12) {
+                owner.resources.tritanium = (owner.resources.tritanium || 0) - (1/12) * amountHealed;
+              } else if (owner.useCredits !== false) {
+                owner.credits = (owner.credits || 0) - 1.0 * amountHealed;
+              } else if (friendlyWellPlanet) {
+                friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * amountHealed);
+              }
             }
           }
         }
@@ -2948,7 +3046,8 @@ export class Ship {
             }
           }
           
-          if (this.bombs < this.getMaxBombs() && friendlyWellPlanet) {
+          const supplyShipForBombs = this.findNearbySupplyShip(allShips);
+          if (this.bombs < this.getMaxBombs() && (friendlyWellPlanet || supplyShipForBombs)) {
             const maxBombs = this.getMaxBombs();
             const reloadMultiplier = 0.5 * (1 + 0.1 * maxBombs);
             this.bombReloadTimer += (deltaTime / 1000) * reloadMultiplier * recoveryRate;
@@ -2957,7 +3056,9 @@ export class Ship {
               const merculiteSellPrice = owner ? (owner.offerPrice?.merculite ?? 3) : 3;
 
               let canAffordReload = false;
-              if (hasExcessMerculite && merculiteSellPrice < 12) {
+              if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
+                canAffordReload = true;
+              } else if (hasExcessMerculite && merculiteSellPrice < 12) {
                 canAffordReload = true;
               } else if (owner && owner.useCredits !== false) {
                 canAffordReload = true;
@@ -2969,11 +3070,13 @@ export class Ship {
                 this.bombReloadTimer = 0;
                 this.bombs++;
                 if (owner && !owner.isMonster && owner.id !== 'monsters') {
-                  if (hasExcessMerculite && merculiteSellPrice < 12) {
+                  if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
+                    supplyShipForBombs.supplies -= 1.0;
+                  } else if (hasExcessMerculite && merculiteSellPrice < 12) {
                     owner.resources.merculite = (owner.resources.merculite || 0) - (1/12);
                   } else if (owner.useCredits !== false) {
                     owner.credits = (owner.credits || 0) - 1.0;
-                  } else {
+                  } else if (friendlyWellPlanet) {
                     friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0);
                   }
                 }

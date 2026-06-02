@@ -116,11 +116,20 @@
         <div id="top-right-hud" style="position: absolute; top: 20px; right: 20px; display: flex; gap: 15px; align-items: center; z-index: 100; pointer-events: none;">
           <div id="game-timer" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #0ff; text-shadow: 0 0 5px #0ff; background: rgba(0, 255, 255, 0.05); border: 1px solid rgba(0, 255, 255, 0.2); padding: 5px 15px; border-radius: 4px; backdrop-filter: blur(5px); display: none; min-width: 120px; text-align: center; font-variant-numeric: tabular-nums;">00:00</div>
         </div>
-        <div id="top-left-hud" style="position: absolute; top: 20px; left: 20px; display: flex; gap: 15px; align-items: center; z-index: 100; pointer-events: none;">
-          <div id="player-command-limit-display" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #00e5ff; text-shadow: 0 0 5px #00e5ff; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">⚓: 0/0</div>
-          <div id="player-trade-options-display" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ff9800; text-shadow: 0 0 5px #ff9800; background: rgba(255, 152, 0, 0.05); border: 1px solid rgba(255, 152, 0, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">⚖️: 0/0</div>
-          <button id="player-sell-for-display" onclick="changeSellPriceSetting()" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ffeb3b; text-shadow: 0 0 5px #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; pointer-events: auto;">💰: 2</button>
-          
+        <div id="top-left-hud" style="position: absolute; top: 20px; left: 20px; display: flex; gap: 15px; align-items: flex-start; z-index: 100; pointer-events: none;">
+          <!-- Left stacked column -->
+          <div id="left-hud-column" style="display: flex; flex-direction: column; gap: 10px; align-items: flex-start; pointer-events: auto;">
+            <!-- Sell For Button -->
+            <button id="player-sell-for-display" onclick="changeSellPriceSetting()" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ffeb3b; text-shadow: 0 0 5px #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; pointer-events: auto;">💰: 2</button>
+            <!-- Credits Button -->
+            <button id="player-credits-display" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ffeb3b; text-shadow: 0 0 5px #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; pointer-events: auto; outline: none; box-shadow: none;">💲 0</button>
+            <!-- Command Limit Display -->
+            <div id="player-command-limit-display" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #00e5ff; text-shadow: 0 0 5px #00e5ff; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">⚓: 0/0</div>
+            <!-- Trade Options Display -->
+            <div id="player-trade-options-display" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ff9800; text-shadow: 0 0 5px #ff9800; background: rgba(255, 152, 0, 0.05); border: 1px solid rgba(255, 152, 0, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">⚖️: 0/0</div>
+          </div>
+
+          <!-- Market panel (Resource buttons starting to the right of the Sell For button) -->
           <div id="market-panel" style="display: flex; flex-direction: column; gap: 8px; pointer-events: auto;">
             <div id="resources-hud" style="display: none; align-items: center; gap: 6px; pointer-events: auto; font-family: 'Orbitron', sans-serif; font-size: 0.8rem; color: #fff; background: rgba(0, 20, 30, 0.7); border: 1px solid rgba(0, 229, 255, 0.35); padding: 4px 10px; border-radius: 6px; backdrop-filter: blur(5px); box-shadow: 0 0 10px rgba(0, 229, 255, 0.15); user-select: none;">
               <!-- Antimatter 🌀 -->
@@ -162,9 +171,6 @@
               <button id="btn-sell-resources" class="cyber-btn" style="padding: 6px 12px; font-size: 0.8rem; font-family: 'Orbitron', sans-serif; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; min-width: 130px; margin-left: 6px; box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); background: rgba(0, 229, 255, 0.1); border: 1px solid rgba(0, 229, 255, 0.4); text-transform: uppercase;">
                 Sell Active: +0
               </button>
-              
-              <!-- Credits Display Card -->
-              <button id="player-credits-display" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ffeb3b; text-shadow: 0 0 5px #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; pointer-events: auto; outline: none; box-shadow: none;">💲 0</button>
             </div>
             <div id="sell-orders-hud" style="display: none; align-items: center; gap: 6px; pointer-events: auto; font-family: 'Orbitron', sans-serif; font-size: 0.7rem; color: #fff; padding: 2px 5px; user-select: none; flex-wrap: wrap;"></div>
           </div>

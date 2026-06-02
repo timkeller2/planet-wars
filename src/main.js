@@ -1193,11 +1193,22 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           for (const partner of myPlayer.tradingPartners) {
             const partnerName = partner.name;
             const ratePerMin = partner.rate * 60;
+            let partnerColor = '#ffffff';
+            if (partnerName === 'Domestic Ships') {
+              partnerColor = myPlayer.color || '#00e5ff';
+            } else if (partnerName === 'Neutral') {
+              partnerColor = '#ffffff';
+            } else {
+              const partnerPlayer = serverState.players.find(p => p.name === partnerName);
+              if (partnerPlayer && partnerPlayer.color) {
+                partnerColor = partnerPlayer.color;
+              }
+            }
             rowsHtml += `
-              <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.05);">
-                <td style="padding: 6px 0; color: #fff; text-align: left;">${partnerName}</td>
-                <td style="padding: 6px 0; text-align: center; color: #aaa;">${Math.floor(partner.ships)}</td>
-                <td style="padding: 6px 0; text-align: right; color: #ffeb3b; font-weight: bold;">+${ratePerMin.toFixed(2)}/m</td>
+              <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: ${partnerColor};">
+                <td style="padding: 6px 0; color: ${partnerColor}; text-align: left;">${partnerName}</td>
+                <td style="padding: 6px 0; text-align: center; color: ${partnerColor};">${Math.floor(partner.ships)}</td>
+                <td style="padding: 6px 0; text-align: right; color: ${partnerColor}; font-weight: bold;">+${ratePerMin.toFixed(2)}/m</td>
               </tr>
             `;
             totalRate += partner.rate;
@@ -1293,7 +1304,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       for (const res of resourcesList) {
         const qtySpan = document.getElementById(`res-qty-${res}`);
         const rawQty = myPlayer.resources?.[res] || 0;
-        const qtyVal = rawQty.toFixed(2);
+        const qtyVal = rawQty > 5 ? Math.floor(rawQty).toString() : rawQty.toFixed(2);
         
         if (qtySpan) qtySpan.textContent = qtyVal;
         
@@ -3652,7 +3663,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         'munitions': 'Adds +1 bomb capacity and +1 splash damage rating per level to standard weapon dogfights',
         'targeting': 'Adds +10% weapon range and +10% laser accuracy hit chance per level in combat',
         'damagecontrol': 'Adds +50% out-of-combat repair and +20% deep-space/in-combat repair rate per level',
-        'fuel_tanker': 'Adds +5 fuel capacity per level and reduces flight speed by -3 per level',
+        'fuel_tanker': 'Adds +5 fuel capacity, +15 max supplies per level. Reduces speed by -3, accuracy by -5, range by -5 per level',
         'diplomat': 'Adds diplomat subversion to project 1 passive sympathy/min or reduce 1 enemy sympathy/min',
         'marines': 'Adds +1 marine capacity factor per level to drastically boost planetary boarding success'
       };
@@ -4527,6 +4538,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             const meta = resourceMeta[hp.preferredResource];
             if (meta) {
               lines.push({ label: 'Preferred Resource', value: `${meta.emoji} ${meta.name}`, color: '#ffd740' });
+              if (hpOwner) {
+                const qty = hpOwner.resources?.[hp.preferredResource] || 0;
+                if (qty >= 1) {
+                  const bonus = Math.sqrt(qty) * 3;
+                  lines.push({ label: 'Enjoying Resource', value: `+${bonus.toFixed(1)}%`, color: '#4caf50' });
+                }
+              }
             }
           }
 
@@ -4851,6 +4869,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               lines.push({ label: 'Splash Damage', value: `+${hs.munitions}`, color: '#ffd740' });
             }
             lines.push({ label: hs.engine > 0 ? `Fuel Level (${hs.engine})` : 'Fuel Level', value: Math.floor(hs.fuel || 0) + ' / ' + Math.floor(getMaxFuel(hs)), color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
+            if (hs.maxsupplies > 0) {
+              lines.push({ label: 'Supplies', value: `📦 ${Math.floor(hs.supplies || 0)} / ${hs.maxsupplies}`, color: '#ffcc80' });
+            }
             const rawTech = hsOwner.techScore || 0;
             const rawExp = hsOwner.expScore || 0;
             const shipExp = hs.expScore || 0;
@@ -4889,10 +4910,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               effectiveRange += baseDogfightRange * 0.10;
             }
             effectiveRange = Math.floor(effectiveRange * (1 + targetingRangeBonus));
+            if (hs.fuel_tanker && hs.fuel_tanker > 0) {
+              effectiveRange = Math.max(5, effectiveRange - hs.fuel_tanker * 5);
+            }
             const healthBonus = Math.floor(hs.health);
             let hitChanceValue = 10 + targetingBonus;
             if (hs.bombs > 0) hitChanceValue += 10;
             hitChanceValue += techBonus + expBonus + shipExpBonus;
+            if (hs.fuel_tanker && hs.fuel_tanker > 0) {
+              hitChanceValue -= hs.fuel_tanker * 5;
+            }
             
             let friendlyGrav = 0;
             let enemyGrav = 0;
@@ -5390,6 +5417,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               }
             }
             range *= (1 + targetingRangeBonus);
+            if (s.fuel_tanker && s.fuel_tanker > 0) {
+              range = Math.max(5, range - s.fuel_tanker * 5);
+            }
           } else {
             const healthBonus = Math.floor(s.health || 0);
             range = 40 * (1 + laserTechBonus) * (1 + healthBonus * 0.10);
