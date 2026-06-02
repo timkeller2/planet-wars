@@ -1975,7 +1975,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           const dx = planet.x - clickPos.x;
           const dy = planet.y - clickPos.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          const targetRadius = 0.65 * planet.radius;
+          const targetRadius = Math.max(15, 0.65 * planet.radius);
           if (dist <= targetRadius) {
             const surfaceDist = dist - targetRadius;
             if (surfaceDist < bestSurfaceDist) {
