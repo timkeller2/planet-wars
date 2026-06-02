@@ -126,7 +126,8 @@ export class Planet {
     if (this.owner && focus === 'commerce' && this.ships >= this.maxShips) {
       const shipsOver100 = Math.max(0, this.ships - 100);
       const tradingBonus = this.owner.tradingBonus || 0;
-      let generatedCredits = (shipsOver100 / 100) * (deltaTime / 1000) * (1 + tradingBonus);
+      const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
+      let generatedCredits = (shipsOver100 / 100) * (deltaTime / 1000) * (1 + tradingBonus) * (1 + techBonus);
       if (this.preferredResource && this.owner.resources) {
         const qty = this.owner.resources[this.preferredResource] || 0;
         if (qty > 0) {
@@ -303,17 +304,23 @@ export class Planet {
 
     // Passive & Active Resource Extraction Tick
     // Base rate: 1/1000 of a resource per ship per minute
-    // Mining focus: 3x, Planet full: 3x
+    // Mining focus: 3x, Planet full: 3x, Tech bonus, Preferred resource bonus
     if (this.owner && this.owner.resources && this.resources && this.resources.length > 0) {
       const baseRatePerMinute = this.ships / 1000; // 1/1000 per ship per minute
-      let rate = baseRatePerMinute;
+      const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
+      let rate = baseRatePerMinute * (1 + techBonus);
       if (focus === 'mining') rate *= 3;
       if (this.ships >= this.maxShips) rate *= 3;
 
       // Convert from per-minute to per-millisecond and apply deltaTime
       const perMs = rate / 60000;
       for (const res of this.resources) {
-        this.owner.resources[res] = (this.owner.resources[res] || 0) + perMs * deltaTime;
+        let resRate = perMs;
+        // Preferred resource bonus: sqrt(qty) * 3 percent
+        if (res === this.preferredResource && this.owner.resources[res] > 0) {
+          resRate *= (1 + (Math.sqrt(this.owner.resources[res]) * 3) / 100);
+        }
+        this.owner.resources[res] = (this.owner.resources[res] || 0) + resRate * deltaTime;
       }
     }
   }

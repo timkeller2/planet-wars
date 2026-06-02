@@ -1182,6 +1182,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         }
       }
 
+      if (myPlayer.passiveIncomeRate !== undefined) {
+        actualIncomeRate += myPlayer.passiveIncomeRate;
+      }
+
       creditsDisplay.style.display = 'block';
       creditsDisplay.textContent = `💲 ${Math.floor(creditsVal)}`;
       creditsDisplay.setAttribute('title', `Income Rate: +${actualIncomeRate.toFixed(2)}/s`);
@@ -1352,8 +1356,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             }
           }
           
-          card.addEventListener('click', (e) => {
+          card.addEventListener('mousedown', (e) => {
             e.stopPropagation();
+            e.preventDefault();
             if (isMine) {
               socket.emit('cancelSellOrder', { orderId: order.id });
             } else {

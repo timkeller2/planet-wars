@@ -293,6 +293,47 @@ export class Game {
     return false;
   }
 
+  isPlanetVisibleTo(p, player) {
+    if (!player) return false;
+    if (player.id === 'monsters') return false;
+
+    // If fog of war is NOT enabled, everything is visible
+    if (!this.settings || !this.settings.fogOfWar) {
+      return true;
+    }
+
+    // A player can always see their own planets
+    if (p.owner && p.owner.id === player.id) {
+      return true;
+    }
+
+    // 1. Gravity well check
+    for (const pl of this.planets) {
+      if (pl.owner && pl.owner.id === player.id) {
+        const gr = pl.getGravityRadius();
+        const dx = pl.x - p.x;
+        const dy = pl.y - p.y;
+        if (dx * dx + dy * dy <= gr * gr) return true;
+      }
+    }
+
+    // 2. Sympathy check
+    if (p.sympathy && p.sympathy[player.id] > 0) return true;
+
+    // 3. Ship sensor check
+    for (const s of this.ships) {
+      if (s.active && s.owner && s.owner.id === player.id) {
+        const radarRange = (typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : 40;
+        const dx = s.x - p.x;
+        const dy = s.y - p.y;
+        if (dx * dx + dy * dy <= radarRange * radarRange) return true;
+      }
+    }
+
+    return false;
+  }
+
+
   tryAssignPlanet(player) {
     if (player.needsPlanet && this.isRunning && player.isAlive !== undefined) {
       player.needsPlanet = false;
@@ -2058,6 +2099,38 @@ export class Game {
       if (player.tradeRegenAccumulator >= 60000) {
         player.tradeRegenAccumulator -= 60000;
         player.tradeOptions = Math.min(player.tradeCapacity, (player.tradeOptions || 0) + (1 + commerceWorlds));
+      }
+
+      // Passive trading income of 1/10000 credits per ship per second of all ships on planets not at war with the player and visible to the player including the player's own planets, capped at the lower of ( 3 * number of ships the player has on all his planets ) or ( the sum of all other friendly planetary ships, not counting the player's ships )
+      if (player !== this.monsterPlayer) {
+        let playerShips = 0;
+        let otherFriendlyShips = 0;
+        let qualifyingShipsSum = 0;
+
+        for (const planet of this.planets) {
+          if (planet.dead) continue;
+          const isOwn = (planet.owner && planet.owner.id === player.id);
+          const isNotAtWar = !planet.owner || !player.isAtWarWith(planet.owner);
+
+          if (isOwn) {
+            playerShips += planet.ships;
+          } else if (isNotAtWar) {
+            otherFriendlyShips += planet.ships;
+          }
+
+          if ((isOwn || isNotAtWar) && this.isPlanetVisibleTo(planet, player)) {
+            qualifyingShipsSum += planet.ships;
+          }
+        }
+
+        const cap = Math.min(3 * playerShips, otherFriendlyShips);
+        const activeTradingShips = Math.min(qualifyingShipsSum, cap);
+        const tradingIncomeRate = activeTradingShips * 0.0001; // credits per second
+        const tradingIncome = tradingIncomeRate * (deltaTime / 1000);
+        player.credits = (player.credits || 0) + tradingIncome;
+        player.passiveIncomeRate = tradingIncomeRate; // Store for client UI display!
+      } else {
+        player.passiveIncomeRate = 0;
       }
     }
     
