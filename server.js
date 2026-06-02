@@ -181,9 +181,21 @@ async function bootstrap() {
           const currentVal = ship[prop] || 0;
           const nextLevel = currentVal + 1;
 
-          if (prop === 'shields' && nextLevel * 0.10 > 0.80) {
-            console.log(`[Server Upgrade Rejected] Deflect chance exceeds 80%.`);
-            return;
+          if (prop === 'shields') {
+            const playerTech = ship.owner ? ship.owner.techScore || 0 : 0;
+            const playerExp = ship.owner ? ship.owner.expScore || 0 : 0;
+            const shipExp = ship.expScore || 0;
+            const techBonus = Math.sqrt(playerTech);
+            const expBonus = Math.sqrt(playerExp);
+            const shipExpBonus = Math.sqrt(shipExp);
+            const baseDeflection = ship.maxHealth + (techBonus + expBonus + shipExpBonus);
+            const deflectionRem = 100 - baseDeflection;
+            const nextShieldDeflectionBonus = nextLevel * (deflectionRem / 5);
+            const newDeflection = baseDeflection + nextShieldDeflectionBonus;
+            if (newDeflection > 90) {
+              console.log(`[Server Upgrade Rejected] Next deflection (${newDeflection}%) would exceed 90%.`);
+              return;
+            }
           }
 
           if (nextLevel > maxIndividualLevel || (totalUpgrades + 1) > maxTotalUpgrades) {
@@ -403,6 +415,12 @@ async function bootstrap() {
       const ship = game.ships.find(s => s.id === shipId);
       if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
         ship.bombPlanetsEnabled = !!enabled;
+        if (ship.bombPlanetsEnabled) {
+          ship.isPatrolling = false;
+          ship.isScouting = false;
+          ship.isResearching = false;
+          ship.isDiplomacy = false;
+        }
       }
     });
 
@@ -419,11 +437,104 @@ async function bootstrap() {
         ship.isPatrolling = !!enabled;
         ship.patrolReloading = false;
         if (ship.isPatrolling) {
+          ship.bombPlanetsEnabled = false;
+          ship.isScouting = false;
+          ship.isResearching = false;
+          ship.isDiplomacy = false;
           ship.orderQueue = [];
           ship.cruiserTargetType = null;
           ship.cruiserTargetId = null;
           ship.patrolStationX = ship.x;
           ship.patrolStationY = ship.y;
+        }
+      }
+    });
+
+    socket.on('toggleCruiserScout', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const { shipId, enabled } = data;
+      if (shipId === undefined || enabled === undefined) return;
+
+      const ship = game.ships.find(s => s.id === shipId);
+      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+        ship.isScouting = !!enabled;
+        ship.scoutFuelRetreating = false;
+        if (ship.isScouting) {
+          ship.isPatrolling = false;
+          ship.bombPlanetsEnabled = false;
+          ship.isResearching = false;
+          ship.isDiplomacy = false;
+          ship.orderQueue = [];
+          ship.cruiserTargetType = null;
+          ship.cruiserTargetId = null;
+          ship.scoutTargetX = null;
+          ship.scoutTargetY = null;
+        }
+      }
+    });
+
+    socket.on('toggleCruiserScoutAttack', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const { shipId, enabled } = data;
+      if (shipId === undefined || enabled === undefined) return;
+
+      const ship = game.ships.find(s => s.id === shipId);
+      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+        ship.scoutAttackEnabled = !!enabled;
+      }
+    });
+
+    socket.on('toggleCruiserResearch', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const { shipId, enabled } = data;
+      if (shipId === undefined || enabled === undefined) return;
+
+      const ship = game.ships.find(s => s.id === shipId);
+      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0) {
+        ship.isResearching = !!enabled;
+        ship.researchFuelRetreating = false;
+        ship.researchRearming = false;
+        if (ship.isResearching) {
+          ship.isDiplomacy = false;
+          ship.isScouting = false;
+          ship.isPatrolling = false;
+          ship.bombPlanetsEnabled = false;
+          ship.orderQueue = [];
+          ship.cruiserTargetType = null;
+          ship.cruiserTargetId = null;
+        }
+      }
+    });
+
+    socket.on('toggleCruiserDiplomacy', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const { shipId, enabled } = data;
+      if (shipId === undefined || enabled === undefined) return;
+
+      const ship = game.ships.find(s => s.id === shipId);
+      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.diplomat > 0) {
+        ship.isDiplomacy = !!enabled;
+        ship.diplomacyFuelRetreating = false;
+        if (ship.isDiplomacy) {
+          ship.isResearching = false;
+          ship.isScouting = false;
+          ship.isPatrolling = false;
+          ship.bombPlanetsEnabled = false;
+          ship.orderQueue = [];
+          ship.cruiserTargetType = null;
+          ship.cruiserTargetId = null;
         }
       }
     });
@@ -436,6 +547,187 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (player && name && typeof name === 'string') {
         player.name = name.substring(0, 16); // limit length
+      }
+    });
+
+    // Sci-Fi Planetary Resources System Event Listeners
+    socket.on('setResourceTargetStockpile', (data) => {
+      const player = connectedClients.get(socket.id);
+      if (player && data && data.resource && typeof data.value === 'number') {
+        if (!player.targetStockpile) {
+          player.targetStockpile = { dilithium: 0, merculite: 0, duranium: 0, tritanium: 0, antimatter: 0, deuterium: 0, latinum: 0 };
+        }
+        if (player.targetStockpile[data.resource] !== undefined) {
+          player.targetStockpile[data.resource] = Math.max(0, Math.min(999, data.value));
+        }
+      }
+    });
+
+    socket.on('setResourceOfferPrice', (data) => {
+      const player = connectedClients.get(socket.id);
+      if (player && data && data.resource && typeof data.value === 'number') {
+        if (!player.offerPrice) {
+          player.offerPrice = { dilithium: 3, merculite: 3, duranium: 3, tritanium: 3, antimatter: 3, deuterium: 3, latinum: 3 };
+        }
+        if (player.offerPrice[data.resource] !== undefined) {
+          player.offerPrice[data.resource] = Math.max(0, Math.min(999, data.value));
+        }
+      }
+    });
+
+    socket.on('setResourceBuyPrice', (data) => {
+      const player = connectedClients.get(socket.id);
+      if (player && data && data.resource && typeof data.value === 'number') {
+        if (!player.buyPrice) {
+          player.buyPrice = { dilithium: 2, merculite: 2, duranium: 2, tritanium: 2, antimatter: 2, deuterium: 2, latinum: 2 };
+        }
+        if (!player.offerPrice) {
+          player.offerPrice = { dilithium: 3, merculite: 3, duranium: 3, tritanium: 3, antimatter: 3, deuterium: 3, latinum: 3 };
+        }
+        if (player.buyPrice[data.resource] !== undefined) {
+          const oldBuyPrice = player.buyPrice[data.resource];
+          const newBuyPrice = Math.max(0, Math.min(999, data.value));
+          player.buyPrice[data.resource] = newBuyPrice;
+          
+          if (newBuyPrice > oldBuyPrice) {
+            const currentSellPrice = player.offerPrice[data.resource] ?? 3;
+            if (currentSellPrice <= newBuyPrice) {
+              player.offerPrice[data.resource] = newBuyPrice + 1;
+            }
+          }
+        }
+      }
+    });
+
+    socket.on('toggleResourceSell', (data) => {
+      const player = connectedClients.get(socket.id);
+      if (player && data && data.resource) {
+        if (!player.sellToggled) {
+          player.sellToggled = { dilithium: false, merculite: false, duranium: false, tritanium: false, antimatter: false, deuterium: false, latinum: false };
+        }
+        if (player.sellToggled[data.resource] !== undefined) {
+          player.sellToggled[data.resource] = !player.sellToggled[data.resource];
+        }
+      }
+    });
+
+    socket.on('sellResourcesToBank', () => {
+      const player = connectedClients.get(socket.id);
+      if (player && player.resources) {
+        if (player.tradeOptions === undefined) {
+          player.tradeOptions = player.tradeCapacity || 5;
+        }
+
+        const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+        const eligible = [];
+        for (const res of resourcesList) {
+          const qty = player.resources[res] || 0;
+          if (qty >= 1.0) {
+            eligible.push({ name: res, qty: qty });
+          }
+        }
+
+        const L = eligible.length;
+
+        // Allow sale if they have at least 1 trade option
+        if (L > 0 && player.tradeOptions >= 1) {
+          const sellPrice = Math.ceil((L * L) / 2);
+          for (const item of eligible) {
+            player.resources[item.name] = (player.resources[item.name] || 0) - 1.0;
+          }
+          player.credits = (player.credits || 0) + sellPrice * L;
+          
+          // Deduct options count (cost), can go negative
+          player.tradeOptions = (player.tradeOptions || 0) - L;
+
+          console.log(`[Bank Direct Sale] Player ${player.id} sold ${L} resources for ${sellPrice * L} credits. Remaining options: ${player.tradeOptions}`);
+        }
+      }
+    });
+
+    socket.on('changeSellPriceSetting', () => {
+      const player = connectedClients.get(socket.id);
+      if (player) {
+        player.sellPriceSetting = (player.sellPriceSetting || 2) + 1;
+        if (player.sellPriceSetting > 10) {
+          player.sellPriceSetting = 2;
+        }
+      }
+    });
+
+    socket.on('postSellOrder', (data) => {
+      const player = connectedClients.get(socket.id);
+      if (player && player.resources) {
+        if (player.tradeOptions === undefined) {
+          player.tradeOptions = player.tradeCapacity || 5;
+        }
+        
+        // Player must have at least 1 trade option and stockpile >= 1.0
+        if (player.tradeOptions >= 1 && (player.resources[data.resource] || 0) >= 1.0) {
+          player.tradeOptions -= 1;
+          player.resources[data.resource] -= 1.0;
+          
+          if (!game.sellOrders) game.sellOrders = [];
+          const orderId = "order_" + Math.random().toString(36).substring(2, 9);
+          game.sellOrders.push({
+            id: orderId,
+            ownerId: player.id,
+            ownerName: player.name,
+            resource: data.resource,
+            price: player.sellPriceSetting || 2,
+            createdAt: Date.now(),
+            expiresAt: Date.now() + 15 * 60000 // 15 minutes
+          });
+          console.log(`[Market Post] Player ${player.id} posted 1 ${data.resource} for ${player.sellPriceSetting || 2} credits.`);
+        }
+      }
+    });
+
+    socket.on('cancelSellOrder', (data) => {
+      const player = connectedClients.get(socket.id);
+      if (player && game.sellOrders) {
+        const idx = game.sellOrders.findIndex(o => o.id === data.orderId);
+        if (idx !== -1) {
+          const order = game.sellOrders[idx];
+          if (order.ownerId === player.id) {
+            // Return resource to player stockpile, no option consumed/refunded
+            player.resources[order.resource] = (player.resources[order.resource] || 0) + 1.0;
+            game.sellOrders.splice(idx, 1);
+            console.log(`[Market Cancel] Player ${player.id} cancelled order ${order.id}. Stockpile returned.`);
+          }
+        }
+      }
+    });
+
+    socket.on('buySellOrder', (data) => {
+      const player = connectedClients.get(socket.id); // buyer
+      if (player && player.resources && game.sellOrders) {
+        if (player.tradeOptions === undefined) {
+          player.tradeOptions = player.tradeCapacity || 5;
+        }
+        
+        const idx = game.sellOrders.findIndex(o => o.id === data.orderId);
+        if (idx !== -1) {
+          const order = game.sellOrders[idx];
+          // Buyer must have >= 1 option and enough credits
+          if (order.ownerId !== player.id && player.tradeOptions >= 1 && (player.credits || 0) >= order.price) {
+            player.tradeOptions -= 1;
+            player.credits -= order.price;
+            player.resources[order.resource] = (player.resources[order.resource] || 0) + 1.0;
+            
+            // Pay credits to seller if not neutral
+            if (order.ownerId !== 'neutral') {
+              const seller = game.allPlayers.find(p => p.id === order.ownerId);
+              if (seller) {
+                seller.credits = (seller.credits || 0) + order.price;
+              }
+            }
+            
+            game.sellOrders.splice(idx, 1);
+            socket.emit('purchaseSuccess');
+            console.log(`[Market Buy] Player ${player.id} bought 1 ${order.resource} from ${order.ownerId} for ${order.price} credits.`);
+          }
+        }
       }
     });
 
@@ -455,7 +747,7 @@ async function bootstrap() {
       const planet = game.planets.find(p => p.id === data.planetId);
       if (!planet || !planet.owner || planet.owner.id !== player.id) return;
 
-      const validModes = ['economy', 'research', 'garrison', 'commerce'];
+      const validModes = ['economy', 'research', 'garrison', 'commerce', 'mining'];
       if (!validModes.includes(data.focusMode)) return;
       if (data.focusMode === 'commerce' && planet.maxShips <= 100) return;
 
@@ -535,6 +827,7 @@ async function bootstrap() {
           productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
           mapSize: options && options.mapSize !== undefined ? options.mapSize : 1600,
           planetCount: options && options.planetCount !== undefined ? options.planetCount : 60,
+          clusters: options && options.clusters !== undefined ? parseInt(options.clusters, 10) : 0,
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600"
         };
@@ -565,6 +858,7 @@ async function bootstrap() {
           productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
           mapSize: options && options.mapSize !== undefined ? options.mapSize : 1600,
           planetCount: options && options.planetCount !== undefined ? options.planetCount : 60,
+          clusters: options && options.clusters !== undefined ? parseInt(options.clusters, 10) : 0,
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600"
       };
@@ -831,6 +1125,7 @@ async function bootstrap() {
           capacityDecreaseEvent: cEvent,
           justAssigned: p.justAssigned,
           rampageEvent: p.rampageEvent,
+          isAICandidate: p.isAICandidate || false,
           defeatEvent: dEvent,
           homeworldOf: p.homeworldOf,
           lastStandEvent: lEvent,
@@ -847,7 +1142,9 @@ async function bootstrap() {
             targetMode: p.focusTransition.targetMode,
             progress: Math.min(1.0, p.focusTransition.elapsed / 15000)
           } : null,
-          finalRateExceedsOne: finalRate > 1.0
+          finalRateExceedsOne: finalRate > 1.0,
+          resources: p.resources || null,
+          preferredResource: p.preferredResource || null
       };
     });
 
@@ -860,6 +1157,8 @@ async function bootstrap() {
       s.diplomatFailureEvent = 0;
       const dipFailureChance = s.diplomatFailureChance || 0;
       s.diplomatFailureChance = 0;
+      const dipPrefResource = s.diplomatPrefResourceEvent || 0;
+      s.diplomatPrefResourceEvent = 0;
 
       if (s.isCruiser || s.isAmoeba) {
         return {
@@ -915,6 +1214,7 @@ async function bootstrap() {
           diplomatSuccessEvent: dipSuccess,
           diplomatFailureEvent: dipFailure,
           diplomatFailureChance: dipFailureChance,
+          diplomatPrefResourceEvent: dipPrefResource,
           cruiserTargetType: s.cruiserTargetType || null,
           cruiserTargetId: s.cruiserTargetId || null,
           cruiserTargetClickX: s.cruiserTargetClickX !== undefined ? s.cruiserTargetClickX : null,
@@ -931,6 +1231,10 @@ async function bootstrap() {
           }).filter(Boolean) : [],
           bombPlanetsEnabled: s.bombPlanetsEnabled !== false,
           isPatrolling: s.isPatrolling || false,
+          isScouting: s.isScouting || false,
+          isResearching: s.isResearching || false,
+          isDiplomacy: s.isDiplomacy || false,
+          scoutAttackEnabled: s.scoutAttackEnabled || false,
           cruiserStyle: s.cruiserStyle || null
         };
       } else {
@@ -1149,7 +1453,7 @@ async function bootstrap() {
           const mappedPlanet = Object.assign({}, allPlanetsMapped[i]);
           if (player.spyRootedEvents && player.spyRootedEvents.has(p.id)) mappedPlanet.spyRootedOutEvent = true;
           visiblePlanets.push(mappedPlanet);
-        } else if (isSilhouetteVisible(p.x, p.y) || player.discoveredPlanets.has(p.id)) {
+        } else if (isSilhouetteVisible(p.x, p.y) || player.discoveredPlanets.has(p.id) || p.rampageEvent) {
           if (isSilhouetteVisible(p.x, p.y)) {
             player.discoveredPlanets.add(p.id);
           }
@@ -1159,20 +1463,24 @@ async function bootstrap() {
             if (player.spyRootedEvents && player.spyRootedEvents.has(p.id)) mappedPlanet.spyRootedOutEvent = true;
             visiblePlanets.push(mappedPlanet);
           } else {
-            const spyRooted = player.spyRootedEvents && player.spyRootedEvents.has(p.id);
+              const spyRooted = player.spyRootedEvents && player.spyRootedEvents.has(p.id);
             visiblePlanets.push({
               id: p.id,
               x: p.x,
               y: p.y,
               radius: p.radius,
-              ownerId: null,
+              ownerId: p.owner ? p.owner.id : null,
               ships: 0,
               maxShips: p.maxShips,
               inFog: true,
               spyRootedOutEvent: spyRooted,
               isSpeedPlanet: p.isSpeedPlanet,
               isResearch: p.isResearch,
-              isMilitary: p.isMilitary
+              isMilitary: p.isMilitary,
+              rampageEvent: p.rampageEvent || false,
+              isAICandidate: p.isAICandidate || false,
+              resources: p.resources || null,
+              expScore: p.expScore || 0
             });
           }
         }
@@ -1272,6 +1580,7 @@ async function bootstrap() {
         globalUpgradeModifiers: game.globalUpgradeModifiers,
         upgradeEnhanceEvents: visibleUpgradeEnhanceEvents,
         galacticCapacity: game.galacticCapacity,
+        sellOrders: game.sellOrders || [],
         isPaused: game.isPaused,
         isRunning: game.isRunning,
         gameOverMessage: game.gameOverMessage,

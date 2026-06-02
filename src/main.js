@@ -5,7 +5,7 @@ const AMOEBA_SIN = [0, 0.70710678, 1, 0.70710678, 0, -0.70710678, -1, -0.7071067
 window.addEventListener('keydown', e => keysDown[e.key] = true);
 window.addEventListener('keyup', e => keysDown[e.key] = false);
 
-window.addEventListener('DOMContentLoaded', () => {
+// Run initialization immediately as an ES Module
   console.log('[PlanetWars] Code version: RAF-loop-v1');
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
@@ -160,12 +160,14 @@ window.addEventListener('DOMContentLoaded', () => {
   const helpBackBtn = document.getElementById('help-back-btn');
 
   const topicTitles = {
-    controls: '🎮 Controls',
     victory: '⚔️ Victory Conditions',
+    controls: '🎮 Controls',
     planets: '🪐 Planets & Economy',
+    focus: '👁️ Focus Modes',
     ships: '🚀 Ships & Combat',
     cruisers: '🛸 Cruisers',
     upgrades: '🛠️ Upgrades',
+    diplomacy: '🤝 Diplomacy & Sympathy',
     hazards: '⚡ Hazards',
     monsters: '🧬 Space Amoebas',
     ai: '🤖 AI & Rampage',
@@ -347,10 +349,26 @@ window.addEventListener('DOMContentLoaded', () => {
       localStorage.setItem('planetWarsPlayerName', nameInput.value.trim());
     }
 
-    const musicCheckbox = document.getElementById('music-checkbox');
+     const musicCheckbox = document.getElementById('music-checkbox');
     const bgMusic = document.getElementById('bg-music');
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
-      bgMusic.src = '/Music/ImperialMarch.wav';
+      const introTracks = [
+        'AIRWOLF.MID',
+        'BATTLE~1.MID',
+        'BATTLE~2.MID',
+        'Battletime.mp3',
+        'COKE.MID',
+        'EMPIRE.MID',
+        'GILLIGAN.MID',
+        'Imperial March.wav',
+        'MIGHTY~1.MID',
+        'MWSMIT~1.MID',
+        'PAULST~1.MID',
+        'RICHMU~1.MID',
+        'SUPERMAN.MID'
+      ];
+      const randomTrack = introTracks[Math.floor(Math.random() * introTracks.length)];
+      bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
       bgMusic.loop = false;
       bgMusic.volume = 1.0;
       bgMusic.play().catch(e => console.warn('Music play blocked:', e));
@@ -500,6 +518,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let lastPlanetCapacities = {};
   let lastPlanetAssignments = {};
   let lastPlanetRampages = {};
+  let megalovaniaPlayed = false;
   let lastPlanetStands = {};
   let lastPlanetHomeworlds = {};
   let planetShields = {};
@@ -589,6 +608,48 @@ window.addEventListener('DOMContentLoaded', () => {
       osc.stop(now + 0.12);
     } catch (e) {
       console.warn('Web Audio synthesis failed for chat sound:', e);
+    }
+  }
+
+  function playChaChingSound() {
+    try {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      
+      const now = audioCtx.currentTime;
+      
+      // First high bell chime (triangle)
+      const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      osc1.connect(gain1);
+      gain1.connect(audioCtx.destination);
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(880, now); // A5
+      osc1.frequency.exponentialRampToValueAtTime(1320, now + 0.08); // E6
+      gain1.gain.setValueAtTime(0.06, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+      osc1.start(now);
+      osc1.stop(now + 0.15);
+
+      // Second high bell chime (cha-ching, delayed sine wave)
+      const osc2 = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1320, now + 0.08); // E6
+      osc2.frequency.exponentialRampToValueAtTime(1760, now + 0.25); // A6
+      gain2.gain.setValueAtTime(0.0, now);
+      gain2.gain.setValueAtTime(0.08, now + 0.08);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc2.start(now + 0.08);
+      osc2.stop(now + 0.35);
+    } catch (e) {
+      console.warn('Web Audio synthesis failed for cha-ching sound:', e);
     }
   }
 
@@ -758,28 +819,34 @@ window.addEventListener('DOMContentLoaded', () => {
         } else if (!p.justAssigned) {
           lastPlanetAssignments[p.id] = false;
         }
-        if (!p.inFog && p.rampageEvent && !lastPlanetRampages[p.id]) {
-          floatingAnimations.push({
-            x: p.x,
-            y: p.y,
-            text: 'RAMPAGE!!!',
-            type: 'rampage',
-            age: 0,
-            duration: 4.0
-          });
-          playSound('rampage');
+        if (p.rampageEvent && !lastPlanetRampages[p.id]) {
           lastPlanetRampages[p.id] = true;
 
           const pOwner = state.players ? state.players.find(pl => pl.id === p.ownerId) : null;
           if (pOwner && pOwner.isAI) {
-            const musicCheckbox = document.getElementById('music-checkbox');
-            const bgMusic = document.getElementById('bg-music');
-            if (musicCheckbox && musicCheckbox.checked && bgMusic) {
-              bgMusic.src = '/Music/Megalovania.mp3';
-              bgMusic.loop = false;
-              bgMusic.volume = 1.0;
-              bgMusic.play().catch(e => console.warn('Megalovania play blocked:', e));
+            if (!megalovaniaPlayed) {
+              megalovaniaPlayed = true;
+              const musicCheckbox = document.getElementById('music-checkbox');
+              const bgMusic = document.getElementById('bg-music');
+              if (musicCheckbox && musicCheckbox.checked && bgMusic) {
+                bgMusic.src = '/Music/Megalovania.mp3';
+                bgMusic.loop = false;
+                bgMusic.volume = 1.0;
+                bgMusic.play().catch(e => console.warn('Megalovania play blocked:', e));
+              }
             }
+          }
+
+          if (!p.inFog) {
+            floatingAnimations.push({
+              x: p.x,
+              y: p.y,
+              text: 'RAMPAGE!!!',
+              type: 'rampage',
+              age: 0,
+              duration: 4.0
+            });
+            playSound('rampage');
           }
         } else if (!p.rampageEvent) {
           lastPlanetRampages[p.id] = false;
@@ -876,6 +943,44 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (state.ships) {
       for (const s of state.ships) {
+        if (s.diplomatPrefResourceEvent && s.diplomatPrefResourceEvent > 0) {
+          let targetX = s.x;
+          let targetY = s.y;
+          let prefEmoji = '💎';
+          if (s.diplomatTargetPlanetId !== null && state.planets) {
+            const targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
+            if (targetP) {
+              targetX = targetP.x;
+              targetY = targetP.y;
+              if (targetP.preferredResource) {
+                const emojis = {
+                  dilithium: '💎',
+                  merculite: '☄️',
+                  duranium: '🧱',
+                  tritanium: '🔩',
+                  antimatter: '🌀',
+                  deuterium: '💧',
+                  latinum: '🏺'
+                };
+                prefEmoji = emojis[targetP.preferredResource] || '💎';
+              }
+            }
+          }
+          for (let b = 0; b < s.diplomatPrefResourceEvent; b++) {
+            floatingAnimations.push({
+              startX: s.x,
+              startY: s.y,
+              endX: targetX,
+              endY: targetY,
+              x: s.x,
+              y: s.y,
+              text: prefEmoji,
+              type: 'pref_resource_diplomacy',
+              age: b * 0.2,
+              duration: 2.5
+            });
+          }
+        }
         if (s.beakerIncreaseEvent && s.beakerIncreaseEvent > 0) {
           for (let b = 0; b < s.beakerIncreaseEvent; b++) {
             floatingAnimations.push({
@@ -926,7 +1031,7 @@ window.addEventListener('DOMContentLoaded', () => {
               text: '💔' + (s.diplomatFailureChance ? ` ${s.diplomatFailureChance}%` : ''),
               type: 'diplomacy_failure',
               age: b * 0.2,
-              duration: 2.5
+              duration: 7.5
             });
           }
         }
@@ -1064,11 +1169,200 @@ window.addEventListener('DOMContentLoaded', () => {
     const creditsDisplay = document.getElementById('player-credits-display');
     if (creditsDisplay) {
       const creditsVal = myPlayer.credits || 0;
-      if (creditsVal > 0.99 || creditsVal < 0) {
-        creditsDisplay.style.display = 'block';
-        creditsDisplay.textContent = `💲 ${Math.floor(creditsVal)}`;
-      } else {
-        creditsDisplay.style.display = 'none';
+      const tradingBonusVal = myPlayer.tradingBonus || 0;
+      let actualIncomeRate = ((myPlayer.totalCapacity || 0) / 200) * tradingBonusVal;
+
+      // Add commerce focus credit generation (boosted by trading bonus)
+      if (serverState && serverState.planets) {
+        for (const p of serverState.planets) {
+          if (p.ownerId === localPlayer.id && p.focusMode === 'commerce' && p.ships >= p.maxShips) {
+            const shipsOver100 = Math.max(0, p.ships - 100);
+            actualIncomeRate += (shipsOver100 / 100) * (1 + tradingBonusVal);
+          }
+        }
+      }
+
+      creditsDisplay.style.display = 'block';
+      creditsDisplay.textContent = `💲 ${Math.floor(creditsVal)}`;
+      creditsDisplay.setAttribute('title', `Income Rate: +${actualIncomeRate.toFixed(2)}/s`);
+    }
+
+    const commandLimitDisplay = document.getElementById('player-command-limit-display');
+    if (commandLimitDisplay) {
+      const cruiserCount = myPlayer.cruiserCount || 0;
+      const commandLimit = myPlayer.commandLimit || 0;
+      commandLimitDisplay.style.display = 'block';
+      commandLimitDisplay.textContent = `⚓: ${cruiserCount}/${commandLimit}`;
+    }
+
+    const tradeOptionsDisplay = document.getElementById('player-trade-options-display');
+    if (tradeOptionsDisplay) {
+      const tradeOptions = myPlayer.tradeOptions !== undefined ? Math.floor(myPlayer.tradeOptions) : 5;
+      const tradeCapacity = myPlayer.tradeCapacity !== undefined ? Math.floor(myPlayer.tradeCapacity) : 5;
+      tradeOptionsDisplay.style.display = 'block';
+      tradeOptionsDisplay.textContent = `⚖️: ${tradeOptions}/${tradeCapacity}`;
+    }
+
+    const sellForDisplay = document.getElementById('player-sell-for-display');
+    if (sellForDisplay) {
+      const sellPriceSetting = myPlayer.sellPriceSetting !== undefined ? myPlayer.sellPriceSetting : 2;
+      sellForDisplay.style.display = 'block';
+      sellForDisplay.textContent = `💰: ${sellPriceSetting}`;
+    }
+
+    const btnMarket = document.getElementById('btn-market');
+    if (btnMarket) {
+      btnMarket.style.display = focusModeActive ? 'none' : 'inline-flex';
+      btnMarket.innerHTML = `<span class="btn-icon">🛒</span>M`;
+    }
+
+    const resHud = document.getElementById('resources-hud');
+    if (resHud) {
+      resHud.style.display = 'flex';
+      
+      const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+      
+      for (const res of resourcesList) {
+        const qtySpan = document.getElementById(`res-qty-${res}`);
+        const rawQty = myPlayer.resources?.[res] || 0;
+        const qtyVal = rawQty.toFixed(2);
+        
+        if (qtySpan) qtySpan.textContent = qtyVal;
+        
+        const card = document.getElementById(`res-card-${res}`);
+        if (card) {
+          card.style.borderColor = 'rgba(0, 229, 255, 0.35)';
+          card.style.boxShadow = 'none';
+          card.style.background = 'rgba(0, 229, 255, 0.05)';
+        }
+      }
+      
+      // Uncapped surplus scan
+      const eligible = [];
+      for (const r of resourcesList) {
+        const qty = myPlayer.resources?.[r] || 0;
+        if (qty >= 1.0) {
+          eligible.push({ name: r, qty: qty });
+        }
+      }
+      
+      const toSell = eligible;
+      const L = toSell.length;
+      
+      const sellPrice = Math.ceil((L * L) / 2);
+      const totalGain = sellPrice * L;
+      
+      const sellBtn = document.getElementById('btn-sell-resources');
+      if (sellBtn) {
+        const resourceEmojis = {
+          antimatter: '🌀',
+          tritanium: '🔩',
+          merculite: '☄️',
+          dilithium: '💎',
+          duranium: '🧱',
+          deuterium: '💧',
+          latinum: '🏺'
+        };
+        
+        if (L > 0) {
+          const iconStr = toSell.map(item => resourceEmojis[item.name] || '').join('');
+          sellBtn.textContent = `${iconStr}: +${totalGain}`;
+        } else {
+          sellBtn.textContent = 'SELL: +0';
+        }
+        
+        const availableOptions = myPlayer.tradeOptions !== undefined ? myPlayer.tradeOptions : 5;
+        // Don't gray it out if the player has at least one trade option (availableOptions >= 1), only if they have none (< 1)
+        if (L === 0 || availableOptions < 1) {
+          sellBtn.disabled = true;
+          sellBtn.style.opacity = '0.5';
+          sellBtn.style.pointerEvents = 'none';
+        } else {
+          sellBtn.disabled = false;
+          sellBtn.style.opacity = '1.0';
+          sellBtn.style.pointerEvents = 'auto';
+        }
+      }
+
+      // Populate and render Sell Orders HUD
+      const sellOrdersHud = document.getElementById('sell-orders-hud');
+      if (sellOrdersHud) {
+        const orders = serverState.sellOrders || [];
+        
+        // Sort orders strictly from lowest price to highest
+        orders.sort((a, b) => a.price - b.price);
+        
+        sellOrdersHud.innerHTML = '';
+        sellOrdersHud.style.display = (window.marketVisible !== false) ? 'flex' : 'none';
+        
+        const resourceEmojis = {
+          antimatter: '🌀',
+          tritanium: '🔩',
+          merculite: '☄️',
+          dilithium: '💎',
+          duranium: '🧱',
+          deuterium: '💧',
+          latinum: '🏺'
+        };
+        
+        const myCredits = myPlayer.credits || 0;
+        const myTradeOptions = myPlayer.tradeOptions !== undefined ? myPlayer.tradeOptions : 5;
+        
+        for (const order of orders) {
+          const isMine = order.ownerId === localPlayer.id;
+          const emoji = resourceEmojis[order.resource] || '';
+          
+          const card = document.createElement('div');
+          card.className = 'cyber-btn sell-order-card';
+          card.style.display = 'flex';
+          card.style.alignItems = 'center';
+          card.style.justifyContent = 'center';
+          card.style.padding = '3px 8px';
+          card.style.borderRadius = '4px';
+          card.style.cursor = 'pointer';
+          card.style.fontSize = '0.75rem';
+          card.style.fontFamily = "'Orbitron', sans-serif";
+          card.style.fontWeight = 'bold';
+          card.style.transition = 'all 0.2s';
+          
+          if (isMine) {
+            card.style.borderColor = 'rgba(76, 175, 80, 0.4)';
+            card.style.background = 'rgba(76, 175, 80, 0.1)';
+            card.style.color = '#4caf50';
+            card.style.textShadow = '0 0 4px #4caf50';
+            card.title = `Your Order - Click to Cancel (Refunds 1 ${order.resource})`;
+          } else {
+            card.style.borderColor = 'rgba(33, 150, 243, 0.4)';
+            card.style.background = 'rgba(33, 150, 243, 0.1)';
+            card.style.color = '#2196f3';
+            card.style.textShadow = '0 0 4px #2196f3';
+            card.title = `Owner: ${order.ownerName} - Click to Buy for ${order.price} credits (Costs 1 option)`;
+          }
+          
+          card.textContent = `${emoji}: ${order.price}`;
+          
+          // Disable / gray out orders if optionless or creditless (except for own orders)
+          if (!isMine) {
+            const hasOptions = myTradeOptions >= 1;
+            const hasCredits = myCredits >= order.price;
+            if (!hasOptions || !hasCredits) {
+              card.style.opacity = '0.35';
+              card.style.pointerEvents = 'none';
+              card.style.cursor = 'not-allowed';
+            }
+          }
+          
+          card.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isMine) {
+              socket.emit('cancelSellOrder', { orderId: order.id });
+            } else {
+              socket.emit('buySellOrder', { orderId: order.id });
+            }
+          });
+          
+          sellOrdersHud.appendChild(card);
+        }
       }
     }
 
@@ -1119,9 +1413,13 @@ window.addEventListener('DOMContentLoaded', () => {
         const blinkClass = (p.id === techLeadingId || p.id === capLeadingId) ? ' leader-row' : '';
         const bullseye = bullseyeIds.has(p.id) ? '<span style="color: #f00; text-shadow: 0 0 5px #f00; margin-left: 2px;" title="Target!">🎯</span>' : '';
 
+        // Check if local player is at war with player p
+        const isAtWar = !!(myPlayer.atWarWith && myPlayer.atWarWith[p.id] && Date.now() < myPlayer.atWarWith[p.id]);
+        const warIcon = isAtWar ? '<span style="margin-right: 3px;" title="At War!">⚔️</span>' : '';
+
         html += `
             <div class="${blinkClass}" style="display: flex; justify-content: space-between; font-family: 'Rajdhani', sans-serif; font-size: 1.05rem; gap: 5px; color: ${p.color}; text-shadow: 0 0 5px ${p.color};">
-              <span style="width: 75px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.name}${bullseye}</span>
+              <span style="width: 75px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${warIcon}${p.name}${bullseye}</span>
               <span style="width: 50px; text-align: center;">+${pTech}%</span>
               <span style="width: 45px; text-align: center;">+${pExp}%</span>
               <span style="width: 45px; text-align: right;">${capacityPercent}%</span>
@@ -1497,6 +1795,46 @@ window.addEventListener('DOMContentLoaded', () => {
               focusModeActive = true;
             }
             return;
+          }
+        }
+      }
+
+      // 3.5 Cruiser Build Icon check (Homeworld / Military world)
+      for (const p of serverState.planets) {
+        if (p.ownerId === localPlayer.id && !p.inFog) {
+          const displayHomeworldOf = p.homeworldOf;
+          const displayIsMilitary = p.isMilitary;
+
+          if (displayHomeworldOf || displayIsMilitary) {
+            // Icon/label is rendered at p.x, p.y - p.radius - 8
+            const iconX = p.x;
+            const iconY = p.y - p.radius - 8;
+
+            const dx = iconX - pos.x;
+            const dy = iconY - pos.y;
+
+            let isHit = false;
+            if (displayHomeworldOf) {
+              const hwOwner = serverState.players.find(pl => pl.id === displayHomeworldOf);
+              const nameStr = hwOwner ? (hwOwner.name || "") : "";
+              const halfWidth = Math.max(25, (nameStr.length + 3) * 4);
+              isHit = Math.abs(dx) <= halfWidth && Math.abs(dy) <= 15;
+            } else {
+              const hitRadius = 18;
+              isHit = (dx * dx + dy * dy <= hitRadius * hitRadius);
+            }
+
+            if (isHit) {
+              const isCurrentlySelected = selectedPlanets.length === 1 && selectedPlanets[0].id === p.id;
+              if (isCurrentlySelected) {
+                cruiserBuildModeActive = !cruiserBuildModeActive;
+              } else {
+                selectedPlanets = [p];
+                selectedShips = [];
+                cruiserBuildModeActive = true;
+              }
+              return;
+            }
           }
         }
       }
@@ -2291,13 +2629,19 @@ window.addEventListener('DOMContentLoaded', () => {
           focusModeActive = false;
           return;
         }
-        if (key === 'm' && planet.focusMode !== 'commerce' && planet.maxShips > 100) {
+        if (key === 'c' && planet.focusMode !== 'commerce' && planet.maxShips > 100) {
           event.preventDefault();
           socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'commerce' });
           focusModeActive = false;
           return;
         }
-        if (key === 'c' || key === 'o' || event.key === 'Escape') {
+        if (key === 'm' && planet.focusMode !== 'mining' && planet.resources && planet.resources.length > 0) {
+          event.preventDefault();
+          socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'mining' });
+          focusModeActive = false;
+          return;
+        }
+        if (key === 'o' || event.key === 'Escape') {
           event.preventDefault();
           focusModeActive = false;
           return;
@@ -2346,7 +2690,23 @@ window.addEventListener('DOMContentLoaded', () => {
 
           const isAllowed = (propName) => {
             const currentVal = ship[propName] || 0;
-            const shieldCheck = (propName !== 'shields' || (currentVal + 1) * 0.10 <= 0.80);
+            const nextLevel = currentVal + 1;
+            let shieldCheck = true;
+            if (propName === 'shields') {
+              const rawTech = localPlayer ? localPlayer.techScore || 0 : 0;
+              const rawExp = localPlayer ? localPlayer.expScore || 0 : 0;
+              const shipExp = ship.expScore || 0;
+              const techBonus = Math.sqrt(rawTech);
+              const expBonus = Math.sqrt(rawExp);
+              const shipExpBonus = Math.sqrt(shipExp);
+              const baseDeflection = ship.maxHealth + (techBonus + expBonus + shipExpBonus);
+              const deflectionRem = 100 - baseDeflection;
+              const nextShieldDeflectionBonus = nextLevel * (deflectionRem / 5);
+              const newDeflection = baseDeflection + nextShieldDeflectionBonus;
+              if (newDeflection > 90) {
+                shieldCheck = false;
+              }
+            }
             return (currentVal < 5) && (currentVal + 1 <= maxIndividualLevel) && (totalUpgrades + 1 <= maxTotalUpgrades) && shieldCheck;
           };
 
@@ -2466,6 +2826,12 @@ window.addEventListener('DOMContentLoaded', () => {
         const nextState = anyNotBombing;
         for (const ship of selectedCruisers) {
           ship.bombPlanetsEnabled = nextState;
+          if (nextState) {
+            ship.isPatrolling = false;
+            ship.isScouting = false;
+            ship.isResearching = false;
+            ship.isDiplomacy = false;
+          }
           socket.emit('toggleCruiserBomb', { shipId: ship.id, enabled: nextState });
         }
       } else {
@@ -2480,6 +2846,12 @@ window.addEventListener('DOMContentLoaded', () => {
         const nextState = anyNotPatrolling;
         for (const ship of selectedCruisers) {
           ship.isPatrolling = nextState;
+          if (nextState) {
+            ship.bombPlanetsEnabled = false;
+            ship.isScouting = false;
+            ship.isResearching = false;
+            ship.isDiplomacy = false;
+          }
           socket.emit('toggleCruiserPatrol', { shipId: ship.id, enabled: nextState });
         }
       }
@@ -2494,7 +2866,70 @@ window.addEventListener('DOMContentLoaded', () => {
       scoreBoard.classList.toggle('hidden');
     }
     if (event.key.toLowerCase() === 's') {
-      scoutModeNext = !scoutModeNext;
+      const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id);
+      const techScore = localPlayer ? localPlayer.techScore || 0 : 0;
+      const techBonus = Math.floor(Math.sqrt(techScore));
+      if (selectedCruisers.length > 0 && techBonus >= 10) {
+        event.preventDefault();
+        const anyNotScouting = selectedCruisers.some(c => !c.isScouting);
+        const nextState = anyNotScouting;
+        selectedCruisers.forEach(ship => {
+          ship.isScouting = nextState;
+          if (nextState) {
+            ship.isPatrolling = false;
+            ship.bombPlanetsEnabled = false;
+            ship.isResearching = false;
+            ship.isDiplomacy = false;
+          }
+          socket.emit('toggleCruiserScout', { shipId: ship.id, enabled: nextState });
+        });
+      } else {
+        scoutModeNext = !scoutModeNext;
+      }
+    }
+    if (event.key.toLowerCase() === 'a') {
+      const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id);
+      if (selectedCruisers.length > 0) {
+        event.preventDefault();
+        const anyNotAttacking = selectedCruisers.some(c => !c.scoutAttackEnabled);
+        const nextState = anyNotAttacking;
+        selectedCruisers.forEach(ship => {
+          ship.scoutAttackEnabled = nextState;
+          socket.emit('toggleCruiserScoutAttack', { shipId: ship.id, enabled: nextState });
+        });
+      }
+    }
+    if (event.key.toLowerCase() === 'r') {
+      const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id && s.labs > 0);
+      if (selectedCruisers.length > 0) {
+        event.preventDefault();
+        const anyNotResearching = selectedCruisers.some(c => !c.isResearching);
+        const nextState = anyNotResearching;
+        selectedCruisers.forEach(ship => {
+          ship.isResearching = nextState;
+          ship.isDiplomacy = false;
+          ship.isScouting = false;
+          ship.isPatrolling = false;
+          ship.bombPlanetsEnabled = false;
+          socket.emit('toggleCruiserResearch', { shipId: ship.id, enabled: nextState });
+        });
+      }
+    }
+    if (event.key.toLowerCase() === 'd') {
+      const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id && s.diplomat > 0);
+      if (selectedCruisers.length > 0) {
+        event.preventDefault();
+        const anyNotDiplomacy = selectedCruisers.some(c => !c.isDiplomacy);
+        const nextState = anyNotDiplomacy;
+        selectedCruisers.forEach(ship => {
+          ship.isDiplomacy = nextState;
+          ship.isResearching = false;
+          ship.isScouting = false;
+          ship.isPatrolling = false;
+          ship.bombPlanetsEnabled = false;
+          socket.emit('toggleCruiserDiplomacy', { shipId: ship.id, enabled: nextState });
+        });
+      }
     }
     if (event.key.toLowerCase() === 'c') {
       const hasCruiserBase = selectedPlanets.some(p => (p.isMilitary || p.homeworldOf) && p.ships >= 50 && p.maxShips >= 57);
@@ -2503,10 +2938,13 @@ window.addEventListener('DOMContentLoaded', () => {
         cruiserBuildModeActive = !cruiserBuildModeActive;
       }
     }
-    if (event.key === ',') speedModifierNext = speedModifierNext === 0.25 ? null : 0.25;
-    if (event.key === '.') speedModifierNext = speedModifierNext === 0.50 ? null : 0.50;
-    if (event.key === '/') speedModifierNext = speedModifierNext === 1.0 ? null : 1.0;
-    if (event.key === '4' || event.key === '0') speedModifierNext = speedModifierNext === 1.0 ? null : 1.0;
+    if (event.key.toLowerCase() === 'm') {
+      if (!focusModeActive && !upgradeModeActive && !cruiserBuildModeActive) {
+        event.preventDefault();
+        window.toggleMarket();
+      }
+    }
+
 
     if (event.key === '=' || event.key === '+' || event.key === '-' || event.key === '_') {
       const rect = canvas.getBoundingClientRect();
@@ -2567,6 +3005,12 @@ window.addEventListener('DOMContentLoaded', () => {
         const nextState = anyNotBombing;
         for (const ship of selectedCruisers) {
           ship.bombPlanetsEnabled = nextState;
+          if (nextState) {
+            ship.isPatrolling = false;
+            ship.isScouting = false;
+            ship.isResearching = false;
+            ship.isDiplomacy = false;
+          }
           socket.emit('toggleCruiserBomb', { shipId: ship.id, enabled: nextState });
         }
       }
@@ -2581,7 +3025,83 @@ window.addEventListener('DOMContentLoaded', () => {
         const nextState = anyNotPatrolling;
         for (const ship of selectedCruisers) {
           ship.isPatrolling = nextState;
+          if (nextState) {
+            ship.bombPlanetsEnabled = false;
+            ship.isScouting = false;
+            ship.isResearching = false;
+            ship.isDiplomacy = false;
+          }
           socket.emit('toggleCruiserPatrol', { shipId: ship.id, enabled: nextState });
+        }
+      }
+    });
+  }
+  const btnCruiserScoutEl = document.getElementById('btn-cruiser-scout');
+  if (btnCruiserScoutEl) {
+    btnCruiserScoutEl.addEventListener('click', () => {
+      const selectedCruisers = getSelectedCruisers();
+      if (selectedCruisers.length > 0) {
+        const anyNotScouting = selectedCruisers.some(c => !c.isScouting);
+        const nextState = anyNotScouting;
+        for (const ship of selectedCruisers) {
+          ship.isScouting = nextState;
+          if (nextState) {
+            ship.isPatrolling = false;
+            ship.bombPlanetsEnabled = false;
+            ship.isResearching = false;
+            ship.isDiplomacy = false;
+          }
+          socket.emit('toggleCruiserScout', { shipId: ship.id, enabled: nextState });
+        }
+      }
+    });
+  }
+  const btnCruiserAttackEl = document.getElementById('btn-cruiser-attack');
+  if (btnCruiserAttackEl) {
+    btnCruiserAttackEl.addEventListener('click', () => {
+      const selectedCruisers = getSelectedCruisers();
+      if (selectedCruisers.length > 0) {
+        const anyNotAttacking = selectedCruisers.some(c => !c.scoutAttackEnabled);
+        const nextState = anyNotAttacking;
+        for (const ship of selectedCruisers) {
+          ship.scoutAttackEnabled = nextState;
+          socket.emit('toggleCruiserScoutAttack', { shipId: ship.id, enabled: nextState });
+        }
+      }
+    });
+  }
+  const btnCruiserResearchEl = document.getElementById('btn-cruiser-research');
+  if (btnCruiserResearchEl) {
+    btnCruiserResearchEl.addEventListener('click', () => {
+      const selectedCruisers = getSelectedCruisers().filter(c => c.labs > 0);
+      if (selectedCruisers.length > 0) {
+        const anyNotResearching = selectedCruisers.some(c => !c.isResearching);
+        const nextState = anyNotResearching;
+        for (const ship of selectedCruisers) {
+          ship.isResearching = nextState;
+          ship.isDiplomacy = false;
+          ship.isScouting = false;
+          ship.isPatrolling = false;
+          ship.bombPlanetsEnabled = false;
+          socket.emit('toggleCruiserResearch', { shipId: ship.id, enabled: nextState });
+        }
+      }
+    });
+  }
+  const btnCruiserDiplomacyEl = document.getElementById('btn-cruiser-diplomacy');
+  if (btnCruiserDiplomacyEl) {
+    btnCruiserDiplomacyEl.addEventListener('click', () => {
+      const selectedCruisers = getSelectedCruisers().filter(c => c.diplomat > 0);
+      if (selectedCruisers.length > 0) {
+        const anyNotDiplomacy = selectedCruisers.some(c => !c.isDiplomacy);
+        const nextState = anyNotDiplomacy;
+        for (const ship of selectedCruisers) {
+          ship.isDiplomacy = nextState;
+          ship.isResearching = false;
+          ship.isScouting = false;
+          ship.isPatrolling = false;
+          ship.bombPlanetsEnabled = false;
+          socket.emit('toggleCruiserDiplomacy', { shipId: ship.id, enabled: nextState });
         }
       }
     });
@@ -2625,6 +3145,82 @@ window.addEventListener('DOMContentLoaded', () => {
   registerFocusBtn('btn-focus-research', 'research');
   registerFocusBtn('btn-focus-garrison', 'garrison');
   registerFocusBtn('btn-focus-commerce', 'commerce');
+  registerFocusBtn('btn-focus-mining', 'mining');
+
+  // Bind Sci-Fi Planetary Resources UI window actions & bank sell button
+
+  window.adjustResourceOffer = (res, amount, e) => {
+    if (e) {
+      e.stopPropagation();
+      if (e.preventDefault) e.preventDefault();
+    }
+    const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+    if (myPlayer) {
+      const curVal = myPlayer.offerPrice?.[res] ?? 3;
+      socket.emit('setResourceOfferPrice', { resource: res, value: curVal + amount });
+    }
+  };
+  window.adjustResourceBuy = (res, amount, e) => {
+    if (e) {
+      e.stopPropagation();
+      if (e.preventDefault) e.preventDefault();
+    }
+    const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+    if (myPlayer) {
+      const curVal = myPlayer.buyPrice?.[res] ?? 2;
+      socket.emit('setResourceBuyPrice', { resource: res, value: curVal + amount });
+    }
+  };
+  window.toggleResourceSellCard = (res) => {
+    socket.emit('toggleResourceSell', { resource: res });
+  };
+  window.changeSellPriceSetting = () => {
+    socket.emit('changeSellPriceSetting');
+  };
+
+  window.marketVisible = true;
+  window.toggleMarket = () => {
+    window.marketVisible = (window.marketVisible !== false) ? false : true;
+    const resHud = document.getElementById('resources-hud');
+    const sellOrdersHud = document.getElementById('sell-orders-hud');
+    if (resHud) {
+      resHud.style.display = 'flex';
+    }
+    if (sellOrdersHud) {
+      sellOrdersHud.style.display = window.marketVisible ? 'flex' : 'none';
+    }
+  };
+
+  const btnMarket = document.getElementById('btn-market');
+  if (btnMarket) {
+    btnMarket.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.toggleMarket();
+    });
+  }
+
+  const btnSellResources = document.getElementById('btn-sell-resources');
+  if (btnSellResources) {
+    btnSellResources.addEventListener('click', (e) => {
+      e.stopPropagation();
+      socket.emit('sellResourcesToBank');
+    });
+  }
+
+  const resourcesListForClicks = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+  for (const res of resourcesListForClicks) {
+    const card = document.getElementById(`res-card-${res}`);
+    if (card) {
+      card.addEventListener('click', (e) => {
+        e.stopPropagation();
+        socket.emit('postSellOrder', { resource: res });
+      });
+    }
+  }
+
+  socket.on('purchaseSuccess', () => {
+    playChaChingSound();
+  });
 
   const btnFocusCancel = document.getElementById('btn-focus-cancel');
   if (btnFocusCancel) {
@@ -2672,7 +3268,24 @@ window.addEventListener('DOMContentLoaded', () => {
           const currentVal = ship[type] || 0;
           const nextLevel = currentVal + 1;
 
-          if (currentVal < 5 && nextLevel <= maxIndividualLevel && (totalUpgrades + 1) <= maxTotalUpgrades && (type !== 'shields' || nextLevel * 0.10 <= 0.80)) {
+          let shieldCheck = true;
+          if (type === 'shields') {
+            const rawTech = localPlayer ? localPlayer.techScore || 0 : 0;
+            const rawExp = localPlayer ? localPlayer.expScore || 0 : 0;
+            const shipExp = ship.expScore || 0;
+            const techBonus = Math.sqrt(rawTech);
+            const expBonus = Math.sqrt(rawExp);
+            const shipExpBonus = Math.sqrt(shipExp);
+            const baseDeflection = ship.maxHealth + (techBonus + expBonus + shipExpBonus);
+            const deflectionRem = 100 - baseDeflection;
+            const nextShieldDeflectionBonus = nextLevel * (deflectionRem / 5);
+            const newDeflection = baseDeflection + nextShieldDeflectionBonus;
+            if (newDeflection > 90) {
+              shieldCheck = false;
+            }
+          }
+
+          if (currentVal < 5 && nextLevel <= maxIndividualLevel && (totalUpgrades + 1) <= maxTotalUpgrades && shieldCheck) {
             const socketType = upgradeToSocketTypeMap[type] || type;
             console.log(`[Upgrade Click] Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${qual.ship.id}`);
             socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
@@ -2702,18 +3315,11 @@ window.addEventListener('DOMContentLoaded', () => {
       upgradeModeActive = false;
     });
   }
-  document.getElementById('btn-speed-1').addEventListener('click', () => { speedModifierNext = speedModifierNext === 0.25 ? null : 0.25; });
-  document.getElementById('btn-speed-2').addEventListener('click', () => { speedModifierNext = speedModifierNext === 0.50 ? null : 0.50; });
-  const btnSpd3 = document.getElementById('btn-speed-3'); if (btnSpd3) btnSpd3.addEventListener('click', () => { speedModifierNext = speedModifierNext === 1.0 ? null : 1.0; });
-
   function updateButtonHighlights() {
     const toggle = (id, active) => {
       const el = document.getElementById(id);
       if (el) el.classList.toggle('action-btn-active', !!active);
     };
-    toggle('btn-speed-1', speedModifierNext === 0.25);
-    toggle('btn-speed-2', speedModifierNext === 0.50);
-    toggle('btn-speed-3', speedModifierNext === 1.0);
     toggle('btn-warp', warpOrderNext);
     toggle('btn-bomb', bombOrderNext === 'eco');
     toggle('btn-bomb-ships', bombOrderNext === 'ships');
@@ -2741,6 +3347,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const productionMultiple = parseFloat(document.getElementById('production-multiple-input').value) || 1.0;
     const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 1600;
     const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 50;
+    const clustersInput = document.getElementById('clusters-input');
+    const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
     const timedGameSelect = document.getElementById('timed-game-select');
@@ -2750,7 +3358,7 @@ window.addEventListener('DOMContentLoaded', () => {
       const customMin = timedGameInput ? parseFloat(timedGameInput.value) : 60;
       timedGameLimit = String(Math.round((isNaN(customMin) ? 60 : customMin) * 60));
     }
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm, timedGameLimit };
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
@@ -2774,6 +3382,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const productionMultiple = parseFloat(document.getElementById('production-multiple-input').value) || 1.0;
     const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 1600;
     const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 50;
+    const clustersInput = document.getElementById('clusters-input');
+    const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
     const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
     const timedGameSelect = document.getElementById('timed-game-select');
@@ -2786,7 +3396,7 @@ window.addEventListener('DOMContentLoaded', () => {
     hasCenteredOnHomeworld = false;
     serverState = null;
     lastKnownPlanets = {}; // Clear cached planet details
-    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, hazardMultiple: hm, timedGameLimit });
+    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit });
   });
 
   function draw() {
@@ -2811,7 +3421,8 @@ window.addEventListener('DOMContentLoaded', () => {
       'btn-focus-economy': 'economy',
       'btn-focus-research': 'research',
       'btn-focus-garrison': 'garrison',
-      'btn-focus-commerce': 'commerce'
+      'btn-focus-commerce': 'commerce',
+      'btn-focus-mining': 'mining'
     };
     const selectedPlanetFocus = getSelectedPlanetForFocus();
     if (!selectedPlanetFocus) {
@@ -2825,7 +3436,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
     const actionButtonsLeft = document.getElementById('action-buttons-left');
-    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-fill', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-cruiser-bomb', 'btn-patrol'];
+    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-fill', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-cruiser-bomb', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-cruiser-research', 'btn-cruiser-diplomacy'];
     const upButtonsMap = {
       'btn-up-sensorarray': 'sensorarrays',
       'btn-up-lab': 'labs',
@@ -2865,6 +3476,12 @@ window.addEventListener('DOMContentLoaded', () => {
           let shouldShow = (selectedPlanetFocus.focusMode !== mode);
           if (mode === 'commerce' && selectedPlanetFocus.maxShips <= 100) {
             shouldShow = false;
+          }
+          if (mode === 'mining') {
+            const hasRes = selectedPlanetFocus.resources && selectedPlanetFocus.resources.length > 0;
+            if (!hasRes) {
+              shouldShow = false;
+            }
           }
           el.style.display = shouldShow ? 'inline-flex' : 'none';
           if (el.style.display === 'inline-flex') {
@@ -2915,10 +3532,10 @@ window.addEventListener('DOMContentLoaded', () => {
       };
 
       const descMap = {
-        'sensorarrays': 'Adds +25% radar range per level (up to +125%) to reveal the fog of war',
+        'sensorarrays': 'Adds +20% radar range per level (up to +100%) to reveal the fog of war',
         'labs': 'Adds +1 Lab research tick speed per level (up to +5) to generate tech points',
         'armor': 'Adds +4 flat + 10% max health armor points per level to withstand damage',
-        'shields': 'Adds +10% damage deflect/shrug chance per level (max 80% deflection cap)',
+        'shields': 'Shield deflection increases by 1/5 of remaining deflection per level with no cap',
         'engine': 'Adds +3 speed and +3°/sec turn rate per level for highly responsive steering',
         'munitions': 'Adds +1 bomb capacity and +1 splash damage rating per level to standard weapon dogfights',
         'targeting': 'Adds +10% weapon range and +10% laser accuracy hit chance per level in combat',
@@ -3021,14 +3638,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
     } else {
       if (actionButtonsLeft) actionButtonsLeft.style.display = 'flex';
-      const hasCruiserSelected = selectedShips.some(s => s.isCruiser);
-      const speedDisplay = hasCruiserSelected ? 'inline-flex' : 'none';
-      const btnSpeed1 = document.getElementById('btn-speed-1');
-      const btnSpeed2 = document.getElementById('btn-speed-2');
-      const btnSpeed3 = document.getElementById('btn-speed-3');
-      if (btnSpeed1) btnSpeed1.style.display = speedDisplay;
-      if (btnSpeed2) btnSpeed2.style.display = speedDisplay;
-      if (btnSpeed3) btnSpeed3.style.display = speedDisplay;
       if (btnUpgradeMode) {
         btnUpgradeMode.style.display = 'none';
         if (upgradeQual) {
@@ -3080,7 +3689,7 @@ window.addEventListener('DOMContentLoaded', () => {
       if (btnBomb) btnBomb.style.display = hasMilitary ? 'inline-flex' : 'none';
       if (btnBombShips) btnBombShips.style.display = hasMilitary ? 'inline-flex' : 'none';
       if (btnCruiser) {
-        btnCruiser.style.display = hasCruiserBase ? 'inline-flex' : 'none';
+        btnCruiser.style.display = 'none';
         btnCruiser.classList.toggle('action-btn-active', cruiserBuildModeActive);
       }
 
@@ -3101,6 +3710,47 @@ window.addEventListener('DOMContentLoaded', () => {
         if (selectedCruisers.length > 0) {
           const anyPatrolling = selectedCruisers.some(c => c.isPatrolling);
           btnPatrol.classList.toggle('action-btn-active', anyPatrolling);
+        }
+      }
+
+      const btnCruiserScout = document.getElementById('btn-cruiser-scout');
+      if (btnCruiserScout) {
+        const techScore = localPlayer ? localPlayer.techScore || 0 : 0;
+        const techBonus = Math.floor(Math.sqrt(techScore));
+        const hasTechBonus10 = techBonus >= 10;
+        btnCruiserScout.style.display = (selectedCruisers.length > 0 && hasTechBonus10) ? 'inline-flex' : 'none';
+        if (selectedCruisers.length > 0 && hasTechBonus10) {
+          const anyScouting = selectedCruisers.some(c => c.isScouting);
+          btnCruiserScout.classList.toggle('action-btn-active', anyScouting);
+        }
+      }
+
+      const btnCruiserAttack = document.getElementById('btn-cruiser-attack');
+      if (btnCruiserAttack) {
+        btnCruiserAttack.style.display = selectedCruisers.length > 0 ? 'inline-flex' : 'none';
+        if (selectedCruisers.length > 0) {
+          const anyAttacking = selectedCruisers.some(c => c.scoutAttackEnabled);
+          btnCruiserAttack.classList.toggle('action-btn-active', anyAttacking);
+        }
+      }
+
+      const btnCruiserResearch = document.getElementById('btn-cruiser-research');
+      if (btnCruiserResearch) {
+        const hasLabs = selectedCruisers.some(c => c.labs > 0);
+        btnCruiserResearch.style.display = (selectedCruisers.length > 0 && hasLabs) ? 'inline-flex' : 'none';
+        if (selectedCruisers.length > 0 && hasLabs) {
+          const anyResearching = selectedCruisers.some(c => c.isResearching);
+          btnCruiserResearch.classList.toggle('action-btn-active', anyResearching);
+        }
+      }
+
+      const btnCruiserDiplomacy = document.getElementById('btn-cruiser-diplomacy');
+      if (btnCruiserDiplomacy) {
+        const hasDiplomats = selectedCruisers.some(c => c.diplomat > 0);
+        btnCruiserDiplomacy.style.display = (selectedCruisers.length > 0 && hasDiplomats) ? 'inline-flex' : 'none';
+        if (selectedCruisers.length > 0 && hasDiplomats) {
+          const anyDiplomacy = selectedCruisers.some(c => c.isDiplomacy);
+          btnCruiserDiplomacy.classList.toggle('action-btn-active', anyDiplomacy);
         }
       }
 
@@ -3389,7 +4039,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
           if (isHuman) {
             const focus = p.focusMode || 'economy';
-            const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : '📈'));
+            const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : '📈')));
             const badgeRadius = pillHeight / 2;
             const badgeX = p.x + textWidth / 2 + 8 + badgeRadius + 2;
 
@@ -3503,6 +4153,33 @@ window.addEventListener('DOMContentLoaded', () => {
               ctx.fillStyle = '#66ccff';
               ctx.fillText(`${xpPercent}%`, p.x, p.y + pillHeight / 2 + 8);
             }
+          }
+
+          // Render Sci-Fi raw resource icons below the planet pill
+          if (p.resources && p.resources.length > 0) {
+            ctx.save();
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#fff';
+            
+            const resourceIcons = {
+              dilithium: '💎',
+              merculite: '☄️',
+              duranium: '🧱',
+              tritanium: '🔩',
+              antimatter: '🌀',
+              deuterium: '💧',
+              latinum: '🏺'
+            };
+            
+            const rIcons = p.resources.map(r => resourceIcons[r]).join(' ');
+            let yOffset = pillHeight / 2 + 18;
+            if (!isLastKnown && ((owner && p.ships < 50) || p.expScore > 0)) {
+              yOffset += 12;
+            }
+            ctx.fillText(rIcons, p.x, p.y + yOffset);
+            ctx.restore();
           }
           let defenderPlanetPenalty = 0;
           let defenderTechPenalty = 0;
@@ -3669,6 +4346,36 @@ window.addEventListener('DOMContentLoaded', () => {
           }
           ctx.shadowBlur = 0;
         }
+
+        if (p.isAICandidate) {
+          let badgeOffset = 8;
+          const displayHomeworldOf = isLastKnown ? (lastKnownPlanets[p.id] ? lastKnownPlanets[p.id].homeworldOf : null) : p.homeworldOf;
+          const displayIsResearch = isLastKnown ? (lastKnownPlanets[p.id] ? lastKnownPlanets[p.id].isResearch : null) : p.isResearch;
+          const displayIsMilitary = isLastKnown ? (lastKnownPlanets[p.id] ? lastKnownPlanets[p.id].isMilitary : null) : p.isMilitary;
+          const displayIsSpeedPlanet = isLastKnown ? (lastKnownPlanets[p.id] ? lastKnownPlanets[p.id].isSpeedPlanet : null) : p.isSpeedPlanet;
+          
+          if (displayHomeworldOf || displayIsResearch || displayIsMilitary || displayIsSpeedPlanet) {
+            badgeOffset += 18;
+          }
+          
+          const eligibleForRevolt = !isLastKnown && (p.revoltCooldown || 0) <= 0 && p.sympathy && Object.entries(p.sympathy).some(([pId, symVal]) => {
+            const isNotOwner = !p.ownerId || pId !== p.ownerId;
+            return isNotOwner && symVal > p.ships / 3;
+          });
+          if (eligibleForRevolt) {
+            badgeOffset += 18;
+          }
+          
+          ctx.save();
+          const pulse = 0.6 + 0.4 * Math.sin(Date.now() / 150);
+          ctx.globalAlpha = pulse;
+          ctx.shadowColor = '#00e5ff';
+          ctx.shadowBlur = 10;
+          ctx.font = '16px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText("✊", p.x, p.y - p.radius - badgeOffset);
+          ctx.restore();
+        }
       }
 
       // Defense tooltip on hovered planet
@@ -3693,6 +4400,22 @@ window.addEventListener('DOMContentLoaded', () => {
           if (hp.isSpeedPlanet) nameLabel += ' ⚡';
           
           lines.push({ label: nameLabel, value: '', color: '#0ff', isHeader: true });
+
+          const resourceMeta = {
+            dilithium: { name: 'Dilithium', emoji: '💎' },
+            merculite: { name: 'Merculite', emoji: '☄️' },
+            duranium: { name: 'Duranium', emoji: '🧱' },
+            tritanium: { name: 'Tritanium', emoji: '🔩' },
+            antimatter: { name: 'Antimatter', emoji: '🌀' },
+            deuterium: { name: 'Deuterium', emoji: '💧' },
+            latinum: { name: 'Latinum', emoji: '🏺' }
+          };
+          if (hp.preferredResource) {
+            const meta = resourceMeta[hp.preferredResource];
+            if (meta) {
+              lines.push({ label: 'Preferred Resource', value: `${meta.emoji} ${meta.name}`, color: '#ffd740' });
+            }
+          }
 
           // Garrison
           const garrisonPenalty = Math.floor(hp.ships / 5);
@@ -3837,13 +4560,47 @@ window.addEventListener('DOMContentLoaded', () => {
           // Show disposition levels on the planet tooltip
           if (hp.disposition) {
             for (const [pId, dispVal] of Object.entries(hp.disposition)) {
-              if (dispVal > 0) {
+              if (dispVal !== undefined && dispVal !== null) {
                 const targetPlayer = serverState.players.find(pl => pl.id === pId);
                 const pName = targetPlayer ? targetPlayer.name : pId;
                 const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
                 lines.push({ label: `🎭 Disposition (${pName})`, value: `${Math.round(dispVal)}`, color: pColor });
               }
             }
+          }
+
+          // Show Diplomacy Chance on neutral/enemy planets
+          const isNeutralOrEnemy = !hp.ownerId || hp.ownerId !== localPlayer.id;
+          if (isNeutralOrEnemy) {
+            const currentSym = hp.sympathy?.[localPlayer.id] || 0;
+            const expBonus = Math.sqrt(myPlayer.expScore || 0);
+            const selectedCruiser = getSelectedCruiser();
+            const shipExpBonus = selectedCruiser ? Math.sqrt(selectedCruiser.expScore || 0) : 0;
+            const bonusSum = expBonus + shipExpBonus;
+            const disposition = hp.disposition?.[localPlayer.id] ?? 0;
+            
+            const chanceBase = 30 + disposition + currentSym + bonusSum;
+            const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10;
+            
+            const basePercent = Math.max(0, Math.min(100, Math.round(chanceBase)));
+            const prefPercent = Math.max(0, Math.min(100, Math.round(chancePref)));
+            
+            const emojis = {
+              dilithium: '💎',
+              merculite: '☄️',
+              duranium: '🧱',
+              tritanium: '🔩',
+              antimatter: '🌀',
+              deuterium: '💧',
+              latinum: '🏺'
+            };
+            const prefEmoji = emojis[hp.preferredResource] || '💎';
+            
+            lines.push({ 
+              label: '🤝 Diplomacy Chance', 
+              value: `${basePercent}%, with ${prefEmoji}: ${prefPercent}%`, 
+              color: '#4caf50' 
+            });
           }
 
           if (serverState.storms) {
@@ -3989,20 +4746,14 @@ window.addEventListener('DOMContentLoaded', () => {
             const expBonus = Math.sqrt(rawExp);
             const shipExpBonus = Math.sqrt(shipExp);
 
-            let shieldBonus = 0;
-            if (hs.shields > 0) {
-              shieldBonus += 10;
-              if (hs.shields > 1) {
-                shieldBonus += 5;
-              }
-              if (hs.shields > 2) {
-                shieldBonus += 5;
-              }
-            }
-            let shrugChance = Math.min(75, Math.floor(hs.maxHealth + (techBonus + expBonus + shipExpBonus) + shieldBonus));
+            const baseDeflection = hs.maxHealth + (techBonus + expBonus + shipExpBonus);
+            const deflectionRem = 100 - baseDeflection;
+            const shieldDeflectionBonus = (hs.shields || 0) * (deflectionRem / 5);
+            let shrugChance = Math.floor(baseDeflection + shieldDeflectionBonus);
             if ((hs.bombs || 0) < 1) {
               shrugChance = Math.floor(shrugChance / 2);
             }
+            shrugChance = Math.min(90, shrugChance);
             lines.push({ label: hs.shields > 0 ? `Armor Deflection (${hs.shields})` : 'Armor Deflection', value: shrugChance + '%', color: '#ccc' });
 
             const laserTechBonus = Math.floor(techBonus) * 0.01;
@@ -4640,14 +5391,7 @@ window.addEventListener('DOMContentLoaded', () => {
             let cruiserRadar = Math.min(250, 5 * s.maxHealth);
             if (s.isWarp) cruiserRadar *= 0.25;
             if (s.sensorarrays && s.sensorarrays > 0) {
-              let mult = 1.0;
-              mult += 0.50;
-              if (s.sensorarrays > 1) {
-                mult += 0.25;
-              }
-              if (s.sensorarrays > 2) {
-                mult += 0.25;
-              }
+              let mult = 1.0 + s.sensorarrays * 0.20;
               cruiserRadar *= mult;
             }
             let playerTechBonus = 0;
@@ -4879,8 +5623,8 @@ window.addEventListener('DOMContentLoaded', () => {
             ctx.textBaseline = 'bottom';
             ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
             ctx.lineWidth = 2.5;
-            ctx.strokeText(`+${s.count - 150}`, s.x, s.y - maxSpread - 6);
-            ctx.fillText(`+${s.count - 150}`, s.x, s.y - maxSpread - 6);
+            ctx.strokeText(`+${Math.round(s.count - 150)}`, s.x, s.y - maxSpread - 6);
+            ctx.fillText(`+${Math.round(s.count - 150)}`, s.x, s.y - maxSpread - 6);
             ctx.restore();
           }
 
@@ -5274,15 +6018,31 @@ window.addEventListener('DOMContentLoaded', () => {
             }
           }
           
+          let modeText = '';
+          let modeColor = '';
           if (s.isPatrolling) {
+            modeText = '⚔️';
+            modeColor = '#0ff';
+          } else if (s.isScouting) {
+            modeText = '🔭';
+            modeColor = '#0ff';
+          } else if (s.isResearching) {
+            modeText = '🔬';
+            modeColor = '#0f0';
+          } else if (s.isDiplomacy) {
+            modeText = '🤝';
+            modeColor = '#ff00ff';
+          }
+
+          if (modeText) {
             ctx.save();
             ctx.font = 'bold 8px Orbitron';
-            ctx.fillStyle = '#0ff';
+            ctx.fillStyle = modeColor;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
             ctx.shadowBlur = 6;
-            ctx.shadowColor = '#0ff';
-            ctx.fillText('⚔️', s.x + size * 1.6 + 2, s.y);
+            ctx.shadowColor = modeColor;
+            ctx.fillText(modeText, s.x + size * 1.6 + 2, s.y);
             ctx.restore();
           }
 
@@ -5700,7 +6460,9 @@ window.addEventListener('DOMContentLoaded', () => {
         const alpha = progress < 0.8 ? 1 : 1 - ((progress - 0.8) * 5);
 
         let yOffset = progress * 50; // default drift up by 50px
-        if (anim.type === 'beaker') {
+        if (anim.type === 'pref_resource_diplomacy') {
+          yOffset = 0; // strictly moves from start position to target position
+        } else if (anim.type === 'beaker') {
           yOffset = progress * 30; // ascends much slower
         } else if (anim.type === 'lightning') {
           yOffset = 0; // doesn't drift up
@@ -5724,7 +6486,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
         // Grow font
         let fontsize = 8 + (progress * 8);
-        if (anim.type === 'lightning') {
+        if (anim.type === 'pref_resource_diplomacy') {
+          fontsize = 12 + (progress * 8); // starts at 12px, grows to 20px
+        } else if (anim.type === 'lightning') {
           fontsize = progress * 30; // grows from 0 to 30
         } else if (anim.type === 'launchCost') {
           fontsize = 6.0 + (progress * 12); // grows from 6.0px to 18.0px
@@ -5801,6 +6565,10 @@ window.addEventListener('DOMContentLoaded', () => {
           xOffset = -Math.sin(progress * Math.PI * 3) * 6;
           ctx.fillStyle = `rgba(180, 180, 180, ${alpha})`;
           ctx.shadowColor = `rgba(100, 100, 100, ${alpha})`;
+        } else if (anim.type === 'pref_resource_diplomacy') {
+          xOffset = -Math.sin(progress * Math.PI * 3) * 8;
+          ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+          ctx.shadowColor = `rgba(255, 215, 0, ${alpha})`; // Gold shadow glow
         } else {
           xOffset = Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
@@ -5808,7 +6576,13 @@ window.addEventListener('DOMContentLoaded', () => {
         }
 
         ctx.shadowBlur = 10;
-        ctx.fillText(anim.text, anim.x + xOffset, anim.y - yOffset);
+        let drawX = anim.x;
+        let drawY = anim.y;
+        if (anim.type === 'pref_resource_diplomacy') {
+          drawX = anim.startX + (anim.endX - anim.startX) * progress;
+          drawY = anim.startY + (anim.endY - anim.startY) * progress;
+        }
+        ctx.fillText(anim.text, drawX + xOffset, drawY - yOffset);
         ctx.shadowBlur = 0;
       }
 
@@ -5842,4 +6616,4 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   console.log('[PlanetWars] Starting render loop');
   requestAnimationFrame(renderLoop);
-});
+// End of initialization

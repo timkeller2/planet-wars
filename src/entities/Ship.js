@@ -30,8 +30,28 @@ export class Ship {
     this.bombPlanetsEnabled = false;
     this.isPatrolling = false;
     this.patrolReloading = false;
+    this.patrolFuelRetreating = false;
+    this.patrolFuelRetreatTargetPlanetId = null;
+    this.bombardRearming = false;
+    this.bombardRearmTargetPlanetId = null;
     this.patrolStationX = null;
     this.patrolStationY = null;
+    this.isScouting = false;
+    this.scoutFuelRetreating = false;
+    this.scoutTargetX = null;
+    this.scoutTargetY = null;
+    this.scoutFuelRetreatTargetPlanetId = null;
+    this.scoutAttackEnabled = false;
+    this.isResearching = false;
+    this.researchFuelRetreating = false;
+    this.researchFuelRetreatTargetPlanetId = null;
+    this.researchRearming = false;
+    this.researchRearmTargetPlanetId = null;
+    this.isDiplomacy = false;
+    this.diplomacyFuelRetreating = false;
+    this.diplomacyFuelRetreatTargetPlanetId = null;
+    this.diplomacyFleeing = false;
+    this.diplomacyFleeTargetPlanetId = null;
     this.fireSideLeft = false;
     this.labs = 0;
     this.accumulatedTech = 0;
@@ -118,7 +138,7 @@ export class Ship {
     let cruiserRadar = Math.min(250, 5 * this.maxHealth);
     if (this.isWarp) cruiserRadar *= 0.25;
     if (this.sensorarrays > 0) {
-      let mult = 1.0 + this.sensorarrays * 0.25;
+      let mult = 1.0 + this.sensorarrays * 0.20;
       cruiserRadar *= mult;
     }
     const techBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
@@ -262,8 +282,58 @@ export class Ship {
     return reduction;
   }
 
+  canSeeStats(p, allPlanets, allShips, game) {
+    if (p.inFog) return false;
+    if (!this.owner) return false;
+    if (this.owner.isMonster || this.owner.id === 'monsters') return true;
+    const fowSetting = (game && game.settings && game.settings.fogOfWar === false);
+    if (fowSetting) return true;
+    if (p.owner && p.owner.id === this.owner.id) return true;
+    if (p.sympathy && p.sympathy[this.owner.id] > 0) return true;
+    if (allPlanets) {
+      for (const pl of allPlanets) {
+        if (pl.owner && pl.owner.id === this.owner.id) {
+          const gr = pl.getGravityRadius();
+          const dx = pl.x - p.x;
+          const dy = pl.y - p.y;
+          if (dx * dx + dy * dy <= gr * gr) return true;
+        }
+      }
+    }
+    if (allShips) {
+      for (const s of allShips) {
+        if (s.active && s.owner && s.owner.id === this.owner.id) {
+          const radarRange = (typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : 40;
+          const dx = s.x - p.x;
+          const dy = s.y - p.y;
+          if (dx * dx + dy * dy <= radarRange * radarRange) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
+
+    if (this.active && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
+      if (game) {
+        if (!game.exploredGrid) game.exploredGrid = {};
+        const pId = this.owner.id;
+        const now = Date.now();
+        const scX = Math.floor(this.x / 200);
+        const scY = Math.floor(this.y / 200);
+        const radarRange = this.isCruiser ? this.cruiserRadarRange() : 40;
+        const cellRadius = Math.max(1, Math.ceil(radarRange / 200));
+        for (let dx = -cellRadius; dx <= cellRadius; dx++) {
+          for (let dy = -cellRadius; dy <= cellRadius; dy++) {
+            const cx = scX + dx;
+            const cy = scY + dy;
+            game.exploredGrid[`${pId}_${cx}_${cy}`] = now;
+          }
+        }
+      }
+    }
 
     // Pirate Cruiser AI
     if (this.isCruiser && this.owner && (this.owner.isMonster || this.owner.id === 'monsters')) {
@@ -403,16 +473,76 @@ export class Ship {
     }
 
 
-    if (this.isAmoeba && this.pursueTarget) {
-      const pdx = this.pursueTarget.x - this.x;
-      const pdy = this.pursueTarget.y - this.y;
-      const pDistSq = pdx * pdx + pdy * pdy;
-      if (this.pursueTarget.active && pDistSq <= 250000) {
-        this.targetPlanet = null;
-        this.targetX = this.pursueTarget.x;
-        this.targetY = this.pursueTarget.y;
+    if (this.pursueTarget) {
+      if (this.pursueTarget.active) {
+        const pdx = this.pursueTarget.x - this.x;
+        const pdy = this.pursueTarget.y - this.y;
+        const pDistSq = pdx * pdx + pdy * pdy;
+        if (!this.isAmoeba || pDistSq <= 250000) {
+          this.targetPlanet = null;
+          this.targetX = this.pursueTarget.x;
+          this.targetY = this.pursueTarget.y;
+        } else {
+          this.pursueTarget = null;
+        }
       } else {
+        const originalTarget = this.pursueTarget;
         this.pursueTarget = null;
+
+        if (this.isScoutDefenseFleet) {
+          // 1. Target the nearest cruiser within 300px
+          let nearestCruiser = null;
+          let nearestDistSq = 300 * 300;
+          if (allShips) {
+            const candidateThreats = (typeof allShips.getShipsInRadiusSq === 'function')
+              ? allShips.getShipsInRadiusSq(this.x, this.y, nearestDistSq)
+              : allShips;
+
+            for (const other of candidateThreats) {
+              if (other.active && other.isCruiser && other.owner === this.originalAttackingPlayer && other !== originalTarget) {
+                const dx = other.x - this.x;
+                const dy = other.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < nearestDistSq) {
+                  nearestDistSq = distSq;
+                  nearestCruiser = other;
+                }
+              }
+            }
+          }
+
+          if (nearestCruiser) {
+            this.pursueTarget = nearestCruiser;
+            this.targetPlanet = null;
+            this.targetX = nearestCruiser.x;
+            this.targetY = nearestCruiser.y;
+            console.log(`[Defensive Fleet] Target destroyed. Retargeted nearest cruiser ${nearestCruiser.id} within 300px.`);
+          } else if (this.originalAttackingPlayer) {
+            // 2. Target nearest planet owned by original attacking player
+            let nearestPlanet = null;
+            let nearestPlanetDistSq = Infinity;
+            if (allPlanets) {
+              for (const planet of allPlanets) {
+                if (planet.owner === this.originalAttackingPlayer) {
+                  const dx = planet.x - this.x;
+                  const dy = planet.y - this.y;
+                  const distSq = dx * dx + dy * dy;
+                  if (distSq < nearestPlanetDistSq) {
+                    nearestPlanetDistSq = distSq;
+                    nearestPlanet = planet;
+                  }
+                }
+              }
+            }
+
+            if (nearestPlanet) {
+              this.targetPlanet = nearestPlanet;
+              this.targetX = nearestPlanet.x;
+              this.targetY = nearestPlanet.y;
+              console.log(`[Defensive Fleet] Target destroyed. Retargeted nearest planet ${nearestPlanet.id} of original attacking player.`);
+            }
+          }
+        }
       }
     }
 
@@ -1040,10 +1170,161 @@ export class Ship {
       }
     }
     
+    if (!this.isPatrolling) {
+      this.patrolFuelRetreating = false;
+      this.patrolFuelRetreatTargetPlanetId = null;
+    }
+    
+    if (!this.isScouting) {
+      this.scoutFuelRetreating = false;
+      this.scoutFuelRetreatTargetPlanetId = null;
+      this.scoutTargetX = null;
+      this.scoutTargetY = null;
+    }
+    
+    if (!this.isResearching) {
+      this.researchFuelRetreating = false;
+      this.researchFuelRetreatTargetPlanetId = null;
+      this.researchRearming = false;
+      this.researchRearmTargetPlanetId = null;
+    }
+
+    if (!this.isDiplomacy) {
+      this.diplomacyFuelRetreating = false;
+      this.diplomacyFuelRetreatTargetPlanetId = null;
+    }
+    
     // Cruiser Patrol Mode Decision Engine
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isPatrolling) {
-      // 1. Check if out of bombs -> Reloading State
-      if (this.bombs <= 0 || (this.patrolReloading && this.bombs < this.getMaxBombs())) {
+      // Check if fuel is 1 or less while patrolling
+      if (this.fuel <= 1) {
+        this.patrolFuelRetreating = true;
+        this.patrolReloading = false;
+        this.patrolReloadTargetPlanetId = null;
+      }
+      
+      // If we are fuel retreating, we remain in this state until fuel is fully replenished (fuel >= getMaxFuel())
+      if (this.patrolFuelRetreating) {
+        if (this.fuel >= this.getMaxFuel()) {
+          this.patrolFuelRetreating = false;
+        }
+      }
+
+      if (this.patrolFuelRetreating) {
+        const wasFuelRetreating = this.patrolFuelRetreating;
+        let needNewTarget = this.targetX === null || this.targetY === null || !this.patrolFuelRetreatTargetPlanetId;
+        if (!needNewTarget && this.patrolFuelRetreatTargetPlanetId !== null && this.patrolFuelRetreatTargetPlanetId !== undefined) {
+          const tp = allPlanets ? allPlanets.find(p => p.id === this.patrolFuelRetreatTargetPlanetId) : null;
+          if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
+            needNewTarget = true;
+          }
+        }
+
+        if (needNewTarget) {
+          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+          let bestCandidate = null;
+
+          if (friendlyPlanets.length > 0) {
+            const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
+              const candidates = [];
+              for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
+                const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
+                const gRad = p.getGravityRadius();
+                const theta = Math.random() * Math.PI * 2;
+                const r = Math.random() * gRad * 0.7;
+                const tx = p.x + r * Math.cos(theta);
+                const ty = p.y + r * Math.sin(theta);
+                
+                const dx = tx - this.x;
+                const dy = ty - this.y;
+                if (dx * dx + dy * dy <= radius * radius) {
+                  let minEnemyDistSq = Infinity;
+                  if (allShips) {
+                    for (const other of allShips) {
+                      if (other.active && other.id !== this.id) {
+                        const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                        if (isEnemy) {
+                          const edx = other.x - tx;
+                          const edy = other.y - ty;
+                          const distSq = edx * edx + edy * edy;
+                          if (distSq < minEnemyDistSq) {
+                            minEnemyDistSq = distSq;
+                          }
+                        }
+                      }
+                    }
+                  }
+                  
+                  if (!strictSafe || minEnemyDistSq >= minEnemyDistReq * minEnemyDistReq) {
+                    candidates.push({ x: tx, y: ty, planet: p, minEnemyDistSq });
+                  }
+                }
+              }
+              
+              if (candidates.length > 0) {
+                candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
+                return candidates[0];
+              }
+              return null;
+            };
+
+            // Stage 1: Search within 300px, requiring at least 150px safety distance from enemies
+            bestCandidate = findBestCandidate(300, 150, true);
+            
+            // Stage 2: If none found within 300px that are >= 150px away from enemies, expand search to 500px
+            if (!bestCandidate) {
+              bestCandidate = findBestCandidate(500, 150, true);
+            }
+
+            // Stage 3: If STILL none found that are >= 150px away, fallback to best overall within 300px
+            if (!bestCandidate) {
+              bestCandidate = findBestCandidate(300, 0, false);
+            }
+
+            // Stage 4: If STILL none, fallback to best overall within 500px
+            if (!bestCandidate) {
+              bestCandidate = findBestCandidate(500, 0, false);
+            }
+          }
+          
+          if (bestCandidate) {
+            this.targetPlanet = null; // don't go directly to the planet
+            this.patrolFuelRetreatTargetPlanetId = bestCandidate.planet.id;
+            this.targetX = bestCandidate.x;
+            this.targetY = bestCandidate.y;
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+          } else {
+            // Fallback: If no friendly planet gravity well is within 500px, find the closest friendly planet and go to it
+            let closestFriendly = null;
+            let minFriendlyDistSq = Infinity;
+            if (friendlyPlanets.length > 0) {
+              for (const p of friendlyPlanets) {
+                const dx = p.x - this.x;
+                const dy = p.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < minFriendlyDistSq) {
+                  minFriendlyDistSq = distSq;
+                  closestFriendly = p;
+                }
+              }
+            }
+            if (closestFriendly) {
+              this.targetPlanet = closestFriendly;
+              this.targetX = closestFriendly.x;
+              this.targetY = closestFriendly.y;
+              this.patrolFuelRetreatTargetPlanetId = closestFriendly.id;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+            }
+          }
+        }
+      } else {
+        this.patrolFuelRetreating = false;
+        this.patrolFuelRetreatTargetPlanetId = null;
+
+        // 1. Check if out of bombs -> Reloading State
+        if (this.bombs <= 0 || (this.patrolReloading && this.bombs < this.getMaxBombs())) {
         const wasReloading = this.patrolReloading;
         this.patrolReloading = true;
         
@@ -1066,7 +1347,7 @@ export class Ship {
                 const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
                 const gRad = p.getGravityRadius();
                 const theta = Math.random() * Math.PI * 2;
-                const r = Math.random() * gRad;
+                const r = Math.random() * gRad * 0.7;
                 const tx = p.x + r * Math.cos(theta);
                 const ty = p.y + r * Math.sin(theta);
                 
@@ -1231,6 +1512,1090 @@ export class Ship {
           }
         }
       }
+      }
+    }
+    
+    // Cruiser Scout Mode Decision Engine
+    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isScouting) {
+      // 1. Refueling & Rearming Retreat Check: if fuel is half or less, OR if attack is on and bombs are depleted
+      const needsRefuel = this.fuel <= this.getMaxFuel() * 0.5;
+      const needsRearm = this.scoutAttackEnabled && this.bombs <= 0;
+      if (needsRefuel || needsRearm) {
+        this.scoutFuelRetreating = true;
+        this.scoutTargetX = null;
+        this.scoutTargetY = null;
+      }
+      
+      // If we are fuel/rearm retreating, remain in this state until fuel and bombs (if attack is enabled) are fully replenished
+      if (this.scoutFuelRetreating) {
+        const fullyFueled = this.fuel >= this.getMaxFuel();
+        const fullyArmed = !this.scoutAttackEnabled || this.bombs >= this.getMaxBombs();
+        if (fullyFueled && fullyArmed) {
+          this.scoutFuelRetreating = false;
+        }
+      }
+
+      // Helper: Check if a cell coordinate overlaps with any active ion storm or minefield (radius + 100px buffer)
+      const isCellInStorm = (tx, ty) => {
+        if (ionStorms) {
+          for (const storm of ionStorms) {
+            const dx = tx - storm.x;
+            const dy = ty - storm.y;
+            const safeDist = storm.radius + 100;
+            if (dx * dx + dy * dy <= safeDist * safeDist) {
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+
+      if (this.scoutFuelRetreating) {
+        let needNewTarget = this.targetX === null || this.targetY === null || !this.scoutFuelRetreatTargetPlanetId;
+        if (!needNewTarget && this.scoutFuelRetreatTargetPlanetId !== null && this.scoutFuelRetreatTargetPlanetId !== undefined) {
+          const tp = allPlanets ? allPlanets.find(p => p.id === this.scoutFuelRetreatTargetPlanetId) : null;
+          if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
+            needNewTarget = true;
+          }
+        }
+
+        if (needNewTarget) {
+          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+          let bestCandidate = null;
+
+          if (friendlyPlanets.length > 0) {
+            const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
+              const candidates = [];
+              for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
+                const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
+                const gRad = p.getGravityRadius();
+                const theta = Math.random() * Math.PI * 2;
+                const r = Math.random() * gRad * 0.7;
+                const tx = p.x + r * Math.cos(theta);
+                const ty = p.y + r * Math.sin(theta);
+                
+                const dx = tx - this.x;
+                const dy = ty - this.y;
+                if (dx * dx + dy * dy <= radius * radius) {
+                  let minEnemyDistSq = Infinity;
+                  if (allShips) {
+                    for (const other of allShips) {
+                      if (other.active && other.id !== this.id) {
+                        const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                        if (isEnemy) {
+                          const edx = other.x - tx;
+                          const edy = other.y - ty;
+                          const distSq = edx * edx + edy * edy;
+                          if (distSq < minEnemyDistSq) {
+                            minEnemyDistSq = distSq;
+                          }
+                        }
+                      }
+                    }
+                  }
+                  
+                  if (!strictSafe || minEnemyDistSq >= minEnemyDistReq * minEnemyDistReq) {
+                    candidates.push({ x: tx, y: ty, planet: p, minEnemyDistSq });
+                  }
+                }
+              }
+              
+              if (candidates.length > 0) {
+                candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
+                return candidates[0];
+              }
+              return null;
+            };
+
+            bestCandidate = findBestCandidate(300, 150, true);
+            if (!bestCandidate) bestCandidate = findBestCandidate(500, 150, true);
+            if (!bestCandidate) bestCandidate = findBestCandidate(300, 0, false);
+            if (!bestCandidate) bestCandidate = findBestCandidate(500, 0, false);
+          }
+          
+          if (bestCandidate) {
+            this.targetPlanet = null;
+            this.scoutFuelRetreatTargetPlanetId = bestCandidate.planet.id;
+            this.targetX = bestCandidate.x;
+            this.targetY = bestCandidate.y;
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+          } else {
+            let closestFriendly = null;
+            let minFriendlyDistSq = Infinity;
+            if (friendlyPlanets.length > 0) {
+              for (const p of friendlyPlanets) {
+                const dx = p.x - this.x;
+                const dy = p.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < minFriendlyDistSq) {
+                  minFriendlyDistSq = distSq;
+                  closestFriendly = p;
+                }
+              }
+            }
+            if (closestFriendly) {
+              this.targetPlanet = closestFriendly;
+              this.targetX = closestFriendly.x;
+              this.targetY = closestFriendly.y;
+              this.scoutFuelRetreatTargetPlanetId = closestFriendly.id;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+            }
+          }
+        }
+      } else {
+        // Active Scouting (Not retreating)
+        this.scoutFuelRetreating = false;
+        this.scoutFuelRetreatTargetPlanetId = null;
+
+        // A. Attack / Engage Logic vs Flee Logic
+        let enemyNearby = null;
+        let closestEnemyDistSq = Infinity;
+        if (allShips) {
+          for (const other of allShips) {
+            if (other.active && other.id !== this.id) {
+              const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+              if (isEnemy) {
+                const dx = other.x - this.x;
+                const dy = other.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                const detectionRange = this.scoutAttackEnabled ? 500 : 300;
+                if (distSq <= detectionRange * detectionRange && distSq < closestEnemyDistSq) {
+                  closestEnemyDistSq = distSq;
+                  enemyNearby = other;
+                }
+              }
+            }
+          }
+        }
+
+        if (enemyNearby) {
+          if (this.scoutAttackEnabled && this.bombs > 0) {
+            // ENGAGE: Lock onto the closest enemy unit
+            this.cruiserTargetType = 'ship';
+            this.cruiserTargetId = enemyNearby.id;
+            this.targetX = enemyNearby.x;
+            this.targetY = enemyNearby.y;
+            this.targetPlanet = null;
+          } else {
+            // FLEE: Avoid enemy units within 300px
+            // Sum threat vectors of all enemies within 300px to escape in the exact opposite direction
+            let sumDx = 0;
+            let sumDy = 0;
+            let count = 0;
+            if (allShips) {
+              for (const other of allShips) {
+                if (other.active && other.id !== this.id) {
+                  const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                  if (isEnemy) {
+                    const dx = other.x - this.x;
+                    const dy = other.y - this.y;
+                    if (dx * dx + dy * dy <= 300 * 300) {
+                      sumDx += dx;
+                      sumDy += dy;
+                      count++;
+                    }
+                  }
+                }
+              }
+            }
+
+            if (count > 0) {
+              const avgDx = sumDx / count;
+              const avgDy = sumDy / count;
+              const escapeAngle = Math.atan2(-avgDy, -avgDx); // Point away from average threat
+              this.targetPlanet = null;
+              this.targetX = this.x + Math.cos(escapeAngle) * 200;
+              this.targetY = this.y + Math.sin(escapeAngle) * 200;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+              this.scoutTargetX = null; // force recalculating scout target once threat is cleared
+              this.scoutTargetY = null;
+            }
+          }
+        } else {
+          // B. Normal Scouting movement (No threat nearby)
+          let needNewTarget = this.targetX === null || this.targetY === null || this.scoutTargetX === null || this.scoutTargetY === null;
+          
+          // Invalidate target if it drifts inside an active ion storm or minefield
+          if (this.scoutTargetX !== null && this.scoutTargetY !== null) {
+            if (isCellInStorm(this.scoutTargetX, this.scoutTargetY)) {
+              needNewTarget = true;
+            }
+          }
+
+          if (!needNewTarget) {
+            const dx = this.scoutTargetX - this.x;
+            const dy = this.scoutTargetY - this.y;
+            if (dx * dx + dy * dy < 20 * 20) {
+              needNewTarget = true;
+            }
+          }
+
+          if (needNewTarget) {
+            const cellSize = 200;
+            const numCells = Math.ceil(mapWidth / cellSize);
+            const candidates = [];
+            const now = Date.now();
+            const fiveMinutesAgo = now - 300000;
+
+            for (let cx = 0; cx < numCells; cx++) {
+              for (let cy = 0; cy < numCells; cy++) {
+                const key = `${this.owner.id}_${cx}_${cy}`;
+                const lastExplored = (game && game.exploredGrid && game.exploredGrid[key]) || 0;
+                candidates.push({ cx, cy, lastExplored });
+              }
+            }
+
+             // Filter for unexplored AND safe from storms/minefields
+            let eligible = candidates.filter(c => {
+              const tx = c.cx * cellSize + cellSize / 2;
+              const ty = c.cy * cellSize + cellSize / 2;
+              return c.lastExplored < fiveMinutesAgo && !isCellInStorm(tx, ty);
+            });
+            
+            let targetCell = null;
+
+            if (eligible.length > 0) {
+              const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+              const friendlyShips = allShips ? allShips.filter(other => other.active && other.owner && other.owner.id === this.owner.id && other.id !== this.id) : [];
+
+              const getMinFriendlyDistSq = (tx, ty) => {
+                let minDistSq = Infinity;
+                for (const p of friendlyPlanets) {
+                  const dx = tx - p.x;
+                  const dy = ty - p.y;
+                  const distSq = dx * dx + dy * dy;
+                  if (distSq < minDistSq) minDistSq = distSq;
+                }
+                for (const other of friendlyShips) {
+                  const dx = tx - other.x;
+                  const dy = ty - other.y;
+                  const distSq = dx * dx + dy * dy;
+                  if (distSq < minDistSq) minDistSq = distSq;
+                }
+                // Fallback to distance from current ship itself
+                if (minDistSq === Infinity) {
+                  const dx = tx - this.x;
+                  const dy = ty - this.y;
+                  minDistSq = dx * dx + dy * dy;
+                }
+                return minDistSq;
+              };
+
+              eligible.forEach(c => {
+                const tx = c.cx * cellSize + cellSize / 2;
+                const ty = c.cy * cellSize + cellSize / 2;
+                const fDistSq = getMinFriendlyDistSq(tx, ty);
+                
+                // Primary priority: close to friendly space
+                // Secondary priority: never explored (lastExplored === 0)
+                const neverExplored = c.lastExplored === 0;
+                const penalty = neverExplored ? 0 : 1500 * 1500;
+                
+                c.score = fDistSq + penalty;
+              });
+
+              // Sort by composite score (lowest score first)
+              eligible.sort((a, b) => a.score - b.score);
+              
+              // Pick a random cell among the 5 closest to avoid congestion
+              const pool = eligible.slice(0, Math.min(5, eligible.length));
+              targetCell = pool[Math.floor(Math.random() * pool.length)];
+            } else {
+              // Fall back to oldest explored cells that are safe from storms
+              let noStormCandidates = candidates.filter(c => {
+                const tx = c.cx * cellSize + cellSize / 2;
+                const ty = c.cy * cellSize + cellSize / 2;
+                return !isCellInStorm(tx, ty);
+              });
+
+              if (noStormCandidates.length > 0) {
+                noStormCandidates.sort((a, b) => a.lastExplored - b.lastExplored);
+                targetCell = noStormCandidates[0];
+              } else {
+                // Ultimate fallback
+                candidates.sort((a, b) => a.lastExplored - b.lastExplored);
+                targetCell = candidates[0];
+              }
+            }
+
+            if (targetCell) {
+              const tx = targetCell.cx * cellSize + cellSize / 2;
+              const ty = targetCell.cy * cellSize + cellSize / 2;
+              this.targetPlanet = null;
+              this.targetX = tx;
+              this.targetY = ty;
+              this.scoutTargetX = tx;
+              this.scoutTargetY = ty;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+            }
+          }
+        }
+      }
+    }
+
+    // Cruiser Research Mode Decision Engine
+    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isResearching && this.labs > 0) {
+      // 1. Refueling Retreat Check: if fuel is less than 2
+      if (this.fuel < 2) {
+        this.researchFuelRetreating = true;
+      }
+      
+      // If we are fuel retreating, remain in this state until fuel is fully replenished
+      if (this.researchFuelRetreating) {
+        if (this.fuel >= this.getMaxFuel()) {
+          this.researchFuelRetreating = false;
+          this.researchFuelRetreatTargetPlanetId = null;
+        }
+      }
+
+      if (this.researchFuelRetreating) {
+        let needNewTarget = this.targetX === null || this.targetY === null || !this.researchFuelRetreatTargetPlanetId;
+        if (!needNewTarget && this.researchFuelRetreatTargetPlanetId) {
+          const tp = allPlanets ? allPlanets.find(p => p.id === this.researchFuelRetreatTargetPlanetId) : null;
+          if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
+            needNewTarget = true;
+          }
+        }
+        if (needNewTarget) {
+          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+          let bestCandidate = null;
+          if (friendlyPlanets.length > 0) {
+            const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
+              const candidates = [];
+              for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
+                const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
+                const gRad = p.getGravityRadius();
+                const theta = Math.random() * Math.PI * 2;
+                const r = Math.random() * gRad * 0.7;
+                const tx = p.x + r * Math.cos(theta);
+                const ty = p.y + r * Math.sin(theta);
+                
+                const dx = tx - this.x;
+                const dy = ty - this.y;
+                if (dx * dx + dy * dy <= radius * radius) {
+                  let minEnemyDistSq = Infinity;
+                  if (allShips) {
+                    for (const other of allShips) {
+                      if (other.active && other.id !== this.id) {
+                        const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                        if (isEnemy) {
+                          const edx = other.x - tx;
+                          const edy = other.y - ty;
+                          const distSq = edx * edx + edy * edy;
+                          if (distSq < minEnemyDistSq) {
+                            minEnemyDistSq = distSq;
+                          }
+                        }
+                      }
+                    }
+                  }
+                  
+                  if (!strictSafe || minEnemyDistSq >= minEnemyDistReq * minEnemyDistReq) {
+                    candidates.push({ x: tx, y: ty, planet: p, minEnemyDistSq });
+                  }
+                }
+              }
+              
+              if (candidates.length > 0) {
+                candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
+                return candidates[0];
+              }
+              return null;
+            };
+
+            bestCandidate = findBestCandidate(300, 150, true);
+            if (!bestCandidate) bestCandidate = findBestCandidate(500, 150, true);
+            if (!bestCandidate) bestCandidate = findBestCandidate(300, 0, false);
+            if (!bestCandidate) bestCandidate = findBestCandidate(500, 0, false);
+          }
+
+          if (bestCandidate) {
+            this.targetPlanet = null;
+            this.researchFuelRetreatTargetPlanetId = bestCandidate.planet.id;
+            this.targetX = bestCandidate.x;
+            this.targetY = bestCandidate.y;
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+          } else {
+            let closestFriendly = null;
+            let minFriendlyDistSq = Infinity;
+            for (const p of friendlyPlanets) {
+              const dx = p.x - this.x;
+              const dy = p.y - this.y;
+              const distSq = dx * dx + dy * dy;
+              if (distSq < minFriendlyDistSq) {
+                minFriendlyDistSq = distSq;
+                closestFriendly = p;
+              }
+            }
+            if (closestFriendly) {
+              this.targetPlanet = closestFriendly;
+              this.targetX = closestFriendly.x;
+              this.targetY = closestFriendly.y;
+              this.researchFuelRetreatTargetPlanetId = closestFriendly.id;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+            }
+          }
+        }
+      } else {
+        // 2. Rearming Retreat Check: if attack mode is also on and bombs are depleted
+        const needsRearm = this.scoutAttackEnabled && this.bombs <= 0;
+        if (needsRearm || this.researchRearming) {
+          this.researchRearming = true;
+          if (this.bombs >= this.getMaxBombs()) {
+            this.researchRearming = false;
+            this.researchRearmTargetPlanetId = null;
+          }
+        }
+
+        if (this.researchRearming) {
+          let needNewTarget = this.targetX === null || this.targetY === null || !this.researchRearmTargetPlanetId;
+          if (!needNewTarget && this.researchRearmTargetPlanetId) {
+            const tp = allPlanets ? allPlanets.find(p => p.id === this.researchRearmTargetPlanetId) : null;
+            if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
+              needNewTarget = true;
+            }
+          }
+          if (needNewTarget) {
+            const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+            let bestCandidate = null;
+            if (friendlyPlanets.length > 0) {
+              const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
+                const candidates = [];
+                for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
+                  const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
+                  const gRad = p.getGravityRadius();
+                  const theta = Math.random() * Math.PI * 2;
+                  const r = Math.random() * gRad * 0.7;
+                  const tx = p.x + r * Math.cos(theta);
+                  const ty = p.y + r * Math.sin(theta);
+                  
+                  const dx = tx - this.x;
+                  const dy = ty - this.y;
+                  if (dx * dx + dy * dy <= radius * radius) {
+                    let minEnemyDistSq = Infinity;
+                    if (allShips) {
+                      for (const other of allShips) {
+                        if (other.active && other.id !== this.id) {
+                          const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                          if (isEnemy) {
+                            const edx = other.x - tx;
+                            const edy = other.y - ty;
+                            const distSq = edx * edx + edy * edy;
+                            if (distSq < minEnemyDistSq) {
+                              minEnemyDistSq = distSq;
+                            }
+                          }
+                        }
+                      }
+                    }
+                    
+                    if (!strictSafe || minEnemyDistSq >= minEnemyDistReq * minEnemyDistReq) {
+                      candidates.push({ x: tx, y: ty, planet: p, minEnemyDistSq });
+                    }
+                  }
+                }
+                
+                if (candidates.length > 0) {
+                  candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
+                  return candidates[0];
+                }
+                return null;
+              };
+
+              bestCandidate = findBestCandidate(300, 150, true);
+              if (!bestCandidate) bestCandidate = findBestCandidate(500, 150, true);
+              if (!bestCandidate) bestCandidate = findBestCandidate(300, 0, false);
+              if (!bestCandidate) bestCandidate = findBestCandidate(500, 0, false);
+            }
+
+            if (bestCandidate) {
+              this.targetPlanet = null;
+              this.researchRearmTargetPlanetId = bestCandidate.planet.id;
+              this.targetX = bestCandidate.x;
+              this.targetY = bestCandidate.y;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+            } else {
+              let closestFriendly = null;
+              let minFriendlyDistSq = Infinity;
+              for (const p of friendlyPlanets) {
+                const dx = p.x - this.x;
+                const dy = p.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < minFriendlyDistSq) {
+                  minFriendlyDistSq = distSq;
+                  closestFriendly = p;
+                }
+              }
+              if (closestFriendly) {
+                this.targetPlanet = closestFriendly;
+                this.targetX = closestFriendly.x;
+                this.targetY = closestFriendly.y;
+                this.researchRearmTargetPlanetId = closestFriendly.id;
+                this.cruiserTargetType = null;
+                this.cruiserTargetId = null;
+              }
+            }
+          }
+        } else {
+          // 3. Normal actions
+          let didAction = false;
+
+          // If attack mode is also on, seek active amoebas
+          if (this.scoutAttackEnabled && this.bombs > 0) {
+            let nearestAmoeba = null;
+            let minAmoebaDistSq = Infinity;
+            if (allShips) {
+              for (const other of allShips) {
+                if (other.active && other.isAmoeba) {
+                  const dx = other.x - this.x;
+                  const dy = other.y - this.y;
+                  const distSq = dx * dx + dy * dy;
+                  if (distSq <= 500 * 500) {
+                    const isFogEnabled = game && game.settings && game.settings.fogOfWar;
+                    const isVisible = !isFogEnabled || (this.owner && this.owner.isAI) || (game && typeof game.isCoordinateVisible === 'function' && game.isCoordinateVisible(other.x, other.y, this.owner));
+                    if (isVisible && distSq < minAmoebaDistSq) {
+                      minAmoebaDistSq = distSq;
+                      nearestAmoeba = other;
+                    }
+                  }
+                }
+              }
+            }
+            if (nearestAmoeba) {
+              this.targetPlanet = null;
+              this.targetX = nearestAmoeba.x;
+              this.targetY = nearestAmoeba.y;
+              this.cruiserTargetType = 'ship';
+              this.cruiserTargetId = nearestAmoeba.id;
+              didAction = true;
+            }
+          }
+
+          // Seek active hazards to research and park outside of them
+          if (!didAction) {
+            let bestHazard = null;
+            let minHazardDistSq = Infinity;
+            if (ionStorms) {
+              for (const storm of ionStorms) {
+                const k = storm.knowledge[this.owner.id] || 0;
+                const tR = Math.sqrt(this.owner.techScore || 0);
+                const eR = Math.sqrt(this.owner.expScore || 0);
+                const effectiveIntensity = Math.max(0, storm.intensity - k - (tR + eR) / 2);
+                if (effectiveIntensity > 0) {
+                  const isFogEnabled = game && game.settings && game.settings.fogOfWar;
+                  const isVisible = !isFogEnabled || (this.owner && this.owner.isAI) || (game && typeof game.isCoordinateVisible === 'function' && game.isCoordinateVisible(storm.x, storm.y, this.owner));
+                  if (isVisible) {
+                    const dx = storm.x - this.x;
+                    const dy = storm.y - this.y;
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq < minHazardDistSq) {
+                      minHazardDistSq = distSq;
+                      bestHazard = storm;
+                    }
+                  }
+                }
+              }
+            }
+
+            if (bestHazard) {
+              const dx = this.x - bestHazard.x;
+              const dy = this.y - bestHazard.y;
+              const d = Math.sqrt(dx * dx + dy * dy);
+              
+              let cruiserRadar = Math.min(250, 5 * this.maxHealth);
+              if (this.isWarp) cruiserRadar *= 0.25;
+              if (this.sensorarrays > 0) {
+                cruiserRadar *= (1.0 + this.sensorarrays * 0.20);
+              }
+              const shipXpBonus = Math.sqrt(this.expScore || 0);
+              const finalCruiserRadar = cruiserRadar * (100 + shipXpBonus * 3) / 100;
+              const parkingDist = bestHazard.radius + Math.max(20, finalCruiserRadar - 40);
+
+              this.targetPlanet = null;
+              if (d > 0) {
+                this.targetX = bestHazard.x + (dx / d) * parkingDist;
+                this.targetY = bestHazard.y + (dy / d) * parkingDist;
+              } else {
+                this.targetX = bestHazard.x + parkingDist;
+                this.targetY = bestHazard.y;
+              }
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+              didAction = true;
+            }
+          }
+
+          // If no hazards or amoebas, park at the closest friendly planet
+          if (!didAction) {
+            const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+            let closestFriendly = null;
+            let minFriendlyDistSq = Infinity;
+            for (const p of friendlyPlanets) {
+              const dx = p.x - this.x;
+              const dy = p.y - this.y;
+              const distSq = dx * dx + dy * dy;
+              if (distSq < minFriendlyDistSq) {
+                minFriendlyDistSq = distSq;
+                closestFriendly = p;
+              }
+            }
+            if (closestFriendly) {
+              this.targetPlanet = closestFriendly;
+              this.targetX = closestFriendly.x;
+              this.targetY = closestFriendly.y;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+            }
+          }
+        }
+      }
+    }
+
+    // Cruiser Diplomacy Mode Decision Engine
+    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isDiplomacy && this.diplomat > 0) {
+      // 1. Refueling Retreat Check
+      if (this.fuel < 2) {
+        this.diplomacyFuelRetreating = true;
+      }
+      
+      if (this.diplomacyFuelRetreating) {
+        if (this.fuel >= this.getMaxFuel()) {
+          this.diplomacyFuelRetreating = false;
+          this.diplomacyFuelRetreatTargetPlanetId = null;
+        }
+      }
+
+      // 1b. Enemy Close Retreat Check (Diplomacy mode fleeing)
+      let enemyClose = false;
+      if (allShips) {
+        for (const other of allShips) {
+          if (other.active && other.id !== this.id) {
+            const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+            if (isEnemy) {
+              const dx = other.x - this.x;
+              const dy = other.y - this.y;
+              if (dx * dx + dy * dy <= 300 * 300) {
+                enemyClose = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (enemyClose && !this.scoutAttackEnabled) {
+        this.diplomacyFleeing = true;
+      }
+
+      if (this.diplomacyFleeing) {
+        // Stop fleeing if we are in a friendly gravity well and no enemies are close
+        if (this.inFriendlyWell && !enemyClose) {
+          this.diplomacyFleeing = false;
+          this.diplomacyFleeTargetPlanetId = null;
+        }
+      }
+
+      if (this.diplomacyFuelRetreating || this.diplomacyFleeing) {
+        let needNewTarget = this.targetX === null || this.targetY === null || (!this.diplomacyFuelRetreatTargetPlanetId && !this.diplomacyFleeTargetPlanetId);
+        if (!needNewTarget) {
+          const targetId = this.diplomacyFuelRetreatTargetPlanetId || this.diplomacyFleeTargetPlanetId;
+          const tp = allPlanets ? allPlanets.find(p => p.id === targetId) : null;
+          if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
+            needNewTarget = true;
+          }
+        }
+        if (needNewTarget) {
+          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+          let bestCandidate = null;
+          if (friendlyPlanets.length > 0) {
+            const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
+              const candidates = [];
+              for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
+                const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
+                const gRad = p.getGravityRadius();
+                const theta = Math.random() * Math.PI * 2;
+                const r = Math.random() * gRad * 0.7;
+                const tx = p.x + r * Math.cos(theta);
+                const ty = p.y + r * Math.sin(theta);
+                
+                const dx = tx - this.x;
+                const dy = ty - this.y;
+                if (dx * dx + dy * dy <= radius * radius) {
+                  let minEnemyDistSq = Infinity;
+                  if (allShips) {
+                    for (const other of allShips) {
+                      if (other.active && other.id !== this.id) {
+                        const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                        if (isEnemy) {
+                          const edx = other.x - tx;
+                          const edy = other.y - ty;
+                          const distSq = edx * edx + edy * edy;
+                          if (distSq < minEnemyDistSq) {
+                            minEnemyDistSq = distSq;
+                          }
+                        }
+                      }
+                    }
+                  }
+                  
+                  if (!strictSafe || minEnemyDistSq >= minEnemyDistReq * minEnemyDistReq) {
+                    candidates.push({ x: tx, y: ty, planet: p, minEnemyDistSq });
+                  }
+                }
+              }
+              
+              if (candidates.length > 0) {
+                candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
+                return candidates[0];
+              }
+              return null;
+            };
+
+            bestCandidate = findBestCandidate(300, 150, true);
+            if (!bestCandidate) bestCandidate = findBestCandidate(500, 150, true);
+            if (!bestCandidate) bestCandidate = findBestCandidate(300, 0, false);
+            if (!bestCandidate) bestCandidate = findBestCandidate(500, 0, false);
+          }
+
+          if (bestCandidate) {
+            this.targetPlanet = null;
+            if (this.diplomacyFuelRetreating) {
+              this.diplomacyFuelRetreatTargetPlanetId = bestCandidate.planet.id;
+            } else {
+              this.diplomacyFleeTargetPlanetId = bestCandidate.planet.id;
+            }
+            this.targetX = bestCandidate.x;
+            this.targetY = bestCandidate.y;
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+          } else {
+            let closestFriendly = null;
+            let minFriendlyDistSq = Infinity;
+            for (const p of friendlyPlanets) {
+              const dx = p.x - this.x;
+              const dy = p.y - this.y;
+              const distSq = dx * dx + dy * dy;
+              if (distSq < minFriendlyDistSq) {
+                minFriendlyDistSq = distSq;
+                closestFriendly = p;
+              }
+            }
+            if (closestFriendly) {
+              this.targetPlanet = closestFriendly;
+              this.targetX = closestFriendly.x;
+              this.targetY = closestFriendly.y;
+              if (this.diplomacyFuelRetreating) {
+                this.diplomacyFuelRetreatTargetPlanetId = closestFriendly.id;
+              } else {
+                this.diplomacyFleeTargetPlanetId = closestFriendly.id;
+              }
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+            }
+          }
+        }
+      } else {
+        // 2. Normal Operations
+        const diplomatCruisers = allShips ? allShips.filter(s => s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && s.diplomat > 0 && s.isDiplomacy) : [];
+        const isMostExperienced = diplomatCruisers.every(s => s.id === this.id || s.expScore < this.expScore || (s.expScore === this.expScore && this.id < s.id));
+        
+        let didAction = false;
+        
+        // Helper to check if the player has discovered/revealed the planet
+        const isPlanetDiscovered = (p) => {
+          const isFogEnabled = game && game.settings && game.settings.fogOfWar;
+          if (!isFogEnabled || (this.owner && this.owner.isAI)) {
+            return true;
+          }
+          return this.owner && this.owner.discoveredPlanets && this.owner.discoveredPlanets.has(p.id);
+        };
+
+        // Helper to check if a planet has enemies nearby (within 400px)
+        const hasEnemiesNearby = (p) => {
+          if (!allShips) return false;
+          for (const s of allShips) {
+            if (s.active && s.id !== this.id) {
+              const isEnemy = (s.owner && s.owner.id !== this.owner.id) || s.isAmoeba;
+              if (isEnemy) {
+                const dx = s.x - p.x;
+                const dy = s.y - p.y;
+                if (dx * dx + dy * dy <= 400 * 400) {
+                  return true;
+                }
+              }
+            }
+          }
+          return false;
+        };
+
+        // Behavior A: Most Experienced cruiser seeks planet without disposition and parks outside
+        if (isMostExperienced) {
+          const noDispPlanets = allPlanets ? allPlanets.filter(p => p.owner !== this.owner && (!p.disposition || p.disposition[this.owner.id] === undefined) && isPlanetDiscovered(p)) : [];
+          if (noDispPlanets.length > 0) {
+            const sortedNoDisp = [...noDispPlanets].sort((a, b) => {
+              const enemiesA = hasEnemiesNearby(a) ? 1 : 0;
+              const enemiesB = hasEnemiesNearby(b) ? 1 : 0;
+              if (enemiesA !== enemiesB) {
+                return enemiesA - enemiesB; // 0 comes before 1
+              }
+              const distSqA = (a.x - this.x) * (a.x - this.x) + (a.y - this.y) * (a.y - this.y);
+              const distSqB = (b.x - this.x) * (b.x - this.x) + (b.y - this.y) * (b.y - this.y);
+              return distSqA - distSqB;
+            });
+            const closestPlanet = sortedNoDisp[0];
+            if (closestPlanet) {
+              // Calculate sensor range
+              let cruiserRadar = Math.min(250, 5 * this.maxHealth);
+              if (this.isWarp) cruiserRadar *= 0.25;
+              if (this.sensorarrays > 0) {
+                cruiserRadar *= (1.0 + this.sensorarrays * 0.20);
+              }
+              const playerTechBonus = 0.01 * Math.floor(Math.sqrt(this.owner.techScore || 0));
+              const playerExpBonus = 0.01 * Math.sqrt(this.owner.expScore || 0);
+              const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
+              const shipXpBonus = Math.sqrt(this.expScore || 0);
+              const sensorRange = baseRange * (100 + shipXpBonus * 3) / 100;
+              const halfSensorRange = sensorRange / 2;
+              
+              const dx = this.x - closestPlanet.x;
+              const dy = this.y - closestPlanet.y;
+              const d = Math.sqrt(dx * dx + dy * dy);
+              this.targetPlanet = null;
+              if (d > 0) {
+                this.targetX = closestPlanet.x + (dx / d) * halfSensorRange;
+                this.targetY = closestPlanet.y + (dy / d) * halfSensorRange;
+              } else {
+                this.targetX = closestPlanet.x + halfSensorRange;
+                this.targetY = closestPlanet.y;
+              }
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+              didAction = true;
+            }
+          }
+        }
+        
+        // Behavior B: Seek planet with highest disposition and sympathy less than ships
+        if (!didAction) {
+          const qualPlanets = allPlanets ? allPlanets.filter(p => p.owner !== this.owner && (p.sympathy ? (p.sympathy[this.owner.id] || 0) : 0) < p.ships && isPlanetDiscovered(p)) : [];
+          if (qualPlanets.length > 0) {
+            qualPlanets.sort((a, b) => {
+              const enemiesA = hasEnemiesNearby(a) ? 1 : 0;
+              const enemiesB = hasEnemiesNearby(b) ? 1 : 0;
+              if (enemiesA !== enemiesB) {
+                return enemiesA - enemiesB;
+              }
+              const dispA = a.disposition ? (a.disposition[this.owner.id] || 0) : 0;
+              const dispB = b.disposition ? (b.disposition[this.owner.id] || 0) : 0;
+              if (dispA !== dispB) {
+                return dispB - dispA;
+              }
+              const distSqA = (a.x - this.x) * (a.x - this.x) + (a.y - this.y) * (a.y - this.y);
+              const distSqB = (b.x - this.x) * (b.x - this.x) + (b.y - this.y) * (b.y - this.y);
+              return distSqA - distSqB;
+            });
+            const bestPlanet = qualPlanets[0];
+            this.targetPlanet = bestPlanet;
+            this.targetX = bestPlanet.x;
+            this.targetY = bestPlanet.y;
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+            didAction = true;
+          }
+        }
+        
+        // Idle Fallback
+        if (!didAction) {
+          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+          let closestFriendly = null;
+          let minFriendlyDistSq = Infinity;
+          for (const p of friendlyPlanets) {
+            const dx = p.x - this.x;
+            const dy = p.y - this.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq < minFriendlyDistSq) {
+              minFriendlyDistSq = distSq;
+              closestFriendly = p;
+            }
+          }
+          if (closestFriendly) {
+            this.targetPlanet = closestFriendly;
+            this.targetX = closestFriendly.x;
+            this.targetY = closestFriendly.y;
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+          }
+        }
+      }
+    }
+
+    if (this.bombPlanetsEnabled === false || !this.scoutAttackEnabled) {
+      this.bombardRearming = false;
+      this.bombardRearmTargetPlanetId = null;
+    }
+
+    // Cruiser Bombard Mode Decision Engine
+    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && !this.isPatrolling && this.bombPlanetsEnabled !== false && this.scoutAttackEnabled) {
+      // If out of bombs and not in a friendly gravity well, enter rearming retreat mode
+      if (this.bombs <= 0 && !this.inFriendlyWell) {
+        this.bombardRearming = true;
+      }
+      
+      // Exit rearming retreat mode once fully replenished
+      if (this.bombardRearming) {
+        if (this.bombs >= this.getMaxBombs()) {
+          this.bombardRearming = false;
+        }
+      }
+      
+      if (this.bombardRearming) {
+        // Retreat to friendly gravity well to replenish bombs
+        let needNewTarget = this.targetX === null || this.targetY === null || !this.bombardRearmTargetPlanetId;
+        if (!needNewTarget && this.bombardRearmTargetPlanetId !== null && this.bombardRearmTargetPlanetId !== undefined) {
+          const tp = allPlanets ? allPlanets.find(p => p.id === this.bombardRearmTargetPlanetId) : null;
+          if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
+            needNewTarget = true;
+          }
+        }
+        
+        if (needNewTarget) {
+          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+          let bestCandidate = null;
+          if (friendlyPlanets.length > 0) {
+            const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
+              const candidates = [];
+              for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
+                const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
+                const gRad = p.getGravityRadius();
+                const theta = Math.random() * Math.PI * 2;
+                const r = Math.random() * gRad * 0.7;
+                const tx = p.x + r * Math.cos(theta);
+                const ty = p.y + r * Math.sin(theta);
+                
+                const dx = tx - this.x;
+                const dy = ty - this.y;
+                if (dx * dx + dy * dy <= radius * radius) {
+                  let minEnemyDistSq = Infinity;
+                  if (allShips) {
+                    for (const other of allShips) {
+                      if (other.active && other.id !== this.id) {
+                        const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                        if (isEnemy) {
+                          const edx = other.x - tx;
+                          const edy = other.y - ty;
+                          const distSq = edx * edx + edy * edy;
+                          if (distSq < minEnemyDistSq) {
+                            minEnemyDistSq = distSq;
+                          }
+                        }
+                      }
+                    }
+                  }
+                  if (!strictSafe || minEnemyDistSq >= minEnemyDistReq * minEnemyDistReq) {
+                    candidates.push({ x: tx, y: ty, planet: p, minEnemyDistSq });
+                  }
+                }
+              }
+              if (candidates.length > 0) {
+                candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
+                return candidates[0];
+              }
+              return null;
+            };
+            
+            bestCandidate = findBestCandidate(300, 150, true);
+            if (!bestCandidate) bestCandidate = findBestCandidate(500, 150, true);
+            if (!bestCandidate) bestCandidate = findBestCandidate(300, 0, false);
+            if (!bestCandidate) bestCandidate = findBestCandidate(500, 0, false);
+          }
+          
+          if (bestCandidate) {
+            this.targetPlanet = null;
+            this.bombardRearmTargetPlanetId = bestCandidate.planet.id;
+            this.targetX = bestCandidate.x;
+            this.targetY = bestCandidate.y;
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+          } else {
+            let closestFriendly = null;
+            let minFriendlyDistSq = Infinity;
+            if (friendlyPlanets.length > 0) {
+              for (const p of friendlyPlanets) {
+                const dx = p.x - this.x;
+                const dy = p.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < minFriendlyDistSq) {
+                  minFriendlyDistSq = distSq;
+                  closestFriendly = p;
+                }
+              }
+            }
+            if (closestFriendly) {
+              this.targetPlanet = closestFriendly;
+              this.targetX = closestFriendly.x;
+              this.targetY = closestFriendly.y;
+              this.bombardRearmTargetPlanetId = closestFriendly.id;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+            }
+          }
+        }
+      } else {
+        this.bombardRearming = false;
+        this.bombardRearmTargetPlanetId = null;
+        
+        // Find the lowest ship count enemy or neutral planet within 500px
+        let bestTarget = null;
+        let lowestShips = Infinity;
+        
+        if (allPlanets) {
+          for (const p of allPlanets) {
+            if (p.owner !== this.owner && this.canSeeStats(p, allPlanets, allShips, game)) {
+              const dx = p.x - this.x;
+              const dy = p.y - this.y;
+              const distSq = dx * dx + dy * dy;
+              if (distSq <= 500 * 500) {
+                if (p.ships < lowestShips) {
+                  lowestShips = p.ships;
+                  bestTarget = p;
+                }
+              }
+            }
+          }
+        }
+        
+        if (bestTarget) {
+          const dx = this.x - bestTarget.x;
+          const dy = this.y - bestTarget.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const bombRange = effectiveRange + bestTarget.radius;
+          const stopDist = bombRange * 0.5;
+          
+          if (dist > stopDist + 2) {
+            // Move to a distance from the planet equal to half the bombing range
+            const angle = Math.atan2(dy, dx);
+            this.targetPlanet = null;
+            this.targetX = bestTarget.x + Math.cos(angle) * stopDist;
+            this.targetY = bestTarget.y + Math.sin(angle) * stopDist;
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+          } else {
+            // Already close enough! Stop moving and target the planet to bombard it
+            this.targetPlanet = null;
+            this.targetX = this.x;
+            this.targetY = this.y;
+            this.cruiserTargetType = 'planet';
+            this.cruiserTargetId = bestTarget.id;
+          }
+        }
+      }
     }
     
     // Cruiser Target Lock State Machine
@@ -1256,7 +2621,7 @@ export class Ship {
         }
       }
       
-      if (targetObj && targetObj.active !== false && (!isPlanet || targetObj.owner !== this.owner)) {
+      if (targetObj && targetObj.active !== false && (!isPlanet || targetObj.owner === this.owner || (targetObj.owner !== this.owner && this.canSeeStats(targetObj, allPlanets, allShips, game)))) {
         // Target is valid! Calculate distance
         const tdx = tx - this.x;
         const tdy = ty - this.y;
@@ -1272,7 +2637,22 @@ export class Ship {
         const maxFrontRange = (effectiveRange * 1.2) + (isPlanet ? targetObj.radius : 0);
         const isTargetInFront = (Math.abs(diff) <= Math.PI / 4);
         
-        if (!isPlanet && isTargetInFront && dist <= maxFrontRange - 5) {
+        if (isPlanet) {
+          const isOwnPlanet = targetObj.owner === this.owner;
+          const stopDist = isOwnPlanet ? (targetObj.radius + 20) : ((effectiveRange + targetObj.radius) * 0.5);
+          if (dist <= stopDist + 2) {
+            // Already close enough! Stop moving
+            this.targetX = this.x;
+            this.targetY = this.y;
+            this.targetPlanet = null;
+          } else {
+            // Move to stopDist from the planet
+            const angle = Math.atan2(tdy, tdx);
+            this.targetX = targetObj.x - Math.cos(angle) * stopDist;
+            this.targetY = targetObj.y - Math.sin(angle) * stopDist;
+            this.targetPlanet = null;
+          }
+        } else if (!isPlanet && isTargetInFront && dist <= maxFrontRange - 5) {
           // Target is in range and in front arc! Stop moving
           this.targetX = this.x;
           this.targetY = this.y;
@@ -1495,7 +2875,20 @@ export class Ship {
 
       if (this.health < this.maxHealth && finalHealRate > 0) {
         let healAmount = (deltaTime / 60000) * finalHealRate;
+        const oldHealth = this.health || 0;
         this.health = Math.min(this.maxHealth, this.health + healAmount);
+        const amountHealed = this.health - oldHealth;
+        if (amountHealed > 0 && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
+          const owner = this.owner;
+          const hasExcessTritanium = owner.resources && Math.floor(owner.resources.tritanium || 0) >= 1;
+          const tritaniumSellPrice = owner.offerPrice?.tritanium ?? 3;
+          
+          if (hasExcessTritanium && tritaniumSellPrice < 12) {
+            owner.resources.tritanium = (owner.resources.tritanium || 0) - (1/12) * amountHealed;
+          } else {
+            owner.credits = (owner.credits || 0) - 1.0 * amountHealed;
+          }
+        }
       }
 
       if (this.inFriendlyWell) {
@@ -1507,7 +2900,25 @@ export class Ship {
         // Cruisers don't recover bombs or fuel while in warp
         if (!this.isWarp) {
           const recoveryRate = (this.combatCooldown && this.combatCooldown > 0) ? 0.5 : 1.0;
-          this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + ((deltaTime / 1000) / 10) * recoveryRate);
+          const oldFuel = this.fuel || 0;
+          this.fuel = Math.min(this.getMaxFuel(), oldFuel + ((deltaTime / 1000) / 10) * recoveryRate);
+          const amountRefueled = (this.fuel || 0) - oldFuel;
+          if (amountRefueled > 0 && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
+            const owner = this.owner;
+            const hasExcessAntimatter = owner.resources && Math.floor(owner.resources.antimatter || 0) >= 1;
+            const antimatterSellPrice = owner.offerPrice?.antimatter ?? 3;
+            
+            let costMultiplier = 1.0;
+            if (this.fuel_tanker && this.fuel_tanker > 0) {
+              costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.fuel_tanker));
+            }
+
+            if (hasExcessAntimatter && antimatterSellPrice < 12) {
+              owner.resources.antimatter = (owner.resources.antimatter || 0) - (1/12) * amountRefueled * costMultiplier;
+            } else {
+              owner.credits = (owner.credits || 0) - 1.0 * amountRefueled * costMultiplier;
+            }
+          }
           
           if (this.bombs < this.getMaxBombs() && friendlyWellPlanet) {
             const maxBombs = this.getMaxBombs();
@@ -1516,6 +2927,17 @@ export class Ship {
             if (this.bombReloadTimer >= 5) {
               this.bombReloadTimer = 0;
               this.bombs++;
+              if (this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
+                const owner = this.owner;
+                const hasExcessMerculite = owner.resources && Math.floor(owner.resources.merculite || 0) >= 1;
+                const merculiteSellPrice = owner.offerPrice?.merculite ?? 3;
+                
+                if (hasExcessMerculite && merculiteSellPrice < 12) {
+                  owner.resources.merculite = (owner.resources.merculite || 0) - (1/12);
+                } else {
+                  owner.credits = (owner.credits || 0) - 1.0;
+                }
+              }
             }
           }
         }
@@ -1627,6 +3049,9 @@ export class Ship {
             }
           } else {
             // Gradual Attack
+            if (this.targetPlanet.owner && this.owner && this.targetPlanet.owner !== this.owner) {
+              this.owner.triggerWarWith(this.targetPlanet.owner);
+            }
             // Calculate kill chance
             let nearbyFriendlyCount = 0;
             if (allShips) {
@@ -1844,6 +3269,9 @@ export class Ship {
 
             if (this.owner) this.owner.addExperience(actualKilled);
             if (this.targetPlanet.owner) this.targetPlanet.owner.addExperience(actualKilled);
+
+            // Grant target planet defense experience
+            this.targetPlanet.addExperience(actualKilled + N_att);
 
             // Capacity decrease chance
             const expectedCapacityDecrease = actualKilled * 0.08;
@@ -2159,6 +3587,9 @@ export class Ship {
 
   takeDamage(explosions, attacker = null, isHazard = false) {
     if (this.health >= 0) {
+      if (this.isCruiser && attacker && attacker.owner && this.owner && attacker.owner !== this.owner) {
+        attacker.owner.triggerWarWith(this.owner);
+      }
       if (this.isAmoeba && attacker && attacker.active && attacker.owner !== this.owner) {
         this.pursueTarget = attacker;
         this.targetPlanet = null;
@@ -2173,13 +3604,14 @@ export class Ship {
         const shipExpBonus = Math.sqrt(this.expScore || 0);
         let shrugChance = 0;
         if (!this.isAmoeba) {
-          shrugChance = (this.maxHealth + (techBonus + expBonus + shipExpBonus)) / 100;
-          let shieldBonus = (this.shields || 0) * 0.10;
-          shrugChance += shieldBonus;
-          shrugChance = Math.min(0.75, shrugChance);
+          const baseDeflection = this.maxHealth + (techBonus + expBonus + shipExpBonus);
+          const deflectionRem = 100 - baseDeflection;
+          const shieldDeflectionBonus = (this.shields || 0) * (deflectionRem / 5);
+          shrugChance = (baseDeflection + shieldDeflectionBonus) / 100;
           if ((this.bombs || 0) < 1) {
             shrugChance /= 2;
           }
+          shrugChance = Math.min(0.90, shrugChance);
         } else {
           shrugChance = Math.min(0.95, 0.50 + this.maxHealth * 0.01 + (techBonus + expBonus + shipExpBonus) * 0.01);
         }

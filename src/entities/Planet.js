@@ -18,8 +18,28 @@ export class Planet {
     this.disposition = {};
     this.retainedShips = false;
     this.revoltCooldown = 0;
-    
+    const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+    this.preferredResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
     this.name = this.generatePlanetName();
+    this.expScore = 0;
+    this.expProgress = 0;
+
+    // Sci-Fi Planetary Resources System
+    // Cascading chance allocation: 35% first, then half for each subsequent resource
+    this.resources = [];
+    let chance = 0.35;
+    for (let i = 0; i < 3; i++) {
+      if (Math.random() < chance) {
+        // Pick a random resource not already assigned
+        const available = resourcesList.filter(r => !this.resources.includes(r));
+        if (available.length > 0) {
+          this.resources.push(available[Math.floor(Math.random() * available.length)]);
+        }
+        chance /= 2;
+      } else {
+        break;
+      }
+    }
   }
 
   generatePlanetName() {
@@ -105,7 +125,14 @@ export class Planet {
 
     if (this.owner && focus === 'commerce' && this.ships >= this.maxShips) {
       const shipsOver100 = Math.max(0, this.ships - 100);
-      const generatedCredits = (shipsOver100 / 100) * (deltaTime / 1000);
+      const tradingBonus = this.owner.tradingBonus || 0;
+      let generatedCredits = (shipsOver100 / 100) * (deltaTime / 1000) * (1 + tradingBonus);
+      if (this.preferredResource && this.owner.resources) {
+        const qty = this.owner.resources[this.preferredResource] || 0;
+        if (qty > 0) {
+          generatedCredits *= (1 + (Math.sqrt(qty) * 3) / 100);
+        }
+      }
       this.owner.credits = (this.owner.credits || 0) + generatedCredits;
     }
 
@@ -125,11 +152,29 @@ export class Planet {
             effectiveRate = 1.0 + ((effectiveRate - 1.0) / 3);
           }
         }
+        if (this.preferredResource && this.owner.resources) {
+          const qty = this.owner.resources[this.preferredResource] || 0;
+          if (qty > 0) {
+            effectiveRate *= (1 + (Math.sqrt(qty) * 3) / 100);
+          }
+        }
         this.productionProgress += effectiveRate * (deltaTime / 1000);
         if (this.productionProgress >= 1) {
           let newShips = Math.floor(this.productionProgress);
-          this.ships += newShips;
           this.productionProgress -= newShips;
+          if (this.owner.credits < 0) {
+            let shipsBuilt = 0;
+            for (let i = 0; i < newShips; i++) {
+              if (this.owner.credits < 0) {
+                this.owner.credits += 1;
+              } else {
+                shipsBuilt++;
+              }
+            }
+            this.ships += shipsBuilt;
+          } else {
+            this.ships += newShips;
+          }
         }
       } else {
         this.productionProgress = 0;
@@ -254,6 +299,30 @@ export class Planet {
         this.justAssigned = false;
         this.justAssignedTimer = 0;
       }
+    }
+
+    // Passive & Active Resource Extraction Tick
+    // Base rate: 1/1000 of a resource per ship per minute
+    // Mining focus: 3x, Planet full: 3x
+    if (this.owner && this.owner.resources && this.resources && this.resources.length > 0) {
+      const baseRatePerMinute = this.ships / 1000; // 1/1000 per ship per minute
+      let rate = baseRatePerMinute;
+      if (focus === 'mining') rate *= 3;
+      if (this.ships >= this.maxShips) rate *= 3;
+
+      // Convert from per-minute to per-millisecond and apply deltaTime
+      const perMs = rate / 60000;
+      for (const res of this.resources) {
+        this.owner.resources[res] = (this.owner.resources[res] || 0) + perMs * deltaTime;
+      }
+    }
+  }
+
+  addExperience(amount) {
+    this.expProgress += amount;
+    while (this.expProgress >= 20) {
+      this.expProgress -= 20;
+      this.expScore++;
     }
   }
 

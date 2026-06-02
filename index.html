@@ -73,6 +73,10 @@
             Planet Count
           </label>
           <label style="cursor: pointer; display: flex; align-items: center;">
+            <input type="number" id="clusters-input" value="0" min="0" max="20" style="width: 60px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            Clusters
+          </label>
+          <label style="cursor: pointer; display: flex; align-items: center;">
             <select id="timed-game-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
               <option value="1800">30 minutes</option>
               <option value="3600" selected>1 hour</option>
@@ -93,9 +97,61 @@
         <button id="setup-new-game-btn" class="cyber-btn" style="position: absolute; bottom: 20px; right: 20px; padding: 10px 20px; font-size: 0.9rem;">SET UP NEW GAME</button>
       </div>
       <div id="game-ui" class="hidden">
+        <div id="top-right-hud" style="position: absolute; top: 20px; right: 20px; display: flex; gap: 15px; align-items: center; z-index: 100; pointer-events: none;">
+          <div id="game-timer" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #0ff; text-shadow: 0 0 5px #0ff; background: rgba(0, 255, 255, 0.05); border: 1px solid rgba(0, 255, 255, 0.2); padding: 5px 15px; border-radius: 4px; backdrop-filter: blur(5px); display: none; min-width: 120px; text-align: center; font-variant-numeric: tabular-nums;">00:00</div>
+        </div>
         <div id="top-left-hud" style="position: absolute; top: 20px; left: 20px; display: flex; gap: 15px; align-items: center; z-index: 100; pointer-events: none;">
-          <div id="game-timer" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #0ff; text-shadow: 0 0 5px #0ff; background: rgba(0, 255, 255, 0.05); border: 1px solid rgba(0, 255, 255, 0.2); padding: 5px 15px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">00:00</div>
-          <div id="player-credits-display" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ffeb3b; text-shadow: 0 0 5px #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">💲 0</div>
+          <div id="player-command-limit-display" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #00e5ff; text-shadow: 0 0 5px #00e5ff; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">⚓: 0/0</div>
+          <div id="player-trade-options-display" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ff9800; text-shadow: 0 0 5px #ff9800; background: rgba(255, 152, 0, 0.05); border: 1px solid rgba(255, 152, 0, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">⚖️: 0/0</div>
+          <button id="player-sell-for-display" onclick="changeSellPriceSetting()" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ffeb3b; text-shadow: 0 0 5px #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; pointer-events: auto;">💰: 2</button>
+          
+          <div id="market-panel" style="display: flex; flex-direction: column; gap: 8px;">
+            <div id="resources-hud" style="display: none; align-items: center; gap: 6px; pointer-events: auto; font-family: 'Orbitron', sans-serif; font-size: 0.8rem; color: #fff; background: rgba(0, 20, 30, 0.7); border: 1px solid rgba(0, 229, 255, 0.35); padding: 4px 10px; border-radius: 6px; backdrop-filter: blur(5px); box-shadow: 0 0 10px rgba(0, 229, 255, 0.15); user-select: none;">
+              <!-- Antimatter 🌀 -->
+              <div id="res-card-antimatter" title="Antimatter" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+                <span>🌀: <span class="res-qty" id="res-qty-antimatter">0.00</span></span>
+              </div>
+
+              <!-- Tritanium 🔩 -->
+              <div id="res-card-tritanium" title="Tritanium" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+                <span>🔩: <span class="res-qty" id="res-qty-tritanium">0.00</span></span>
+              </div>
+
+              <!-- Merculite ☄️ -->
+              <div id="res-card-merculite" title="Merculite" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+                <span>☄️: <span class="res-qty" id="res-qty-merculite">0.00</span></span>
+              </div>
+
+              <!-- Dilithium 💎 -->
+              <div id="res-card-dilithium" title="Dilithium" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+                <span>💎: <span class="res-qty" id="res-qty-dilithium">0.00</span></span>
+              </div>
+
+              <!-- Duranium 🧱 -->
+              <div id="res-card-duranium" title="Duranium" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+                <span>🧱: <span class="res-qty" id="res-qty-duranium">0.00</span></span>
+              </div>
+
+              <!-- Deuterium 💧 -->
+              <div id="res-card-deuterium" title="Deuterium" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+                <span>💧: <span class="res-qty" id="res-qty-deuterium">0.00</span></span>
+              </div>
+
+              <!-- Latinum 🏺 -->
+              <div id="res-card-latinum" title="Latinum" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+                <span>🏺: <span class="res-qty" id="res-qty-latinum">0.00</span></span>
+              </div>
+
+              <!-- Galactic Bank Sell Button -->
+              <button id="btn-sell-resources" class="cyber-btn" style="padding: 6px 12px; font-size: 0.8rem; font-family: 'Orbitron', sans-serif; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; min-width: 130px; margin-left: 6px; box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); background: rgba(0, 229, 255, 0.1); border: 1px solid rgba(0, 229, 255, 0.4); text-transform: uppercase;">
+                Sell Active: +0
+              </button>
+              
+              <!-- Credits Display Card -->
+              <div id="player-credits-display" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ffeb3b; text-shadow: 0 0 5px #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; pointer-events: auto;">💲 0</div>
+            </div>
+            <div id="sell-orders-hud" style="display: none; align-items: center; gap: 6px; pointer-events: auto; font-family: 'Orbitron', sans-serif; font-size: 0.7rem; color: #fff; padding: 2px 5px; user-select: none; flex-wrap: wrap;"></div>
+          </div>
         </div>
         <div id="player-names-container" class="player-names"></div>
         <div id="score-board">
@@ -118,9 +174,12 @@
         
         <div id="action-buttons" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 30px; z-index: 100; pointer-events: auto;">
           <div id="action-buttons-left" style="display: flex; gap: 10px;">
-            <button id="btn-speed-1" class="cyber-btn action-btn-icon" style="display: none;" title="1/4 Speed (,)"><span class="btn-icon">🐢</span>,</button>
-            <button id="btn-speed-2" class="cyber-btn action-btn-icon" style="display: none;" title="1/2 Speed (.)"><span class="btn-icon">🚶</span>.</button>
-            <button id="btn-speed-3" class="cyber-btn action-btn-icon" style="display: none;" title="Normal Speed (/)"><span class="btn-icon">🏃</span>/</button>
+            <button id="btn-cruiser-scout" class="cyber-btn action-btn-icon" style="display: none;" title="Scout Mode (S)"><span class="btn-icon">🔭</span>S</button>
+            <button id="btn-cruiser-attack" class="cyber-btn action-btn-icon" style="display: none;" title="Scout Attack (A)"><span class="btn-icon">🎯</span>A</button>
+            <button id="btn-cruiser-research" class="cyber-btn action-btn-icon" style="display: none;" title="Research Mode (R)"><span class="btn-icon">🔬</span>R</button>
+            <button id="btn-cruiser-diplomacy" class="cyber-btn action-btn-icon" style="display: none;" title="Diplomacy Mode (D)"><span class="btn-icon">🤝</span>D</button>
+            <button id="btn-cruiser-bomb" class="cyber-btn action-btn-icon" style="display: none;" title="Bomb Planets (B)"><span class="btn-icon">💥</span>B</button>
+            <button id="btn-patrol" class="cyber-btn action-btn-icon" style="display: none;" title="Patrol Mode (P)"><span class="btn-icon">⚔️</span>P</button>
             <button id="btn-warp" class="cyber-btn action-btn-icon" title="Warp (W)"><span class="btn-icon">⚡</span>W</button>
           </div>
           <div id="action-buttons-right" style="display: flex; gap: 10px;">
@@ -128,9 +187,7 @@
             <button id="btn-bomb-ships" class="cyber-btn action-btn-icon" title="Bomb Ships (Q)"><span class="btn-icon">💣</span>Q</button>
             <button id="btn-fill" class="cyber-btn action-btn-icon" title="Fill Mode (F)"><span class="btn-icon">📥</span>F</button>
             <button id="btn-scout" class="cyber-btn action-btn-icon" title="Scout Mode (S)"><span class="btn-icon">🔭</span>S</button>
-            <button id="btn-cruiser" class="cyber-btn action-btn-icon" title="Cruiser Mode (C)"><span class="btn-icon">🛸</span>C</button>
-            <button id="btn-cruiser-bomb" class="cyber-btn action-btn-icon" style="display: none;" title="Bomb Planets (B)"><span class="btn-icon">💥</span>B</button>
-            <button id="btn-patrol" class="cyber-btn action-btn-icon" style="display: none;" title="Patrol Mode (P)"><span class="btn-icon">⚔️</span>P</button>
+            <button id="btn-cruiser" class="cyber-btn action-btn-icon" style="display: none !important;" title="Cruiser Mode (C)"><span class="btn-icon">🛸</span>C</button>
             <button id="btn-upgrade-mode" class="cyber-btn action-btn-icon" style="display: none;" title="Upgrade Mode (U)"><span class="btn-icon">⚙️</span>U<span class="btn-cost"></span></button>
             <button id="btn-up-sensorarray" class="cyber-btn action-btn-icon" style="display: none;" title="Sensor Array (S)"><span class="btn-icon">📡</span>S<span class="btn-cost"></span><span class="btn-discount"></span></button>
             <button id="btn-up-lab" class="cyber-btn action-btn-icon" style="display: none;" title="Lab (L)"><span class="btn-icon">🔬</span>L<span class="btn-cost"></span><span class="btn-discount"></span></button>
@@ -147,7 +204,8 @@
             <button id="btn-focus-economy" class="cyber-btn action-btn-icon" style="display: none;" title="Economy Mode (E)"><span class="btn-icon">📈</span>E<span class="btn-cost"></span></button>
             <button id="btn-focus-research" class="cyber-btn action-btn-icon" style="display: none;" title="Research Mode (R)"><span class="btn-icon">🔬</span>R<span class="btn-cost"></span></button>
             <button id="btn-focus-garrison" class="cyber-btn action-btn-icon" style="display: none;" title="Garrison Mode (G)"><span class="btn-icon">🛡️</span>G<span class="btn-cost"></span></button>
-            <button id="btn-focus-commerce" class="cyber-btn action-btn-icon" style="display: none;" title="Commerce Mode (M)"><span class="btn-icon">💲</span>M<span class="btn-cost"></span></button>
+            <button id="btn-focus-commerce" class="cyber-btn action-btn-icon" style="display: none;" title="Commerce Mode (C)"><span class="btn-icon">💲</span>C<span class="btn-cost"></span></button>
+            <button id="btn-focus-mining" class="cyber-btn action-btn-icon" style="display: none;" title="Mining Mode (M)"><span class="btn-icon">⛏️</span>M<span class="btn-cost"></span></button>
             <!-- Capital Ship Build Mode Buttons -->
             <button id="btn-build-scout" class="cyber-btn action-btn-icon" style="display: none;" title="Build Scout Ship (S)"><span class="btn-icon">🛸</span>Scout (S)<span class="btn-cost">50/2</span></button>
             <button id="btn-build-frigate" class="cyber-btn action-btn-icon" style="display: none;" title="Build Frigate (F)"><span class="btn-icon">🛸</span>Frigate (F)<span class="btn-cost">75/3</span></button>
@@ -157,6 +215,9 @@
             <button id="btn-build-battleship" class="cyber-btn action-btn-icon" style="display: none;" title="Build Battleship (B)"><span class="btn-icon">🛸</span>Battleship (B)<span class="btn-cost">225/9</span></button>
             <button id="btn-build-titan" class="cyber-btn action-btn-icon" style="display: none;" title="Build Titan (T)"><span class="btn-icon">🛸</span>Titan (T)<span class="btn-cost">300/12</span></button>
             <button id="btn-build-mammoth" class="cyber-btn action-btn-icon" style="display: none;" title="Build Mammoth (M)"><span class="btn-icon">🛸</span>Mammoth (M)<span class="btn-cost">400/16</span></button>
+          </div>
+          <div id="action-buttons-utility" style="display: flex; gap: 10px;">
+            <button id="btn-market" class="cyber-btn action-btn-icon" title="Market (M)"><span class="btn-icon">🛒</span>M</button>
             <button id="btn-leaderboard" class="cyber-btn action-btn-icon" title="Leaderboard (L)"><span class="btn-icon">🏆</span>L</button>
             <button id="help-btn" class="cyber-btn action-btn-icon" title="Help (?)"><span class="btn-icon">❓</span>?</button>
           </div>
@@ -183,52 +244,19 @@
           <!-- INDEX PAGE -->
           <div id="help-index" class="help-page">
             <div class="help-index-list">
-              <button class="help-topic-btn" data-topic="controls">🎮 Controls</button>
               <button class="help-topic-btn" data-topic="victory">⚔️ Victory Conditions</button>
+              <button class="help-topic-btn" data-topic="controls">🎮 Controls</button>
               <button class="help-topic-btn" data-topic="planets">🪐 Planets &amp; Economy</button>
+              <button class="help-topic-btn" data-topic="focus">👁️ Focus Modes</button>
               <button class="help-topic-btn" data-topic="ships">🚀 Ships &amp; Combat</button>
               <button class="help-topic-btn" data-topic="cruisers">🛸 Cruisers</button>
               <button class="help-topic-btn" data-topic="upgrades">🛠️ Upgrades</button>
+              <button class="help-topic-btn" data-topic="diplomacy">🤝 Diplomacy &amp; Sympathy</button>
               <button class="help-topic-btn" data-topic="hazards">⚡ Hazards</button>
               <button class="help-topic-btn" data-topic="monsters">🧬 Space Amoebas</button>
               <button class="help-topic-btn" data-topic="ai">🤖 AI &amp; Rampage</button>
               <button class="help-topic-btn" data-topic="other">📡 Other</button>
             </div>
-          </div>
-
-          <!-- CONTROLS -->
-          <div id="help-topic-controls" class="help-page hidden">
-            <ul>
-              <li><strong>Left-click:</strong> Select planets or ships. Click empty space to deselect.</li>
-              <li><strong>Left-click + Drag:</strong> Draw a lasso to box-select ships or planets. Hold <strong>Shift</strong> to add/remove from selection.</li>
-              <li><strong>Right-click:</strong> Issue orders! Right click an enemy to attack, a friendly planet to reinforce, or empty space to move ships there. Hold <strong>Shift</strong> while right-clicking to queue up orders sequentially for friendly selected cruisers.</li>
-              <li><strong>Right-click Drag / Middle-click Drag:</strong> Pan the camera.</li>
-              <li><strong>Scroll Wheel / +/- keys:</strong> Zoom in and out.</li>
-              <li><strong>Arrow Keys:</strong> Pan the camera.</li>
-              <li><strong>Touch Controls (Mobile):</strong>
-                <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
-                  <li><strong>Selection:</strong> Quick tap on a planet or cruiser to select/deselect it.</li>
-                  <li><strong>Issue Commands:</strong> Tap and **hold for 450ms** on an enemy planet or empty space to attack or move (marked by a floating <em>COMMAND ISSUED</em> neon text). This prevents accidental selections from clearing when ordering attacks!</li>
-                  <li><strong>View Stats (Tooltips):</strong> Touch down or slowly slide your finger over a planet, cruiser, or space amoeba to display its detailed status overlay.</li>
-                  <li><strong>Camera Pan:</strong> Drag your finger quickly (>10px) to slide the camera (automatically hides tooltips to keep the view clean).</li>
-                  <li><strong>Pinch to Zoom:</strong> Two-finger pinch to zoom in/out smoothly.</li>
-                </ul>
-              </li>
-              <li><strong>Enter:</strong> Open/send chat messages.</li>
-              <li><strong>Pause/Break:</strong> Pause the game.</li>
-              <li><strong>Speed Keys (,, ., /):</strong> Set fleet speed to 1/4, 1/2, or normal. Keys . and / also set the <em>default</em> speed for future launches.</li>
-              <li><strong>W — Warp:</strong> Toggle warp mode for the next launch.</li>
-              <li><strong>B — Bomb Eco:</strong> Launch eco bombers (requires 🚀 Military planet).</li>
-              <li><strong>Q — Bomb Ships:</strong> Launch ship bombers (requires 🚀 Military planet).</li>
-              <li><strong>F — Fill Mode:</strong> Toggle Fill Mode. Sends only enough ships to fill the target friendly planet. (Shortcut only; HUD button is eliminated).</li>
-              <li><strong>S — Scout Mode:</strong> Toggle Scout Mode. Sends a small scouting party of 10% of garrison (min 3 ships). (Shortcut only; HUD button is eliminated).</li>
-              <li><strong>C — Cruiser:</strong> Toggle Cruiser construction mode from a 🚀 Military planet or your Homeworld.</li>
-              <li><strong>U — Upgrade Mode / Click Toggle:</strong> Enter Upgrade Mode when a cruiser is selected inside a friendly gravity well. You can also simply click the currently selected cruiser again to enter Upgrade Mode! Click it again in Upgrade Mode to exit. Cruiser and selection are preserved on exit.</li>
-              <li><strong>Focus Mode Click Toggle:</strong> Enter Focus Mode by clicking a selected planet's focus badge (🔬). Click the badge again to exit. Planet and selection are preserved on exit.</li>
-              <li><strong>Upgrade Shortcuts (S, L, A, H, E, M, T, D, C):</strong> During active Upgrade Mode, S/L/A/H/E/M/T/D purchase upgrades, and C cancels. Standard commands are temporarily bypassed.</li>
-              <li><strong>L — Leaderboard:</strong> Toggle the leaderboard panel.</li>
-              <li><strong>Help Button ❓:</strong> Open this How-to-Play help index (integrated into the bottom-right action buttons panel for instant touch accessibility).</li>
-            </ul>
           </div>
 
           <!-- VICTORY CONDITIONS -->
@@ -237,7 +265,51 @@
               <li><strong>Elimination:</strong> Be the last player standing. All other players must lose every planet and ship.</li>
               <li><strong>Tech Domination:</strong> Achieve a √Tech bonus of at least <strong>15%</strong> AND lead 2nd place by at least <strong>10 percentage points</strong>.</li>
               <li><strong>Economic Domination:</strong> Control more than <strong>75%</strong> of the galaxy's total planet capacity.</li>
-              <li><strong>Player Elimination:</strong> Capturing a player's last planet eliminates them, awarding the conqueror <strong>+100 Exp</strong>.</li>
+              <li><strong>Timed Game Victory:</strong> When the clock runs out, the player with the highest combined score wins. Score = <strong>√Tech + √Exp + Capacity%</strong> (your percentage of total galactic max capacity). If no players survive, it's a draw.</li>
+              <li><strong>Player Elimination:</strong> Capturing a player's last planet eliminates them, awarding the conqueror <strong>+100 Exp</strong>. Destroying a Homeworld also awards <strong>+100 Exp</strong>.</li>
+              <li><strong>Leaderboard Scoring:</strong> The leaderboard ranks all players by Victory Score = √Tech% + √Exp% + Capacity%. Players with a 🎯 bullseye are dominant threats (capacity &gt;4,500, tech lead ≥200, or 2× capacity over 2nd place) — AIs will gang up on them!</li>
+            </ul>
+          </div>
+
+          <!-- CONTROLS -->
+          <div id="help-topic-controls" class="help-page hidden">
+            <ul>
+              <li><strong>Left-click:</strong> Select planets or ships. Click empty space to deselect. Click a selected cruiser again to toggle Upgrade Mode.</li>
+              <li><strong>Shift + Left-click:</strong> Add/remove planets or ships from your current selection.</li>
+              <li><strong>Shift + Left-drag:</strong> Draw a lasso to box-select multiple ships and/or planets.</li>
+              <li><strong>Right-click:</strong> Issue orders — attack enemies, reinforce friendlies, or move to empty space. Right-click an enemy <em>ship</em> to target-lock your cruisers or redirect your fleets.</li>
+              <li><strong>Shift + Right-click:</strong> Queue orders for selected cruisers. They execute waypoints sequentially.</li>
+              <li><strong>Left-drag / Middle-click Drag:</strong> Pan the camera.</li>
+              <li><strong>Scroll Wheel / +/- keys:</strong> Zoom in and out (0.2×–5.0×).</li>
+              <li><strong>Arrow Keys:</strong> Pan the camera.</li>
+              <li><strong>Tab:</strong> Cycle through your owned planets (selects and centers camera).</li>
+              <li><strong>Ctrl+Tab:</strong> Cycle through your cruisers.</li>
+              <li><strong>Alt+Tab:</strong> Cycle through your active fleets.</li>
+              <li><strong>Ctrl+0–9:</strong> Assign selected ships/fleets to a control group.</li>
+              <li><strong>0–9:</strong> Recall a saved control group.</li>
+              <li><strong>Enter:</strong> Open/send chat. Type <code>N &lt;name&gt;</code> with a cruiser or planet selected to rename it (max 16 characters).</li>
+              <li><strong>Pause/Break:</strong> Pause the game.</li>
+              <li><strong>L:</strong> Toggle the leaderboard panel.</li>
+              <li><strong>Touch Controls (Mobile):</strong>
+                <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
+                  <li><strong>Quick Tap:</strong> Select/deselect a planet or cruiser. Double-tap to view detailed tooltips.</li>
+                  <li><strong>Hold 450ms:</strong> Issue commands (attack/move). Marked by floating <em>COMMAND ISSUED</em> text.</li>
+                  <li><strong>Drag (&gt;10px):</strong> Pan the camera.</li>
+                  <li><strong>Two-finger Pinch:</strong> Zoom in/out smoothly.</li>
+                </ul>
+              </li>
+            </ul>
+            <p style="margin-top: 12px; font-size: 0.95rem; color: #aaa;"><strong>Order Modifiers</strong> (toggle before issuing an order):</p>
+            <ul>
+              <li><strong>W — Warp:</strong> Toggle warp mode for the next launch.</li>
+              <li><strong>B — Bomb Eco:</strong> Launch eco bombers (requires 🚀 Military planet).</li>
+              <li><strong>Q — Bomb Ships:</strong> Launch ship bombers (requires 🚀 Military planet).</li>
+              <li><strong>F — Fill Mode:</strong> Sends only enough ships to fill the target friendly planet to capacity.</li>
+              <li><strong>S — Scout Mode:</strong> Sends only 10% of selected ships (min 3) as a scouting party.</li>
+              <li><strong>C — Cruiser Build:</strong> Open cruiser construction menu (requires 🚀 Military planet or Homeworld).</li>
+              <li><strong>O — Focus Mode:</strong> Open planet focus mode selector (select an owned planet first).</li>
+              <li><strong>U — Upgrade Mode:</strong> Open cruiser upgrade menu (cruiser must be near a friendly planet).</li>
+              <li><strong>P — Patrol:</strong> Toggle patrol mode for selected cruiser(s). Cruiser attacks enemies in range, returns to a friendly well to rearm, then returns to patrol station.</li>
             </ul>
           </div>
 
@@ -246,46 +318,61 @@
             <ul>
               <li><strong>Production:</strong> Owned planets auto-produce ships. Rate scales with how many ships the planet is missing, boosted by Tech Score. Human production above 1× is reduced by 1/3.</li>
               <li><strong>Low Population Penalty:</strong> Planets below 50 ships suffer reduced production. Below 5 ships, production drops to just <strong>10%</strong>.</li>
-              <li><strong>Capacity Growth:</strong> Full planets slowly gain +1 max capacity. Homeworlds gain <strong>+2</strong>.</li>
-              <li><strong>Tech Score 🧪 &amp; Failures:</strong> Earned when planets sit at max capacity. Human players have a failure chance based on galaxy capacity percentage (<code>failChance = capacityPercent * 2</code>). Successful research ticks cost <strong>2 ships</strong>; failed ticks cost <strong>1 ship</strong> (with no tech score progress, unless on a Research Planet which grants +1 Tech Score anyway).</li>
-              <li><strong>Research Focus 🔬:</strong> Transitioning your planet's focus to Research uses the microscope emoji <code>🔬</code> for all UI badges, transition bars, and active indicator displays. Beaker <code>🧪</code> represents standard planetary natural Research and galactic Tech Score.</li>
-              <li><strong>Exp Score 🎯:</strong> Earned through combat (every 20 kills = +1 Exp). Eliminating a player or destroying a Homeworld awards <strong>+100 Exp</strong>. √Exp × 0.5 provides combat bonuses.</li>
-              <li><strong>Gravity Fields:</strong> Planets project gravity wells (radius = maxShips × 1.5, expanded by Tech/Exp). Friendly wells protect ships from attrition and allow cruiser healing/rearming. Gravity gives +1% kill bonus per 50 friendly capacity nearby, -1% per 50 enemy.</li>
+              <li><strong>Capacity Growth:</strong> Full planets slowly gain +1 max capacity (in Economy focus). Homeworlds gain <strong>+2</strong>. Research-focused planets earn Tech instead. Garrison-focused planets hold double capacity but don't grow. Commerce-focused planets generate credits instead.</li>
+              <li><strong>Tech Score 🧪:</strong> Earned when planets at max capacity sit in <strong>Research</strong> focus. Human players have a failure chance based on galaxy capacity percentage (<code>failChance = capacityPercent × 2</code>). Success costs <strong>2 ships</strong> and grants +1 Tech (or +2 on 🔬 Research planets). Failure costs <strong>1 ship</strong> (🔬 Research planets still gain +1 on failure).</li>
+              <li><strong>Tech Enhancement Bonuses:</strong> Each time your √Tech bonus increases by 1, you receive a random <strong>-10% upgrade cost discount</strong> on one upgrade category (down to -50% max). A floating text and chat message announce the discount.</li>
+              <li><strong>Exp Score 🎯:</strong> Earned through combat (every 20 kills = +1 Exp). Eliminating a player or destroying a Homeworld awards <strong>+100 Exp</strong>. Diplomats also earn Exp through sympathy generation.</li>
+              <li><strong>Credits 💲:</strong> A currency earned by <strong>Commerce</strong>-focused planets. Credits can supplement ship costs when building cruisers, paying for upgrades, and transitioning focus modes — reducing the garrison drain.</li>
+              <li><strong>Gravity Fields:</strong> Planets project gravity wells (radius = maxShips × 1.5, expanded by Tech/Exp). Military planets at full capacity get <strong>1.5× gravity radius</strong>. Garrison-focused planets at full capacity extend gravity by <strong>+ships/2</strong>. Friendly wells protect ships from attrition and allow cruiser healing/rearming.</li>
               <li><strong>Orbital Bombardment:</strong> Each defending ship killed has an <strong>8%</strong> chance to reduce max capacity by 1. Below 55 max capacity = <strong>planet destroyed!</strong></li>
               <li><strong>Planet Explosion:</strong> Destroyed planets deal <strong>3d6 splash damage</strong> to all planets within 400px (reduced by 1 per 25px). Max capacity takes 1/3 of that. Military planet explosions deal <strong>3× damage</strong> in a <strong>600px</strong> radius. Chain reactions are possible!</li>
               <li><strong>Sacrificial Upgrade:</strong> Sending ships to a full friendly planet sacrifices them. Every <strong>20 sacrificed = +1 max capacity</strong>.</li>
-              <li><strong>Capture Penalty:</strong> Capturing an owned planet costs <strong>-1 max capacity</strong>. Capturing a neutral has a <strong>40%</strong> chance to assign a special type.</li>
-              <li><strong>Homeworld 👑:</strong> Starting planet. 2× production, +2 capacity growth. Attacking or defending grants <strong>+15% combat bonus</strong> (human players only). Destroying one awards +100 Exp.</li>
-              <li><strong>Special Planet Types</strong> (30% chance on neutral capture):
+              <li><strong>Capture Penalty:</strong> Capturing an owned planet costs <strong>-1 max capacity</strong>. Capturing a neutral has a <strong>30%</strong> chance to assign a special type (10% each: Research, Military, Speed).</li>
+              <li><strong>Homeworld 👑:</strong> Starting planet. 2× production, +2 capacity growth. Attacking or defending grants <strong>+15% combat bonus</strong> (human players only). Destroying one awards +100 Exp. Cruisers can be built here.</li>
+              <li><strong>Special Planet Types:</strong>
                 <ul style="margin-top: 6px;">
-                  <li><strong>🔬 Research (10%):</strong> Earns +2 Tech per tick instead of +1, marked by the microscope emoji <code>🔬</code>.</li>
-                  <li><strong>🚀 Military (10%):</strong> Required to launch bomber runs and cruisers. Costs -1 max capacity per bombing launch.</li>
-                  <li><strong>⚡ Speed (10%):</strong> Ships launched gain +15 flat speed bonus.</li>
+                  <li><strong>🔬 Research:</strong> Earns +2 Tech per successful tick instead of +1. Still earns +1 on failures.</li>
+                  <li><strong>🚀 Military:</strong> Required to launch bombers and build cruisers. Full military planets get 1.5× gravity radius. Costs -1 max capacity per bombing launch. Explosions deal 3× damage in 600px radius.</li>
+                  <li><strong>⚡ Speed:</strong> Ships launched gain +15 flat speed bonus.</li>
                 </ul>
               </li>
+              <li><strong>Sympathy &amp; Revolts:</strong> Planets accumulate sympathy from nearby players (see 🤝 Diplomacy topic). When a non-owner's sympathy exceeds 1/3 of the planet's garrison, a revolt contest can trigger, potentially flipping ownership peacefully!</li>
+            </ul>
+          </div>
+
+          <!-- FOCUS MODES -->
+          <div id="help-topic-focus" class="help-page hidden">
+            <ul>
+              <li><strong>Overview:</strong> Every owned planet operates in one of five focus modes. Press <strong>O</strong> (or click the focus badge) on a selected planet to switch. Focus transitions take <strong>15 seconds</strong> and cost <strong>half the planet's max capacity</strong> in ships (payable with credits). Planets start in a random mode (Economy, Research, or Garrison).</li>
+              <li><strong>📈 Economy (E):</strong> The default growth mode. When the planet is at full capacity, it gains <strong>+1 max capacity</strong> periodically (+2 for Homeworlds). This is how you expand your economy over time.</li>
+              <li><strong>🔬 Research (R):</strong> When at full capacity, the planet generates <strong>Tech Score 🧪</strong> instead of growing capacity. Success rate decreases as your share of galactic capacity increases. Research planets (🔬 type) earn double tech. Essential for Tech Domination victory!</li>
+              <li><strong>🛡️ Garrison (G):</strong> The planet can hold up to <strong>2× its max capacity</strong> in ships, producing beyond the normal cap. It does not grow max capacity or earn tech when full. Garrison planets extend their gravity well radius by <strong>+ships/2</strong> when above capacity, creating massive defensive zones. Excess ships are sacrificed for capacity upgrades when transitioning out.</li>
+              <li><strong>💲 Commerce (C):</strong> Requires <strong>&gt;100 max capacity</strong> to unlock. When at full capacity, the planet generates <strong>Credits</strong> at a rate proportional to ships above 100. Credits can be used to pay for cruiser construction, upgrades, and focus transitions — reducing the need to drain planet garrisons. Commerce planets do not grow capacity or earn tech.</li>
+              <li><strong>⛏️ Mining (M):</strong> When selected, the planet passively extracts dilithium crystals, merculite, duranium, and other raw sci-fi materials found on it. If the planet is at full capacity (ships &gt;= max capacity), the extraction rate is tripled. Stockpiled resources can be traded or sold to the galactic bank.</li>
             </ul>
           </div>
 
           <!-- SHIPS & COMBAT -->
           <div id="help-topic-ships" class="help-page hidden">
             <ul>
-              <li><strong>Launch Cost:</strong> Each launch costs <strong>10 + your planet count − √Tech</strong> ships. Invest in Tech to launch cheaply!</li>
+              <li><strong>Launch Cost:</strong> Each launch costs <strong>10 + your planet count − √Tech</strong> ships (capped at 250). Invest in Tech to launch cheaply!</li>
               <li><strong>Smart Reinforcements:</strong> Friendly planet-to-planet reinforcement launches are automated:
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
                   <li>If the destination is already full, <strong>0 ships</strong> are launched, preventing wastage.</li>
-                  <li>If the target is not full and the source has enough garrison, exactly the number of ships needed to fill the target are sent.</li>
+                  <li>If the target is not full and the source has enough, exactly the number needed to fill the target is sent.</li>
                   <li>Otherwise, exactly half the source planet's remaining ships are sent.</li>
                 </ul>
               </li>
               <li><strong>Combat (Planet Attack):</strong> <strong>80%</strong> base kill chance, minus 1% per 5 defending ships, plus Tech/Exp/Gravity/Swarm modifiers. Minimum kill chance = attacker's Tech+Exp bonuses.</li>
               <li><strong>Swarm Bonus:</strong> +1% kill chance per 10 friendly ships within 100px of the target.</li>
+              <li><strong>Gravity Combat Modifier:</strong> +1% kill chance per 50 friendly capacity in gravity wells near the fight. -1% per 50 enemy capacity.</li>
               <li><strong>Homeworld &amp; Last Stand:</strong> +15% combat bonus when attacking or defending a Homeworld (human only). +15% Last Stand bonus defending your last planet. These do <strong>not</strong> apply to AI vs AI.</li>
               <li><strong>Human vs Human:</strong> Defender gets +2% bonus per surviving AI player. Clear out the AI first!</li>
               <li><strong>Dogfighting:</strong> Ships within 40px (expanded by Tech + Health) fire lasers each second. Base hit chance: (10 + Tech + Exp + ShipExp + maxHealth×5 + bombs×3) / 100.</li>
               <li><strong>Fleet Attrition:</strong> Every 4 seconds, one ship per fleet is destroyed (after a safe window based on Tech+Exp). Ships inside friendly gravity wells take 1/3 attrition.</li>
-              <li><strong>Deep Space Attrition:</strong> Individual ships in deep space take escalating damage the longer they fly, starting after a safe window of (√Tech + √Exp×0.5) seconds. Bombers take half attrition.</li>
-              <li><strong>Distance-Based Launch Speeds:</strong> Fleets launched into space travel at **1/4 speed** (saving rolls enabled) if their destination is less than **100px** away from the origin planet. Otherwise, they launch at **normal speed**. <em>Note:</em> Cruisers always launch at normal speed.</li>
-              <li><strong>Speed Modifiers (1/2/3):</strong> 1/4 speed gets a <strong>90%</strong> Saving Roll vs damage. 1/2 speed gets <strong>75%</strong>. Cruisers and Amoebas always survive rolls.</li>
+              <li><strong>Deep Space Attrition:</strong> Ships in deep space take escalating damage the longer they fly, starting after a safe window of (√Tech + √Exp×0.5) seconds. Bombers take half attrition.</li>
+              <li><strong>Distance-Based Launch Speeds:</strong> Fleets launched to destinations less than <strong>100px</strong> away travel at <strong>1/4 speed</strong> (saving rolls enabled). Otherwise normal speed. Cruisers always launch at normal speed.</li>
+              <li><strong>Speed Modifiers:</strong> 1/4 speed gets a <strong>90%</strong> Saving Roll vs damage. 1/2 speed gets <strong>75%</strong>. Cruisers and Amoebas always survive rolls.</li>
               <li><strong>Warp Drive (W):</strong> Adds (30 − your planet count, min 20) speed bonus. Each ship has a <strong>(50% − √Tech)%</strong> chance to explode on launch!</li>
               <li><strong>Bombers (B/Q):</strong> Military 🚀 planets only. Sends 1/3 of fleet at speed 20. Costs -1 max capacity.
                 <ul style="margin-top: 6px;">
@@ -300,45 +387,72 @@
           <!-- CRUISERS -->
           <div id="help-topic-cruisers" class="help-page hidden">
             <ul>
-              <li><strong>Cruisers 🛸:</strong> Heavy warships equipped with massive health pools and regenerating weapon systems (bombs).</li>
-              <li><strong>Cruiser Stats &amp; Launches:</strong> Health = garrison/25. Cost = health×15 ships + health×2 max capacity. Speed decreases with health. Cruisers **always launch at normal speed**, unaffected by launch distances. They orbit enemy planets instead of landing.</li>
-              <li><strong>Upgrade Accessibility:</strong> You can enter Upgrade Mode on owned planets regardless of their ship garrison size. Insufficient garrison ships will gray out and disable unaffordable options while keeping costs visible.</li>
-              <li><strong>Fuel System &amp; Attrition:</strong> Cruisers consume fuel outside friendly gravity wells. Flying drains fuel at **twice the rate** (<code>4</code> in sub-warp flight, <code>8</code> in warp), but **halves to <code>2</code>** when they are stationary (not moving). Inside friendly wells, they naturally recover fuel.</li>
-              <li><strong>Out of Fuel Penalty:</strong> When out of fuel (<code>fuel &lt;= 0</code>), cruisers move at **1/4 speed** and take **1d6 direct health damage** (bypassing armor) each time fuel is consumed outside a friendly gravity well.</li>
-              <li><strong>Autonomous Fuel Transfer:</strong> Out-of-fuel friendly cruisers within sensor range of each other will autonomously share fuel. If one has <code>fuel &gt; 1</code>, it transfers **1 fuel** to rescue the stranded cruiser.</li>
-              <li><strong>Multi-shot:</strong> Cruisers fire multiple laser shots per second equal to their current health, targeting enemy ships and planets.</li>
-              <li><strong>Bomb Sacs:</strong> Cruisers carry bombs equal to 1/5 of their max health. Each dogfight volley at planets consumes one bomb sac. Bombs reload at friendly gravity wells (base rate of 1 per 10 seconds, but reload rate increases by +10% per max bomb capability).</li>
-              <li><strong>Armor Deflection (Damage Resistance):</strong> Cruisers have a base chance to completely shrug off incoming damage equal to <strong>(Max Health + √Tech + √Exp × 0.5 + √ShipExp × 0.5)%</strong> (capped at <strong>75%</strong>). The **Shields** upgrade directly adds +10% (Tier 1), +15% (Tier 2), or +20% (Tier 3) to this shrug chance before capping. If bomb sacs are empty (0), this deflection chance is **cut in half**. Keep them armed!</li>
-              <li><strong>Splash, Targeting, &amp; Damage Control:</strong> Cruisers can be upgraded with **Munitions** to gain splash damage (destroying multiple standard fleet ships or dealing extra direct HP damage to cruisers/amoebas limited to 1/50th target size when bombs are loaded, i.e. &lt;50 no splash, &lt;100 1 splash, &lt;150 2 splash, &lt;200 3 splash), **Targeting Computers** (boosts accuracy and range by up to +20%), and **Damage Control** (accelerates repairing by up to +3 HP/min and reduces damage speed penalties by up to 75%).</li>
-              <li><strong>Bombardment Threat Safety:</strong> Cruisers will automatically <strong>suspend planetary bombardment</strong> if there is any active enemy ship or wild Space Amoeba within their <strong>sensor range</strong>, switching their weapon systems entirely to defensive engagement.</li>
-              <li><strong>Order Queueing (Shift-Right Click):</strong> Hold Shift while right-clicking empty space, friendly planets, or enemy ships/planets to queue up movement and targeting orders for selected cruisers. Cruisers execute them sequentially, transitioning automatically when within 15px of a space target, inside friendly gravity orbit (radius + 45px), or when a targeted lock is conquered or destroyed.</li>
-              <li><strong>Crew Reloading Proximity Safety:</strong> Cruisers naturally restore crew at 1 per second inside a friendly gravity well, unless an enemy vessel gets closer than <strong>100px</strong> (independent of the cruiser's sensor scanning range).</li>
-              <li><strong>Marine Assault Capacity Constraints:</strong> Cruisers equipped with Marines automatically launch planetary assaults only when their marine count is at least <strong>1/2 of maximum capacity</strong> (Max Capacity = Marines level × Max Health). This restriction is completely bypassed if a planet is explicitly targeted by the player.</li>
+              <li><strong>Building Cruisers 🛸:</strong> Built from 🚀 Military planets or your Homeworld. Press <strong>C</strong> to open the build menu. Choose from 8 hull classes (Scout 15HP to Mammoth 50HP). Cost = ships + max capacity deducted from the planet. The planet must retain at least 55 max capacity after construction.</li>
+              <li><strong>Hull Classes:</strong>
+                <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
+                  <li><strong>Scout (S):</strong> 15 HP — 50 ships, 2 cap</li>
+                  <li><strong>Frigate (F):</strong> 20 HP — 75 ships, 3 cap</li>
+                  <li><strong>Destroyer (D):</strong> 25 HP — 100 ships, 4 cap</li>
+                  <li><strong>Cruiser (C):</strong> 30 HP — 150 ships, 6 cap</li>
+                  <li><strong>Battlecruiser (A):</strong> 35 HP — 175 ships, 7 cap</li>
+                  <li><strong>Battleship (B):</strong> 40 HP — 225 ships, 9 cap</li>
+                  <li><strong>Titan (T):</strong> 45 HP — 300 ships, 12 cap</li>
+                  <li><strong>Mammoth (M):</strong> 50 HP — 400 ships, 16 cap</li>
+                </ul>
+              </li>
+              <li><strong>Movement &amp; Speed:</strong> Cruisers always launch at normal speed. Larger cruisers move slower. Engine upgrades add +3 speed per level. Damaged cruisers suffer a speed penalty (reduced by Damage Control).</li>
+              <li><strong>Fuel System:</strong> Cruisers consume fuel outside friendly gravity wells. Flying costs <strong>4 fuel/tick</strong> (8 in warp). Stationary outside wells costs <strong>2 fuel/tick</strong>. Inside friendly wells, fuel regenerates. Base fuel capacity = maxHealth/5 (increased by Engine upgrades and Fuel Tanker).</li>
+              <li><strong>Out of Fuel Penalty:</strong> At 0 fuel, cruisers move at <strong>1/4 speed</strong> and take <strong>1d6 direct HP damage</strong> per tick outside friendly wells.</li>
+              <li><strong>Fuel Transfer:</strong> Friendly cruisers within sensor range autonomously share fuel — if one has fuel &gt;1, it donates 1 to a stranded ally.</li>
+              <li><strong>Multi-shot Weapons:</strong> Cruisers fire laser shots per second equal to their current health. They target enemy ships, amoebas, and planets.</li>
+              <li><strong>Bomb Sacs:</strong> Carry bombs = maxHealth/5 (increased by Munitions). Each bombardment volley on planets uses 1 bomb. Bombs reload inside friendly gravity wells.</li>
+              <li><strong>Armor Deflection:</strong> Base shrug chance = <strong>(MaxHealth + √Tech + √Exp×0.5 + √ShipExp×0.5)%</strong>, capped at <strong>75%</strong>. Shields upgrade adds +10% per level. If out of bombs (0), deflection is <strong>halved</strong> — keep them loaded!</li>
+              <li><strong>Crew System:</strong> Cruisers have crew (up to 2× current health). Crew restores at 1/sec inside friendly wells when no enemies are within <strong>100px</strong>. Crew is consumed during boarding combat.</li>
+              <li><strong>Patrol Mode (P):</strong> Toggled via <strong>P</strong> key or button. Cruiser attacks enemies in sensor range, flies to a nearby friendly well to rearm, then returns to its patrol station. Great for automated area defense.</li>
+              <li><strong>Bombardment Threat Safety:</strong> Cruisers automatically <strong>suspend bombardment</strong> when any enemy ship or Amoeba is within sensor range, switching to defensive engagement.</li>
+              <li><strong>Order Queueing (Shift+Right-click):</strong> Queue movement and targeting orders. Cruisers execute them sequentially, advancing to the next waypoint automatically.</li>
+              <li><strong>Cruiser Bomb Toggle (B):</strong> When cruiser(s) are selected, <strong>B</strong> toggles auto-planet-bombardment on/off for those cruisers.</li>
             </ul>
           </div>
 
           <!-- UPGRADES -->
           <div id="help-topic-upgrades" class="help-page hidden">
             <ul>
-              <li><strong>Cruiser Upgrade Mode (U) ⚙️:</strong> Select a Cruiser and click it again (or press <strong>U</strong>) to enter Upgrade Mode. Upgrade choices are grayed out/disabled if the planet does not have enough ships.</li>
-              <li><strong>Deduction Cost:</strong> Every upgrade costs exactly <strong>100 ships</strong> deducted directly from the nearby friendly planet.</li>
-              <li><strong>Max Upgrades &amp; Health Limits:</strong> Each category can be upgraded a maximum of <strong>5 times</strong>. However, the levels of individual upgrades on a cruiser cannot exceed <strong>1/10 of its max health</strong> rounded down (e.g., Level 1 at 10-19 HP, Level 5 at 50+ HP). Additionally, the total number of all combined upgrades a cruiser can have is limited to <strong>1/5 of its max health</strong> rounded down. When a category or the overall cruiser is fully upgraded, the corresponding buttons disappear from the Upgrade Mode overlay.</li>
-              <li><strong>Progression &amp; Linear Bonus:</strong> Upgrades scale linearly per level, ensuring consistent and powerful incremental benefits for all tiers up to Level 5.</li>
-              <li><strong>Upgrade Emojis:</strong> Active upgrade emojis are drawn at **half size** (<code>4px</code>) on the starmap under the cruisers for a clean layout.</li>
+              <li><strong>Upgrade Mode (U) ⚙️:</strong> Select a cruiser near a friendly planet and press <strong>U</strong> (or click the cruiser again) to open the upgrade panel. Costs are paid from the nearby planet's garrison (and your credit balance).</li>
+              <li><strong>Cost Formula:</strong> Base cost = <code>min(150, 25 + maxHealth × (3 + totalUpgrades/3))</code>, modified by a global discount (-25% base) and personal tech-enhancement discounts (earned as your √Tech increases). Costs scale with the cruiser's total upgrade count.</li>
+              <li><strong>Upgrade Limits:</strong> Each category caps at <strong>Level 5</strong>. Individual upgrade level ≤ <strong>maxHealth/10</strong>. Total upgrades ≤ <strong>maxHealth/5</strong>. Bigger hulls support more upgrades.</li>
               <li><strong>Available Modules:</strong>
                 <ul style="margin-top: 6px; padding-left: 20px;">
-                  <li><strong>📡 Sensor Array (S):</strong> Standardized to exactly <strong>+25% range bonus per level</strong> (up to +125% total range boost).</li>
-                  <li><strong>🔬 Laboratories (L):</strong> Linearly increases research lab speed (+1 Lab each tier, up to +5 total), allowing the cruiser to accumulate hazard knowledge. Uses the microscope emoji <code>🔬</code>.</li>
-                  <li><strong>🛡️ Armor Plating (A):</strong> Standardized to exactly <strong>+4 flat + 10% maxHealth</strong> armor points/capacity per level.</li>
-                  <li><strong>🌀 Energy Shields (H):</strong> Standardized to exactly <strong>+10% deflect chance per level</strong>. Enforced a hard purchase limit block if the next level's deflect chance is <strong>higher than 80%</strong>.</li>
-                  <li><strong>🚀 Overcharged Engine (E):</strong> Standardized to exactly <strong>+3 speed per level</strong> and <strong>+3°/sec turn rate per level</strong>.</li>
-                  <li><strong>💣 Munition Pods (M):</strong> Standardized to exactly <strong>+1 bomb capacity</strong> and <strong>+1 splash damage rating per level</strong>. When active, hitting targets automatically destroys additional standard fleet ships or deals extra direct damage to enemy cruisers/amoebas. <em>Note:</em> splash damage cannot exceed 1/50 of the target's size (remaining fleet count or HP).</li>
-                  <li><strong>🎯 Targeting Computer (T):</strong> Standardized to exactly <strong>+10% weapon range</strong> and <strong>+10% accuracy hit chance per level</strong>.</li>
-                  <li><strong>🔧 Damage Control (D):</strong> Restores hull integrity out-of-combat inside friendly gravity wells (+50% per level). Additionally allows hull healing in combat or deep-space at 20% of normal rate per level (up to 100% rate at level 5!), and decreases the damaged low-health cruiser speed penalty factor: <code>1 / (1 + level)</code>.</li>
-                  <li><strong>⛽ Fuel Tanker (F):</strong> Standardized to exactly <strong>+5 fuel capacity per level</strong> and reduces cruiser flight speed by only <strong>-3 speed per level</strong>.</li>
+                  <li><strong>📡 Sensor Array (S):</strong> <strong>+25% scan/weapon range per level</strong>. Expands the cruiser's detection, attack, and diplomacy radius.</li>
+                  <li><strong>🔬 Laboratories (L):</strong> <strong>+1 lab per level</strong>. Labs accumulate hazard knowledge when near storms/nebulae, reducing their danger. Uses 🔬 icon.</li>
+                  <li><strong>🛡️ Armor Plating (A):</strong> <strong>+4 flat + 10% maxHealth</strong> armor capacity per level. Absorbs damage before hull.</li>
+                  <li><strong>🌀 Energy Shields (H):</strong> <strong>+10% deflect chance per level</strong>. Hard cap: cannot purchase if next level would exceed <strong>80%</strong> total deflection.</li>
+                  <li><strong>🚀 Overcharged Engine (E):</strong> <strong>+3 speed and +3°/sec turn rate per level</strong>. Also adds +2/+1/+1 bonus fuel capacity at Levels 1/2/3.</li>
+                  <li><strong>💣 Munition Pods (M):</strong> <strong>+1 bomb capacity and +1 splash damage per level</strong>. Splash destroys additional fleet ships or deals bonus HP damage to cruisers/amoebas (limited to 1/50th of target's size).</li>
+                  <li><strong>🎯 Targeting Computer (T):</strong> <strong>+10% weapon range and +10% accuracy per level</strong>.</li>
+                  <li><strong>🔧 Damage Control (D):</strong> <strong>+50% hull repair speed per level</strong> inside friendly wells. Enables out-of-combat deep-space healing at 20% per level (100% at L5). Reduces damaged-cruiser speed penalty by <code>1/(1+level)</code>.</li>
+                  <li><strong>⛽ Fuel Tanker (F):</strong> <strong>+(maxHealth/5 + 10) fuel capacity per level</strong>. Costs -3 cruiser speed per level.</li>
+                  <li><strong>🤝 Diplomat (I):</strong> <strong>+1 diplomatic attempt per 60/level seconds</strong>. Generates sympathy on neutral and enemy planets in sensor range, potentially flipping them via revolt. Also reduces enemy sympathy on your own planets. Earns Exp on success. See 🤝 Diplomacy topic.</li>
+                  <li><strong>🪖 Marines (R):</strong> <strong>Marine capacity = level × maxHealth</strong>. Automatically loads marines from nearby friendly planets (&gt;50% garrison). Marines launch fleet assaults on enemy planets when they outnumber defenders 3:1. Can also board enemy cruisers when marines exceed 2× enemy crew — capturing the ship!</li>
                 </ul>
               </li>
-              <li><strong>Cancel Upgrade Mode:</strong> Click the selected cruiser again (or press <strong>C</strong> or click <strong>❌ Cancel</strong>) to exit Upgrade Mode. The cruiser remains selected.</li>
+              <li><strong>Cancel:</strong> Press <strong>C</strong>, <strong>U</strong>, <strong>Escape</strong>, or click ❌ Cancel to exit Upgrade Mode. The cruiser stays selected.</li>
+            </ul>
+          </div>
+
+          <!-- DIPLOMACY & SYMPATHY -->
+          <div id="help-topic-diplomacy" class="help-page hidden">
+            <ul>
+              <li><strong>Sympathy System:</strong> Planets accumulate <strong>sympathy</strong> toward players, representing soft influence. Sympathy accrues from two sources: nearby owned planets (gravitational influence) and cruiser Diplomat modules.</li>
+              <li><strong>Gravity-Based Sympathy:</strong> Owned planets passively exert sympathy on neutral/enemy planets within their gravity well that have fewer ships than them, at a rate of <strong>1 sympathy per minute</strong>. Larger, fuller planets naturally extend influence further.</li>
+              <li><strong>Diplomat Sympathy:</strong> Cruisers with the 🤝 Diplomat upgrade attempt sympathy rolls on neutral/enemy planets in sensor range every <strong>60/diplomat_level seconds</strong>. Success chance = <strong>(30 + √PlayerExp×3 + √ShipExp×3 + currentSympathy)%</strong>. Success grants sympathy and awards +1 player Exp and ship Exp equal to sympathy gained.</li>
+              <li><strong>Disposition:</strong> On first successful diplomat contact, a planet rolls a <strong>d20 + exp bonuses</strong> for its disposition toward you. Higher disposition means larger sympathy gains per success.</li>
+              <li><strong>Sympathy Cap:</strong> A player's sympathy on any planet caps at the planet's <strong>max capacity</strong>.</li>
+              <li><strong>Counter-Espionage:</strong> If no enemy/neutral planets are in range, diplomats will instead target friendly planets that have enemy sympathy, <strong>reducing</strong> the highest enemy sympathy by 1 per attempt.</li>
+              <li><strong>Revolts:</strong> When a non-owner's sympathy exceeds <strong>1/3 of the planet's garrison</strong>, a revolt can occur. All eligible factions (including the current owner) roll dice — owner rolls up to <code>garrison + own sympathy</code>, challengers roll up to their sympathy. Highest roll wins! The winner consumes sympathy equal to 1/3 of the garrison. Revolts have a <strong>3-minute cooldown</strong>.</li>
+              <li><strong>Spy Rooted Out 👁️:</strong> When your ships are cleared from an enemy planet you attacked, a 👁️ icon appears, indicating your espionage attempt has been discovered.</li>
+              <li><strong>Marine Boarding:</strong> Cruisers with Marines can <strong>board enemy cruisers</strong> when their marine count exceeds 2× the enemy's crew. Boarding sends a pod that initiates combat between marines and the target's crew+marines. Victory captures the enemy cruiser! Surviving marines return to the launching cruiser via return pod.</li>
+              <li><strong>Marine Planet Assaults:</strong> When a cruiser's marines exceed 3× a nearby enemy planet's garrison (or the planet is explicitly targeted), it launches the marines as a standard fleet to capture the planet.</li>
             </ul>
           </div>
 
@@ -348,9 +462,9 @@
               <li><strong>Ion Storms ⚡:</strong> Moving hazards that drift across the map. New storms spawn roughly every 5 minutes. Intensity = 10d6 (capped by spawn count). Ships and planets inside take periodic damage.</li>
               <li><strong>Ancient Minefields 💣:</strong> Stationary. Intensity = 12d6. Massive burst damage on entry, especially to fast ships. Ongoing damage to ships inside. Do <em>not</em> damage planets.</li>
               <li><strong>Nebulae 🌫️:</strong> Stationary, 30% larger. Intensity = 10d8. Slow ships passing through, reduce combat effectiveness by intensity/4 %. No direct damage or entry burst.</li>
-              <li><strong>Integer Display:</strong> Effective intensity (intensity minus knowledge/tech/exp reductions) is rounded and displayed as a clean integer on the starmap.</li>
+              <li><strong>Sensor Reduction:</strong> Hazards reduce your gravity well sensor range while planets/ships are inside them. Effective intensity is displayed as a clean integer on the starmap.</li>
               <li><strong>Damage Formula:</strong> Chance = (intensity − knowledge − (√Tech + √Exp)/2 − √ShipExp) / divisor. Higher stats = much safer.</li>
-              <li><strong>Knowledge:</strong> Increases when cruisers with laboratories (🔬) are within scanning range of a hazard (+1 per lab per 2 minutes). Directly reduces effective intensity.</li>
+              <li><strong>Knowledge:</strong> Increases when cruisers with 🔬 Laboratories are within scanning range of a hazard (+1 per lab per 2 minutes). Directly reduces effective intensity.</li>
               <li><strong>Speed &amp; Entry:</strong> Ships traveling faster than base speed (warp) take 3× entry damage from storms/minefields. Slow ships get Saving Rolls.</li>
               <li><strong>Amoeba Immunity:</strong> Amoebas are immune to Ion Storm entry damage (but not minefields).</li>
               <li><strong>Planet Erosion:</strong> Ion storms (not minefields) erode planet max capacity over time. Below 55 = destroyed! Last Stand gives +20 knowledge bonus.</li>
@@ -363,38 +477,38 @@
             <ul>
               <li><strong>Giant Space Amoebas 🧬:</strong> Alien creatures belonging to the "Monsters" faction. They wander the map attacking ships and bombarding planets.</li>
               <li><strong>Amoeba Hive:</strong> The Monsters' homeworld. Spawns a new Amoeba every <strong>2 minutes</strong>. Initial Amoebas also spawn scattered across the map at game start (1 per 10 planets).</li>
-              <li><strong>Stats:</strong> Speed = 4d6 (varies per Amoeba). Health = 1–3 (random). Attack range = 50px. Amoebas render at double the standard graphic size and attack targets or planets with a beautiful, custom-designed organic green plasma particle spray animation.</li>
-              <li><strong>Regeneration &amp; Armor:</strong> Amoebas slowly heal over time (1 HP per minute). They possess incredibly thick shields/hides, giving them a 50% + 1% per Max Health + 1% per Tech/Exp modifier chance to completely deflect hits (capped at <strong>95%</strong>). When shrugging damage, a mini green shrug-ripple animation triggers at a randomized coordinate within the visual boundary of the Amoeba. When reduced to 0 health, if maxHealth &gt; 0, they lose 1 maxHealth but fully regenerate — shrinking visually each time.</li>
-              <li><strong>Growth &amp; Splitting:</strong> Killing an enemy ship or bombarding a planet grants +1 maxHealth and +1 health (30-second cooldown). If its maxHealth reaches the splitting threshold (Math.max(4, techBonus)), it has a 50% chance to split into two smaller Amoebas, each taking half of the parent's maxHealth and health. Splitting also feeds the Monster faction, adding experience and tech score equal to the parent's pre-split maxHealth!</li>
-              <li><strong>Bomb Sacs:</strong> Amoebas carry bomb sacs equal to their maxHealth. These regenerate naturally (1 per 60 seconds) without needing a friendly well.</li>
-              <li><strong>Combat Value:</strong> Killing an Amoeba awards <strong>10 × maxHealth Exp</strong> to the attacker — they're valuable targets!</li>
-              <li><strong>Wandering AI:</strong> Amoebas roam randomly toward planets. They attack any non-Monster ships in range and bombard unowned or enemy planets.</li>
+              <li><strong>Stats:</strong> Speed = 4d6 (varies per Amoeba). Health = 1–3 (random). Attack range = 50px. Rendered at double standard graphic size with organic green plasma spray animations.</li>
+              <li><strong>Regeneration &amp; Armor:</strong> Amoebas heal 1 HP per minute. Deflection chance = <strong>50% + 1% per maxHealth + 1% per Tech/Exp modifier</strong> (capped at <strong>95%</strong>). When shrugging damage, a green ripple animation plays. At 0 health with maxHealth &gt; 0, they lose 1 maxHealth but fully regenerate — shrinking each time.</li>
+              <li><strong>Growth &amp; Splitting:</strong> Killing a ship or bombarding a planet grants +1 maxHealth and +1 health (30-second cooldown). At their splitting threshold, 50% chance to split into two smaller Amoebas. Splitting feeds the Monster faction's tech and exp scores!</li>
+              <li><strong>Bomb Sacs:</strong> Carry bombs equal to maxHealth. Regenerate 1 per 60 seconds without needing a gravity well.</li>
+              <li><strong>Combat Value:</strong> Killing an Amoeba awards <strong>10 × maxHealth Exp</strong> — valuable targets!</li>
+              <li><strong>Wandering AI:</strong> Amoebas roam toward planets, attacking non-Monster ships in range and bombarding unowned/enemy planets.</li>
             </ul>
           </div>
 
           <!-- AI & RAMPAGE -->
           <div id="help-topic-ai" class="help-page hidden">
             <ul>
-              <li><strong>AI Spawning:</strong> AIs spawn gradually over the first <strong>4 minutes</strong> of the game (interval scales dynamically based on the active AI count). The count is configurable at game start (default <strong>5</strong>).</li>
-              <li><strong>AI Aggression:</strong> AIs act and make decisions more frequently as they grow. The base decision interval is <strong>2.0 seconds</strong>, which decreases by <strong>0.2 seconds per planet owned</strong>, down to a hyper-aggressive minimum of <strong>0.5 seconds</strong>.</li>
-              <li><strong>Defense Thresholds &amp; Safety Reserves:</strong>
+              <li><strong>AI Spawning:</strong> AIs spawn gradually over the first <strong>4 minutes</strong>. Count is configurable (default <strong>5</strong>).</li>
+              <li><strong>AI Aggression:</strong> Base decision interval = <strong>2.0 seconds</strong>, decreasing by <strong>0.2s per planet owned</strong> (min <strong>0.5s</strong>).</li>
+              <li><strong>Defense Thresholds:</strong>
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
-                  <li><strong>Small Empires:</strong> AI players with fewer than <strong>4 planets</strong> will not launch attacks from any planet unless its garrison exceeds <strong>75% capacity</strong>.</li>
-                  <li><strong>Minimum Garrison:</strong> AI planets will never launch attacks if they have <strong>12 or fewer ships</strong>.</li>
-                  <li><strong>Threat Safety Reserves:</strong> The AI calculates a launch reserve ratio (starts at <strong>70%</strong> and decreases by <strong>5% per planet owned</strong>, down to a <strong>35% minimum</strong>). If a launch would drop the garrison below this reserve ratio, the AI scans for hostile planets within <strong>400px</strong> with <strong>&gt;15 ships</strong>. If any significant threats are detected, there is only a <strong>10% chance</strong> the AI will risk launching.</li>
+                  <li><strong>Small Empires (&lt;4 planets):</strong> Won't attack unless garrison exceeds <strong>75% capacity</strong>.</li>
+                  <li><strong>Minimum Garrison:</strong> Never attacks with <strong>≤12 ships</strong>.</li>
+                  <li><strong>Threat Reserves:</strong> Reserve ratio starts at <strong>70%</strong>, drops 5% per planet (min <strong>35%</strong>). Only 10% chance to attack if nearby threats (&gt;15 ships within 400px) detected.</li>
                 </ul>
               </li>
-              <li><strong>Launch Worthiness:</strong> AIs will only launch an attack if the source planet's garrison exceeds the target planet's garrison by <strong>more than 10 ships</strong>.</li>
-              <li><strong>AI Speed Limits:</strong> If the AI player's √Tech bonus is &lt; 7 (Tech Score &lt; 49), its launched fleets are limited to <strong>1/2 Speed</strong>. Once they reach 49+ Tech, fleets launch at <strong>Normal Speed</strong> (1.0).</li>
-              <li><strong>Overpopulation:</strong> AI planets with <strong>&gt;160 ships</strong> have a <strong>10% chance every 10 seconds</strong> to automatically launch an attack at the weakest enemy planet.</li>
-              <li><strong>Dominant Player Targeting 🎯:</strong> AIs coordinate to prioritize and target dominant leaders! A player is marked as a dominant threat if they exceed <strong>4,500 total capacity</strong>, hold a Tech Score lead of <strong>200+ points</strong>, or possess at least <strong>double the capacity</strong> of the second-place player. Targets owned by a dominant threat receive a huge priority boost (subtracting 200 from the target score).</li>
-              <li><strong>Homeworld Priority:</strong> AIs will fiercely defend and retake their homeworld if captured. Retaking their lost homeworld is given an extremely high priority (subtracting 500 from target score), and if it is within their top targets, they have a <strong>75% chance</strong> to attack it immediately.</li>
-              <li><strong>Rampage Events:</strong> Triggered roughly every <strong>15 minutes</strong> (scaled by map size, and accelerating by −3 minutes per event down to a <strong>6-minute minimum</strong>). A dormant AI player awakens on a neutral planet, targeting the smallest neutral planet with &gt;150 capacity (or the largest neutral overall).
+              <li><strong>Launch Worthiness:</strong> Source garrison must exceed target by <strong>&gt;10 ships</strong>.</li>
+              <li><strong>AI Speed Limits:</strong> Fleets limited to <strong>1/2 speed</strong> until √Tech ≥ 7 (Tech ≥ 49), then normal speed.</li>
+              <li><strong>Overpopulation:</strong> AI planets with <strong>&gt;160 ships</strong> have a <strong>10% chance/10s</strong> to auto-attack the weakest enemy.</li>
+              <li><strong>Dominant Player Targeting 🎯:</strong> AIs gang up on players exceeding <strong>4,500 capacity</strong>, leading tech by <strong>200+</strong>, or holding <strong>2× capacity</strong> of 2nd place.</li>
+              <li><strong>Homeworld Priority:</strong> AIs fiercely retake their lost homeworld (<strong>75% chance</strong> to immediately attack if in top targets).</li>
+              <li><strong>Rampage Events:</strong> Every <strong>~15 minutes</strong> (accelerating to min 6 min). A dormant AI awakens on a neutral planet:
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
-                  <li><strong>Rampage Garrison:</strong> The planet is instantly reinforced with <strong>+300%</strong> of its max capacity in ships.</li>
-                  <li><strong>Vicious Production:</strong> Ships are produced at a <strong>3× rate</strong>.</li>
-                  <li><strong>Garrison Safety:</strong> The AI will not launch from a Rampage planet of &gt;= 150 capacity unless its garrison exceeds <strong>200% of max capacity</strong>, and it must retain at least <strong>100% capacity</strong> after launching.</li>
-                  <li><strong>Capacity Decay &amp; Collapse:</strong> Rather than growing when full, the planet **loses 1 max capacity** periodically. Additionally, **every ship launch permanently drains 1 max capacity**. If its maximum capacity drops <strong>below 55</strong>, the planet undergoes catastrophic collapse and is **completely destroyed**! This decay persists until the planet is successfully captured by another player.</li>
+                  <li><strong>Garrison:</strong> +300% of max capacity instantly.</li>
+                  <li><strong>Production:</strong> 3× rate.</li>
+                  <li><strong>Safety:</strong> Won't launch until garrison &gt;200% capacity (retains 100%).</li>
+                  <li><strong>Decay &amp; Collapse:</strong> Planet loses capacity over time and per launch. Below 55 = <strong>destroyed!</strong> Captured to stop decay.</li>
                 </ul>
               </li>
             </ul>
@@ -403,15 +517,32 @@
           <!-- OTHER -->
           <div id="help-topic-other" class="help-page hidden">
             <ul>
-              <li><strong>Fog of War:</strong> Optional. You can only see within your gravity wells and ship radar. Previously discovered planets appear as silhouettes.</li>
-              <li><strong>AFK Protection:</strong> After 3 minutes of inactivity, your empire is handed to an AI.</li>
-              <li><strong>Map Layout:</strong> Default 60 planets. Sizes: Mega-Super (300 cap), Super (250), Large (150–180), Medium (120–150), Small (75–115), Tiny (53–74). Huge maps get more super planets.</li>
-              <li><strong>Configurable Settings:</strong> AI count, fog of war, production speed (0.5×–3×), hazard level (0–4×), map size (800–3200), and planet count — all set from the start screen.</li>
-              <li><strong>Leaderboard:</strong> Shows players ranked by total capacity. 🧪 = √Tech bonus %. 🎯 = √Exp×0.5 bonus %. 🪐 = capacity (% of galaxy).</li>
-              <li><strong>Mobile responsive Viewport:</strong> Fully optimized for portrait/upright iPhone layouts. Action buttons (including the Help ❓ button) stack neatly into two compact horizontal rows with optimized touch target sizes, the leaderboard scales to the top-right with scroll limits, and the options/menus have scrollable areas to avoid cutoffs.</li>
+              <li><strong>Fog of War:</strong> Optional. You can only see within your gravity wells and ship radar. Previously discovered planets appear as silhouettes with cached info.</li>
+              <li><strong>AFK Protection:</strong> After 3 minutes of inactivity, a warning appears. If you don't respond, your empire is handed to an AI.</li>
+              <li><strong>Timed Games:</strong> Configurable game clock (30 min to unlimited). When time expires, victory is awarded by combined score: √Tech + √Exp + Capacity%.</li>
+              <li><strong>Map Layout:</strong> Default 50 planets (scales with map size). Sizes: Mega-Super (300 cap), Super (250), Large (150–180), Medium (120–150), Small (75–115), Tiny (53–74).</li>
+              <li><strong>Configurable Settings:</strong>
+                <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
+                  <li><strong>AI Count:</strong> 0–50 AI players (default 5). Auto-scales with planet count.</li>
+                  <li><strong>Fog of War:</strong> Toggle visibility restrictions.</li>
+                  <li><strong>Small Empires:</strong> When enabled, AI players with &lt;4 planets play more defensively.</li>
+                  <li><strong>No Rampagers:</strong> Disables Rampage events entirely.</li>
+                  <li><strong>Background Music:</strong> Toggle the soundtrack.</li>
+                  <li><strong>Star Field:</strong> Toggle the cosmetic background star field.</li>
+                  <li><strong>Production Speed:</strong> 0.5× (Grand Strategy) to 3× (Blitz) or custom.</li>
+                  <li><strong>Hazard Level:</strong> 0 (none) to 4× (lots) or custom.</li>
+                  <li><strong>Map Size:</strong> 800 (Very Small) to 3200 (Huge) or custom.</li>
+                  <li><strong>Planet Count:</strong> 10–1000 (default scales with map).</li>
+                  <li><strong>Timed Game:</strong> 30 min to 3 hours, custom, or unlimited.</li>
+                </ul>
+              </li>
+              <li><strong>Leaderboard (L):</strong> Ranks all players by Victory Score (√Tech% + √Exp% + Capacity%). Columns: 🧪 Tech, 🎯 Exp, 🪐 Capacity, 🏆 Total. Dominant threats get a 🎯 bullseye.</li>
+              <li><strong>Chat &amp; Naming:</strong> Press <strong>Enter</strong> to chat. Type <code>N &lt;name&gt;</code> to rename a selected cruiser or owned planet (max 16 characters). Chat commands <code>battle time!</code> and <code>meg!</code> play special music tracks.</li>
               <li><strong>Player Name:</strong> Your name is saved locally and remembered between sessions.</li>
+              <li><strong>Mobile:</strong> Fully responsive for portrait/landscape. Action buttons stack into compact rows. Leaderboard and menus are scrollable.</li>
             </ul>
           </div>
+
 
           <!-- BACK BUTTON (hidden on index) -->
           <div id="help-back-container" style="display: none; margin-top: 15px;">

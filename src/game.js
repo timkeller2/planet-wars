@@ -194,6 +194,10 @@ export class Game {
     };
     this.upgradeEnhanceEvents = [];
     this.pendingChatMessages = [];
+    this.sellOrders = [];
+    this.neutralTradeTimer = 0;
+    this.nextNeutralTradeTime = 120000 + Math.random() * 60000;
+    this.aiMarketTimer = 0;
   }
 
   getUpgradeCost(ship, type) {
@@ -372,6 +376,15 @@ export class Game {
       targetPlanet.justAssignedTimer = 0;
       targetPlanet.homeworldOf = player.id;
       targetPlanet.focusMode = 'economy';
+      
+      // All homeworlds must begin with a resource (randomly assigned)
+      const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+      if (!targetPlanet.resources || targetPlanet.resources.length === 0) {
+        targetPlanet.resources = [resourcesList[Math.floor(Math.random() * resourcesList.length)]];
+      }
+
+      // Player stockpiles start at 0
+      // (resources object is already initialized to all zeros in Player constructor)
       
       // Clear hazards from newly assigned planet
       for (const storm of this.ionStorms) {
@@ -830,7 +843,11 @@ export class Game {
     if (source.isSpeedPlanet) ship.speed += 15;
     ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
     ship.sourcePlanet = source;
-    ship.expScore = source.expScore || 0;
+    let startingExp = source.expScore || 0;
+    if (source.focusMode === 'garrison' && !source.homeworldOf) {
+      startingExp += (source.maxShips || 0) / 10;
+    }
+    ship.expScore = startingExp;
     ship.bomberOffsetMag = 0;
     
     if (isBombing) {
@@ -1020,7 +1037,11 @@ export class Game {
     const spaceDist = Math.sqrt(spaceDx * spaceDx + spaceDy * spaceDy);
     ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
     ship.sourcePlanet = source;
-    ship.expScore = source.expScore || 0;
+    let startingExp = source.expScore || 0;
+    if (source.focusMode === 'garrison' && !source.homeworldOf) {
+      startingExp += (source.maxShips || 0) / 10;
+    }
+    ship.expScore = startingExp;
     ship.bomberOffsetMag = 0;
     
     if (isBombing) {
@@ -1079,6 +1100,12 @@ export class Game {
           ship.speed = Math.max(5, ship.speed - 10);
         }
         ship.speedModifier = 1.0;
+        
+        let startingExp = source.expScore || 0;
+        if (source.focusMode === 'garrison' && !source.homeworldOf) {
+          startingExp += (source.maxShips || 0) / 10;
+        }
+        ship.expScore = startingExp;
 
         if (!source.owner.cruiserStyle) {
           const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
@@ -1997,6 +2024,42 @@ export class Game {
         planet.owner.planetCount++;
       }
     }
+
+    // Dynamic calculations for player limits and trade options
+    for (const player of this.allPlayers) {
+      let garrisonWorlds = 0;
+      let fullGarrisonWorlds = 0;
+      let commerceWorlds = 0;
+
+      for (const planet of this.planets) {
+        if (planet.owner === player) {
+          if (planet.focusMode === 'garrison') {
+            garrisonWorlds++;
+            if (planet.ships > planet.maxShips * 2 - 10) {
+              fullGarrisonWorlds++;
+            }
+          } else if (planet.focusMode === 'commerce') {
+            commerceWorlds++;
+          }
+        }
+      }
+
+      player.commandLimit = 5 + Math.ceil((player.planetCount || 0) / 3) + garrisonWorlds + fullGarrisonWorlds;
+      player.tradeCapacity = Math.ceil((player.planetCount || 0) / 5) + commerceWorlds;
+
+      if (player.tradeOptions === undefined) {
+        player.tradeOptions = player.tradeCapacity;
+      } else {
+        player.tradeOptions = Math.min(player.tradeCapacity, player.tradeOptions);
+      }
+
+      // Handle Trade Options Regeneration
+      player.tradeRegenAccumulator = (player.tradeRegenAccumulator || 0) + deltaTime;
+      if (player.tradeRegenAccumulator >= 60000) {
+        player.tradeRegenAccumulator -= 60000;
+        player.tradeOptions = Math.min(player.tradeCapacity, (player.tradeOptions || 0) + (1 + commerceWorlds));
+      }
+    }
     
     for (const planet of this.planets) {
         planet.update(deltaTime, this.planets, this.settings);
@@ -2113,13 +2176,18 @@ export class Game {
             if (laser.targetPlanetId !== undefined) {
               const targetPlanet = this.planets.find(pl => pl.id === laser.targetPlanetId);
               if (targetPlanet && targetPlanet.ships > 0) {
+                const oldShips = targetPlanet.ships;
                 targetPlanet.ships -= 1;
+                let toDestroy = 0;
                 if (laser.splashDamage && laser.splashDamage > 0) {
                   const splashLimit = Math.floor(targetPlanet.ships / 50);
                   const splash = Math.min(laser.splashDamage, splashLimit);
-                  const toDestroy = Math.min(targetPlanet.ships, splash);
+                  toDestroy = Math.min(targetPlanet.ships, splash);
                   targetPlanet.ships -= toDestroy;
                 }
+                const actualKilled = oldShips - targetPlanet.ships;
+                targetPlanet.addExperience(actualKilled);
+                
                 if (targetPlanet.ships <= 0) {
                   targetPlanet.ships = 0;
                   const sourceShip = this.ships.find(sh => sh.id === laser.sourceShipId);
@@ -2404,6 +2472,116 @@ export class Game {
     }
 
     this.updateCustomCruiserSystems(deltaTime / 1000);
+
+    // Sell Orders Expiration and Neutral Postings Loops
+    if (!this.sellOrders) {
+      this.sellOrders = [];
+    }
+
+    // 1. Check expirations (15 minutes lifespan)
+    const nowTimestamp = Date.now();
+    for (let i = this.sellOrders.length - 1; i >= 0; i--) {
+      const order = this.sellOrders[i];
+      if (nowTimestamp >= order.expiresAt) {
+        // Return 1.0 resource unit back to original owner
+        const owner = this.allPlayers.find(p => p.id === order.ownerId);
+        if (owner && owner.isAlive) {
+          if (!owner.resources) owner.resources = {};
+          owner.resources[order.resource] = (owner.resources[order.resource] || 0) + 1.0;
+          console.log(`[Market Expiration] Order ${order.id} expired. 1.0 ${order.resource} returned to ${owner.id}`);
+        }
+        this.sellOrders.splice(i, 1);
+      }
+    }
+
+    // 2. Neutral Posting Loop (every 2-3 minutes)
+    this.neutralTradeTimer = (this.neutralTradeTimer || 0) + deltaTime;
+    if (this.neutralTradeTimer >= (this.nextNeutralTradeTime || 120000)) {
+      this.neutralTradeTimer = 0;
+      this.nextNeutralTradeTime = 120000 + Math.random() * 60000; // 2-3 minutes random interval
+
+      const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+      const randomRes = resourcesList[Math.floor(Math.random() * resourcesList.length)];
+      const d3 = Math.floor(Math.random() * 3) + 1; // d3 (1, 2, 3)
+      const startPrice = 7 + d3;
+
+      // Post the new neutral order
+      const orderId = "order_" + Math.random().toString(36).substring(2, 9);
+      this.sellOrders.push({
+        id: orderId,
+        ownerId: 'neutral',
+        ownerName: 'Neutral Market',
+        resource: randomRes,
+        price: startPrice,
+        createdAt: nowTimestamp,
+        expiresAt: nowTimestamp + 15 * 60000 // 15 minutes in milliseconds
+      });
+      console.log(`[Neutral Market] Posted sell order ${orderId} for ${randomRes} at price ${startPrice}.`);
+
+      // Decrease the price of all existing neutral and AI orders by d2 (1 or 2), capped at minimum 1
+      const d2 = Math.floor(Math.random() * 2) + 1; // d2 (1 or 2)
+      for (const order of this.sellOrders) {
+        const isNeutral = order.ownerId === 'neutral';
+        const isAI = this.aiPlayers.some(p => p.id === order.ownerId);
+        if ((isNeutral || isAI) && order.id !== orderId) {
+          const oldPrice = order.price;
+          order.price = Math.max(1, order.price - d2);
+          console.log(`[Market Decay] Decayed ${isNeutral ? 'Neutral' : 'AI'} order ${order.id} price from ${oldPrice} to ${order.price} (d2=${d2}).`);
+        }
+      }
+    }
+
+    // 3. AI Posting Loop (every 1 minute)
+    this.aiMarketTimer = (this.aiMarketTimer || 0) + deltaTime;
+    if (this.aiMarketTimer >= 60000) {
+      this.aiMarketTimer = 0;
+
+      const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+      
+      for (const aiPlayer of this.aiPlayers) {
+        if (!aiPlayer.isAlive) continue;
+        if (!aiPlayer.resources) aiPlayer.resources = {};
+
+        // Find qualifying resources where AI has > 2.0
+        let mostNumerousRes = null;
+        let highestQty = 2.0; // Must be strictly greater than 2.0
+        
+        for (const res of resourcesList) {
+          const qty = aiPlayer.resources[res] || 0;
+          if (qty > highestQty) {
+            highestQty = qty;
+            mostNumerousRes = res;
+          }
+        }
+
+        // If qualifying, 33% chance to post
+        if (mostNumerousRes && Math.random() < 0.33) {
+          // Deduct 1.0 resource
+          aiPlayer.resources[mostNumerousRes] -= 1.0;
+          // Deduct 1 trade option
+          if (aiPlayer.tradeOptions === undefined) {
+            aiPlayer.tradeOptions = aiPlayer.tradeCapacity || 5;
+          }
+          aiPlayer.tradeOptions = (aiPlayer.tradeOptions || 0) - 1;
+
+          // Create the sell order
+          const orderId = "order_" + Math.random().toString(36).substring(2, 9);
+          const d3 = Math.floor(Math.random() * 3) + 1; // d3 (1, 2, or 3)
+          const startPrice = 7 + d3;
+          
+          this.sellOrders.push({
+            id: orderId,
+            ownerId: aiPlayer.id,
+            ownerName: aiPlayer.name,
+            resource: mostNumerousRes,
+            price: startPrice,
+            createdAt: nowTimestamp,
+            expiresAt: nowTimestamp + 15 * 60000 // 15 minutes
+          });
+          console.log(`[AI Market Post] AI Player ${aiPlayer.name} (${aiPlayer.id}) posted 1 ${mostNumerousRes} for ${startPrice} credits (stock remaining: ${aiPlayer.resources[mostNumerousRes]}, options remaining: ${aiPlayer.tradeOptions}).`);
+        }
+      }
+    }
 
     if (this.onScoreUpdate) {
       const pCount = this.planets.filter(p => p.owner === this.humanPlayer).length;
