@@ -663,4 +663,13 @@ canvas {
   animation: cyber-blink 1s infinite ease-in-out;
 }
 
+#sell-orders-hud::-webkit-scrollbar {
+  width: 4px;
+}
+
+#sell-orders-hud::-webkit-scrollbar-thumb {
+  background: rgba(0, 229, 255, 0.4);
+  border-radius: 2px;
+}
+
 
