@@ -73,6 +73,8 @@ export class Ship {
     this.marines = 0;
     this.specialfuel = 0;
     this.specialbombs = 0;
+    this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+    this.resourceAccumulators = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
     this.crew = 0;
     this.marineCount = 0;
     this.cruiserStyle = null;
@@ -3004,7 +3006,15 @@ export class Ship {
                 const remainingHeal = suppliesUsed - supplyShip.supplies;
                 supplyShip.supplies = 0;
                 if (hasExcessTritanium && tritaniumSellPrice < 12) {
-                  owner.resources.tritanium = (owner.resources.tritanium || 0) - (1/12) * remainingHeal;
+                  const consumed = (1/12) * remainingHeal;
+                  owner.resources.tritanium = (owner.resources.tritanium || 0) - consumed;
+                  if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                  if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                  this.resourceAccumulators.tritanium = (this.resourceAccumulators.tritanium || 0) + consumed;
+                  if (this.resourceAccumulators.tritanium >= 0.0833) {
+                    this.resourceConsumeEvents.tritanium = (this.resourceConsumeEvents.tritanium || 0) + 1;
+                    this.resourceAccumulators.tritanium -= 0.0833;
+                  }
                 } else if (owner.useCredits !== false) {
                   owner.credits = (owner.credits || 0) - 1.0 * remainingHeal;
                 } else if (friendlyWellPlanet) {
@@ -3013,7 +3023,15 @@ export class Ship {
               }
             } else {
               if (hasExcessTritanium && tritaniumSellPrice < 12) {
-                owner.resources.tritanium = (owner.resources.tritanium || 0) - (1/12) * amountHealed;
+                const consumed = (1/12) * amountHealed;
+                owner.resources.tritanium = (owner.resources.tritanium || 0) - consumed;
+                if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                this.resourceAccumulators.tritanium = (this.resourceAccumulators.tritanium || 0) + consumed;
+                if (this.resourceAccumulators.tritanium >= 0.0833) {
+                  this.resourceConsumeEvents.tritanium = (this.resourceConsumeEvents.tritanium || 0) + 1;
+                  this.resourceAccumulators.tritanium -= 0.0833;
+                }
               } else if (owner.useCredits !== false) {
                 owner.credits = (owner.credits || 0) - 1.0 * amountHealed;
               } else if (friendlyWellPlanet) {
@@ -3059,8 +3077,16 @@ export class Ship {
               }
 
               if (hasExcessDeuterium && deuteriumSellPrice < 12) {
-                owner.resources.deuterium = (owner.resources.deuterium || 0) - (1/12) * amountRefueled * costMultiplier;
+                const consumed = (1/12) * amountRefueled * costMultiplier;
+                owner.resources.deuterium = (owner.resources.deuterium || 0) - consumed;
                 this.specialfuel = (this.specialfuel || 0) + amountRefueled;
+                if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                this.resourceAccumulators.deuterium = (this.resourceAccumulators.deuterium || 0) + consumed;
+                if (this.resourceAccumulators.deuterium >= 0.0833) {
+                  this.resourceConsumeEvents.deuterium = (this.resourceConsumeEvents.deuterium || 0) + 1;
+                  this.resourceAccumulators.deuterium -= 0.0833;
+                }
               } else if (owner.useCredits !== false) {
                 owner.credits = (owner.credits || 0) - 1.0 * amountRefueled * costMultiplier;
               } else if (friendlyWellPlanet) {
@@ -3104,8 +3130,16 @@ export class Ship {
                   if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
                     supplyShipForBombs.supplies -= 1.0;
                   } else if (hasExcessResource && resourceSellPrice < 12) {
-                    owner.resources[bombResource] = (owner.resources[bombResource] || 0) - (1/12);
+                    const consumed = 1/12;
+                    owner.resources[bombResource] = (owner.resources[bombResource] || 0) - consumed;
                     this.specialbombs = (this.specialbombs || 0) + 1;
+                    if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                    if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                    this.resourceAccumulators[bombResource] = (this.resourceAccumulators[bombResource] || 0) + consumed;
+                    if (this.resourceAccumulators[bombResource] >= 0.0833) {
+                      this.resourceConsumeEvents[bombResource] = (this.resourceConsumeEvents[bombResource] || 0) + 1;
+                      this.resourceAccumulators[bombResource] -= 0.0833;
+                    }
                   } else if (owner.useCredits !== false) {
                     owner.credits = (owner.credits || 0) - 1.0;
                   } else if (friendlyWellPlanet) {

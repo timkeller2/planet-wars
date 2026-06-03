@@ -957,6 +957,29 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
     if (state.ships) {
       for (const s of state.ships) {
+        if (s.resourceConsumeEvents) {
+          const emojis = {
+            deuterium: '💧',
+            tritanium: '🔩',
+            merculite: '☄️',
+            antimatter: '🌀',
+            dilithium: '💎'
+          };
+          for (const [res, count] of Object.entries(s.resourceConsumeEvents)) {
+            if (count > 0 && emojis[res]) {
+              for (let b = 0; b < count; b++) {
+                floatingAnimations.push({
+                  x: s.x + (Math.random() - 0.5) * 12,
+                  y: s.y - 12 - b * 5,
+                  text: emojis[res],
+                  type: 'resource_consume',
+                  age: b * 0.1,
+                  duration: 2.0
+                });
+              }
+            }
+          }
+        }
         if (s.diplomatPrefResourceEvent && s.diplomatPrefResourceEvent > 0) {
           let targetX = s.x;
           let targetY = s.y;

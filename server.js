@@ -1172,6 +1172,11 @@ async function bootstrap() {
       const dipPrefResource = s.diplomatPrefResourceEvent || 0;
       s.diplomatPrefResourceEvent = 0;
 
+      const consumeEvents = s.resourceConsumeEvents ? { ...s.resourceConsumeEvents } : null;
+      if (s.resourceConsumeEvents) {
+        s.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+      }
+
       if (s.isCruiser || s.isAmoeba) {
         return {
           id: s.id,
@@ -1206,6 +1211,7 @@ async function bootstrap() {
           maxsupplies: s.maxsupplies || 0,
           specialfuel: s.specialfuel || 0,
           specialbombs: s.specialbombs || 0,
+          resourceConsumeEvents: consumeEvents,
           diplomat: s.diplomat || 0,
           marines: s.marines || 0,
           diplomatTargetPlanetId: s.diplomatTargetPlanetId || null,
