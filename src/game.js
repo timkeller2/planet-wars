@@ -3004,7 +3004,7 @@ export class Game {
                   }
                   dispositionVal += 0.5 * currentSym;
 
-                  targetPlanet.disposition[ship.owner.id] = Math.floor(dispositionVal);
+                  targetPlanet.disposition[ship.owner.id] = Math.max(-100, Math.min(100, Math.floor(dispositionVal)));
                 }
 
                 let increaseAmt = Math.floor(1 + (chancePercent - roll) / 25);
