@@ -1174,7 +1174,7 @@ async function bootstrap() {
 
       const consumeEvents = s.resourceConsumeEvents ? { ...s.resourceConsumeEvents } : null;
       if (s.resourceConsumeEvents) {
-        s.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+        s.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
       }
 
       if (s.isCruiser || s.isAmoeba) {

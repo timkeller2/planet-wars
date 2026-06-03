@@ -825,9 +825,8 @@ export class Game {
       launchCost = Math.max(0, launchCost - techBonus);
     }
     launchCost = Math.min(250, launchCost);
-    if (source.ships < launchCost + 1) return;
-    
-    source.ships -= launchCost;
+
+    // Calculate potential shipsToSend without deducting launch cost first
     let shipsToSend;
     const isReinforcing = source.owner && target && target.owner && source.owner.id === target.owner.id;
     if (isReinforcing && !isBombing) {
@@ -842,7 +841,6 @@ export class Game {
           shipsToSend = Math.floor(source.ships / 2);
         }
       }
-      // Never leave source planet with less than 10 ships
       shipsToSend = Math.min(shipsToSend, Math.max(0, source.ships - 10));
     } else {
       shipsToSend = scoutMode ? Math.max(3, Math.floor(source.ships * 0.1)) : Math.floor(source.ships / 2);
@@ -864,12 +862,60 @@ export class Game {
 
     shipsToSend = Math.min(250, shipsToSend);
 
-    if (shipsToSend <= 0) {
-      source.ships += launchCost; // revert cost
-      return;
+    const tritaniumCost = 0.01 * shipsToSend;
+    const payWithTritanium = source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0;
+
+    let finalShipsToSend = shipsToSend;
+    let finalLaunchCost = 0;
+    let isTritaniumPaid = false;
+
+    if (payWithTritanium) {
+      isTritaniumPaid = true;
+      source.owner.resources.tritanium -= tritaniumCost;
+    } else {
+      // Standard ship payment fallback
+      if (source.ships < launchCost + 1) return;
+      
+      const tempShips = source.ships - launchCost;
+      let standardShipsToSend;
+      if (isReinforcing && !isBombing) {
+        const maxS = (target.focusMode === 'garrison') ? (target.maxShips * 2) : target.maxShips;
+        if (target.ships >= maxS) {
+          standardShipsToSend = 0;
+        } else {
+          const fillNeeded = maxS - target.ships;
+          if (tempShips >= fillNeeded) {
+            standardShipsToSend = fillNeeded;
+          } else {
+            standardShipsToSend = Math.floor(tempShips / 2);
+          }
+        }
+        standardShipsToSend = Math.min(standardShipsToSend, Math.max(0, tempShips - 10));
+      } else {
+        standardShipsToSend = scoutMode ? Math.max(3, Math.floor(tempShips * 0.1)) : Math.floor(tempShips / 2);
+      }
+      standardShipsToSend = Math.min(standardShipsToSend, tempShips);
+      if (source.rampageEvent) {
+        const minReserve = source.maxShips * 0.75;
+        if (tempShips - standardShipsToSend < minReserve) {
+          standardShipsToSend = Math.floor(tempShips - minReserve);
+        }
+      }
+      if (fillAmount !== null) {
+        const maxCanSend = Math.max(0, Math.floor(tempShips) - 10);
+        standardShipsToSend = Math.min(maxCanSend, fillAmount);
+      }
+      standardShipsToSend = Math.min(250, standardShipsToSend);
+      
+      if (standardShipsToSend <= 0) {
+        return;
+      }
+      finalShipsToSend = standardShipsToSend;
+      finalLaunchCost = launchCost;
     }
-    
-    source.ships -= shipsToSend;
+
+    source.ships -= finalLaunchCost;
+    source.ships -= finalShipsToSend;
     
     if (source.rampageEvent) {
       source.decreaseMaxShips(1);
@@ -880,8 +926,8 @@ export class Game {
       if (!source.isMilitary) {
         isBombing = false;
       } else {
-        shipsToSend = Math.floor(shipsToSend / 3);
-        if (shipsToSend <= 0) return;
+        finalShipsToSend = Math.floor(finalShipsToSend / 3);
+        if (finalShipsToSend <= 0) return;
         source.decreaseMaxShips(1);
         if (source.maxShips < 10) source.dead = true;
       }
@@ -890,13 +936,16 @@ export class Game {
     // Spawn fleet represented as a single Ship entity
     const ship = new Ship(this.nextShipId++, source.x, source.y, target, source.owner);
     ship.cruiserStyle = source.racialAffinity;
-    ship.count = shipsToSend;
+    ship.count = finalShipsToSend;
     if (source.isSpeedPlanet) ship.speed += 15;
     ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
     ship.sourcePlanet = source;
     let startingExp = source.expScore || 0;
     if (source.focusMode === 'garrison' && !source.homeworldOf) {
       startingExp += (source.maxShips || 0) / 10;
+    }
+    if (isTritaniumPaid) {
+      startingExp += 100;
     }
     ship.expScore = startingExp;
     ship.bomberOffsetMag = 0;
@@ -1025,9 +1074,8 @@ export class Game {
       launchCost = Math.max(0, launchCost - techBonus);
     }
     launchCost = Math.min(250, launchCost);
-    if (source.ships < launchCost + 1) return;
-    
-    source.ships -= launchCost;
+
+    // Calculate potential shipsToSend without deducting launch cost first
     let shipsToSend = scoutMode ? Math.max(3, Math.floor(source.ships * 0.1)) : Math.floor(source.ships / 2);
     shipsToSend = Math.min(shipsToSend, source.ships);
     
@@ -1040,12 +1088,40 @@ export class Game {
     
     shipsToSend = Math.min(250, shipsToSend);
 
-    if (shipsToSend <= 0) {
-      source.ships += launchCost; // revert cost
-      return;
+    const tritaniumCost = 0.01 * shipsToSend;
+    const payWithTritanium = source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0;
+
+    let finalShipsToSend = shipsToSend;
+    let finalLaunchCost = 0;
+    let isTritaniumPaid = false;
+
+    if (payWithTritanium) {
+      isTritaniumPaid = true;
+      source.owner.resources.tritanium -= tritaniumCost;
+    } else {
+      // Standard ship payment fallback
+      if (source.ships < launchCost + 1) return;
+      
+      const tempShips = source.ships - launchCost;
+      let standardShipsToSend = scoutMode ? Math.max(3, Math.floor(tempShips * 0.1)) : Math.floor(tempShips / 2);
+      standardShipsToSend = Math.min(standardShipsToSend, tempShips);
+      if (source.rampageEvent) {
+        const minReserve = source.maxShips * 0.75;
+        if (tempShips - standardShipsToSend < minReserve) {
+          standardShipsToSend = Math.floor(tempShips - minReserve);
+        }
+      }
+      standardShipsToSend = Math.min(250, standardShipsToSend);
+      
+      if (standardShipsToSend <= 0) {
+        return;
+      }
+      finalShipsToSend = standardShipsToSend;
+      finalLaunchCost = launchCost;
     }
-    
-    source.ships -= shipsToSend;
+
+    source.ships -= finalLaunchCost;
+    source.ships -= finalShipsToSend;
     
     if (source.rampageEvent) {
       source.decreaseMaxShips(1);
@@ -1056,8 +1132,8 @@ export class Game {
       if (!source.isMilitary) {
         isBombing = false;
       } else {
-        shipsToSend = Math.floor(shipsToSend / 3);
-        if (shipsToSend <= 0) return;
+        finalShipsToSend = Math.floor(finalShipsToSend / 3);
+        if (finalShipsToSend <= 0) return;
         source.decreaseMaxShips(1);
         if (source.maxShips < 10) source.dead = true;
       }
@@ -1066,7 +1142,7 @@ export class Game {
     // Spawn fleet represented as a single Ship entity
     const ship = new Ship(this.nextShipId++, source.x, source.y, null, source.owner, targetX, targetY);
     ship.cruiserStyle = source.racialAffinity;
-    ship.count = shipsToSend;
+    ship.count = finalShipsToSend;
     if (source.isSpeedPlanet) ship.speed += 15;
     const spaceDx = targetX - source.x;
     const spaceDy = targetY - source.y;
@@ -1076,6 +1152,9 @@ export class Game {
     let startingExp = source.expScore || 0;
     if (source.focusMode === 'garrison' && !source.homeworldOf) {
       startingExp += (source.maxShips || 0) / 10;
+    }
+    if (isTritaniumPaid) {
+      startingExp += 100;
     }
     ship.expScore = startingExp;
     ship.bomberOffsetMag = 0;
@@ -2301,7 +2380,15 @@ export class Game {
         } else {
           victim.active = false;
         }
-        if (victim.owner) victim.owner.addExperience(1);
+        if (victim.owner) {
+          victim.owner.addExperience(1);
+          if (victim.sourceShipId) {
+            const launcher = this.ships.find(sh => sh.id === victim.sourceShipId && sh.active);
+            if (launcher) {
+              launcher.expScore = (launcher.expScore || 0) + 1;
+            }
+          }
+        }
         this.explosions.push({
           x: victim.x,
           y: victim.y,
@@ -3089,14 +3176,58 @@ export class Game {
 
         if (targetPlanet) {
           // Launch standard fleet representing the marines
+          const count = Math.floor(ship.marineCount);
           const marineFleet = new Ship(this.nextShipId++, ship.x, ship.y, targetPlanet, ship.owner);
           marineFleet.cruiserStyle = ship.cruiserStyle;
-          marineFleet.count = Math.floor(ship.marineCount);
+          marineFleet.count = count;
           marineFleet.speedModifier = 1.0;
-          marineFleet.expScore = ship.expScore || 0;
+          marineFleet.isMarineFleet = true;
+          marineFleet.sourceShipId = ship.id;
+
+          let startingExp = ship.expScore || 0;
+          const tritaniumCost = 0.01 * (count / 3);
+          const owner = ship.owner;
+          if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && count > 0) {
+            owner.resources.tritanium -= tritaniumCost;
+            startingExp += 400;
+          }
+          marineFleet.expScore = startingExp;
           this.ships.push(marineFleet);
 
           console.log(`[MARINE PLANET INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to attack target planet ${targetPlanet.name}.`);
+          ship.marineCount = 0;
+        }
+
+        // Direct ship targeting launch check
+        let targetShip = null;
+        if ((ship.marineCount || 0) > 0 && ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null) {
+          const enemy = this.ships.find(s => s.id === ship.cruiserTargetId && s.active);
+          if (enemy && enemy.owner && enemy.owner.id !== ship.owner.id) {
+            targetShip = enemy;
+          }
+        }
+
+        if (targetShip) {
+          const count = Math.floor(ship.marineCount);
+          const marineFleet = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, targetShip.x, targetShip.y);
+          marineFleet.cruiserStyle = ship.cruiserStyle;
+          marineFleet.count = count;
+          marineFleet.speedModifier = 1.0;
+          marineFleet.isMarineFleet = true;
+          marineFleet.targetShipId = targetShip.id;
+          marineFleet.sourceShipId = ship.id;
+
+          let startingExp = ship.expScore || 0;
+          const tritaniumCost = 0.01 * (count / 3);
+          const owner = ship.owner;
+          if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && count > 0) {
+            owner.resources.tritanium -= tritaniumCost;
+            startingExp += 400;
+          }
+          marineFleet.expScore = startingExp;
+          this.ships.push(marineFleet);
+
+          console.log(`[MARINE SHIP INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to target ship ${targetShip.id}.`);
           ship.marineCount = 0;
         }
       }

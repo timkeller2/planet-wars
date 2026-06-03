@@ -73,8 +73,8 @@ export class Ship {
     this.marines = 0;
     this.specialfuel = 0;
     this.specialbombs = 0;
-    this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
-    this.resourceAccumulators = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+    this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+    this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
     this.crew = 0;
     this.marineCount = 0;
     this.cruiserStyle = null;
@@ -863,6 +863,12 @@ export class Ship {
             const damageDealt = enemyShip.takeDamage(explosions, this);
             if (damageDealt && this.owner) {
               this.owner.addExperience(1);
+              if (this.sourceShipId && allShips) {
+                const launcher = allShips.find(sh => sh.id === this.sourceShipId && sh.active);
+                if (launcher) {
+                  launcher.expScore = (launcher.expScore || 0) + 1;
+                }
+              }
             }
 
             if (lasers && lasersDrawn < 8) {
@@ -1014,8 +1020,20 @@ export class Ship {
                 // XP for damaging amoebas and cruisers
                 if (enemyShip.isAmoeba && enemyShip.maxHealth > 0) {
                   this.owner.addExperience(enemyShip.maxHealth / 2);
+                  if (this.sourceShipId && allShips) {
+                    const launcher = allShips.find(sh => sh.id === this.sourceShipId && sh.active);
+                    if (launcher) {
+                      launcher.expScore = (launcher.expScore || 0) + enemyShip.maxHealth / 2;
+                    }
+                  }
                 } else if (enemyShip.maxHealth > 0 && !enemyShip.isAmoeba) {
                   this.owner.addExperience(enemyShip.maxHealth / 2);
+                  if (this.sourceShipId && allShips) {
+                    const launcher = allShips.find(sh => sh.id === this.sourceShipId && sh.active);
+                    if (launcher) {
+                      launcher.expScore = (launcher.expScore || 0) + enemyShip.maxHealth / 2;
+                    }
+                  }
                 }
               }
               // If attacker is a cruiser, and target is a cruiser or amoeba, and target is not destroyed:
@@ -1039,6 +1057,12 @@ export class Ship {
             if (!enemyShip.active) {
               if (this.owner) {
                 this.owner.addExperience(1);
+                if (this.sourceShipId && allShips) {
+                  const launcher = allShips.find(sh => sh.id === this.sourceShipId && sh.active);
+                  if (launcher) {
+                    launcher.expScore = (launcher.expScore || 0) + 1;
+                  }
+                }
               } else if (this.isAmoeba) {
                 if (!this.amoebaGrowCooldown || this.amoebaGrowCooldown <= 0) {
                   this.maxHealth += 1;
@@ -2738,6 +2762,43 @@ export class Ship {
       }
     }
 
+    if (this.isMarineFleet && this.targetShipId) {
+      const target = allShips ? allShips.find(s => s.id === this.targetShipId && s.active) : null;
+      if (target) {
+        this.targetX = target.x;
+        this.targetY = target.y;
+        this.targetPlanet = null;
+        
+        // Collision check
+        const tdx = target.x - this.x;
+        const tdy = target.y - this.y;
+        const dist = Math.sqrt(tdx * tdx + tdy * tdy);
+        if (dist < 15) {
+          // Trigger boarding on target ship!
+          target.isUnderBoarding = true;
+          target.boardingPlayer = this.owner;
+          target.boardingMarines = (target.boardingMarines || 0) + this.count;
+          target.boardingSourceId = this.sourceShipId;
+          this.active = false; // consume marine fleet
+          console.log(`[MARINE FLEET BOARDING IMPACT] Marine fleet collided with target ship ${target.id}, boarding with ${this.count} marines.`);
+          
+          if (explosions) {
+            explosions.push({
+              x: this.x,
+              y: this.y,
+              color: this.owner ? this.owner.color : '#fff',
+              age: 0
+            });
+          }
+          return;
+        }
+      } else {
+        // Target is destroyed
+        this.active = false;
+        return;
+      }
+    }
+
     let destX = this.targetPlanet ? (this.targetPlanet.x + (this.cruiserTargetOffsetX || 0)) : this.targetX;
     let destY = this.targetPlanet ? (this.targetPlanet.y + (this.cruiserTargetOffsetY || 0)) : this.targetY;
 
@@ -2975,8 +3036,8 @@ export class Ship {
 
       if (this.health < this.maxHealth && finalHealRate > 0) {
         const owner = this.owner;
-        const hasExcessTritanium = owner && owner.resources && Math.floor(owner.resources.tritanium || 0) >= 1;
-        const tritaniumSellPrice = owner ? (owner.offerPrice?.tritanium ?? 3) : 3;
+        const hasExcessDuranium = owner && owner.resources && Math.floor(owner.resources.duranium || 0) >= 1;
+        const duraniumSellPrice = owner ? (owner.offerPrice?.duranium ?? 3) : 3;
 
         // Check for nearby supply ship first!
         const supplyShip = this.findNearbySupplyShip(allShips);
@@ -2984,7 +3045,7 @@ export class Ship {
         let canAffordHeal = false;
         if (supplyShip && (supplyShip.supplies || 0) > 0) {
           canAffordHeal = true;
-        } else if (hasExcessTritanium && tritaniumSellPrice < 12) {
+        } else if (hasExcessDuranium && duraniumSellPrice < 12) {
           canAffordHeal = true;
         } else if (owner && owner.useCredits !== false) {
           canAffordHeal = true;
@@ -3005,15 +3066,15 @@ export class Ship {
               } else {
                 const remainingHeal = suppliesUsed - supplyShip.supplies;
                 supplyShip.supplies = 0;
-                if (hasExcessTritanium && tritaniumSellPrice < 12) {
+                if (hasExcessDuranium && duraniumSellPrice < 12) {
                   const consumed = (1/12) * remainingHeal;
-                  owner.resources.tritanium = (owner.resources.tritanium || 0) - consumed;
-                  if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
-                  if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
-                  this.resourceAccumulators.tritanium = (this.resourceAccumulators.tritanium || 0) + consumed;
-                  if (this.resourceAccumulators.tritanium >= 0.0833) {
-                    this.resourceConsumeEvents.tritanium = (this.resourceConsumeEvents.tritanium || 0) + 1;
-                    this.resourceAccumulators.tritanium -= 0.0833;
+                  owner.resources.duranium = (owner.resources.duranium || 0) - consumed;
+                  if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                  if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                  this.resourceAccumulators.duranium = (this.resourceAccumulators.duranium || 0) + consumed;
+                  if (this.resourceAccumulators.duranium >= 0.0833) {
+                    this.resourceConsumeEvents.duranium = (this.resourceConsumeEvents.duranium || 0) + 1;
+                    this.resourceAccumulators.duranium -= 0.0833;
                   }
                 } else if (owner.useCredits !== false) {
                   owner.credits = (owner.credits || 0) - 1.0 * remainingHeal;
@@ -3022,15 +3083,15 @@ export class Ship {
                 }
               }
             } else {
-              if (hasExcessTritanium && tritaniumSellPrice < 12) {
+              if (hasExcessDuranium && duraniumSellPrice < 12) {
                 const consumed = (1/12) * amountHealed;
-                owner.resources.tritanium = (owner.resources.tritanium || 0) - consumed;
-                if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
-                if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
-                this.resourceAccumulators.tritanium = (this.resourceAccumulators.tritanium || 0) + consumed;
-                if (this.resourceAccumulators.tritanium >= 0.0833) {
-                  this.resourceConsumeEvents.tritanium = (this.resourceConsumeEvents.tritanium || 0) + 1;
-                  this.resourceAccumulators.tritanium -= 0.0833;
+                owner.resources.duranium = (owner.resources.duranium || 0) - consumed;
+                if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                this.resourceAccumulators.duranium = (this.resourceAccumulators.duranium || 0) + consumed;
+                if (this.resourceAccumulators.duranium >= 0.0833) {
+                  this.resourceConsumeEvents.duranium = (this.resourceConsumeEvents.duranium || 0) + 1;
+                  this.resourceAccumulators.duranium -= 0.0833;
                 }
               } else if (owner.useCredits !== false) {
                 owner.credits = (owner.credits || 0) - 1.0 * amountHealed;
@@ -3479,7 +3540,15 @@ export class Ship {
             this.targetPlanet.ships = Math.max(0, this.targetPlanet.ships - defendersKilled);
             const actualKilled = oldShips - this.targetPlanet.ships;
 
-            if (this.owner) this.owner.addExperience(actualKilled);
+            if (this.owner) {
+              this.owner.addExperience(actualKilled);
+              if (this.sourceShipId && allShips) {
+                const launcher = allShips.find(sh => sh.id === this.sourceShipId && sh.active);
+                if (launcher) {
+                  launcher.expScore = (launcher.expScore || 0) + actualKilled;
+                }
+              }
+            }
             if (this.targetPlanet.owner) this.targetPlanet.owner.addExperience(actualKilled);
 
             // Grant target planet defense experience

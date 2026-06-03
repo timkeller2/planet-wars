@@ -953,6 +953,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           const emojis = {
             deuterium: '💧',
             tritanium: '🔩',
+            duranium: '🧱',
             merculite: '☄️',
             antimatter: '🌀',
             dilithium: '💎'
