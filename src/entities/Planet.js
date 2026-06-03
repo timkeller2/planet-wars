@@ -20,6 +20,8 @@ export class Planet {
     this.revoltCooldown = 0;
     const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
     this.preferredResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
+    const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
+    this.racialAffinity = styles[Math.floor(Math.random() * styles.length)];
     this.name = this.generatePlanetName();
     this.expScore = 0;
     this.expProgress = 0;
@@ -134,6 +136,9 @@ export class Planet {
           generatedCredits *= (1 + (Math.sqrt(qty) * 3) / 100);
         }
       }
+      if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
+        generatedCredits *= 1.30;
+      }
       this.owner.credits = (this.owner.credits || 0) + generatedCredits;
     }
 
@@ -158,6 +163,9 @@ export class Planet {
           if (qty > 0) {
             effectiveRate *= (1 + (Math.sqrt(qty) * 3) / 100);
           }
+        }
+        if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
+          effectiveRate *= 1.30;
         }
         this.productionProgress += effectiveRate * (deltaTime / 1000);
         if (this.productionProgress >= 1) {
@@ -319,6 +327,9 @@ export class Planet {
         // Preferred resource bonus: sqrt(qty) * 3 percent
         if (res === this.preferredResource && this.owner.resources[res] > 0) {
           resRate *= (1 + (Math.sqrt(this.owner.resources[res]) * 3) / 100);
+        }
+        if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
+          resRate *= 1.30;
         }
         this.owner.resources[res] = (this.owner.resources[res] || 0) + resRate * deltaTime;
       }

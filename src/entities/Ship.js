@@ -3430,7 +3430,8 @@ export class Ship {
             N_att = Math.min(this.count, N_att);
 
             const penalty = 0.01 * Math.floor(this.targetPlanet.ships / 5);
-            let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus);
+            const racialDefenseBonus = (this.targetPlanet.owner && this.targetPlanet.racialAffinity === this.targetPlanet.owner.cruiserStyle) ? 0.15 : 0;
+            let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus - racialDefenseBonus);
             killChance = Math.max(minKillChance, killChance - hazardPenalty);
 
             let defendersKilled = N_att * killChance;

@@ -4486,7 +4486,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               }
 
               const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
-              const estimatedKillChance = Math.max(minKillChance, baseKillChance - defenderLocalExpPenalty + attackerFleetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - lastStandPenalty - defenderHomeworldPenalty - hazardPenalty - humanDefenderBonus);
+              const racialDefenseBonus = (owner && p.racialAffinity === owner.cruiserStyle) ? 0.15 : 0;
+              const estimatedKillChance = Math.max(minKillChance, baseKillChance - defenderLocalExpPenalty + attackerFleetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - lastStandPenalty - defenderHomeworldPenalty - hazardPenalty - humanDefenderBonus - racialDefenseBonus);
               const displayPercentage = Math.round(estimatedKillChance * 100);
 
               ctx.fillStyle = '#ff3333';
@@ -4564,6 +4565,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           if (hp.isSpeedPlanet) nameLabel += ' ⚡';
           
           lines.push({ label: nameLabel, value: '', color: '#0ff', isHeader: true });
+          if (hp.racialAffinity) {
+            lines.push({ label: 'Racial Affinity', value: hp.racialAffinity, color: '#e040fb' });
+          }
 
           const resourceMeta = {
             dilithium: { name: 'Dilithium', emoji: '💎' },
@@ -4651,6 +4655,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             }
 
 
+
+            if (hp.racialAffinity && hp.racialAffinity === hpOwner.cruiserStyle) {
+              totalDefense += 15;
+              lines.push({ label: 'Racial Match Defense', value: `15%`, color: '#e040fb' });
+            }
 
             if (hpOwner.id === hp.homeworldOf) {
               totalDefense += 15;
@@ -4750,8 +4759,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             const bonusSum = expBonus + shipExpBonus;
             const disposition = hp.disposition?.[localPlayer.id] ?? 0;
             
-            const chanceBase = 30 + disposition + currentSym + bonusSum;
-            const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10;
+            let racialBonus = 0;
+            if (selectedCruiser && selectedCruiser.cruiserStyle === hp.racialAffinity) {
+              racialBonus = 20;
+            }
+
+            const chanceBase = 30 + disposition + currentSym + bonusSum + racialBonus;
+            const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10 + racialBonus;
             
             const basePercent = Math.max(0, Math.min(100, Math.round(chanceBase)));
             const prefPercent = Math.max(0, Math.min(100, Math.round(chancePref)));

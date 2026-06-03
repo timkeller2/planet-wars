@@ -1068,7 +1068,8 @@ async function bootstrap() {
             }
 
             const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
-            let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus);
+            const racialDefenseBonus = (p.owner && p.racialAffinity === p.owner.cruiserStyle) ? 0.15 : 0;
+            let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus - racialDefenseBonus);
             killChance = Math.max(minKillChance, killChance - hazardPenalty);
             if (maxKillChance === null || killChance > maxKillChance) {
               maxKillChance = killChance;
@@ -1154,7 +1155,8 @@ async function bootstrap() {
           } : null,
           finalRateExceedsOne: finalRate > 1.0,
           resources: p.resources || null,
-          preferredResource: p.preferredResource || null
+          preferredResource: p.preferredResource || null,
+          racialAffinity: p.racialAffinity || null
       };
     });
 

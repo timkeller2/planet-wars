@@ -412,6 +412,24 @@ export class Game {
 
     if (targetPlanet) {
       targetPlanet.owner = player;
+      if (!player.cruiserStyle) {
+        const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
+        if (!player.isAI) {
+          const assignedStyles = this.allPlayers
+            .filter(p => !p.isAI && p.cruiserStyle)
+            .map(p => p.cruiserStyle);
+          const unusedStyles = styles.filter(s => !assignedStyles.includes(s));
+          if (unusedStyles.length > 0) {
+            player.cruiserStyle = unusedStyles[Math.floor(Math.random() * unusedStyles.length)];
+          } else {
+            player.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
+          }
+        } else {
+          player.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
+        }
+        console.log(`Assigned style ${player.cruiserStyle} to player ${player.id}`);
+      }
+      targetPlanet.racialAffinity = player.cruiserStyle;
       const hwSizeSetting = (this.settings && this.settings.homeworldSize) ? this.settings.homeworldSize : "120";
       if (hwSizeSetting !== 'natural') {
         const parsedVal = parseInt(hwSizeSetting, 10);
@@ -789,24 +807,7 @@ export class Game {
             ship.speed = Math.max(5, ship.speed - 10);
           }
           ship.speedModifier = 1.0;
-          if (!source.owner.cruiserStyle) {
-            const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
-            if (!source.owner.isAI) {
-              const assignedStyles = this.allPlayers
-                .filter(p => !p.isAI && p.cruiserStyle)
-                .map(p => p.cruiserStyle);
-              const unusedStyles = styles.filter(s => !assignedStyles.includes(s));
-              if (unusedStyles.length > 0) {
-                source.owner.cruiserStyle = unusedStyles[Math.floor(Math.random() * unusedStyles.length)];
-              } else {
-                source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
-              }
-            } else {
-              source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
-            }
-            console.log(`Assigned ${source.owner.cruiserStyle} style to ${source.owner.id}`);
-          }
-          ship.cruiserStyle = source.owner.cruiserStyle;
+          ship.cruiserStyle = source.racialAffinity;
           ship.isCruiser = true;
           ship.count = 1;
           this.ships.push(ship);
@@ -887,6 +888,7 @@ export class Game {
     
     // Spawn fleet represented as a single Ship entity
     const ship = new Ship(this.nextShipId++, source.x, source.y, target, source.owner);
+    ship.cruiserStyle = source.racialAffinity;
     ship.count = shipsToSend;
     if (source.isSpeedPlanet) ship.speed += 15;
     ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
@@ -1005,23 +1007,7 @@ export class Game {
             ship.speed = Math.max(5, ship.speed - 10);
           }
           ship.speedModifier = 1.0;
-          if (!source.owner.cruiserStyle) {
-            const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
-            if (!source.owner.isAI) {
-              const assignedStyles = this.allPlayers
-                .filter(p => !p.isAI && p.cruiserStyle)
-                .map(p => p.cruiserStyle);
-              const unusedStyles = styles.filter(s => !assignedStyles.includes(s));
-              if (unusedStyles.length > 0) {
-                source.owner.cruiserStyle = unusedStyles[Math.floor(Math.random() * unusedStyles.length)];
-              } else {
-                source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
-              }
-            } else {
-              source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
-            }
-          }
-          ship.cruiserStyle = source.owner.cruiserStyle;
+          ship.cruiserStyle = source.racialAffinity;
           ship.isCruiser = true;
           ship.count = 1;
           this.ships.push(ship);
@@ -1078,6 +1064,7 @@ export class Game {
     
     // Spawn fleet represented as a single Ship entity
     const ship = new Ship(this.nextShipId++, source.x, source.y, null, source.owner, targetX, targetY);
+    ship.cruiserStyle = source.racialAffinity;
     ship.count = shipsToSend;
     if (source.isSpeedPlanet) ship.speed += 15;
     const spaceDx = targetX - source.x;
@@ -1179,23 +1166,7 @@ export class Game {
         }
         ship.expScore = startingExp;
 
-        if (!source.owner.cruiserStyle) {
-          const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
-          if (!source.owner.isAI) {
-            const assignedStyles = this.allPlayers
-              .filter(p => !p.isAI && p.cruiserStyle)
-              .map(p => p.cruiserStyle);
-            const unusedStyles = styles.filter(s => !assignedStyles.includes(s));
-            if (unusedStyles.length > 0) {
-              source.owner.cruiserStyle = unusedStyles[Math.floor(Math.random() * unusedStyles.length)];
-            } else {
-              source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
-            }
-          } else {
-            source.owner.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
-          }
-        }
-        ship.cruiserStyle = source.owner.cruiserStyle;
+        ship.cruiserStyle = source.racialAffinity;
         ship.isCruiser = true;
         ship.count = 1;
         this.ships.push(ship);
@@ -3004,7 +2975,10 @@ export class Game {
               const chanceBase = 30 + disposition + currentSym + bonusSum;
               const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10;
               
-              const rawChance = hasPref ? chancePref : chanceBase;
+              let rawChance = hasPref ? chancePref : chanceBase;
+              if (ship.cruiserStyle === targetPlanet.racialAffinity) {
+                rawChance += 20;
+              }
               const chancePercent = Math.max(0, Math.min(100, Math.round(rawChance)));
               
               const roll = Math.floor(Math.random() * 100) + 1;
@@ -3090,6 +3064,7 @@ export class Game {
         if (targetPlanet) {
           // Launch standard fleet representing the marines
           const marineFleet = new Ship(this.nextShipId++, ship.x, ship.y, targetPlanet, ship.owner);
+          marineFleet.cruiserStyle = ship.cruiserStyle;
           marineFleet.count = Math.floor(ship.marineCount);
           marineFleet.speedModifier = 1.0;
           marineFleet.expScore = ship.expScore || 0;
@@ -3113,6 +3088,7 @@ export class Game {
               if (ship.marineCount >= requiredMarines && requiredMarines > 0) {
                 // Launch Boarding Fleet Pod!
                 const pod = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, enemy.x, enemy.y);
+                pod.cruiserStyle = ship.cruiserStyle;
                 pod.isBoardingFleet = true;
                 pod.targetShipId = enemy.id;
                 pod.sourceShipId = ship.id;
@@ -3188,6 +3164,7 @@ export class Game {
             const launcher = this.ships.find(ss => ss.id === originalSourceId && ss.active);
             if (launcher) {
               const rPod = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, launcher.x, launcher.y);
+              rPod.cruiserStyle = ship.cruiserStyle;
               rPod.isReturnPod = true;
               rPod.targetShipId = launcher.id;
               rPod.sourceShipId = ship.id;
