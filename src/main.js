@@ -950,16 +950,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     if (state.planets) {
       for (const p of state.planets) {
         if (!p.inFog || p.permanentlyTracked) {
-          lastKnownPlanets[p.id] = {
-            ownerId: p.ownerId,
-            ships: p.ships,
-            maxShips: p.maxShips,
-            isResearch: p.isResearch,
-            isMilitary: p.isMilitary,
-            isSpeedPlanet: p.isSpeedPlanet,
-            homeworldOf: p.homeworldOf,
-            name: p.name
-          };
+          lastKnownPlanets[p.id] = { ...p };
         }
       }
     }
@@ -4667,16 +4658,23 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
       // Defense tooltip on hovered planet
       if (hoveredPlanet && serverState.planets) {
-        const hp = serverState.planets.find(pp => pp.id === hoveredPlanet.id);
+        let hp = serverState.planets.find(pp => pp.id === hoveredPlanet.id);
         if (!hp) {
           hoveredPlanet = null;
         } else {
+          const isLastKnown = hp.inFog && !hp.permanentlyTracked && lastKnownPlanets[hp.id] ? true : false;
+          if (isLastKnown) {
+            hp = lastKnownPlanets[hp.id];
+          }
           const hpOwner = hp.ownerId ? serverState.players.find(pl => pl.id === hp.ownerId) : null;
           const lines = [];
           let totalDefense = 0;
 
           // Planet name and type
           let nameLabel = hp.name || 'Unknown';
+          if (isLastKnown) {
+            nameLabel += ' (Last Known)';
+          }
           if (hp.homeworldOf) {
             const hwOwner = serverState.players.find(pl => pl.id === hp.homeworldOf);
             if (hwOwner) nameLabel += ` (👑 ${hwOwner.name})`;
@@ -4706,7 +4704,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               lines.push({ label: 'Preferred Resource', value: `${meta.emoji} ${meta.name}`, color: '#ffd740' });
               if (hpOwner) {
                 const qty = hpOwner.resources?.[hp.preferredResource] || 0;
-                if (qty >= 1) {
+                if (qty >= 0.1) {
                   const bonus = Math.sqrt(qty) * 3;
                   lines.push({ label: 'Enjoying Resource', value: `+${bonus.toFixed(1)}%`, color: '#4caf50' });
                 }

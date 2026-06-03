@@ -3080,7 +3080,7 @@ export class Ship {
 
       if (this.health < this.maxHealth && finalHealRate > 0) {
         const owner = this.owner;
-        const hasExcessDuranium = owner && owner.resources && Math.floor(owner.resources.duranium || 0) >= 1;
+        const hasExcessDuranium = owner && owner.resources && (owner.resources.duranium || 0) >= 0.1;
         const duraniumSellPrice = owner ? (owner.offerPrice?.duranium ?? 3) : 3;
 
         // Check for nearby supply ship first!
@@ -3159,7 +3159,7 @@ export class Ship {
           const oldFuel = this.fuel || 0;
 
           const owner = this.owner;
-          const hasExcessDeuterium = owner && owner.resources && Math.floor(owner.resources.deuterium || 0) >= 1;
+          const hasExcessDeuterium = owner && owner.resources && (owner.resources.deuterium || 0) >= 0.1;
           const deuteriumSellPrice = owner ? (owner.offerPrice?.deuterium ?? 3) : 3;
 
           let canAffordRefuel = false;
@@ -3214,7 +3214,7 @@ export class Ship {
                 bombResource = 'dilithium';
               }
 
-              const hasExcessResource = owner && owner.resources && Math.floor(owner.resources[bombResource] || 0) >= 1;
+              const hasExcessResource = owner && owner.resources && (owner.resources[bombResource] || 0) >= 0.1;
               const resourceSellPrice = owner ? (owner.offerPrice?.[bombResource] ?? 3) : 3;
 
               let canAffordReload = false;
