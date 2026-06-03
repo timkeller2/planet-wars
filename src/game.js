@@ -1755,7 +1755,7 @@ export class Game {
           pirate.crew = 2 * maxHealth;
           pirate.cruiserStyle = randomStyle;
           pirate.fuel = pirate.getMaxFuel();
-          pirate.bombs = maxHealth;
+          pirate.bombs = pirate.getMaxBombs();
           pirate.bombPlanetsEnabled = false;
           pirate.speed = Math.max(5, pirate.speed - 10);
           pirate.speedModifier = 1.0;

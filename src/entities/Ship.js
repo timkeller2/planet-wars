@@ -381,7 +381,7 @@ export class Ship {
         this.pirateRegenTimer -= 30;
         this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + 1);
         if (this.bombs !== undefined) {
-          this.bombs = Math.min(this.maxHealth, this.bombs + 1);
+          this.bombs = Math.min(this.getMaxBombs(), this.bombs + 1);
         }
         this.health = Math.min(this.maxHealth, this.health + 1);
       }
