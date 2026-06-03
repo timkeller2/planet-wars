@@ -4918,11 +4918,19 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
             const maxBombs = getMaxBombs(hs);
             let munitionsDisplay = Math.floor(hs.bombs || 0) + ' / ' + maxBombs;
-            lines.push({ label: hs.munitions > 0 ? `Munitions (${hs.munitions})` : 'Munitions', value: munitionsDisplay, color: '#ffa' });
+            let munitionsLabel = hs.munitions > 0 ? `Munitions (${hs.munitions})` : 'Munitions';
+            if (hs.specialbombs && hs.specialbombs > 0) {
+              munitionsLabel += '*';
+            }
+            lines.push({ label: munitionsLabel, value: munitionsDisplay, color: '#ffa' });
             if (hs.munitions > 0) {
               lines.push({ label: 'Splash Damage', value: `+${hs.munitions}`, color: '#ffd740' });
             }
-            lines.push({ label: hs.engine > 0 ? `Fuel Level (${hs.engine})` : 'Fuel Level', value: Math.floor(hs.fuel || 0) + ' / ' + Math.floor(getMaxFuel(hs)), color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
+            let fuelLabel = hs.engine > 0 ? `Fuel Level (${hs.engine})` : 'Fuel Level';
+            if (hs.specialfuel && hs.specialfuel > 0) {
+              fuelLabel += '*';
+            }
+            lines.push({ label: fuelLabel, value: Math.floor(hs.fuel || 0) + ' / ' + Math.floor(getMaxFuel(hs)), color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
             if (hs.maxsupplies > 0) {
               lines.push({ label: 'Supplies', value: `📦 ${Math.floor(hs.supplies || 0)} / ${hs.maxsupplies}`, color: '#ffcc80' });
             }
@@ -5039,8 +5047,17 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             const hitChance = Math.round(Math.min(100, Math.max(10.0, hitChanceValue + friendlyGrav - enemyGrav - hazardPenalty))) + '%';
 
             const volleySize = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
-            lines.push({ label: 'Range', value: effectiveRange, color: '#f88' });
-            lines.push({ label: hs.targeting > 0 ? `Accuracy (${hs.targeting})` : 'Accuracy', value: hitChance, color: '#f88' });
+            let rangeLabel = 'Range';
+            if (hs.specialbombs && hs.specialbombs > 0) {
+              rangeLabel += '*';
+            }
+            lines.push({ label: rangeLabel, value: effectiveRange, color: '#f88' });
+            
+            let accuracyLabel = hs.targeting > 0 ? `Accuracy (${hs.targeting})` : 'Accuracy';
+            if (hs.specialbombs && hs.specialbombs > 0) {
+              accuracyLabel += '*';
+            }
+            lines.push({ label: accuracyLabel, value: hitChance, color: '#f88' });
             
             const netMapBonus = friendlyGrav - enemyGrav - hazardPenalty;
             if (netMapBonus !== 0) {

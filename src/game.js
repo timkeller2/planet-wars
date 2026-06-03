@@ -2666,7 +2666,7 @@ export class Game {
       const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
       
       for (const aiPlayer of this.aiPlayers) {
-        if (!aiPlayer.isAlive) continue;
+        if (!aiPlayer.isAlive || !aiPlayer.isAI) continue;
         if (!aiPlayer.resources) aiPlayer.resources = {};
 
         // Find qualifying resources where AI has > 2.0
