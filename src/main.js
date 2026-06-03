@@ -1292,11 +1292,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       sellForDisplay.textContent = `💰: ${sellPriceSetting}`;
     }
 
-    const btnMarket = document.getElementById('btn-market');
-    if (btnMarket) {
-      btnMarket.style.display = focusModeActive ? 'none' : 'inline-flex';
-      btnMarket.innerHTML = `<span class="btn-icon">🛒</span>M`;
-    }
+
 
     const resHud = document.getElementById('resources-hud');
     if (resHud) {
@@ -1375,7 +1371,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         orders.sort((a, b) => a.price - b.price);
         
         sellOrdersHud.innerHTML = '';
-        sellOrdersHud.style.display = (window.marketVisible !== false) ? 'flex' : 'none';
+        sellOrdersHud.style.display = 'flex';
         
         const resourceEmojis = {
           antimatter: '🌀',
@@ -2693,11 +2689,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           const cfg = SHIP_CLASSES[typeToBuild];
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
           
-          // Check unlock requirement: except for frigates, previous class must be built
+          // Check unlock requirement: except for frigates and scouts, previous class must be built
           const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
           const idx = keys.indexOf(typeToBuild);
           let isUnlocked = true;
-          if (idx > 0 && typeToBuild !== 'frigate') {
+          if (idx > 0 && typeToBuild !== 'frigate' && typeToBuild !== 'scout') {
             const prevClass = keys[idx - 1];
             if (!builtClasses[prevClass]) {
               isUnlocked = false;
@@ -2706,7 +2702,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
           if (isUnlocked) {
             const isFirst = !builtClasses[typeToBuild];
-            const costMult = (isFirst && typeToBuild !== 'frigate') ? 3 : 1;
+            const costMult = (isFirst && typeToBuild !== 'frigate' && typeToBuild !== 'scout') ? 3 : 1;
             const costShips = cfg.costShips * costMult;
 
             const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
@@ -3054,12 +3050,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         cruiserBuildModeActive = !cruiserBuildModeActive;
       }
     }
-    if (event.key.toLowerCase() === 'm') {
-      if (!focusModeActive && !upgradeModeActive && !cruiserBuildModeActive) {
-        event.preventDefault();
-        window.toggleMarket();
-      }
-    }
+
 
 
     if (event.key === '=' || event.key === '+' || event.key === '-' || event.key === '_') {
@@ -3294,26 +3285,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     socket.emit('changeSellPriceSetting');
   };
 
-  window.marketVisible = true;
-  window.toggleMarket = () => {
-    window.marketVisible = (window.marketVisible !== false) ? false : true;
-    const resHud = document.getElementById('resources-hud');
-    const sellOrdersHud = document.getElementById('sell-orders-hud');
-    if (resHud) {
-      resHud.style.display = 'flex';
-    }
-    if (sellOrdersHud) {
-      sellOrdersHud.style.display = window.marketVisible ? 'flex' : 'none';
-    }
-  };
 
-  const btnMarket = document.getElementById('btn-market');
-  if (btnMarket) {
-    btnMarket.addEventListener('click', (e) => {
-      e.stopPropagation();
-      window.toggleMarket();
-    });
-  }
 
   const btnSellResources = document.getElementById('btn-sell-resources');
   if (btnSellResources) {
@@ -3779,12 +3751,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
           
-          // Check unlock requirement: except for frigates, previous class must be built
+          // Check unlock requirement: except for frigates and scouts, previous class must be built
           const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
           const idx = keys.indexOf(classType);
           let isUnlocked = true;
           let lockReason = '';
-          if (idx > 0 && classType !== 'frigate') {
+          if (idx > 0 && classType !== 'frigate' && classType !== 'scout') {
             const prevClass = keys[idx - 1];
             if (!builtClasses[prevClass]) {
               isUnlocked = false;
@@ -3794,7 +3766,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
 
           const isFirst = !builtClasses[classType];
-          const costMult = (isFirst && classType !== 'frigate') ? 3 : 1;
+          const costMult = (isFirst && classType !== 'frigate' && classType !== 'scout') ? 3 : 1;
           const costShips = cfg.costShips * costMult;
 
           const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;

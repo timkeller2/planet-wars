@@ -1116,10 +1116,10 @@ export class Game {
         owner.builtClasses = owner.builtClasses || {};
       }
 
-      // Check unlock requirement: except for frigates, previous class must be built
+      // Check unlock requirement: except for frigates and scouts, previous class must be built
       const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
       const idx = keys.indexOf(classType);
-      if (idx > 0 && classType !== 'frigate') {
+      if (idx > 0 && classType !== 'frigate' && classType !== 'scout') {
         const prevClass = keys[idx - 1];
         const builtClasses = owner ? (owner.builtClasses || {}) : {};
         if (!builtClasses[prevClass]) {
@@ -1129,7 +1129,7 @@ export class Game {
 
       const isFirst = owner ? !owner.builtClasses[classType] : true;
       
-      const costMult = (isFirst && classType !== 'frigate') ? 3 : 1;
+      const costMult = (isFirst && classType !== 'frigate' && classType !== 'scout') ? 3 : 1;
       const costShips = cfg.costShips * costMult;
       const costCap = cfg.costCap;
       const maxHealth = cfg.hp;
