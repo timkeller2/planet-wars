@@ -366,24 +366,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
      const musicCheckbox = document.getElementById('music-checkbox');
     const bgMusic = document.getElementById('bg-music');
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
-      const introTracks = [
-        'AIRWOLF.MID',
-        'BATTLE~1.MID',
-        'BATTLE~2.MID',
-        'Battletime.mp3',
-        'COKE.MID',
-        'EMPIRE.MID',
-        'GILLIGAN.MID',
-        'Imperial March.wav',
-        'MIGHTY~1.MID',
-        'MWSMIT~1.MID',
-        'PAULST~1.MID',
-        'RICHMU~1.MID',
-        'SUPERMAN.MID'
-      ];
-      const randomTrack = introTracks[Math.floor(Math.random() * introTracks.length)];
-      bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
-      bgMusic.loop = false;
+      bgMusic.src = '/Music/Pretty and Steady.mp3';
+      bgMusic.loop = true;
       bgMusic.volume = 1.0;
       bgMusic.play().catch(e => console.warn('Music play blocked:', e));
     } else if (bgMusic) {
