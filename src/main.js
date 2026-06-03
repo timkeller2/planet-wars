@@ -1102,6 +1102,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           health: flat[i + 13],
           expScore: flat[i + 14],
           flightTime: flat[i + 15],
+          currentSpeed: flat[i + 16],
+          speed: 35,
           formation: 'arrow',
           isCruiser: false,
           isAmoeba: false
@@ -5054,8 +5056,14 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             lines.push({ label: headerLabel, value: '', color: hsOwner.color || '#0ff', isHeader: true });
             lines.push({ label: 'Ship Class', value: shipClass, color: '#aaf' });
             lines.push({ label: 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
+            lines.push({ label: 'Base Speed', value: (hs.speed || 35).toFixed(1), color: '#ccc' });
+            lines.push({ label: 'Effective Speed', value: (hs.currentSpeed || 0).toFixed(1), color: '#4f4' });
             if (hs.maxArmor && hs.maxArmor > 0) {
-              lines.push({ label: `Cruiser Armor (${hs.armor})`, value: Math.floor(hs.armorPoints) + ' / ' + Math.floor(hs.maxArmor), color: '#b0bec5' });
+              let armorLabel = `Cruiser Armor (${hs.armor})`;
+              if (hs.specialduranium && hs.specialduranium > 0) {
+                armorLabel += '*';
+              }
+              lines.push({ label: armorLabel, value: Math.floor(hs.armorPoints) + ' / ' + Math.floor(hs.maxArmor), color: '#b0bec5' });
             }
             if (hs.sensorarrays > 0) lines.push({ label: `Sensor Array (${hs.sensorarrays})`, value: `📡 Active`, color: '#ffb300' });
             if (hs.labs > 0) lines.push({ label: `Laboratories (${hs.labs})`, value: `🔬 Active`, color: '#00e5ff' });
@@ -5098,8 +5106,15 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if ((hs.bombs || 0) < 1) {
               shrugChance = Math.floor(shrugChance / 2);
             }
+            if (hs.specialduranium && hs.specialduranium > 0) {
+              shrugChance += 10;
+            }
             shrugChance = Math.min(90, shrugChance);
-            lines.push({ label: hs.shields > 0 ? `Armor Deflection (${hs.shields})` : 'Armor Deflection', value: shrugChance + '%', color: '#ccc' });
+            let deflectionLabel = hs.shields > 0 ? `Armor Deflection (${hs.shields})` : 'Armor Deflection';
+            if (hs.specialduranium && hs.specialduranium > 0) {
+              deflectionLabel += '*';
+            }
+            lines.push({ label: deflectionLabel, value: shrugChance + '%', color: '#ccc' });
 
             const laserTechBonus = Math.floor(techBonus) * 0.01;
             const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
@@ -5248,6 +5263,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             // ship count
             const bomberLabel = bomberCount > 0 ? ` (${bomberCount + (hs.isBomber ? 1 : 0)} bombers)` : '';
             lines.push({ label: 'ships in range', value: `${totalShips}${bomberLabel}`, color: '#ccc' });
+            lines.push({ label: 'Base Speed', value: (hs.speed || 35).toFixed(1), color: '#ccc' });
+            lines.push({ label: 'Effective Speed', value: (hs.currentSpeed || 0).toFixed(1), color: '#4f4' });
 
             // swarm bonus
             const swarmBonus = Math.floor(nearbyCount / 10);

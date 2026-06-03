@@ -73,6 +73,7 @@ export class Ship {
     this.marines = 0;
     this.specialfuel = 0;
     this.specialbombs = 0;
+    this.specialduranium = 0;
     this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
     this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
     this.crew = 0;
@@ -394,6 +395,15 @@ export class Ship {
     }
     if (this.bombs !== undefined && this.bombs <= 0) {
       this.specialbombs = 0;
+    }
+    if (this.maxArmor > 0) {
+      if (this.armorPoints <= 0) {
+        this.specialduranium = 0;
+      }
+    } else {
+      if (this.health <= 0) {
+        this.specialduranium = 0;
+      }
     }
 
     if (this.active && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
@@ -3113,6 +3123,7 @@ export class Ship {
                 if (hasExcessDuranium && duraniumSellPrice < 12) {
                   const consumed = (1/12) * remainingHeal;
                   owner.resources.duranium = (owner.resources.duranium || 0) - consumed;
+                  this.specialduranium = (this.specialduranium || 0) + remainingHeal;
                   if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
                   if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
                   this.resourceAccumulators.duranium = (this.resourceAccumulators.duranium || 0) + consumed;
@@ -3130,6 +3141,7 @@ export class Ship {
               if (hasExcessDuranium && duraniumSellPrice < 12) {
                 const consumed = (1/12) * amountHealed;
                 owner.resources.duranium = (owner.resources.duranium || 0) - consumed;
+                this.specialduranium = (this.specialduranium || 0) + amountHealed;
                 if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
                 if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
                 this.resourceAccumulators.duranium = (this.resourceAccumulators.duranium || 0) + consumed;
@@ -3883,6 +3895,9 @@ export class Ship {
           shrugChance = (baseDeflection + shieldDeflectionBonus) / 100;
           if ((this.bombs || 0) < 1) {
             shrugChance /= 2;
+          }
+          if (this.specialduranium && this.specialduranium > 0) {
+            shrugChance += 0.10;
           }
           shrugChance = Math.min(0.90, shrugChance);
         } else {

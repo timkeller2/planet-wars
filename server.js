@@ -1231,6 +1231,8 @@ async function bootstrap() {
           flightTime: s.flightTime || 0,
           speedModifier: s.speedModifier || 1.0,
           speed: s.speed || 35,
+          currentSpeed: s.currentSpeed || 0,
+          specialduranium: s.specialduranium || 0,
           targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,
           targetY: s.targetPlanet ? s.targetPlanet.y : s.targetY,
           formation: s.formation,
@@ -1538,7 +1540,7 @@ async function bootstrap() {
               Math.round((s.health || 0) * 10) / 10,
               Math.round((s.expScore || 0) * 10) / 10,
               Math.round((s.flightTime || 0) * 10) / 10,
-              0
+              Math.round((s.currentSpeed || 0) * 10) / 10
             );
           }
         }
