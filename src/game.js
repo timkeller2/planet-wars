@@ -1116,18 +1116,31 @@ export class Game {
       }
 
       const isFirst = owner ? !owner.builtClasses[classType] : true;
-      
-      const prototypeMultipliers = {
-        scout: 1,
-        frigate: 1.5,
-        destroyer: 1.75,
-        cruiser: 2,
-        battlecruiser: 2.5,
-        battleship: 3,
-        titan: 3.5,
-        mammoth: 4
-      };
-      const costMult = isFirst ? (prototypeMultipliers[classType] || 1) : 1;
+      let costMult = 1;
+      if (isFirst) {
+        const baseMultipliers = {
+          scout: 1,
+          frigate: 1.5,
+          destroyer: 1.75,
+          cruiser: 2,
+          battlecruiser: 2.5,
+          battleship: 3,
+          titan: 3.5,
+          mammoth: 4
+        };
+        const baseMult = baseMultipliers[classType] || 1;
+        costMult = baseMult;
+        if (owner) {
+          const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+          const idx = keys.indexOf(classType);
+          if (idx > 0) {
+            const prevClass = keys[idx - 1];
+            const prevCount = (owner.buildCounts && owner.buildCounts[prevClass]) || 0;
+            const subsequentBuilds = Math.max(0, prevCount - 1);
+            costMult = Math.max(1, baseMult - subsequentBuilds * 0.2);
+          }
+        }
+      }
       const costShips = cfg.costShips * costMult;
       const costCap = cfg.costCap;
       const maxHealth = cfg.hp;
@@ -1149,6 +1162,8 @@ export class Game {
         if (owner) {
           owner.credits = (owner.credits || 0) - creditsPaid;
           owner.builtClasses[classType] = true;
+          owner.buildCounts = owner.buildCounts || {};
+          owner.buildCounts[classType] = (owner.buildCounts[classType] || 0) + 1;
         }
         source.decreaseMaxShips(costCap);
 

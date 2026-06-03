@@ -2702,6 +2702,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         if (typeToBuild) {
           event.preventDefault();
           const cfg = SHIP_CLASSES[typeToBuild];
+          const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
           
           // Check unlock requirement: except for scouts, previous class must be built
@@ -2717,17 +2718,30 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
           if (isUnlocked) {
             const isFirst = !builtClasses[typeToBuild];
-            const prototypeMultipliers = {
-              scout: 1,
-              frigate: 1.5,
-              destroyer: 1.75,
-              cruiser: 2,
-              battlecruiser: 2.5,
-              battleship: 3,
-              titan: 3.5,
-              mammoth: 4
-            };
-            const costMult = isFirst ? (prototypeMultipliers[typeToBuild] || 1) : 1;
+            let costMult = 1;
+            if (isFirst) {
+              const baseMultipliers = {
+                scout: 1,
+                frigate: 1.5,
+                destroyer: 1.75,
+                cruiser: 2,
+                battlecruiser: 2.5,
+                battleship: 3,
+                titan: 3.5,
+                mammoth: 4
+              };
+              const baseMult = baseMultipliers[typeToBuild] || 1;
+              costMult = baseMult;
+              if (myPlayer) {
+                const idx = keys.indexOf(typeToBuild);
+                if (idx > 0) {
+                  const prevClass = keys[idx - 1];
+                  const prevCount = (myPlayer.buildCounts && myPlayer.buildCounts[prevClass]) || 0;
+                  const subsequentBuilds = Math.max(0, prevCount - 1);
+                  costMult = Math.max(1, baseMult - subsequentBuilds * 0.2);
+                }
+              }
+            }
             const costShips = cfg.costShips * costMult;
 
             const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
@@ -3811,17 +3825,31 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
 
           const isFirst = !builtClasses[classType];
-          const prototypeMultipliers = {
-            scout: 1,
-            frigate: 1.5,
-            destroyer: 1.75,
-            cruiser: 2,
-            battlecruiser: 2.5,
-            battleship: 3,
-            titan: 3.5,
-            mammoth: 4
-          };
-          const costMult = isFirst ? (prototypeMultipliers[classType] || 1) : 1;
+          let costMult = 1;
+          if (isFirst) {
+            const baseMultipliers = {
+              scout: 1,
+              frigate: 1.5,
+              destroyer: 1.75,
+              cruiser: 2,
+              battlecruiser: 2.5,
+              battleship: 3,
+              titan: 3.5,
+              mammoth: 4
+            };
+            const baseMult = baseMultipliers[classType] || 1;
+            costMult = baseMult;
+            if (myPlayer) {
+              const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+              const idx = keys.indexOf(classType);
+              if (idx > 0) {
+                const prevClass = keys[idx - 1];
+                const prevCount = (myPlayer.buildCounts && myPlayer.buildCounts[prevClass]) || 0;
+                const subsequentBuilds = Math.max(0, prevCount - 1);
+                costMult = Math.max(1, baseMult - subsequentBuilds * 0.2);
+              }
+            }
+          }
           const costShips = cfg.costShips * costMult;
 
           const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
