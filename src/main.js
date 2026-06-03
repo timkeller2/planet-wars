@@ -2691,7 +2691,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         if (typeToBuild) {
           event.preventDefault();
           const cfg = SHIP_CLASSES[typeToBuild];
-          const canAfford = selectedPlanetBuild.ships >= cfg.costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+          const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
+          const isFirst = !builtClasses[typeToBuild];
+          const costMult = (isFirst && typeToBuild !== 'frigate') ? 3 : 1;
+          const costShips = cfg.costShips * costMult;
+
+          const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+          const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
           if (canAfford) {
             socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType: typeToBuild });
           }
@@ -3756,8 +3762,15 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         const el = document.getElementById(cfg.btnId);
         if (el) {
           el.style.display = 'inline-flex';
-          const creditsAvailable = (myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0;
-          const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= cfg.costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+          
+          const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
+          const isFirst = !builtClasses[classType];
+          const costMult = (isFirst && classType !== 'frigate') ? 3 : 1;
+          const costShips = cfg.costShips * costMult;
+
+          const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+          const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+
           if (!canAfford) {
             el.style.opacity = '0.5';
             el.style.pointerEvents = 'none';
@@ -3765,6 +3778,17 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             el.style.opacity = '1.0';
             el.style.pointerEvents = 'auto';
           }
+
+          const costSpan = el.querySelector('.btn-cost');
+          if (costSpan) {
+            costSpan.textContent = `${costShips}/${cfg.costCap}`;
+          }
+          const baseName = cfg.name;
+          const shortcutKey = cfg.key.toUpperCase();
+          const titleStr = isFirst 
+            ? `Build Prototype ${baseName} (${shortcutKey}) (Credits allowed)` 
+            : `Build ${baseName} (${shortcutKey}) (Ships only)`;
+          el.setAttribute('title', titleStr);
         }
       }
       const elBuildCancel = document.getElementById('btn-build-cancel');

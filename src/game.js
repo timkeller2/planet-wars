@@ -1111,11 +1111,22 @@ export class Game {
     if (!cfg) return;
 
     if (source.isMilitary || source.homeworldOf) {
-      const costShips = cfg.costShips;
+      const owner = source.owner;
+      if (owner) {
+        owner.builtClasses = owner.builtClasses || {};
+      }
+      const isFirst = owner ? !owner.builtClasses[classType] : true;
+      
+      const costMult = (isFirst && classType !== 'frigate') ? 3 : 1;
+      const costShips = cfg.costShips * costMult;
       const costCap = cfg.costCap;
       const maxHealth = cfg.hp;
 
-      const creditsAvailable = (source.owner && source.owner.useCredits !== false) ? (source.owner.credits || 0) : 0;
+      let creditsAvailable = 0;
+      if (isFirst) {
+        creditsAvailable = (owner && owner.useCredits !== false) ? (owner.credits || 0) : 0;
+      }
+      
       const creditsPaid = Math.min(creditsAvailable, costShips);
       const remainingCostShips = costShips - creditsPaid;
 
@@ -1125,8 +1136,9 @@ export class Game {
         const finalMaxHealth = maxHealth + bonusHp;
 
         source.ships -= remainingCostShips;
-        if (source.owner) {
-          source.owner.credits = (source.owner.credits || 0) - creditsPaid;
+        if (owner) {
+          owner.credits = (owner.credits || 0) - creditsPaid;
+          owner.builtClasses[classType] = true;
         }
         source.decreaseMaxShips(costCap);
 
