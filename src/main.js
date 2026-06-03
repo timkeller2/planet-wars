@@ -2692,14 +2692,28 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           event.preventDefault();
           const cfg = SHIP_CLASSES[typeToBuild];
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
-          const isFirst = !builtClasses[typeToBuild];
-          const costMult = (isFirst && typeToBuild !== 'frigate') ? 3 : 1;
-          const costShips = cfg.costShips * costMult;
+          
+          // Check unlock requirement: except for frigates, previous class must be built
+          const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+          const idx = keys.indexOf(typeToBuild);
+          let isUnlocked = true;
+          if (idx > 0 && typeToBuild !== 'frigate') {
+            const prevClass = keys[idx - 1];
+            if (!builtClasses[prevClass]) {
+              isUnlocked = false;
+            }
+          }
 
-          const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
-          const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
-          if (canAfford) {
-            socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType: typeToBuild });
+          if (isUnlocked) {
+            const isFirst = !builtClasses[typeToBuild];
+            const costMult = (isFirst && typeToBuild !== 'frigate') ? 3 : 1;
+            const costShips = cfg.costShips * costMult;
+
+            const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+            const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+            if (canAfford) {
+              socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType: typeToBuild });
+            }
           }
           return;
         }
@@ -3764,12 +3778,27 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           el.style.display = 'inline-flex';
           
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
+          
+          // Check unlock requirement: except for frigates, previous class must be built
+          const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+          const idx = keys.indexOf(classType);
+          let isUnlocked = true;
+          let lockReason = '';
+          if (idx > 0 && classType !== 'frigate') {
+            const prevClass = keys[idx - 1];
+            if (!builtClasses[prevClass]) {
+              isUnlocked = false;
+              const prevCfg = SHIP_CLASSES[prevClass];
+              lockReason = `Requires building a ${prevCfg.name} first`;
+            }
+          }
+
           const isFirst = !builtClasses[classType];
           const costMult = (isFirst && classType !== 'frigate') ? 3 : 1;
           const costShips = cfg.costShips * costMult;
 
           const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
-          const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+          const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
 
           if (!canAfford) {
             el.style.opacity = '0.5';
@@ -3785,9 +3814,14 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
           const baseName = cfg.name;
           const shortcutKey = cfg.key.toUpperCase();
-          const titleStr = isFirst 
-            ? `Build Prototype ${baseName} (${shortcutKey}) (Credits allowed)` 
-            : `Build ${baseName} (${shortcutKey}) (Ships only)`;
+          let titleStr = '';
+          if (!isUnlocked) {
+            titleStr = `Build ${baseName} (LOCKED - ${lockReason})`;
+          } else {
+            titleStr = isFirst 
+              ? `Build Prototype ${baseName} (${shortcutKey}) (Credits allowed)` 
+              : `Build ${baseName} (${shortcutKey}) (Ships only)`;
+          }
           el.setAttribute('title', titleStr);
         }
       }
