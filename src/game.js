@@ -514,6 +514,7 @@ export class Game {
     this.explosions.clear();
     this.lasers.clear();
     this.ionStorms = [];
+    this.sellOrders = [];
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
     this.ionStormsCreated = 0;
