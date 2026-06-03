@@ -2959,13 +2959,22 @@ export class Game {
                 console.log(`[DIPLOMAT COOLDOWN/REDUCTION] Cruiser ${ship.id} reduced enemy ${highestEnemyId} sympathy on friendly planet ${targetPlanet.name} to ${targetPlanet.sympathy[highestEnemyId]}.`);
               }
             } else {
-              // Standard sympathy attempt logic:
-              // XP Bonus: sqrt( XP score )
+              // Standard sympathy attempt logic using tooltip formula:
               const expBonus = Math.sqrt(ship.owner.expScore || 0);
               const shipExpBonus = Math.sqrt(ship.expScore || 0);
+              const bonusSum = expBonus + shipExpBonus;
               const currentSym = targetPlanet.sympathy ? (targetPlanet.sympathy[ship.owner.id] || 0) : 0;
-              // Success rate: (30 + player XP bonus * 3 + ship XP bonus * 3 + current player sympathy)%
-              const chancePercent = 30 + expBonus * 3 + shipExpBonus * 3 + currentSym;
+              const disposition = targetPlanet.disposition ? (targetPlanet.disposition[ship.owner.id] ?? 0) : 0;
+
+              const prefRes = targetPlanet.preferredResource;
+              const qty = prefRes ? (ship.owner.resources?.[prefRes] || 0) : 0;
+              const hasPref = qty > 0;
+
+              const chanceBase = 30 + disposition + currentSym + bonusSum;
+              const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10;
+              
+              const rawChance = hasPref ? chancePref : chanceBase;
+              const chancePercent = Math.max(0, Math.min(100, Math.round(rawChance)));
               const prob = chancePercent / 100;
 
               if (Math.random() < prob) {
@@ -2977,12 +2986,23 @@ export class Game {
 
                 // Roll disposition if not yet set
                 if (targetPlanet.disposition[ship.owner.id] === undefined) {
-                  const d20 = Math.floor(Math.random() * 20) + 1;
-                  targetPlanet.disposition[ship.owner.id] = Math.floor((d20 + expBonus + shipExpBonus) / 6);
+                  const d100 = Math.floor(Math.random() * 100) + 1;
+                  let dispositionVal = d100 - 50;
+
+                  if (qty > 0.1) {
+                    dispositionVal += (ship.owner.expScore + ship.expScore) * 3;
+                  }
+                  if (qty > 0) {
+                    dispositionVal += 10;
+                  }
+                  dispositionVal += 0.5 * currentSym;
+
+                  targetPlanet.disposition[ship.owner.id] = Math.floor(dispositionVal);
                 }
 
                 const disp = targetPlanet.disposition[ship.owner.id];
-                const increaseAmt = 1 + Math.floor(Math.random() * (disp + 1));
+                const maxRange = Math.max(0, disp) + 1;
+                const increaseAmt = 1 + Math.floor(Math.random() * maxRange);
 
                 const newSym = Math.min(targetPlanet.maxShips, currentSym + increaseAmt);
                 const actualIncrease = newSym - currentSym;
