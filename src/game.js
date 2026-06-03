@@ -2982,9 +2982,10 @@ export class Game {
               
               const rawChance = hasPref ? chancePref : chanceBase;
               const chancePercent = Math.max(0, Math.min(100, Math.round(rawChance)));
-              const prob = chancePercent / 100;
+              
+              const roll = Math.floor(Math.random() * 100) + 1;
 
-              if (Math.random() < prob) {
+              if (roll <= chancePercent) {
                 // Award 1 XP score to player
                 ship.owner.expScore = (ship.owner.expScore || 0) + 1;
 
@@ -3007,9 +3008,10 @@ export class Game {
                   targetPlanet.disposition[ship.owner.id] = Math.floor(dispositionVal);
                 }
 
-                const disp = targetPlanet.disposition[ship.owner.id];
-                const maxRange = Math.max(0, disp) + 1;
-                const increaseAmt = 1 + Math.floor(Math.random() * maxRange);
+                let increaseAmt = Math.floor(1 + (chancePercent - roll) / 25);
+                if (prefRes && initialQty > 0.1) {
+                  increaseAmt *= 2;
+                }
 
                 const newSym = Math.min(targetPlanet.maxShips, currentSym + increaseAmt);
                 const actualIncrease = newSym - currentSym;
