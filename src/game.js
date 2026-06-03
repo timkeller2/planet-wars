@@ -3007,7 +3007,7 @@ export class Game {
                   let dispositionVal = d100 - 50;
 
                   if (initialQty > 0.1) {
-                    dispositionVal += (ship.owner.expScore + ship.expScore) * 3;
+                    dispositionVal += (expBonus + shipExpBonus) * 3;
                   }
                   if (initialQty > 0) {
                     dispositionVal += 10;
