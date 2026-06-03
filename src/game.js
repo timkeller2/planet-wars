@@ -533,8 +533,24 @@ export class Game {
     for (const player of this.allPlayers) {
       player.techScore = 0;
       player.expScore = 0;
+      player.expProgress = 0;
       player.cruiserStyle = null;
       player.prevTechBonus = 0;
+      player.credits = 0;
+      player.tradingBonus = 0;
+      player.useCredits = true;
+      player.atWarWith = {};
+      player.builtClasses = {};
+      player.buildCounts = {
+        scout: 0,
+        frigate: 0,
+        destroyer: 0,
+        cruiser: 0,
+        battlecruiser: 0,
+        battleship: 0,
+        titan: 0,
+        mammoth: 0
+      };
       player.upgradeModifiers = {
         sensorarray: 0,
         lab: 0,
@@ -548,6 +564,55 @@ export class Game {
         diplomat: 0,
         marines: 0
       };
+      player.resources = {
+        dilithium: 0,
+        merculite: 0,
+        duranium: 0,
+        tritanium: 0,
+        antimatter: 0,
+        deuterium: 0,
+        latinum: 0
+      };
+      player.targetStockpile = {
+        dilithium: 0,
+        merculite: 0,
+        duranium: 0,
+        tritanium: 0,
+        antimatter: 0,
+        deuterium: 0,
+        latinum: 0
+      };
+      player.offerPrice = {
+        dilithium: 3,
+        merculite: 3,
+        duranium: 3,
+        tritanium: 3,
+        antimatter: 3,
+        deuterium: 3,
+        latinum: 3
+      };
+      player.buyPrice = {
+        dilithium: 2,
+        merculite: 2,
+        duranium: 2,
+        tritanium: 2,
+        antimatter: 2,
+        deuterium: 2,
+        latinum: 2
+      };
+      player.sellToggled = {
+        dilithium: false,
+        merculite: false,
+        duranium: false,
+        tritanium: false,
+        antimatter: false,
+        deuterium: false,
+        latinum: false
+      };
+      player.tradeCapacity = 5;
+      player.tradeOptions = undefined;
+      player.tradeRegenAccumulator = 0;
+      player.sellPriceSetting = 2;
     }
 
     // Reset global upgrade modifiers
