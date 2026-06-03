@@ -375,7 +375,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       ];
       const randomTrack = introTracks[Math.floor(Math.random() * introTracks.length)];
       bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
-      bgMusic.loop = true;
+      bgMusic.loop = false;
       bgMusic.volume = 0.4;
       bgMusic.play().catch(e => console.warn('Music play blocked:', e));
     } else if (bgMusic) {
