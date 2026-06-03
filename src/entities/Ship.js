@@ -71,6 +71,8 @@ export class Ship {
     this.maxsupplies = 0;
     this.diplomat = 0;
     this.marines = 0;
+    this.specialfuel = 0;
+    this.specialbombs = 0;
     this.crew = 0;
     this.marineCount = 0;
     this.cruiserStyle = null;
@@ -340,6 +342,13 @@ export class Ship {
 
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
+
+    if (this.fuel <= 0) {
+      this.specialfuel = 0;
+    }
+    if (this.bombs !== undefined && this.bombs <= 0) {
+      this.specialbombs = 0;
+    }
 
     if (this.active && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
       if (game) {
@@ -692,6 +701,9 @@ export class Ship {
       if (this.fuel_tanker && this.fuel_tanker > 0) {
         effectiveRange = Math.max(5, effectiveRange - this.fuel_tanker * 5);
       }
+      if (this.specialbombs && this.specialbombs > 0) {
+        effectiveRange += 10;
+      }
     } else {
       const healthBonus = Math.floor(this.health);
       effectiveRange = 40 * (1 + laserTechBonus) * (1 + healthBonus * 0.10);
@@ -708,6 +720,9 @@ export class Ship {
       hitChance += targetingBonus;
       if (this.fuel_tanker && this.fuel_tanker > 0) {
         hitChance -= this.fuel_tanker * 0.05;
+      }
+      if (this.specialbombs && this.specialbombs > 0) {
+        hitChance += 0.10;
       }
     } else {
       const bombBonus = (this.bombs && this.bombs > 0) ? (this.bombs * 3) : 0;
@@ -3045,6 +3060,7 @@ export class Ship {
 
               if (hasExcessDeuterium && deuteriumSellPrice < 12) {
                 owner.resources.deuterium = (owner.resources.deuterium || 0) - (1/12) * amountRefueled * costMultiplier;
+                this.specialfuel = (this.specialfuel || 0) + amountRefueled;
               } else if (owner.useCredits !== false) {
                 owner.credits = (owner.credits || 0) - 1.0 * amountRefueled * costMultiplier;
               } else if (friendlyWellPlanet) {
@@ -3089,6 +3105,7 @@ export class Ship {
                     supplyShipForBombs.supplies -= 1.0;
                   } else if (hasExcessResource && resourceSellPrice < 12) {
                     owner.resources[bombResource] = (owner.resources[bombResource] || 0) - (1/12);
+                    this.specialbombs = (this.specialbombs || 0) + 1;
                   } else if (owner.useCredits !== false) {
                     owner.credits = (owner.credits || 0) - 1.0;
                   } else if (friendlyWellPlanet) {
@@ -3571,6 +3588,9 @@ export class Ship {
     }
     if (this.fuel_tanker && this.fuel_tanker > 0) {
       effectiveSpeed = Math.max(5, effectiveSpeed - this.fuel_tanker * 3);
+    }
+    if (this.specialfuel && this.specialfuel > 0) {
+      effectiveSpeed += 10;
     }
     if (this.speedModifier) {
       effectiveSpeed *= this.speedModifier;

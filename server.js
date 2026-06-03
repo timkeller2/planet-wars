@@ -1202,6 +1202,8 @@ async function bootstrap() {
           fuel_tanker: s.fuel_tanker || 0,
           supplies: s.supplies || 0,
           maxsupplies: s.maxsupplies || 0,
+          specialfuel: s.specialfuel || 0,
+          specialbombs: s.specialbombs || 0,
           diplomat: s.diplomat || 0,
           marines: s.marines || 0,
           diplomatTargetPlanetId: s.diplomatTargetPlanetId || null,

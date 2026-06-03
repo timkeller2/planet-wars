@@ -4923,12 +4923,18 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if (hs.fuel_tanker && hs.fuel_tanker > 0) {
               effectiveRange = Math.max(5, effectiveRange - hs.fuel_tanker * 5);
             }
+            if (hs.specialbombs && hs.specialbombs > 0) {
+              effectiveRange += 10;
+            }
             const healthBonus = Math.floor(hs.health);
             let hitChanceValue = 10 + targetingBonus;
             if (hs.bombs > 0) hitChanceValue += 10;
             hitChanceValue += techBonus + expBonus + shipExpBonus;
             if (hs.fuel_tanker && hs.fuel_tanker > 0) {
               hitChanceValue -= hs.fuel_tanker * 5;
+            }
+            if (hs.specialbombs && hs.specialbombs > 0) {
+              hitChanceValue += 10;
             }
             
             let friendlyGrav = 0;
@@ -5429,6 +5435,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             range *= (1 + targetingRangeBonus);
             if (s.fuel_tanker && s.fuel_tanker > 0) {
               range = Math.max(5, range - s.fuel_tanker * 5);
+            }
+            if (s.specialbombs && s.specialbombs > 0) {
+              range += 10;
             }
           } else {
             const healthBonus = Math.floor(s.health || 0);
