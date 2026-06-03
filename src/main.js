@@ -366,9 +366,17 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
      const musicCheckbox = document.getElementById('music-checkbox');
     const bgMusic = document.getElementById('bg-music');
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
-      bgMusic.src = '/Music/Pretty and Steady.mp3';
+      const introTracks = [
+        'A little loud, but pretty good.mp3',
+        'Deep Space Ambience.wav',
+        'Intense option.mp3',
+        'Pretty and Steady.mp3',
+        'Solid option.mp3'
+      ];
+      const randomTrack = introTracks[Math.floor(Math.random() * introTracks.length)];
+      bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
       bgMusic.loop = true;
-      bgMusic.volume = 0.5;
+      bgMusic.volume = 0.4;
       bgMusic.play().catch(e => console.warn('Music play blocked:', e));
     } else if (bgMusic) {
       bgMusic.pause();
