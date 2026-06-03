@@ -368,7 +368,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
       bgMusic.src = '/Music/Pretty and Steady.mp3';
       bgMusic.loop = true;
-      bgMusic.volume = 1.0;
+      bgMusic.volume = 0.5;
       bgMusic.play().catch(e => console.warn('Music play blocked:', e));
     } else if (bgMusic) {
       bgMusic.pause();
@@ -439,7 +439,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         if (musicCheckbox && musicCheckbox.checked && bgMusic) {
           bgMusic.src = '/Music/Battletime.mp3';
           bgMusic.loop = false;
-          bgMusic.volume = 1.0;
+          bgMusic.volume = 0.5;
           bgMusic.play().catch(e => console.warn('Battletime play blocked:', e));
         }
       }
@@ -450,7 +450,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         if (musicCheckbox && musicCheckbox.checked && bgMusic) {
           bgMusic.src = '/Music/Megalovania.mp3';
           bgMusic.loop = false;
-          bgMusic.volume = 1.0;
+          bgMusic.volume = 0.5;
           bgMusic.play().catch(e => console.warn('Megalovania play blocked:', e));
         }
       }
@@ -829,7 +829,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               if (musicCheckbox && musicCheckbox.checked && bgMusic) {
                 bgMusic.src = '/Music/Megalovania.mp3';
                 bgMusic.loop = false;
-                bgMusic.volume = 1.0;
+                bgMusic.volume = 0.5;
                 bgMusic.play().catch(e => console.warn('Megalovania play blocked:', e));
               }
             }
