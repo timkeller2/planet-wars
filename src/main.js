@@ -953,7 +953,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           const emojis = {
             deuterium: '💧',
             tritanium: '🔩',
-            duranium: '🧱',
+            duranium: '🔲',
             merculite: '☄️',
             antimatter: '🌀',
             dilithium: '💎'
@@ -986,7 +986,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                 const emojis = {
                   dilithium: '💎',
                   merculite: '☄️',
-                  duranium: '🧱',
+                  duranium: '🔲',
                   tritanium: '🔩',
                   antimatter: '🌀',
                   deuterium: '💧',
@@ -1353,7 +1353,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           tritanium: '🔩',
           merculite: '☄️',
           dilithium: '💎',
-          duranium: '🧱',
+          duranium: '🔲',
           deuterium: '💧',
           latinum: '🏺'
         };
@@ -1394,7 +1394,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           tritanium: '🔩',
           merculite: '☄️',
           dilithium: '💎',
-          duranium: '🧱',
+          duranium: '🔲',
           deuterium: '💧',
           latinum: '🏺'
         };
@@ -4414,7 +4414,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             const resourceIcons = {
               dilithium: '💎',
               merculite: '☄️',
-              duranium: '🧱',
+              duranium: '🔲',
               tritanium: '🔩',
               antimatter: '🌀',
               deuterium: '💧',
@@ -4656,7 +4656,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           const resourceMeta = {
             dilithium: { name: 'Dilithium', emoji: '💎' },
             merculite: { name: 'Merculite', emoji: '☄️' },
-            duranium: { name: 'Duranium', emoji: '🧱' },
+            duranium: { name: 'Duranium', emoji: '🔲' },
             tritanium: { name: 'Tritanium', emoji: '🔩' },
             antimatter: { name: 'Antimatter', emoji: '🌀' },
             deuterium: { name: 'Deuterium', emoji: '💧' },
@@ -4857,7 +4857,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             const emojis = {
               dilithium: '💎',
               merculite: '☄️',
-              duranium: '🧱',
+              duranium: '🔲',
               tritanium: '🔩',
               antimatter: '🌀',
               deuterium: '💧',
