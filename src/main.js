@@ -260,8 +260,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     });
   }
 
-  let lastSuggestedPlanets = 50;
-  let lastSuggestedAI = 5;
+  let lastSuggestedPlanets = 60;
+  let lastSuggestedAI = 6;
 
   if (planetCountInput && aiCountInput) {
     planetCountInput.addEventListener('input', () => {
@@ -3473,8 +3473,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     const noRampagers = document.getElementById('no-rampagers-checkbox').checked;
     const aiCount = parseInt(document.getElementById('ai-count-input').value, 10);
     const productionMultiple = parseFloat(document.getElementById('production-multiple-input').value) || 1.0;
-    const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 1600;
-    const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 50;
+    const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 2000;
+    const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 60;
     const clustersInput = document.getElementById('clusters-input');
     const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
@@ -3492,7 +3492,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const customVal = homeworldSizeInput ? parseInt(homeworldSizeInput.value, 10) : 120;
       homeworldSizeSetting = isNaN(customVal) ? "120" : String(customVal);
     }
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting };
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
@@ -3514,8 +3514,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     const noRampagers = document.getElementById('no-rampagers-checkbox').checked;
     const aiCount = parseInt(document.getElementById('ai-count-input').value, 10);
     const productionMultiple = parseFloat(document.getElementById('production-multiple-input').value) || 1.0;
-    const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 1600;
-    const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 50;
+    const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 2000;
+    const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 60;
     const clustersInput = document.getElementById('clusters-input');
     const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
     const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
@@ -3536,7 +3536,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     hasCenteredOnHomeworld = false;
     serverState = null;
     lastKnownPlanets = {}; // Clear cached planet details
-    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 5 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting });
+    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting });
   });
 
   function draw() {
