@@ -2474,7 +2474,8 @@ export class Game {
             otherFriendlyShips += planet.ships;
           }
 
-          if ((isOwn || isNotAtWar) && this.isPlanetVisibleTo(planet, player)) {
+          const isVisibleOrOnceKnown = this.isPlanetVisibleTo(planet, player) || (player.discoveredPlanets && player.discoveredPlanets.has(planet.id));
+          if ((isOwn || isNotAtWar) && isVisibleOrOnceKnown) {
             if (isOwn) {
               visiblePartnerShips["Domestic Ships"] += planet.ships;
             } else if (planet.owner) {
