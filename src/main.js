@@ -6036,6 +6036,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ctx.lineWidth = oldLineWidth;
           ctx.beginPath();
         } else if (s.isCruiser) {
+          ctx.save();
+          if (s.isMaterializing && s.materializeProgress !== undefined) {
+            ctx.globalAlpha = s.materializeProgress;
+          }
           const size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0);
           let angle = s.angle || 0;
           let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
@@ -6203,6 +6207,17 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                 ctx.font = `${iconSize}px "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", Orbitron`;
               }
             }
+            ctx.restore();
+          }
+
+          if (s.isMaterializing) {
+            ctx.save();
+            ctx.globalAlpha = 0.8 + 0.2 * Math.sin(Date.now() / 150);
+            ctx.font = '14px "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const bob = 3 * Math.sin(Date.now() / 200);
+            ctx.fillText('🔨', s.x, s.y - size - 12 + bob);
             ctx.restore();
           }
 
@@ -6403,6 +6418,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
 
           ctx.beginPath();
+          ctx.restore();
         } else {
           ctx.arc(s.x, s.y, 1.5, 0, Math.PI * 2);
         }

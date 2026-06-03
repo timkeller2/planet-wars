@@ -345,6 +345,50 @@ export class Ship {
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
 
+    if (this.isMaterializing) {
+      const dt = deltaTime / 1000;
+      this.materializeProgress = Math.min(1.0, this.materializeProgress + dt / this.materializeDuration);
+      this.health = Math.max(1, Math.floor(this.materializeProgress * this.maxHealth));
+      
+      const remainingProgressTime = this.materializeDuration * (1.0 - this.materializeProgress + (dt / this.materializeDuration));
+      if (this.materializeProgress < 1.0) {
+        if (this.buildCostShipsRemaining > 0) {
+          const shipsDeduction = (this.buildCostShipsRemaining / (remainingProgressTime / dt));
+          const actualDeduction = Math.min(this.buildCostShipsRemaining, shipsDeduction);
+          if (this.sourcePlanet && this.sourcePlanet.owner === this.owner) {
+            this.sourcePlanet.ships = Math.max(0, this.sourcePlanet.ships - actualDeduction);
+          }
+          this.buildCostShipsRemaining = Math.max(0, this.buildCostShipsRemaining - actualDeduction);
+        }
+        if (this.buildCostCreditsRemaining > 0) {
+          const creditsDeduction = (this.buildCostCreditsRemaining / (remainingProgressTime / dt));
+          const actualDeduction = Math.min(this.buildCostCreditsRemaining, creditsDeduction);
+          if (this.owner) {
+            this.owner.credits = Math.max(0, (this.owner.credits || 0) - actualDeduction);
+          }
+          this.buildCostCreditsRemaining = Math.max(0, this.buildCostCreditsRemaining - actualDeduction);
+        }
+      } else {
+        if (this.buildCostShipsRemaining > 0) {
+          if (this.sourcePlanet && this.sourcePlanet.owner === this.owner) {
+            this.sourcePlanet.ships = Math.max(0, this.sourcePlanet.ships - this.buildCostShipsRemaining);
+          }
+          this.buildCostShipsRemaining = 0;
+        }
+        if (this.buildCostCreditsRemaining > 0) {
+          if (this.owner) {
+            this.owner.credits = Math.max(0, (this.owner.credits || 0) - this.buildCostCreditsRemaining);
+          }
+          this.buildCostCreditsRemaining = 0;
+        }
+        this.health = this.maxHealth;
+        this.isMaterializing = false;
+        console.log(`[Capital Ship Materialized] ${this.id} finished construction. Final HP: ${this.health}`);
+      }
+      this.currentSpeed = 0;
+      return;
+    }
+
     if (this.fuel <= 0) {
       this.specialfuel = 0;
     }
@@ -426,7 +470,7 @@ export class Ship {
             : allShips;
 
           for (const other of candidateThreats) {
-            if (other.active && other.owner && other.owner !== this.owner && !other.isAmoeba && !other.isReturnPod && !other.isBoardingFleet) {
+            if (other.active && other.owner && other.owner !== this.owner && !other.isAmoeba && !other.isReturnPod && !other.isBoardingFleet && !other.isMaterializing) {
               const dx = other.x - this.x;
               const dy = other.y - this.y;
               const distSq = dx * dx + dy * dy;
@@ -543,7 +587,7 @@ export class Ship {
               : allShips;
 
             for (const other of candidateThreats) {
-              if (other.active && other.isCruiser && other.owner === this.originalAttackingPlayer && other !== originalTarget) {
+              if (other.active && other.isCruiser && other.owner === this.originalAttackingPlayer && other !== originalTarget && !other.isMaterializing) {
                 const dx = other.x - this.x;
                 const dy = other.y - this.y;
                 const distSq = dx * dx + dy * dy;
@@ -765,7 +809,7 @@ export class Ship {
           : allShips;
 
         for (const enemyShip of candidateShips) {
-          if (!enemyShip.active || enemyShip.owner === this.owner) continue;
+          if (!enemyShip.active || enemyShip.owner === this.owner || enemyShip.isMaterializing) continue;
           if (this.isAmoeba && enemyShip.isAmoeba) continue;
           
           if (this.owner) {
@@ -1145,7 +1189,7 @@ export class Ship {
             : allShips;
 
           for (const otherShip of candidateThreats) {
-            if (otherShip.active && otherShip.owner !== this.owner) {
+            if (otherShip.active && otherShip.owner !== this.owner && !otherShip.isMaterializing) {
               const odx = otherShip.x - this.x;
               const ody = otherShip.y - this.y;
               if (odx * odx + ody * ody <= rangeSq) {
@@ -2263,7 +2307,7 @@ export class Ship {
       if (allShips) {
         for (const other of allShips) {
           if (other.active && other.id !== this.id) {
-            const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+            const isEnemy = (other.owner && other.owner.id !== this.owner.id && !other.isMaterializing) || other.isAmoeba;
             if (isEnemy) {
               const dx = other.x - this.x;
               const dy = other.y - this.y;
@@ -3742,12 +3786,15 @@ export class Ship {
             const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
             const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
             const sRed = Math.sqrt(this.expScore || 0);
-            const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
-            if (effectiveIntensity > 0) {
-              if (effectiveSpeed > 5) {
-                effectiveSpeed = 5;
-              }
+
+            const otherModifiers = knowledge + (tRed + eRed) / 2 + sRed;
+            const normalSpeed = effectiveSpeed;
+            
+            let targetSpeed = normalSpeed;
+            if (h.intensity > 0) {
+              targetSpeed = (10 * otherModifiers) / h.intensity;
             }
+            effectiveSpeed = Math.max(5, Math.min(normalSpeed, targetSpeed));
           }
         }
       }

@@ -1302,9 +1302,7 @@ export class Game {
         const bonusHp = Math.min(4, Math.floor(Math.max(0, extraShips) / 25));
         const finalMaxHealth = maxHealth + bonusHp;
 
-        source.ships -= remainingCostShips;
         if (owner) {
-          owner.credits = (owner.credits || 0) - creditsPaid;
           owner.builtClasses[classType] = true;
           owner.buildCounts = owner.buildCounts || {};
           owner.buildCounts[classType] = (owner.buildCounts[classType] || 0) + 1;
@@ -1316,10 +1314,10 @@ export class Game {
         const sx = source.x + Math.cos(angle) * spawnDist;
         const sy = source.y + Math.sin(angle) * spawnDist;
 
-        const ship = new Ship(this.nextShipId++, sx, sy, source, source.owner);
+        const ship = new Ship(this.nextShipId++, sx, sy, null, source.owner, sx, sy);
         ship.classType = classType;
         ship.maxHealth = finalMaxHealth;
-        ship.health = finalMaxHealth;
+        ship.health = 1;
         ship.crew = 2 * finalMaxHealth;
         
         const basePower = Math.floor(finalMaxHealth / 5);
@@ -1339,8 +1337,18 @@ export class Game {
         ship.cruiserStyle = source.racialAffinity;
         ship.isCruiser = true;
         ship.count = 1;
+
+        ship.isMaterializing = true;
+        ship.materializeProgress = 0.0;
+        ship.materializeDuration = finalMaxHealth / 2;
+        ship.sourcePlanet = source;
+        ship.buildCostShipsTotal = remainingCostShips;
+        ship.buildCostCreditsTotal = creditsPaid;
+        ship.buildCostShipsRemaining = remainingCostShips;
+        ship.buildCostCreditsRemaining = creditsPaid;
+
         this.ships.push(ship);
-        console.log(`[Capital Ship Built] Spawning ${cfg.name} (HP: ${finalMaxHealth}) from Planet ${source.id} for Player ${source.owner.id}`);
+        console.log(`[Capital Ship Build Started] Spawning ${cfg.name} (HP: ${finalMaxHealth}) from Planet ${source.id} for Player ${source.owner.id}. Deducting ${remainingCostShips} ships and ${creditsPaid} credits over ${ship.materializeDuration}s`);
       }
     }
   }
@@ -2089,9 +2097,9 @@ export class Game {
             const techRed = Math.sqrt(ship.owner.techScore || 0);
             const expRed = Math.sqrt(ship.owner.expScore || 0);
             const shipExpRed = Math.sqrt(ship.expScore || 0);
-            const effectiveIntensity = Math.max(0, storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed);
 
-            const risk = (effectiveIntensity * speed) / 10;
+            const otherModifiers = knowledge + (techRed + expRed) / 2 + shipExpRed;
+            const risk = Math.max(0, (storm.intensity * speed) / 10 - otherModifiers);
 
             if (risk > 0) {
               if (ship.maxHealth > 0) {
@@ -2145,7 +2153,13 @@ export class Game {
         }
       }
     }
+    this.planetDepletionTimer = (this.planetDepletionTimer || 0) + deltaTime;
+    if (this.planetDepletionTimer >= 1000) {
+      this.planetDepletionTimer -= 1000;
+      for (const storm of this.ionStorms) {
+        if (storm.type === 'nebula') continue;
         if (storm.type !== 'minefield') {
+          const explosionColor = '#ff0';
           for (const planet of this.planets) {
             if (!planet.owner) continue;
             const dx = planet.x - storm.x;

@@ -1258,6 +1258,8 @@ async function bootstrap() {
           isResearching: s.isResearching || false,
           isDiplomacy: s.isDiplomacy || false,
           scoutAttackEnabled: s.scoutAttackEnabled || false,
+          isMaterializing: s.isMaterializing || false,
+          materializeProgress: s.materializeProgress !== undefined ? s.materializeProgress : 1.0,
           cruiserStyle: s.cruiserStyle || null
         };
       } else {
