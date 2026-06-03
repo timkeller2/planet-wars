@@ -3021,7 +3021,7 @@ export class Game {
 
                 targetPlanet.sympathy[ship.owner.id] = newSym;
                 
-                ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + 1;
+                ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + actualIncrease;
               } else {
                 ship.diplomatFailureEvent = (ship.diplomatFailureEvent || 0) + 1;
                 ship.diplomatFailureChance = Math.round(chancePercent);

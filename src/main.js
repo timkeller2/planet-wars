@@ -1023,8 +1023,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               y: targetY,
               text: '💖',
               type: 'diplomacy_success',
-              age: b * 0.2,
-              duration: 2.5
+              age: b * 0.15,
+              duration: 2.2 + Math.random() * 0.6,
+              driftX: (Math.random() - 0.5) * 30,
+              driftYMult: 0.8 + Math.random() * 0.6,
+              scatterX: (Math.random() - 0.5) * 20
             });
           }
         }
@@ -6631,7 +6634,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         } else if (anim.type === 'enhance') {
           yOffset = progress * 60; // drifts up nicely
         } else if (anim.type === 'diplomacy_success' || anim.type === 'diplomacy_failure') {
-          yOffset = progress * 40; // float up nicely
+          const mult = anim.driftYMult !== undefined ? anim.driftYMult : 1.0;
+          yOffset = progress * 40 * mult; // float up nicely
         }
 
         // Grow font
@@ -6708,7 +6712,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ctx.fillStyle = anim.color || '#fff';
           ctx.shadowColor = anim.color || 'rgba(0, 255, 255, 0.8)';
         } else if (anim.type === 'diplomacy_success') {
-          xOffset = Math.sin(progress * Math.PI * 3) * 6;
+          const drift = anim.driftX !== undefined ? anim.driftX * progress : 0;
+          const scat = anim.scatterX !== undefined ? anim.scatterX : 0;
+          xOffset = Math.sin(progress * Math.PI * 3) * 6 + drift + scat;
           ctx.fillStyle = `rgba(255, 180, 200, ${alpha})`;
           ctx.shadowColor = `rgba(255, 0, 128, ${alpha})`;
         } else if (anim.type === 'diplomacy_failure') {
