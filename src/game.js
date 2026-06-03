@@ -173,6 +173,9 @@ export class Game {
     this.gameTime = 0;
     this.rampageInterval = 1800000;
     this.nextRampageTime = 1800000;
+    this.nextRampageSelectionTime = Math.max(0, this.nextRampageTime - 180000);
+    this.incubatingPlanet = null;
+    this.rampageIncubationTimeRemaining = 0;
     this.scheduledAttacks = [];
     this.ionStorms = [];
     this.nextIonStormId = 0;
@@ -342,69 +345,140 @@ export class Game {
   }
 
   assignPlanet(player) {
-    const neutralPlanets = this.planets.filter(p => p.owner === null && !p.isSuperPlanet);
-    if (neutralPlanets.length === 0) return false;
-
-    let availableCandidates = neutralPlanets;
-    if (player.isAI && player !== this.monsterPlayer) {
-      const preferred = neutralPlanets.filter(p => {
-        // Skip if in human gravity well
-        if (this.isPlanetInHumanGravityWell(p)) return false;
-        // Skip if FOW is enabled and visible to human (66% chance)
-        if (this.settings && this.settings.fogOfWar) {
-          if (this.isPlanetVisibleToHuman(p) && Math.random() < 0.66) {
-            return false;
-          }
-        }
-        return true;
-      });
-      if (preferred.length > 0) {
-        availableCandidates = preferred;
-      }
-    }
+    const hwSizeSetting = (this.settings && this.settings.homeworldSize) ? this.settings.homeworldSize : "120";
+    const isNatural = hwSizeSetting === 'natural';
 
     let targetPlanet = null;
 
-    if (player === this.monsterPlayer) {
-      // Monster gets the smallest planet
-      availableCandidates.sort((a, b) => a.maxShips - b.maxShips);
-      targetPlanet = availableCandidates[0];
-    } else {
-      const humanPlanets = this.planets.filter(p => p.owner && !p.owner.isAI);
+    if (!isNatural) {
+      // Create a new homeworld planet!
+      const parsedVal = parseInt(hwSizeSetting, 10);
+      const newRadius = (!isNaN(parsedVal) && parsedVal > 0) ? Math.round(parsedVal / 4) : 30;
       
-      if (!player.isAI && humanPlanets.length > 0) {
-        // Human player: prioritize candidates with maxShips > 115, sorted by distance to nearest human planet descending
-        const candidatePlanets = availableCandidates.filter(p => p.maxShips > 115);
-        if (candidatePlanets.length > 0) {
-          candidatePlanets.sort((a, b) => {
-            const distA = humanPlanets.reduce((min, hp) => Math.min(min, (a.x - hp.x)**2 + (a.y - hp.y)**2), Infinity);
-            const distB = humanPlanets.reduce((min, hp) => Math.min(min, (b.x - hp.x)**2 + (b.y - hp.y)**2), Infinity);
-            return distB - distA; // Descending order (furthest first)
-          });
-          targetPlanet = candidatePlanets[0];
+      // Find a position away from other player homeworlds and not on top of any existing planet
+      const existingHomeworlds = this.planets.filter(p => p.homeworldOf !== undefined && p.homeworldOf !== null);
+      
+      let bestPos = null;
+      let maxMinDist = -1;
+      
+      // Try with different spacing values in case map is very crowded
+      const spacings = [40, 25, 10];
+      for (const spacing of spacings) {
+        const candidates = [];
+        for (let attempt = 0; attempt < 200; attempt++) {
+          const x = newRadius + 50 + Math.random() * (this.width - newRadius * 2 - 100);
+          const y = newRadius + 50 + Math.random() * (this.height - newRadius * 2 - 100);
+          
+          // Check collision with existing planets
+          let collision = false;
+          for (const p of this.planets) {
+            const dx = p.x - x;
+            const dy = p.y - y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < p.radius + newRadius + spacing) {
+              collision = true;
+              break;
+            }
+          }
+          if (!collision) {
+            candidates.push({ x, y });
+          }
+        }
+        
+        if (candidates.length > 0) {
+          if (existingHomeworlds.length === 0) {
+            // First homeworld: pick a random valid candidate
+            bestPos = candidates[Math.floor(Math.random() * candidates.length)];
+          } else {
+            // Pick candidate that maximizes minimum distance to other homeworlds
+            for (const c of candidates) {
+              const minDist = Math.min(...existingHomeworlds.map(h => {
+                const dx = h.x - c.x;
+                const dy = h.y - c.y;
+                return Math.sqrt(dx * dx + dy * dy);
+              }));
+              if (minDist > maxMinDist) {
+                maxMinDist = minDist;
+                bestPos = c;
+              }
+            }
+          }
+          break; // Found a position, stop trying smaller spacings
         }
       }
       
-      if (!targetPlanet) {
-        const candidatePlanets = availableCandidates.filter(p => p.maxShips > 115 && humanPlanets.every(hp => {
-          const dx = p.x - hp.x;
-          const dy = p.y - hp.y;
-          return dx*dx + dy*dy >= 40000; // 200^2
-        }));
+      if (bestPos) {
+        const newPlanetId = Math.max(...this.planets.map(p => p.id), 0) + 1;
+        const initialShips = (!isNaN(parsedVal) && parsedVal > 0) ? parsedVal : 120;
+        targetPlanet = new Planet(newPlanetId, bestPos.x, bestPos.y, newRadius, null, initialShips);
+        this.planets.push(targetPlanet);
+        console.log(`[New Homeworld Created] Created new Planet ${targetPlanet.name} (${targetPlanet.id}) at (${Math.round(bestPos.x)}, ${Math.round(bestPos.y)}) for player ${player.id}. Min dist to other homeworlds: ${maxMinDist.toFixed(1)}`);
+      }
+    }
 
-        if (candidatePlanets.length > 0) {
-          candidatePlanets.sort((a, b) => a.maxShips - b.maxShips); // smallest > 115
-          targetPlanet = candidatePlanets[0];
-        } else {
-          // Fallback 1: smallest > 115 regardless of distance
-          const anyLarge = availableCandidates.filter(p => p.maxShips > 115);
-          if (anyLarge.length > 0) {
-            anyLarge.sort((a, b) => a.maxShips - b.maxShips);
-            targetPlanet = anyLarge[0];
+    if (!targetPlanet) {
+      const neutralPlanets = this.planets.filter(p => p.owner === null && !p.isSuperPlanet);
+      if (neutralPlanets.length === 0) return false;
+
+      let availableCandidates = neutralPlanets;
+      if (player.isAI && player !== this.monsterPlayer) {
+        const preferred = neutralPlanets.filter(p => {
+          // Skip if in human gravity well
+          if (this.isPlanetInHumanGravityWell(p)) return false;
+          // Skip if FOW is enabled and visible to human (66% chance)
+          if (this.settings && this.settings.fogOfWar) {
+            if (this.isPlanetVisibleToHuman(p) && Math.random() < 0.66) {
+              return false;
+            }
+          }
+          return true;
+        });
+        if (preferred.length > 0) {
+          availableCandidates = preferred;
+        }
+      }
+
+      if (player === this.monsterPlayer) {
+        // Monster gets the smallest planet
+        availableCandidates.sort((a, b) => a.maxShips - b.maxShips);
+        targetPlanet = availableCandidates[0];
+      } else {
+        const humanPlanets = this.planets.filter(p => p.owner && !p.owner.isAI);
+        
+        if (!player.isAI && humanPlanets.length > 0) {
+          // Human player: prioritize candidates with maxShips > 115, sorted by distance to nearest human planet descending
+          const candidatePlanets = availableCandidates.filter(p => p.maxShips > 115);
+          if (candidatePlanets.length > 0) {
+            candidatePlanets.sort((a, b) => {
+              const distA = humanPlanets.reduce((min, hp) => Math.min(min, (a.x - hp.x)**2 + (a.y - hp.y)**2), Infinity);
+              const distB = humanPlanets.reduce((min, hp) => Math.min(min, (b.x - hp.x)**2 + (b.y - hp.y)**2), Infinity);
+              return distB - distA; // Descending order (furthest first)
+            });
+            targetPlanet = candidatePlanets[0];
+          }
+        }
+        
+        if (!targetPlanet) {
+          const candidatePlanets = availableCandidates.filter(p => p.maxShips > 115 && humanPlanets.every(hp => {
+            const dx = p.x - hp.x;
+            const dy = p.y - hp.y;
+            return dx*dx + dy*dy >= 40000; // 200^2
+          }));
+
+          if (candidatePlanets.length > 0) {
+            candidatePlanets.sort((a, b) => a.maxShips - b.maxShips); // smallest > 115
+            targetPlanet = candidatePlanets[0];
           } else {
-            // Fallback 2: highest maxShips overall
-            availableCandidates.sort((a, b) => b.maxShips - a.maxShips);
-            targetPlanet = availableCandidates[0];
+            // Fallback 1: smallest > 115 regardless of distance
+            const anyLarge = availableCandidates.filter(p => p.maxShips > 115);
+            if (anyLarge.length > 0) {
+              anyLarge.sort((a, b) => a.maxShips - b.maxShips);
+              targetPlanet = anyLarge[0];
+            } else {
+              // Fallback 2: highest maxShips overall
+              availableCandidates.sort((a, b) => b.maxShips - a.maxShips);
+              targetPlanet = availableCandidates[0];
+            }
           }
         }
       }
@@ -527,6 +601,9 @@ export class Game {
     }
     this.rampageInterval = Math.round(1800000 * rampageDelayMultiple);
     this.nextRampageTime = this.rampageInterval;
+    this.nextRampageSelectionTime = Math.max(0, this.nextRampageTime - 180000);
+    this.incubatingPlanet = null;
+    this.rampageIncubationTimeRemaining = 0;
     this.scheduledAttacks = [];
     
     // Reset player states
@@ -1789,28 +1866,77 @@ export class Game {
 
     if (this.settings && this.settings.noRampagers) {
       // No rampagers
-    } else if (this.gameTime >= this.nextRampageTime) {
-      this.rampageInterval = Math.max(720000, this.rampageInterval - 360000);
-      this.nextRampageTime = this.gameTime + this.rampageInterval;
-      const unusedAIs = this.aiPlayers.filter(p => !this.planets.some(pl => pl.owner === p));
-      if (unusedAIs.length > 0) {
-        const neutralPlanets = this.planets.filter(p => p.owner === null);
-        if (neutralPlanets.length > 0) {
-          const rampageAI = unusedAIs[0];
-          const above150 = neutralPlanets.filter(p => p.maxShips > 150);
-          let target;
-          if (above150.length > 0) {
-            above150.sort((a, b) => a.maxShips - b.maxShips); // smallest first
-            target = above150[0];
-          } else {
-            neutralPlanets.sort((a, b) => b.maxShips - a.maxShips); // largest first
-            target = neutralPlanets[0];
+    } else {
+      // 1. Check if we need to select a new planet for incubation
+      if (this.gameTime >= this.nextRampageSelectionTime && !this.incubatingPlanet) {
+        const unusedAIs = this.aiPlayers.filter(p => !this.planets.some(pl => pl.owner === p) && !p.isRampager);
+        if (unusedAIs.length > 0) {
+          const neutralPlanets = this.planets.filter(p => p.owner === null && !p.rampageIncubating);
+          if (neutralPlanets.length > 0) {
+            const above150 = neutralPlanets.filter(p => p.maxShips > 150);
+            let target;
+            if (above150.length > 0) {
+              above150.sort((a, b) => a.maxShips - b.maxShips); // smallest first
+              target = above150[0];
+            } else {
+              neutralPlanets.sort((a, b) => b.maxShips - a.maxShips); // largest first
+              target = neutralPlanets[0];
+            }
+            target.rampageIncubating = true;
+            this.incubatingPlanet = target;
+            this.rampageIncubationTimeRemaining = 180000; // 3 minutes in ms
+            console.log(`[Rampage Incubation] Planet ${target.name} (${target.id}) selected for rampage. Begins in 3 minutes.`);
+
+            // Send a chat warning to all human players
+            this.pendingChatMessages = this.pendingChatMessages || [];
+            for (const p of this.allPlayers) {
+              if (!p.isAI) {
+                this.pendingChatMessages.push({
+                  playerId: p.id,
+                  text: `⚠️ WARNING: Pathogenic outbreak detected on Planet ${target.name}! Inimical activity expected in 3 minutes.`
+                });
+              }
+            }
           }
-          target.owner = rampageAI;
-          rampageAI.isRampager = true;
-          target.ships += target.maxShips * 3;
-          target.rampageEvent = true;
-          target.rampageBoost = true;
+        }
+        // Push selection time to infinity so we don't pick multiple
+        this.nextRampageSelectionTime = Infinity;
+      }
+
+      // 2. Process incubation timer if active
+      if (this.incubatingPlanet) {
+        if (this.incubatingPlanet.owner !== null) {
+          // Planet was captured by a player during incubation! Clear/heal infection.
+          console.log(`[Rampage Cured] Planet ${this.incubatingPlanet.name} (${this.incubatingPlanet.id}) captured by player ${this.incubatingPlanet.owner.id}. Incubation cleared.`);
+          this.incubatingPlanet.rampageIncubating = false;
+          this.incubatingPlanet = null;
+          this.rampageIncubationTimeRemaining = 0;
+          // Retry selection in 30 seconds
+          this.nextRampageSelectionTime = this.gameTime + 30000;
+        } else {
+          this.rampageIncubationTimeRemaining -= deltaTime;
+          if (this.rampageIncubationTimeRemaining <= 0) {
+            // Incubation complete! Trigger the actual rampage!
+            const target = this.incubatingPlanet;
+            target.rampageIncubating = false;
+            this.incubatingPlanet = null;
+
+            const unusedAIs = this.aiPlayers.filter(p => !this.planets.some(pl => pl.owner === p) && !p.isRampager);
+            if (unusedAIs.length > 0 && target.owner === null) {
+              const rampageAI = unusedAIs[0];
+              target.owner = rampageAI;
+              rampageAI.isRampager = true;
+              target.ships += target.maxShips * 3;
+              target.rampageEvent = true;
+              target.rampageBoost = true;
+              console.log(`[Rampage Triggered] Planet ${target.name} (${target.id}) is now RAMPAGING under player ${rampageAI.id}!`);
+            }
+
+            // Schedule the next rampage
+            this.rampageInterval = Math.max(720000, this.rampageInterval - 360000);
+            this.nextRampageTime = this.gameTime + this.rampageInterval;
+            this.nextRampageSelectionTime = Math.max(this.gameTime, this.nextRampageTime - 180000);
+          }
         }
       }
     }

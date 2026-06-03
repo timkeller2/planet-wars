@@ -1137,6 +1137,7 @@ async function bootstrap() {
           capacityDecreaseEvent: cEvent,
           justAssigned: p.justAssigned,
           rampageEvent: p.rampageEvent,
+          rampageIncubating: p.rampageIncubating || false,
           isAICandidate: p.isAICandidate || false,
           defeatEvent: dEvent,
           homeworldOf: p.homeworldOf,
@@ -1503,6 +1504,7 @@ async function bootstrap() {
               isResearch: p.isResearch,
               isMilitary: p.isMilitary,
               rampageEvent: p.rampageEvent || false,
+              rampageIncubating: p.rampageIncubating || false,
               isAICandidate: p.isAICandidate || false,
               resources: p.resources || null,
               expScore: p.expScore || 0

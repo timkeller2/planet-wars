@@ -524,6 +524,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   let lastPlanetCapacities = {};
   let lastPlanetAssignments = {};
   let lastPlanetRampages = {};
+  let lastPlanetIncubations = {};
   let megalovaniaPlayed = false;
   let lastPlanetStands = {};
   let lastPlanetHomeworlds = {};
@@ -856,6 +857,22 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
         } else if (!p.rampageEvent) {
           lastPlanetRampages[p.id] = false;
+        }
+        if (p.rampageIncubating && !lastPlanetIncubations[p.id]) {
+          lastPlanetIncubations[p.id] = true;
+          if (!p.inFog) {
+            floatingAnimations.push({
+              x: p.x,
+              y: p.y,
+              text: 'OUTBREAK DETECTED!',
+              type: 'outbreak',
+              age: 0,
+              duration: 4.0
+            });
+            playSound('trumpet');
+          }
+        } else if (!p.rampageIncubating) {
+          lastPlanetIncubations[p.id] = false;
         }
         if (p.defeatEvent) {
           floatingAnimations.push({
@@ -4382,6 +4399,26 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.restore();
           }
 
+          if (p.rampageIncubating) {
+            ctx.save();
+            const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 150);
+            const bob = Math.sin(Date.now() / 200) * 3;
+            ctx.globalAlpha = pulse;
+            ctx.shadowColor = '#0f0';
+            ctx.shadowBlur = 10;
+            ctx.font = '20px sans-serif';
+            ctx.textAlign = 'center';
+            let iconHeight = 10;
+            if (displayHomeworldOf || displayIsResearch || displayIsMilitary || displayIsSpeedPlanet) {
+              iconHeight = 28;
+            }
+            if (eligibleForRevolt) {
+              iconHeight += 18;
+            }
+            ctx.fillText("☣️", p.x, p.y - p.radius - iconHeight + bob);
+            ctx.restore();
+          }
+
           if (!isLastKnown) {
             if (owner) {
               if (p.ships < 50) {
@@ -6836,6 +6873,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         } else if (anim.type === 'diplomacy_success' || anim.type === 'diplomacy_failure') {
           const mult = anim.driftYMult !== undefined ? anim.driftYMult : 1.0;
           yOffset = progress * 40 * mult; // float up nicely
+        } else if (anim.type === 'outbreak') {
+          yOffset = progress * 60; // drifts up nicely
         }
 
         // Grow font
@@ -6858,6 +6897,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           fontsize = 12 + (progress * 8); // grows from 12 to 20
         } else if (anim.type === 'diplomacy_success' || anim.type === 'diplomacy_failure') {
           fontsize = 12 + (progress * 8); // grows from 12 to 20
+        } else if (anim.type === 'outbreak') {
+          fontsize = 16 + (progress * 14); // grows moderately
         }
 
         ctx.font = `bold ${fontsize}px Orbitron`; // growing font
@@ -6894,6 +6935,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           xOffset = (Math.random() - 0.5) * 15; // aggressive jitter
           ctx.fillStyle = `rgba(255, 100, 100, ${alpha})`;
           ctx.shadowColor = `rgba(255, 0, 0, ${alpha})`; // deep red glow
+        } else if (anim.type === 'outbreak') {
+          xOffset = (Math.random() - 0.5) * 4; // slight jitter
+          ctx.fillStyle = `rgba(150, 255, 150, ${alpha})`; // green/lime color for infection
+          ctx.shadowColor = `rgba(0, 255, 0, ${alpha})`; // green glow
         } else if (anim.type === 'defeat') {
           xOffset = (Math.random() - 0.5) * 3;
           const c = anim.color || '#fff';
