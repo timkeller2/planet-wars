@@ -396,15 +396,6 @@ export class Ship {
     if (this.bombs !== undefined && this.bombs <= 0) {
       this.specialbombs = 0;
     }
-    if (this.maxArmor > 0) {
-      if (this.armorPoints <= 0) {
-        this.specialduranium = 0;
-      }
-    } else {
-      if (this.health <= 0) {
-        this.specialduranium = 0;
-      }
-    }
 
     if (this.active && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
       if (game) {
@@ -3946,6 +3937,9 @@ export class Ship {
       }
 
       const cruiserCheck = this.maxHealth > 0 && !this.isAmoeba;
+      if (this.isCruiser && (this.specialduranium || 0) > 0) {
+        this.specialduranium = Math.max(0, this.specialduranium - 1);
+      }
       let damageAmt = (cruiserCheck && isHazard) ? (Math.floor(Math.random() * 6) + 1) : 1;
       if (cruiserCheck && (this.armorPoints || 0) > 0) {
         if (this.armorPoints >= damageAmt) {
