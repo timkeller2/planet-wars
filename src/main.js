@@ -3509,6 +3509,26 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     endScreen.classList.add('hidden');
     gameUI.classList.remove('hidden');
     if (serverState) serverState.isRunning = true;
+
+    const musicCheckbox = document.getElementById('music-checkbox');
+    const bgMusic = document.getElementById('bg-music');
+    if (musicCheckbox && musicCheckbox.checked && bgMusic) {
+      const introTracks = [
+        'A little loud, but pretty good.mp3',
+        'Deep Space Ambience.wav',
+        'Intense option.mp3',
+        'Pretty and Steady.mp3',
+        'Solid option.mp3'
+      ];
+      const randomTrack = introTracks[Math.floor(Math.random() * introTracks.length)];
+      bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
+      bgMusic.loop = false;
+      bgMusic.volume = 0.4;
+      bgMusic.play().catch(e => console.warn('Music play blocked:', e));
+    } else if (bgMusic) {
+      bgMusic.pause();
+    }
+
     const fogOfWar = document.getElementById('fog-of-war-checkbox').checked;
     const smallEmpires = document.getElementById('small-empires-checkbox').checked;
     const noRampagers = document.getElementById('no-rampagers-checkbox').checked;
