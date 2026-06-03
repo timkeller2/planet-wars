@@ -2967,8 +2967,15 @@ export class Game {
               const disposition = targetPlanet.disposition ? (targetPlanet.disposition[ship.owner.id] ?? 0) : 0;
 
               const prefRes = targetPlanet.preferredResource;
-              const qty = prefRes ? (ship.owner.resources?.[prefRes] || 0) : 0;
-              const hasPref = qty > 0;
+              const initialQty = prefRes ? (ship.owner.resources?.[prefRes] || 0) : 0;
+
+              // If the player has > .1 of the preferred resource of a planet during a diplomacy event, consume .1 of that resource.
+              if (prefRes && initialQty > 0.1) {
+                ship.owner.resources[prefRes] = Math.max(0, ship.owner.resources[prefRes] - 0.1);
+                ship.diplomatPrefResourceEvent = (ship.diplomatPrefResourceEvent || 0) + 1;
+              }
+
+              const hasPref = initialQty > 0;
 
               const chanceBase = 30 + disposition + currentSym + bonusSum;
               const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10;
@@ -2989,10 +2996,10 @@ export class Game {
                   const d100 = Math.floor(Math.random() * 100) + 1;
                   let dispositionVal = d100 - 50;
 
-                  if (qty > 0.1) {
+                  if (initialQty > 0.1) {
                     dispositionVal += (ship.owner.expScore + ship.expScore) * 3;
                   }
-                  if (qty > 0) {
+                  if (initialQty > 0) {
                     dispositionVal += 10;
                   }
                   dispositionVal += 0.5 * currentSym;
