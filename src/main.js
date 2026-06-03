@@ -2704,11 +2704,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           const cfg = SHIP_CLASSES[typeToBuild];
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
           
-          // Check unlock requirement: except for frigates and scouts, previous class must be built
+          // Check unlock requirement: except for scouts, previous class must be built
           const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
           const idx = keys.indexOf(typeToBuild);
           let isUnlocked = true;
-          if (idx > 0 && typeToBuild !== 'frigate' && typeToBuild !== 'scout') {
+          if (idx > 0 && typeToBuild !== 'scout') {
             const prevClass = keys[idx - 1];
             if (!builtClasses[prevClass]) {
               isUnlocked = false;
@@ -2717,7 +2717,17 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
           if (isUnlocked) {
             const isFirst = !builtClasses[typeToBuild];
-            const costMult = (isFirst && typeToBuild !== 'frigate' && typeToBuild !== 'scout') ? 3 : 1;
+            const prototypeMultipliers = {
+              scout: 1,
+              frigate: 1.5,
+              destroyer: 1.75,
+              cruiser: 2,
+              battlecruiser: 2.5,
+              battleship: 3,
+              titan: 3.5,
+              mammoth: 4
+            };
+            const costMult = isFirst ? (prototypeMultipliers[typeToBuild] || 1) : 1;
             const costShips = cfg.costShips * costMult;
 
             const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
@@ -3786,12 +3796,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
           
-          // Check unlock requirement: except for frigates and scouts, previous class must be built
+          // Check unlock requirement: except for scouts, previous class must be built
           const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
           const idx = keys.indexOf(classType);
           let isUnlocked = true;
           let lockReason = '';
-          if (idx > 0 && classType !== 'frigate' && classType !== 'scout') {
+          if (idx > 0 && classType !== 'scout') {
             const prevClass = keys[idx - 1];
             if (!builtClasses[prevClass]) {
               isUnlocked = false;
@@ -3801,7 +3811,17 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
 
           const isFirst = !builtClasses[classType];
-          const costMult = (isFirst && classType !== 'frigate' && classType !== 'scout') ? 3 : 1;
+          const prototypeMultipliers = {
+            scout: 1,
+            frigate: 1.5,
+            destroyer: 1.75,
+            cruiser: 2,
+            battlecruiser: 2.5,
+            battleship: 3,
+            titan: 3.5,
+            mammoth: 4
+          };
+          const costMult = isFirst ? (prototypeMultipliers[classType] || 1) : 1;
           const costShips = cfg.costShips * costMult;
 
           const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
