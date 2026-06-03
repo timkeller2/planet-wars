@@ -3525,7 +3525,8 @@ export class Ship {
             N_att = Math.min(this.count, N_att);
 
             const penalty = 0.01 * Math.floor(this.targetPlanet.ships / 5);
-            const racialDefenseBonus = (this.targetPlanet.owner && this.targetPlanet.racialAffinity === this.targetPlanet.owner.cruiserStyle) ? 0.15 : 0;
+            const matchesAttacker = (this.cruiserStyle === this.targetPlanet.racialAffinity) || (this.owner && this.owner.cruiserStyle === this.targetPlanet.racialAffinity);
+            const racialDefenseBonus = !matchesAttacker ? 0.15 : 0;
             let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus - racialDefenseBonus);
             killChance = Math.max(minKillChance, killChance - hazardPenalty);
 
@@ -3727,74 +3728,6 @@ export class Ship {
         const hdy = this.y - h.y;
         if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
           currentHazards.add(h.id);
-          
-          // Entry check
-          if (!this.insideHazards.has(h.id) && h.type !== 'nebula') {
-            const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
-            const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
-            const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
-            const sRed = Math.sqrt(this.expScore || 0);
-            const effectiveIntensity = h.intensity - knowledge - (tRed + eRed) / 2 - sRed;
-
-            if (this.maxHealth > 0) {
-              if (!this.isAmoeba) {
-                // Cruiser Exception
-                if (!this.hazardCooldown || this.hazardCooldown <= 0) {
-                  let rollChance = effectiveIntensity / 100;
-                  let speedMod = effectiveSpeed / 35;
-                  if (effectiveSpeed > 35) {
-                    speedMod *= 3;
-                  }
-                  if (h.type === 'minefield' || !h.type || h.type === 'storm') {
-                    rollChance *= speedMod;
-                  }
-                  if (rollChance > 0 && Math.random() < rollChance) {
-                    const damage = Math.floor(Math.random() * 6) + 1;
-                    this.health -= damage;
-                    this.hazardCooldown = 1000;
-                    if (explosions) {
-                      const explosionColor = h.type === 'minefield' ? '#44f' : '#ff0';
-                      explosions.push({ x: this.x, y: this.y, color: explosionColor, age: 0 });
-                    }
-                    if (this.health <= 0) {
-                      this.active = false;
-                    }
-                  }
-                }
-              }
-            } else if (!this.isAmoeba) {
-              // Standard fleet entry checks: (effective intensity)% chance to destroy each ship
-              const damageChance = Math.max(0, effectiveIntensity / 100);
-              let destroyedCount = 0;
-              const initialCount = this.count;
-              for (let i = 0; i < initialCount; i++) {
-                if (Math.random() < damageChance) {
-                  if (!this.checkSurvivalRoll()) {
-                    destroyedCount++;
-                  }
-                }
-              }
-              if (destroyedCount > 0) {
-                this.count -= destroyedCount;
-                if (this.count <= 0) {
-                  this.count = 0;
-                  this.active = false;
-                }
-                if (explosions) {
-                  const explosionColor = h.type === 'minefield' ? '#44f' : '#ff0';
-                  explosions.push({ x: this.x, y: this.y, color: explosionColor, age: 0 });
-                  if (lasers && !this.active) {
-                    const boltX = this.x + (Math.random() - 0.5) * 80;
-                    const boltY = this.y - 30 - Math.random() * 50;
-                    const midX = (this.x + boltX) / 2 + (Math.random() - 0.5) * 40;
-                    const midY = (this.y + boltY) / 2 + (Math.random() - 0.5) * 20;
-                    lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
-                    lasers.push({ startX: midX, startY: midY, endX: this.x, endY: this.y, color: explosionColor, age: 0, duration: 0.4 });
-                  }
-                }
-              }
-            }
-          }
 
           if (h.type === 'nebula') {
             const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
@@ -3803,6 +3736,18 @@ export class Ship {
             const sRed = Math.sqrt(this.expScore || 0);
             const slowPct = Math.max(0, h.intensity - sRed - (eRed + tRed) / 2 - knowledge);
             effectiveSpeed *= Math.max(0.1, 1 - slowPct / 100);
+          } else {
+            // Ion Storm or Minefield speed reduction
+            const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
+            const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
+            const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
+            const sRed = Math.sqrt(this.expScore || 0);
+            const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+            if (effectiveIntensity > 0) {
+              if (effectiveSpeed > 5) {
+                effectiveSpeed = 5;
+              }
+            }
           }
         }
       }
@@ -3867,6 +3812,7 @@ export class Ship {
         this.y += Math.sin(this.angle) * moveDistance;
       }
     }
+    this.currentSpeed = effectiveSpeed;
   }
 
   takeDamage(explosions, attacker = null, isHazard = false) {

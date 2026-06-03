@@ -1068,7 +1068,8 @@ async function bootstrap() {
             }
 
             const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
-            const racialDefenseBonus = (p.owner && p.racialAffinity === p.owner.cruiserStyle) ? 0.15 : 0;
+            const matchesAnyAttacker = ships.some(s => s.cruiserStyle === p.racialAffinity) || (owner && owner.cruiserStyle === p.racialAffinity);
+            const racialDefenseBonus = !matchesAnyAttacker ? 0.15 : 0;
             let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus - racialDefenseBonus);
             killChance = Math.max(minKillChance, killChance - hazardPenalty);
             if (maxKillChance === null || killChance > maxKillChance) {

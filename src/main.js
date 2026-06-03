@@ -4570,7 +4570,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               }
 
               const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
-              const racialDefenseBonus = (owner && p.racialAffinity === owner.cruiserStyle) ? 0.15 : 0;
+              const matchesAnySelectedAttacker = selectedShips.some(s => s.cruiserStyle === p.racialAffinity) || 
+                                                selectedPlanets.some(sp => sp.racialAffinity === p.racialAffinity) || 
+                                                (localPlayer && localPlayer.cruiserStyle === p.racialAffinity);
+              const racialDefenseBonus = !matchesAnySelectedAttacker ? 0.15 : 0;
               const estimatedKillChance = Math.max(minKillChance, baseKillChance - defenderLocalExpPenalty + attackerFleetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - lastStandPenalty - defenderHomeworldPenalty - hazardPenalty - humanDefenderBonus - racialDefenseBonus);
               const displayPercentage = Math.round(estimatedKillChance * 100);
 
@@ -4650,7 +4653,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           
           lines.push({ label: nameLabel, value: '', color: '#0ff', isHeader: true });
           if (hp.racialAffinity) {
-            lines.push({ label: 'Racial Affinity', value: hp.racialAffinity, color: '#e040fb' });
+            lines.push({ label: 'Planetary Environment', value: hp.racialAffinity, color: '#e040fb' });
           }
 
           const resourceMeta = {
@@ -4721,6 +4724,30 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             lines.push({ label: 'Gravity Well Support', value: `${Math.round(defPlanetPenaltyPct)}%`, color: '#4f4' });
           }
 
+          let hasEnvDefense = false;
+          let envLabel = 'Environmental Defense';
+          if (hp.racialAffinity) {
+            const matchesOurForces = selectedShips.some(s => s.cruiserStyle === hp.racialAffinity) || 
+                                     selectedPlanets.some(sp => sp.racialAffinity === hp.racialAffinity) || 
+                                     (localPlayer && localPlayer.cruiserStyle === hp.racialAffinity);
+            if (hpOwner) {
+              if (localPlayer && hpOwner.id === localPlayer.id) {
+                hasEnvDefense = true;
+                envLabel = 'Env Defense (vs non-matching)';
+              } else {
+                if (!matchesOurForces) {
+                  hasEnvDefense = true;
+                  envLabel = 'Env Defense (vs attacker)';
+                }
+              }
+            } else {
+              if (!matchesOurForces) {
+                hasEnvDefense = true;
+                envLabel = 'Env Defense (vs attacker)';
+              }
+            }
+          }
+
           if (hpOwner) {
             const techDef = Math.round(Math.sqrt(hpOwner.techScore || 0) * 100) / 100;
             if (techDef > 0) {
@@ -4740,9 +4767,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
 
 
-            if (hp.racialAffinity && hp.racialAffinity === hpOwner.cruiserStyle) {
+            if (hasEnvDefense) {
               totalDefense += 15;
-              lines.push({ label: 'Racial Match Defense', value: `15%`, color: '#e040fb' });
+              lines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
             }
 
             if (hpOwner.id === hp.homeworldOf) {
@@ -4782,7 +4809,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               lines.push({ label: 'Focus Mode', value: `${capitalizedFocus} (Change: ${cost} 🪐)`, color: '#ffd740' });
             }
           } else {
-            lines.push({ label: 'Neutral', value: 'No defense bonuses', color: '#888' });
+            if (hasEnvDefense) {
+              totalDefense += 15;
+              lines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
+            } else {
+              lines.push({ label: 'Neutral', value: 'No defense bonuses', color: '#888' });
+            }
           }
 
           // Storm / Nebula defensive support
@@ -4844,7 +4876,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             const disposition = hp.disposition?.[localPlayer.id] ?? 0;
             
             let racialBonus = 0;
-            if (selectedCruiser && selectedCruiser.cruiserStyle === hp.racialAffinity) {
+            if (selectedCruiser && (selectedCruiser.cruiserStyle === hp.racialAffinity || (selectedCruiser.owner && selectedCruiser.owner.cruiserStyle === hp.racialAffinity))) {
               racialBonus = 20;
             }
 

@@ -2048,8 +2048,8 @@ export class Game {
 
     // Ion Storm / Minefield ship damage (every second, chance/10) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â skip nebulae
     this.ionStormDamageTimer += deltaTime;
-    if (this.ionStormDamageTimer >= 1000) {
-      this.ionStormDamageTimer -= 1000;
+    if (this.ionStormDamageTimer >= 6000) {
+      this.ionStormDamageTimer -= 6000;
       for (const storm of this.ionStorms) {
         if (storm.type === 'nebula') continue;
         const explosionColor = storm.type === 'minefield' ? '#44f' : '#ff0';
@@ -2057,75 +2057,94 @@ export class Game {
           if (!ship.active || !ship.owner) continue;
           if (ship.isAmoeba) continue;
           
-          if (storm.type === 'minefield') {
-            let isMoving = true;
-            if (ship.targetPlanet) {
-              const dx = ship.targetPlanet.x - ship.x;
-              const dy = ship.targetPlanet.y - ship.y;
-              if (Math.sqrt(dx * dx + dy * dy) <= ship.targetPlanet.radius + 1) {
-                isMoving = false;
-              }
-            } else if (ship.targetX !== undefined && ship.targetY !== undefined) {
-              const dx = ship.targetX - ship.x;
-              const dy = ship.targetY - ship.y;
-              if (Math.sqrt(dx * dx + dy * dy) < 5) {
-                isMoving = false;
-              }
-            }
-            if (!isMoving) continue;
-          }
           const dx = ship.x - storm.x;
           const dy = ship.y - storm.y;
           if (dx * dx + dy * dy <= storm.radius * storm.radius) {
+            // Determine if moving
+            let isMoving = false;
+            if (ship.targetPlanet) {
+              const pdx = ship.targetPlanet.x - ship.x;
+              const pdy = ship.targetPlanet.y - ship.y;
+              if (pdx * pdx + pdy * pdy > (ship.targetPlanet.radius + 1) * (ship.targetPlanet.radius + 1)) {
+                isMoving = true;
+              }
+            } else if (ship.targetX !== null && ship.targetY !== null && ship.targetX !== undefined && ship.targetY !== undefined) {
+              const pdx = ship.targetX - ship.x;
+              const pdy = ship.targetY - ship.y;
+              if (pdx * pdx + pdy * pdy >= 25) { // 5 squared
+                isMoving = true;
+              }
+            }
+
+            // Determine speed for damage purposes
+            let speed = 0;
+            if (isMoving) {
+              speed = ship.currentSpeed !== undefined ? ship.currentSpeed : ship.speed;
+            }
+            if (storm.type === 'storm') { // Ion storm
+              speed = Math.max(5, speed);
+            }
+
             const knowledge = storm.knowledge[ship.owner.id] || 0;
             const techRed = Math.sqrt(ship.owner.techScore || 0);
             const expRed = Math.sqrt(ship.owner.expScore || 0);
             const shipExpRed = Math.sqrt(ship.expScore || 0);
-            const effectiveIntensity = storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed;
-            const damageChance = Math.max(0, effectiveIntensity / 1000);
+            const effectiveIntensity = Math.max(0, storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed);
 
-            if (ship.maxHealth > 0) {
-              // CruiserException: Retains dynamic 1d6 damage on damageChance failure
-              if (damageChance > 0 && Math.random() < damageChance) {
-                ship.takeDamage(this.explosions, null, true);
-                // Lightning bolt effect
-                const boltX = ship.x + (Math.random() - 0.5) * 80;
-                const boltY = ship.y - 30 - Math.random() * 50;
-                const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
-                const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
-                this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
-                this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
-              }
-            } else {
-              // Standard fleet tick checks: 1/10th that rate per second afterward
-              let destroyedCount = 0;
-              const initialCount = ship.count;
-              for (let i = 0; i < initialCount; i++) {
-                if (Math.random() < damageChance) {
-                  if (!ship.checkSurvivalRoll()) {
-                    destroyedCount++;
+            const risk = (effectiveIntensity * speed) / 10;
+
+            if (risk > 0) {
+              if (ship.maxHealth > 0) {
+                // Cruiser
+                const roll = Math.random() * 100;
+                if (roll < risk) {
+                  const damage = Math.ceil((risk - roll) / 10);
+                  ship.health -= damage;
+                  
+                  this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
+                  const boltX = ship.x + (Math.random() - 0.5) * 80;
+                  const boltY = ship.y - 30 - Math.random() * 50;
+                  const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
+                  const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
+                  this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
+                  this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
+
+                  if (ship.health <= 0) {
+                    ship.active = false;
                   }
                 }
-              }
-              if (destroyedCount > 0) {
-                ship.count -= destroyedCount;
-                if (ship.count <= 0) {
-                  ship.count = 0;
-                  ship.active = false;
+              } else {
+                // Standard fleet
+                let destroyedCount = 0;
+                const initialCount = ship.count;
+                for (let i = 0; i < initialCount; i++) {
+                  const roll = Math.random() * 100;
+                  if (roll < risk) {
+                    if (!ship.checkSurvivalRoll()) {
+                      destroyedCount++;
+                    }
+                  }
                 }
-                this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
-                // Lightning bolt effect
-                const boltX = ship.x + (Math.random() - 0.5) * 80;
-                const boltY = ship.y - 30 - Math.random() * 50;
-                const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
-                const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
-                this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
-                this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
+                if (destroyedCount > 0) {
+                  ship.count -= destroyedCount;
+                  if (ship.count <= 0) {
+                    ship.count = 0;
+                    ship.active = false;
+                  }
+                  this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
+                  const boltX = ship.x + (Math.random() - 0.5) * 80;
+                  const boltY = ship.y - 30 - Math.random() * 50;
+                  const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
+                  const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
+                  this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
+                  this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
+                }
               }
             }
           }
         }
-        
+      }
+    }
         if (storm.type !== 'minefield') {
           for (const planet of this.planets) {
             if (!planet.owner) continue;
@@ -2170,6 +2189,7 @@ export class Game {
           p.amoebaSpawnTimer -= 120000;
           const amoeba = new Ship(this.nextShipId++, p.x, p.y, null, this.monsterPlayer, p.x + (Math.random()-0.5)*200, p.y + (Math.random()-0.5)*200);
           amoeba.isAmoeba = true;
+          amoeba.cruiserStyle = p.racialAffinity;
           let speed = 0;
           for (let d = 0; d < 4; d++) speed += Math.floor(Math.random() * 6) + 1;
           amoeba.speed = speed;
@@ -2405,6 +2425,7 @@ export class Game {
           ship.health = halfSize;
           const newAmoeba = new Ship(this.nextShipId++, ship.x, ship.y, null, this.monsterPlayer, ship.x + (Math.random() - 0.5) * 400, ship.y + (Math.random() - 0.5) * 400);
           newAmoeba.isAmoeba = true;
+          newAmoeba.cruiserStyle = ship.cruiserStyle;
           let speed = 0;
           for (let d = 0; d < 4; d++) speed += Math.floor(Math.random() * 6) + 1;
           newAmoeba.speed = speed;
@@ -3154,7 +3175,7 @@ export class Game {
               const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10;
               
               let rawChance = hasPref ? chancePref : chanceBase;
-              if (ship.cruiserStyle === targetPlanet.racialAffinity) {
+              if (ship.cruiserStyle === targetPlanet.racialAffinity || (ship.owner && ship.owner.cruiserStyle === targetPlanet.racialAffinity)) {
                 rawChance += 20;
               }
               const chancePercent = Math.max(0, Math.min(100, Math.round(rawChance)));
