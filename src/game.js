@@ -1289,10 +1289,7 @@ export class Game {
       const costCap = cfg.costCap;
       const maxHealth = cfg.hp;
 
-      let creditsAvailable = 0;
-      if (isFirst) {
-        creditsAvailable = (owner && owner.useCredits !== false) ? (owner.credits || 0) : 0;
-      }
+      const creditsAvailable = (owner && owner.useCredits !== false) ? (owner.credits || 0) : 0;
       
       const creditsPaid = Math.min(creditsAvailable, costShips);
       const remainingCostShips = costShips - creditsPaid;
@@ -2098,8 +2095,11 @@ export class Game {
             const expRed = Math.sqrt(ship.owner.expScore || 0);
             const shipExpRed = Math.sqrt(ship.expScore || 0);
 
-            const otherModifiers = knowledge + (techRed + expRed) / 2 + shipExpRed;
-            const risk = Math.max(0, (storm.intensity * speed) / 10 - otherModifiers);
+            const baseEffectiveIntensity = Math.max(0, storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed);
+            const normalSpeed = ship.speed * (ship.speedModifier !== undefined ? ship.speedModifier : 1.0);
+            const speedReduction = Math.max(0, normalSpeed - speed);
+            const effectiveIntensity = Math.max(0, baseEffectiveIntensity - speedReduction);
+            const risk = (effectiveIntensity * speed) / 10;
 
             if (risk > 0) {
               if (ship.maxHealth > 0) {

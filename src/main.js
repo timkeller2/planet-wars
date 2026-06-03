@@ -2745,7 +2745,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             }
             const costShips = cfg.costShips * costMult;
 
-            const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+            const creditsAvailable = (myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0;
             const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
             if (canAfford) {
               socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType: typeToBuild });
@@ -3853,7 +3853,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
           const costShips = cfg.costShips * costMult;
 
-          const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+          const creditsAvailable = (myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0;
           const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
 
           if (!canAfford) {
@@ -3874,9 +3874,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           if (!isUnlocked) {
             titleStr = `Build ${baseName} (LOCKED - ${lockReason})`;
           } else {
-            titleStr = isFirst 
-              ? `Build Prototype ${baseName} (${shortcutKey}) (Credits allowed)` 
-              : `Build ${baseName} (${shortcutKey}) (Ships only)`;
+            titleStr = `Build ${isFirst ? 'Prototype ' : ''}${baseName} (${shortcutKey}) (Credits allowed if toggled)`;
           }
           el.setAttribute('title', titleStr);
         }

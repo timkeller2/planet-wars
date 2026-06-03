@@ -3787,14 +3787,10 @@ export class Ship {
             const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
             const sRed = Math.sqrt(this.expScore || 0);
 
-            const otherModifiers = knowledge + (tRed + eRed) / 2 + sRed;
+            const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
             const normalSpeed = effectiveSpeed;
-            
-            let targetSpeed = normalSpeed;
-            if (h.intensity > 0) {
-              targetSpeed = (10 * otherModifiers) / h.intensity;
-            }
-            effectiveSpeed = Math.max(5, Math.min(normalSpeed, targetSpeed));
+            const safeSpeed = normalSpeed - effectiveIntensity;
+            effectiveSpeed = Math.max(5, safeSpeed);
           }
         }
       }
