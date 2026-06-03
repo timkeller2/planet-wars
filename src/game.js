@@ -3323,6 +3323,9 @@ export class Game {
               
               const roll = Math.floor(Math.random() * 100) + 1;
 
+              // Give cruiser 1 XP score for the attempt
+              ship.expScore = (ship.expScore || 0) + 1;
+
               if (roll <= chancePercent) {
                 // Award 1 XP score to player
                 ship.owner.expScore = (ship.owner.expScore || 0) + 1;
@@ -3346,16 +3349,27 @@ export class Game {
                   targetPlanet.disposition[ship.owner.id] = Math.max(-100, Math.min(100, Math.floor(dispositionVal)));
                 }
 
-                let increaseAmt = Math.floor(1 + (chancePercent - roll) / 25);
-                if (prefRes && initialQty >= 0.1) {
+                const baseIncreaseAmt = Math.floor(1 + (chancePercent - roll) / 25);
+                let increaseAmt = baseIncreaseAmt;
+                const isResourceDoubled = prefRes && initialQty >= 0.1;
+                if (isResourceDoubled) {
                   increaseAmt *= 2;
                 }
 
                 const newSym = Math.min(targetPlanet.maxShips, currentSym + increaseAmt);
                 const actualIncrease = newSym - currentSym;
 
-                // Give ship XP score equal to the sympathy created
-                ship.expScore = (ship.expScore || 0) + actualIncrease;
+                // Calculate base sympathy created without doubling
+                const baseSymCreated = Math.min(targetPlanet.maxShips, currentSym + baseIncreaseAmt) - currentSym;
+
+                // Success XP = 1 + 1/2 of base sympathy created, rounded down
+                let successXP = Math.floor(1 + baseSymCreated / 2);
+                if (isResourceDoubled) {
+                  successXP *= 2;
+                }
+
+                // Give ship the success XP score
+                ship.expScore = (ship.expScore || 0) + successXP;
 
                 targetPlanet.sympathy[ship.owner.id] = newSym;
                 
