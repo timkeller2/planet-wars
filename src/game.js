@@ -3279,8 +3279,6 @@ export class Game {
     }
     
     if (this.isPaused) {
-      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      this.ctx.fillRect(0, 0, this.width, this.height);
       this.ctx.fillStyle = '#fff';
       this.ctx.font = '40px Orbitron';
       this.ctx.textAlign = 'center';

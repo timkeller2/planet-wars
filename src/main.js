@@ -6784,8 +6784,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       if (serverState.isPaused) {
         const mapWidth = serverState ? (serverState.width || 1920) : 1920;
         const mapHeight = serverState ? (serverState.height || 1620) : 1620;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(0, 0, mapWidth, mapHeight);
         ctx.fillStyle = '#fff';
         ctx.font = '40px Orbitron';
         ctx.textAlign = 'center';
