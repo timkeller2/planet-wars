@@ -1290,11 +1290,11 @@ export class Game {
       const maxHealth = cfg.hp;
 
       const creditsAvailable = (owner && owner.useCredits !== false) ? (owner.credits || 0) : 0;
-      
-      const creditsPaid = Math.min(creditsAvailable, costShips);
-      const remainingCostShips = costShips - creditsPaid;
+      const creditsAvailableForAffordability = isFirst ? creditsAvailable : 0;
 
-      if ((source.ships + creditsAvailable) >= costShips && (source.maxShips - costCap) >= 55) {
+      if ((source.ships + creditsAvailableForAffordability) >= costShips && (source.maxShips - costCap) >= 55) {
+        const creditsPaid = Math.min(creditsAvailable, costShips);
+        const remainingCostShips = costShips - creditsPaid;
         const extraShips = source.ships - remainingCostShips;
         const bonusHp = Math.min(4, Math.floor(Math.max(0, extraShips) / 25));
         const finalMaxHealth = maxHealth + bonusHp;
