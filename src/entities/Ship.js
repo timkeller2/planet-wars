@@ -1578,6 +1578,11 @@ export class Ship {
             if (other.active && other.id !== this.id) {
               const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
               if (isEnemy) {
+                let isVisible = true;
+                if (game && typeof game.isShipVisibleTo === 'function') {
+                  isVisible = game.isShipVisibleTo(other, this.owner);
+                }
+                if (!isVisible) continue;
                 let beingBoardedByUs = false;
                 if (allShips) {
                   for (const pod of allShips) {

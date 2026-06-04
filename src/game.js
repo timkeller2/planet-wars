@@ -336,6 +336,43 @@ export class Game {
     return false;
   }
 
+  isShipVisibleTo(s, player) {
+    if (!player) return false;
+    if (player.id === 'monsters') return false;
+
+    // If fog of war is NOT enabled, everything is visible
+    if (!this.settings || !this.settings.fogOfWar) {
+      return true;
+    }
+
+    // A player can always see their own ships
+    if (s.owner && s.owner.id === player.id) {
+      return true;
+    }
+
+    // 1. Gravity well check
+    for (const pl of this.planets) {
+      if (pl.owner && pl.owner.id === player.id) {
+        const gr = pl.getGravityRadius();
+        const dx = pl.x - s.x;
+        const dy = pl.y - s.y;
+        if (dx * dx + dy * dy <= gr * gr) return true;
+      }
+    }
+
+    // 2. Ship sensor check
+    for (const other of this.ships) {
+      if (other.active && other.owner && other.owner.id === player.id) {
+        const radarRange = (typeof other.cruiserRadarRange === 'function') ? other.cruiserRadarRange() : 40;
+        const dx = other.x - s.x;
+        const dy = other.y - s.y;
+        if (dx * dx + dy * dy <= radarRange * radarRange) return true;
+      }
+    }
+
+    return false;
+  }
+
 
   tryAssignPlanet(player) {
     if (player.needsPlanet && this.isRunning && player.isAlive !== undefined) {
