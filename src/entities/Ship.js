@@ -535,12 +535,12 @@ export class Ship {
           
           if (this.upgradeProp === 'armor') {
             const upgradeCost = this.upgradeShipsPaid || 0;
-            const duraniumThreshold = upgradeCost / 25;
+            const duraniumThreshold = upgradeCost / 50;
             let bonus = 4 + 0.10 * this.maxHealth;
             if (this.owner && this.owner.resources && (this.owner.resources.duranium || 0) > duraniumThreshold) {
               this.owner.resources.duranium = Math.max(0, (this.owner.resources.duranium || 0) - duraniumThreshold);
-              bonus *= 3;
-              console.log(`[Armor Upgrade Boosted] Consumed ${duraniumThreshold} duranium. Tripled bonus to ${bonus}`);
+              bonus *= 1.5;
+              console.log(`[Armor Upgrade Boosted] Consumed ${duraniumThreshold} duranium. Boosted bonus by 50% to ${bonus}`);
             }
             this.maxArmor = (this.maxArmor || 0) + bonus;
             this.armorPoints = (this.armorPoints || 0) + bonus;
