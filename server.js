@@ -1411,29 +1411,12 @@ async function bootstrap() {
       const scaleMap = 1.0;
 
       for (const fleet of playerFleets.values()) {
-        const count = fleet.count;
-        let baseRadar = count * 1.5 * scaleMap;
-        fleet.radarRange = Math.max(75 * scaleMap, Math.min(300 * scaleMap, baseRadar * (1 + playerTechBonus + playerExpBonus)));
+        fleet.radarRange = 50 * scaleMap;
 
         let maxCruiserRange = 0;
         for (const s of fleet.ships) {
           if (s.maxHealth > 0) {
-            let cruiserRadar = Math.min(250, 5 * s.maxHealth);
-            if (s.isWarp) cruiserRadar *= 0.25;
-            if (s.sensorarrays && s.sensorarrays > 0) {
-              let mult = 1.0;
-              mult += 0.50;
-              if (s.sensorarrays > 1) {
-                mult += 0.25;
-              }
-              if (s.sensorarrays > 2) {
-                mult += 0.25;
-              }
-              cruiserRadar *= mult;
-            }
-            const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
-            const shipXpBonus = Math.sqrt(s.expScore || 0);
-            const shipRange = baseRange * (100 + shipXpBonus * 3) / 100;
+            const shipRange = s.cruiserRadarRange();
             if (shipRange > maxCruiserRange) maxCruiserRange = shipRange;
           }
         }

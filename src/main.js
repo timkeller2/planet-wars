@@ -3770,7 +3770,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       };
 
       const descMap = {
-        'sensorarrays': 'Adds +20% radar range per level (up to +100%) to reveal the fog of war',
+        'sensorarrays': 'Adds +25 to base sensor range and +25% total range per level to reveal the fog of war',
         'labs': 'Adds +1 Lab research tick speed per level (up to +5) to generate tech points',
         'armor': 'Adds +4 flat + 10% max health armor points per level to withstand damage',
         'shields': 'Shield deflection increases by 1/5 of remaining deflection per level with no cap',
@@ -5997,21 +5997,14 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.beginPath();
             
             // Draw cyan sensor range circle (outline only, no fill!)
-            let cruiserRadar = Math.min(250, 5 * s.maxHealth);
-            if (s.isWarp) cruiserRadar *= 0.25;
-            if (s.sensorarrays && s.sensorarrays > 0) {
-              let mult = 1.0 + s.sensorarrays * 0.20;
-              cruiserRadar *= mult;
-            }
-            let playerTechBonus = 0;
-            let playerExpBonus = 0;
+            let baseCruiserRadar = 75 + s.maxHealth * 2;
+            let sensorRange = baseCruiserRadar + 25 * (s.sensorarrays || 0);
+            sensorRange *= (1 + 0.25 * (s.sensorarrays || 0));
+            if (s.isWarp) sensorRange *= 0.25;
             if (owner) {
-              playerTechBonus = 0.01 * Math.sqrt(owner.techScore || 0);
-              playerExpBonus = 0.01 * Math.sqrt(owner.expScore || 0);
+              const techBonus = 0.01 * Math.sqrt(owner.techScore || 0);
+              sensorRange *= (1 + techBonus);
             }
-            const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
-            const shipXpBonus = Math.sqrt(s.expScore || 0);
-            const sensorRange = baseRange * (100 + shipXpBonus * 3) / 100;
             
             ctx.save();
             ctx.strokeStyle = 'rgba(0, 255, 255, 0.45)'; // Sleek cyan

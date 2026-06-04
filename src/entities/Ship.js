@@ -201,17 +201,15 @@ export class Ship {
 
   cruiserRadarRange() {
     if (this.maxHealth <= 0) return 0;
-    let cruiserRadar = Math.min(250, 5 * this.maxHealth);
-    if (this.isWarp) cruiserRadar *= 0.25;
-    if (this.sensorarrays > 0) {
-      let mult = 1.0 + this.sensorarrays * 0.20;
-      cruiserRadar *= mult;
+    let baseCruiserRadar = 75 + this.maxHealth * 2;
+    let range = baseCruiserRadar + 25 * (this.sensorarrays || 0);
+    range *= (1 + 0.25 * (this.sensorarrays || 0));
+    if (this.isWarp) {
+      range *= 0.25;
     }
     const techBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
-    const expBonus = this.owner ? (0.01 * Math.sqrt(this.owner.expScore || 0)) : 0;
-    const baseRange = cruiserRadar * (1 + techBonus + expBonus);
-    const shipXpBonus = Math.sqrt(this.expScore || 0);
-    return baseRange * (100 + shipXpBonus * 3) / 100;
+    range *= (1 + techBonus);
+    return range;
   }
 
   executeNextOrder(allPlanets, allShips, game = null) {
@@ -369,7 +367,7 @@ export class Ship {
     if (allShips) {
       for (const s of allShips) {
         if (s.active && s.owner && s.owner.id === this.owner.id) {
-          const radarRange = (typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : 40;
+          const radarRange = (s.isCruiser && typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : 50;
           const dx = s.x - p.x;
           const dy = s.y - p.y;
           if (dx * dx + dy * dy <= radarRange * radarRange) return true;
@@ -440,7 +438,7 @@ export class Ship {
         const now = Date.now();
         const scX = Math.floor(this.x / 200);
         const scY = Math.floor(this.y / 200);
-        const radarRange = this.isCruiser ? this.cruiserRadarRange() : 40;
+        const radarRange = this.isCruiser ? this.cruiserRadarRange() : 50;
         const cellRadius = Math.max(1, Math.ceil(radarRange / 200));
         for (let dx = -cellRadius; dx <= cellRadius; dx++) {
           for (let dy = -cellRadius; dy <= cellRadius; dy++) {
@@ -486,16 +484,7 @@ export class Ship {
         this.cruiserTargetId = null;
       } else {
         // Engage enemy fleets and cruisers in sensor range
-        let cruiserRadar = Math.min(250, 5 * this.maxHealth);
-        if (this.isWarp) cruiserRadar *= 0.25;
-        
-        const techBonus = this.owner ? Math.floor(Math.sqrt(this.owner.techScore || 0)) : 0;
-        const expBonus = this.owner ? Math.floor(Math.sqrt(this.owner.expScore || 0)) : 0;
-        const playerTechBonus = 0.01 * techBonus;
-        const playerExpBonus = 0.01 * expBonus;
-        const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
-        const shipXpBonus = Math.sqrt(this.expScore || 0);
-        const sensorRange = baseRange * (100 + shipXpBonus * 3) / 100;
+        const sensorRange = this.cruiserRadarRange();
         const rangeSq = sensorRange * sensorRange;
 
         let nearestEnemy = null;
@@ -1356,6 +1345,11 @@ export class Ship {
             const targetIndex = Math.floor(Math.random() * validPlanets.length);
             const p = validPlanets[targetIndex];
             
+            if (p.owner && this.owner && p.owner.id !== this.owner.id) {
+              this.lastAttackTimeByPlayer = this.lastAttackTimeByPlayer || {};
+              this.lastAttackTimeByPlayer[p.owner.id] = Date.now();
+            }
+            
             shotsFired++;
             
             let destroyedDefender = false;
@@ -1730,6 +1724,30 @@ export class Ship {
                   beingBoardedByUs = true;
                 }
                 if (beingBoardedByUs) continue;
+
+                let allowedToPursue = this.scoutAttackEnabled;
+                if (!allowedToPursue) {
+                  let inFriendlyGravityWell = false;
+                  if (allPlanets) {
+                    for (const pl of allPlanets) {
+                      if (pl.owner && pl.owner.id === this.owner.id) {
+                        const gr = pl.getGravityRadius();
+                        const pdx = other.x - pl.x;
+                        const pdy = other.y - pl.y;
+                        if (pdx * pdx + pdy * pdy <= gr * gr) {
+                          inFriendlyGravityWell = true;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                  
+                  const recentlyAttackedPlayer = !!(other.lastAttackTimeByPlayer && (Date.now() - (other.lastAttackTimeByPlayer[this.owner.id] || 0) < 15000));
+                  const recentlyAttackedByUs = !!(this.lastAttackTimeOnShip && (Date.now() - (this.lastAttackTimeOnShip[other.id] || 0) < 15000));
+                  
+                  allowedToPursue = inFriendlyGravityWell || recentlyAttackedPlayer || recentlyAttackedByUs;
+                }
+                if (!allowedToPursue) continue;
 
                 const dx = other.x - this.x;
                 const dy = other.y - this.y;
@@ -4027,6 +4045,14 @@ export class Ship {
 
   takeDamage(explosions, attacker = null, isHazard = false) {
     if (this.health >= 0) {
+      if (attacker) {
+        attacker.lastAttackTimeOnShip = attacker.lastAttackTimeOnShip || {};
+        attacker.lastAttackTimeOnShip[this.id] = Date.now();
+        if (this.owner) {
+          attacker.lastAttackTimeByPlayer = attacker.lastAttackTimeByPlayer || {};
+          attacker.lastAttackTimeByPlayer[this.owner.id] = Date.now();
+        }
+      }
       if (this.isCruiser && attacker && attacker.owner && this.owner && attacker.owner !== this.owner) {
         attacker.owner.triggerWarWith(this.owner);
       }

@@ -286,7 +286,7 @@ export class Game {
       // 3. Ship sensor check
       for (const s of this.ships) {
         if (s.active && s.owner && s.owner.id === hp.id) {
-          const radarRange = (typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : 40;
+          const radarRange = (s.isCruiser && typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : 50;
           const dx = s.x - p.x;
           const dy = s.y - p.y;
           if (dx * dx + dy * dy <= radarRange * radarRange) return true;
@@ -325,8 +325,8 @@ export class Game {
 
     // 3. Ship sensor check
     for (const s of this.ships) {
-      if (s.active && s.owner && s.owner.id === player.id) {
-        const radarRange = (typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : 40;
+       if (s.active && s.owner && s.owner.id === player.id) {
+        const radarRange = (s.isCruiser && typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : 50;
         const dx = s.x - p.x;
         const dy = s.y - p.y;
         if (dx * dx + dy * dy <= radarRange * radarRange) return true;
@@ -362,8 +362,8 @@ export class Game {
 
     // 2. Ship sensor check
     for (const other of this.ships) {
-      if (other.active && other.owner && other.owner.id === player.id) {
-        const radarRange = (typeof other.cruiserRadarRange === 'function') ? other.cruiserRadarRange() : 40;
+       if (other.active && other.owner && other.owner.id === player.id) {
+        const radarRange = (other.isCruiser && typeof other.cruiserRadarRange === 'function') ? other.cruiserRadarRange() : 50;
         const dx = other.x - s.x;
         const dy = other.y - s.y;
         if (dx * dx + dy * dy <= radarRange * radarRange) return true;
@@ -2172,21 +2172,7 @@ export class Game {
         let overlapCount = 0;
         for (const ship of this.ships) {
           if (ship.active && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0) {
-            let cruiserRadar = Math.min(250, 5 * ship.maxHealth);
-            if (ship.isWarp) cruiserRadar *= 0.25;
-            if (ship.sensorarrays > 0) {
-              let mult = 1.0;
-              mult += 0.50;
-              if (ship.sensorarrays > 1) {
-                mult += 0.25;
-              }
-              if (ship.sensorarrays > 2) {
-                mult += 0.25;
-              }
-              cruiserRadar *= mult;
-            }
-            const shipXpBonus = Math.sqrt(ship.expScore || 0);
-            const finalCruiserRadar = cruiserRadar * (100 + shipXpBonus * 3) / 100;
+            const finalCruiserRadar = ship.cruiserRadarRange();
 
             const red = hazardSensorReduction(ship.x, ship.y, player.id);
             const effRadar = Math.max(10, finalCruiserRadar - red);
@@ -2839,24 +2825,7 @@ export class Game {
               const dist = Math.sqrt(dx * dx + dy * dy);
               
               // Calculate Cruiser sensor range including experience & player modifiers
-              let cruiserRadar = Math.min(250, 5 * cruiser.maxHealth);
-              if (cruiser.isWarp) cruiserRadar *= 0.25;
-              if (cruiser.sensorarrays > 0) {
-                let mult = 1.0;
-                mult += 0.50;
-                if (cruiser.sensorarrays > 1) {
-                  mult += 0.25;
-                }
-                if (cruiser.sensorarrays > 2) {
-                  mult += 0.25;
-                }
-                cruiserRadar *= mult;
-              }
-              const playerTechBonus = 0.01 * Math.floor(Math.sqrt(cruiser.owner.techScore || 0));
-              const playerExpBonus = 0.01 * Math.sqrt(cruiser.owner.expScore || 0);
-              const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
-              const shipXpBonus = Math.sqrt(cruiser.expScore || 0);
-              const sensorRange = baseRange * (100 + shipXpBonus * 3) / 100;
+              const sensorRange = cruiser.cruiserRadarRange();
               
               if (dist <= sensorRange) {
                 const techGain = cruiser.labs;
