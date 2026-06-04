@@ -203,6 +203,35 @@
             <button id="btn-cruiser-bomb" class="cyber-btn action-btn-icon" style="display: none;" title="Bomb Planets (B)"><span class="btn-icon">💥</span>B</button>
             <button id="btn-patrol" class="cyber-btn action-btn-icon" style="display: none;" title="Patrol Mode (P)"><span class="btn-icon">⚔️</span>P</button>
             <button id="btn-warp" class="cyber-btn action-btn-icon" title="Warp (W)"><span class="btn-icon">⚡</span>W</button>
+
+            <!-- Cruiser dropdown selections -->
+            <div id="cruiser-dropdowns" style="display: none; gap: 15px; align-items: center; margin-left: 10px; border-left: 1px dashed rgba(0, 229, 255, 0.4); padding-left: 15px;">
+              <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px;">
+                <span style="font-family: 'Orbitron', sans-serif; font-size: 0.7rem; color: #00e5ff; text-shadow: 0 0 5px rgba(0, 229, 255, 0.5); font-weight: bold;">PACKAGE</span>
+                <select id="sel-cruiser-package" style="background: rgba(0, 229, 255, 0.15); border: 1px solid #00e5ff; color: #fff; font-family: 'Orbitron', sans-serif; font-size: 0.85rem; padding: 4px 8px; border-radius: 4px; outline: none; cursor: pointer; text-shadow: 0 0 5px rgba(0, 229, 255, 0.5);">
+                  <option value="brute" style="background: #111; color: #fff;">Brute</option>
+                  <option value="ranged" style="background: #111; color: #fff;">Ranged</option>
+                  <option value="sniper" style="background: #111; color: #fff;">Sniper</option>
+                </select>
+              </div>
+              <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px;">
+                <span style="font-family: 'Orbitron', sans-serif; font-size: 0.7rem; color: #00e5ff; text-shadow: 0 0 5px rgba(0, 229, 255, 0.5); font-weight: bold;">TACTICS</span>
+                <select id="sel-cruiser-tactics" style="background: rgba(0, 229, 255, 0.15); border: 1px solid #00e5ff; color: #fff; font-family: 'Orbitron', sans-serif; font-size: 0.85rem; padding: 4px 8px; border-radius: 4px; outline: none; cursor: pointer; text-shadow: 0 0 5px rgba(0, 229, 255, 0.5);">
+                  <option value="normal" style="background: #111; color: #fff;">Normal</option>
+                  <option value="patient" style="background: #111; color: #fff;">Patient</option>
+                  <option value="frenzied" style="background: #111; color: #fff;">Frenzied</option>
+                </select>
+              </div>
+              <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px;">
+                <span style="font-family: 'Orbitron', sans-serif; font-size: 0.7rem; color: #00e5ff; text-shadow: 0 0 5px rgba(0, 229, 255, 0.5); font-weight: bold;">STRATEGY</span>
+                <select id="sel-cruiser-strategy" style="background: rgba(0, 229, 255, 0.15); border: 1px solid #00e5ff; color: #fff; font-family: 'Orbitron', sans-serif; font-size: 0.85rem; padding: 4px 8px; border-radius: 4px; outline: none; cursor: pointer; text-shadow: 0 0 5px rgba(0, 229, 255, 0.5);">
+                  <option value="normal" style="background: #111; color: #fff;">Normal</option>
+                  <option value="short" style="background: #111; color: #fff;">Short</option>
+                  <option value="long" style="background: #111; color: #fff;">Long</option>
+                  <option value="extreme" style="background: #111; color: #fff;">Extreme</option>
+                </select>
+              </div>
+            </div>
           </div>
           <div id="action-buttons-right" style="display: flex; gap: 10px;">
             <button id="btn-bomb" class="cyber-btn action-btn-icon" title="Bomb Eco (B)"><span class="btn-icon">💥</span>B</button>
@@ -450,7 +479,7 @@
                   <li><strong>🌀 Energy Shields (H):</strong> <strong>+10% deflect chance per level</strong>. Hard cap: cannot purchase if next level would exceed <strong>80%</strong> total deflection.</li>
                   <li><strong>🚀 Overcharged Engine (E):</strong> <strong>+3 speed and +3°/sec turn rate per level</strong>. Also adds +2/+1/+1 bonus fuel capacity at Levels 1/2/3.</li>
                   <li><strong>💣 Munition Pods (M):</strong> <strong>+1 bomb capacity and +1 splash damage per level</strong>. Splash destroys additional fleet ships or deals bonus HP damage to cruisers/amoebas (limited to 1/50th of target's size).</li>
-                  <li><strong>🎯 Targeting Computer (T):</strong> <strong>+10% weapon range and +10% accuracy per level</strong>.</li>
+                  <li><strong>🎯 Targeting Computer (T):</strong> <strong>+5% weapon range and +5% accuracy per level</strong>.</li>
                   <li><strong>🔧 Damage Control (D):</strong> <strong>+50% hull repair speed per level</strong> inside friendly wells. Enables out-of-combat deep-space healing at 20% per level (100% at L5). Reduces damaged-cruiser speed penalty by <code>1/(1+level)</code>.</li>
                   <li><strong>⛽ Fuel Tanker (F):</strong> <strong>+(maxHealth/5 + 10) fuel capacity</strong> and <strong>+15 maxsupplies</strong> per level. Reduces speed by -3, laser accuracy by -5%, and weapon range by -5 per level.</li>
                   <li><strong>🤝 Diplomat (I):</strong> <strong>+1 diplomatic attempt per 60/level seconds</strong>. Generates sympathy on neutral and enemy planets in sensor range, potentially flipping them via revolt. Also reduces enemy sympathy on your own planets. Earns Exp on success. See 🤝 Diplomacy topic.</li>

@@ -438,6 +438,54 @@ async function bootstrap() {
       }
     });
 
+    socket.on('setCruiserPackage', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const shipIds = Array.isArray(data.shipIds) ? data.shipIds : [data.shipId];
+      for (const shipId of shipIds) {
+        const ship = game.ships.find(s => s.id === shipId);
+        if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+          if (['brute', 'ranged', 'sniper'].includes(data.value)) {
+            ship.package = data.value;
+          }
+        }
+      }
+    });
+
+    socket.on('setCruiserTactics', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const shipIds = Array.isArray(data.shipIds) ? data.shipIds : [data.shipId];
+      for (const shipId of shipIds) {
+        const ship = game.ships.find(s => s.id === shipId);
+        if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+          if (['normal', 'patient', 'frenzied'].includes(data.value)) {
+            ship.tactics = data.value;
+          }
+        }
+      }
+    });
+
+    socket.on('setCruiserStrategy', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const shipIds = Array.isArray(data.shipIds) ? data.shipIds : [data.shipId];
+      for (const shipId of shipIds) {
+        const ship = game.ships.find(s => s.id === shipId);
+        if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+          if (['normal', 'short', 'long', 'extreme'].includes(data.value)) {
+            ship.strategy = data.value;
+          }
+        }
+      }
+    });
+
     socket.on('toggleCruiserPatrol', (data) => {
       if (!game.isRunning || game.isPaused) return;
       const player = connectedClients.get(socket.id);
@@ -1276,7 +1324,10 @@ async function bootstrap() {
           scoutAttackEnabled: s.scoutAttackEnabled || false,
           isMaterializing: s.isMaterializing || false,
           materializeProgress: s.materializeProgress !== undefined ? s.materializeProgress : 1.0,
-          cruiserStyle: s.cruiserStyle || null
+          cruiserStyle: s.cruiserStyle || null,
+          package: s.package || 'ranged',
+          tactics: s.tactics || 'normal',
+          strategy: s.strategy || 'normal'
         };
       } else {
         return null;

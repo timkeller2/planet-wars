@@ -3153,6 +3153,49 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       cruiserBuildModeActive = false;
     });
   }
+
+  const selCruiserPackage = document.getElementById('sel-cruiser-package');
+  if (selCruiserPackage) {
+    selCruiserPackage.addEventListener('change', (e) => {
+      const selectedCruisers = getSelectedCruisers();
+      if (selectedCruisers.length > 0) {
+        const val = e.target.value;
+        for (const ship of selectedCruisers) {
+          ship.package = val;
+        }
+        socket.emit('setCruiserPackage', { shipIds: selectedCruisers.map(c => c.id), value: val });
+      }
+    });
+  }
+
+  const selCruiserTactics = document.getElementById('sel-cruiser-tactics');
+  if (selCruiserTactics) {
+    selCruiserTactics.addEventListener('change', (e) => {
+      const selectedCruisers = getSelectedCruisers();
+      if (selectedCruisers.length > 0) {
+        const val = e.target.value;
+        for (const ship of selectedCruisers) {
+          ship.tactics = val;
+        }
+        socket.emit('setCruiserTactics', { shipIds: selectedCruisers.map(c => c.id), value: val });
+      }
+    });
+  }
+
+  const selCruiserStrategy = document.getElementById('sel-cruiser-strategy');
+  if (selCruiserStrategy) {
+    selCruiserStrategy.addEventListener('change', (e) => {
+      const selectedCruisers = getSelectedCruisers();
+      if (selectedCruisers.length > 0) {
+        const val = e.target.value;
+        for (const ship of selectedCruisers) {
+          ship.strategy = val;
+        }
+        socket.emit('setCruiserStrategy', { shipIds: selectedCruisers.map(c => c.id), value: val });
+      }
+    });
+  }
+
   const btnCruiserBombEl = document.getElementById('btn-cruiser-bomb');
   if (btnCruiserBombEl) {
     btnCruiserBombEl.addEventListener('click', () => {
@@ -3733,7 +3776,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         'shields': 'Shield deflection increases by 1/5 of remaining deflection per level with no cap',
         'engine': 'Adds +3 speed and +3°/sec turn rate per level for highly responsive steering',
         'munitions': 'Adds +1 bomb capacity and +1 splash damage rating per level to standard weapon dogfights',
-        'targeting': 'Adds +10% weapon range and +10% laser accuracy hit chance per level in combat',
+        'targeting': 'Adds +5% weapon range and +5% laser accuracy hit chance per level in combat',
         'damagecontrol': 'Adds +50% out-of-combat repair and +20% deep-space/in-combat repair rate per level',
         'fuel_tanker': 'Adds +5 fuel capacity, +15 max supplies per level. Reduces speed by -3, accuracy by -5, range by -5 per level',
         'diplomat': 'Adds diplomat subversion to project 1 passive sympathy/min or reduce 1 enemy sympathy/min',
@@ -3960,6 +4003,43 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       }
 
       const selectedCruisers = getSelectedCruisers();
+
+      const dropdownsEl = document.getElementById('cruiser-dropdowns');
+      if (dropdownsEl) {
+        if (selectedCruisers.length > 0) {
+          dropdownsEl.style.display = 'flex';
+          const first = selectedCruisers[0];
+          const selPackage = document.getElementById('sel-cruiser-package');
+          const selTactics = document.getElementById('sel-cruiser-tactics');
+          const selStrategy = document.getElementById('sel-cruiser-strategy');
+          
+          if (selPackage && document.activeElement !== selPackage) {
+            selPackage.value = first.package || (first.cruiserStyle === 'Gorn' ? 'brute' : (first.cruiserStyle === 'Romulan' || first.cruiserStyle === 'Tholian' ? 'sniper' : 'ranged'));
+          }
+          if (selTactics && document.activeElement !== selTactics) {
+            let defaultTactics = 'normal';
+            if (first.cruiserStyle === 'Tholian' || first.cruiserStyle === 'Lyran') {
+              defaultTactics = 'patient';
+            } else if (first.cruiserStyle === 'Klingon' || first.cruiserStyle === 'Romulan') {
+              defaultTactics = 'frenzied';
+            }
+            selTactics.value = first.tactics || defaultTactics;
+          }
+          if (selStrategy && document.activeElement !== selStrategy) {
+            let defaultStrategy = 'normal';
+            if (first.cruiserStyle === 'Tholian' || first.cruiserStyle === 'Romulan') {
+              defaultStrategy = 'extreme';
+            } else if (first.cruiserStyle === 'Klingon') {
+              defaultStrategy = 'long';
+            } else if (first.cruiserStyle === 'Gorn') {
+              defaultStrategy = 'short';
+            }
+            selStrategy.value = first.strategy || defaultStrategy;
+          }
+        } else {
+          dropdownsEl.style.display = 'none';
+        }
+      }
 
       const btnCruiserBomb = document.getElementById('btn-cruiser-bomb');
       if (btnCruiserBomb) {
@@ -5111,6 +5191,29 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               const icon = raceIcons[raceStyle] || '';
               lines.push({ label: 'Race', value: `${icon} ${raceStyle}`, color: '#e040fb' });
             }
+            
+            const pkgDisplay = hs.package ? hs.package.charAt(0).toUpperCase() + hs.package.slice(1) : (hs.cruiserStyle === 'Gorn' ? 'Brute' : (hs.cruiserStyle === 'Romulan' || hs.cruiserStyle === 'Tholian' ? 'Sniper' : 'Ranged'));
+            let defaultTactics = 'Normal';
+            if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Lyran') {
+              defaultTactics = 'Patient';
+            } else if (hs.cruiserStyle === 'Klingon' || hs.cruiserStyle === 'Romulan') {
+              defaultTactics = 'Frenzied';
+            }
+            const tacDisplay = hs.tactics ? hs.tactics.charAt(0).toUpperCase() + hs.tactics.slice(1) : defaultTactics;
+
+            let defaultStrategy = 'Normal';
+            if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Romulan') {
+              defaultStrategy = 'Extreme';
+            } else if (hs.cruiserStyle === 'Klingon') {
+              defaultStrategy = 'Long';
+            } else if (hs.cruiserStyle === 'Gorn') {
+              defaultStrategy = 'Short';
+            }
+            const stratDisplay = hs.strategy ? hs.strategy.charAt(0).toUpperCase() + hs.strategy.slice(1) : defaultStrategy;
+            lines.push({ label: 'Package', value: pkgDisplay, color: '#e040fb' });
+            lines.push({ label: 'Tactics', value: tacDisplay, color: '#e040fb' });
+            lines.push({ label: 'Strategy', value: stratDisplay, color: '#e040fb' });
+
             lines.push({ label: 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
             lines.push({
               label: 'Speed',
@@ -5180,17 +5283,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             const laserTechBonus = Math.floor(techBonus) * 0.01;
             const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
             const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
-            let targetingBonus = 0;
-            if (hs.targeting > 0) {
-              targetingBonus += 10;
-              if (hs.targeting > 1) {
-                targetingBonus += 5;
-              }
-              if (hs.targeting > 2) {
-                targetingBonus += 5;
-              }
-            }
-            const targetingRangeBonus = targetingBonus / 100;
+            const targetingBonus = (hs.targeting || 0) * 5;
+            const targetingRangeBonus = (hs.targeting || 0) * 0.05;
 
             let effectiveRange = baseDogfightRange * 1.10;
             if (hs.bombs > 0) {
@@ -5203,9 +5297,34 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if (hs.specialbombs && hs.specialbombs > 0) {
               effectiveRange += 10;
             }
-            const healthBonus = Math.floor(hs.health);
-            let hitChanceValue = 10 + targetingBonus;
-            if (hs.bombs > 0) hitChanceValue += 10;
+            if (hs.package === 'brute') {
+              effectiveRange *= 0.5;
+            } else if (hs.package === 'sniper') {
+              effectiveRange *= 2.0;
+            }
+            effectiveRange = Math.floor(effectiveRange);
+
+            let bombAccuracyBonus = 0;
+            if (hs.bombs > 0) {
+              bombAccuracyBonus = 10;
+              let effTactics = hs.tactics;
+              if (!effTactics) {
+                if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Lyran') {
+                  effTactics = 'patient';
+                } else if (hs.cruiserStyle === 'Klingon' || hs.cruiserStyle === 'Romulan') {
+                  effTactics = 'frenzied';
+                } else {
+                  effTactics = 'normal';
+                }
+              }
+              if (effTactics === 'patient') {
+                bombAccuracyBonus = 5;
+              } else if (effTactics === 'frenzied') {
+                bombAccuracyBonus = 20;
+              }
+            }
+
+            let hitChanceValue = 10 + targetingBonus + bombAccuracyBonus;
             hitChanceValue += techBonus + expBonus + shipExpBonus;
             if (hs.fuel_tanker && hs.fuel_tanker > 0) {
               hitChanceValue -= hs.fuel_tanker * 5;
@@ -5757,16 +5876,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             }
             
             // Apply targeting range bonus consistent with Ship.js
-            let targetingRangeBonus = 0;
-            if (s.targeting > 0) {
-              targetingRangeBonus += 0.10;
-              if (s.targeting > 1) {
-                targetingRangeBonus += 0.05;
-              }
-              if (s.targeting > 2) {
-                targetingRangeBonus += 0.05;
-              }
-            }
+            const targetingRangeBonus = (s.targeting || 0) * 0.05;
             range *= (1 + targetingRangeBonus);
             if (s.fuel_tanker && s.fuel_tanker > 0) {
               range = Math.max(5, range - s.fuel_tanker * 5);
@@ -5774,6 +5884,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if (s.specialbombs && s.specialbombs > 0) {
               range += 10;
             }
+            if (s.package === 'brute') {
+              range *= 0.5;
+            } else if (s.package === 'sniper') {
+              range *= 2.0;
+            }
+            range = Math.floor(range);
           } else {
             const healthBonus = Math.floor(s.health || 0);
             range = 40 * (1 + laserTechBonus) * (1 + healthBonus * 0.10);
@@ -5794,19 +5910,19 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               
               let targetingRangeBonus = 0;
               if (s.targeting > 0) {
-                targetingRangeBonus += 0.10;
+                targetingRangeBonus += 0.05;
                 if (s.targeting > 1) {
-                  targetingRangeBonus += 0.05;
+                  targetingRangeBonus += 0.025;
                 }
                 if (s.targeting > 2) {
-                  targetingRangeBonus += 0.05;
+                  targetingRangeBonus += 0.025;
                 }
               }
               const munitionsBonus = baseDogfightRange * 0.10 * (1 + targetingRangeBonus);
               rangeWithoutMunitions = Math.max(0, range - munitionsBonus);
             }
             const rangeAft = rangeWithoutMunitions * 0.85;
-            const rangeFront = range * 1.2;
+            const rangeFront = range * 1.3;
             const rangeSide = range;
             
             // 1. Draw outer envelope perimeter
