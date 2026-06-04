@@ -5098,6 +5098,19 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             const headerLabel = hsOwner.name + ' ' + (hs.name ? hs.name : shipClass);
             lines.push({ label: headerLabel, value: '', color: hsOwner.color || '#0ff', isHeader: true });
             lines.push({ label: 'Ship Class', value: shipClass, color: '#aaf' });
+            const raceStyle = hs.cruiserStyle || (hsOwner ? hsOwner.cruiserStyle : null);
+            if (raceStyle) {
+              const raceIcons = {
+                'Federation': '🖖',
+                'Romulan': '🦅',
+                'Klingon': '⚔️',
+                'Gorn': '🐊',
+                'Tholian': '🕸️',
+                'Lyran': '🐯'
+              };
+              const icon = raceIcons[raceStyle] || '';
+              lines.push({ label: 'Race', value: `${icon} ${raceStyle}`, color: '#e040fb' });
+            }
             lines.push({ label: 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
             lines.push({
               label: 'Speed',
@@ -5311,6 +5324,19 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             // ship count
             const bomberLabel = bomberCount > 0 ? ` (${bomberCount + (hs.isBomber ? 1 : 0)} bombers)` : '';
             lines.push({ label: 'ships in range', value: `${totalShips}${bomberLabel}`, color: '#ccc' });
+            const raceStyle = hs.cruiserStyle || (hsOwner ? hsOwner.cruiserStyle : null);
+            if (raceStyle) {
+              const raceIcons = {
+                'Federation': '🖖',
+                'Romulan': '🦅',
+                'Klingon': '⚔️',
+                'Gorn': '🐊',
+                'Tholian': '🕸️',
+                'Lyran': '🐯'
+              };
+              const icon = raceIcons[raceStyle] || '';
+              lines.push({ label: 'Race', value: `${icon} ${raceStyle}`, color: '#e040fb' });
+            }
             lines.push({ label: 'Base Speed', value: (hs.speed || 35).toFixed(1), color: '#ccc' });
             lines.push({ label: 'Effective Speed', value: (hs.currentSpeed || 0).toFixed(1), color: '#4f4' });
 
