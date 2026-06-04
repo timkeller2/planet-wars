@@ -3863,6 +3863,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
           const costShips = cfg.costShips * costMult;
 
+          if (costMult > 1) {
+            el.style.borderColor = '#ffeb3b';
+            el.style.color = '#ffeb3b';
+            el.style.boxShadow = '0 0 10px rgba(255, 235, 59, 0.3), inset 0 0 10px rgba(255, 235, 59, 0.3)';
+          } else {
+            el.style.borderColor = '';
+            el.style.color = '';
+            el.style.boxShadow = '';
+          }
+
           const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
           const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
 
@@ -4278,6 +4288,29 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
         const isLastKnown = p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id];
         if (!p.inFog || p.permanentlyTracked || isLastKnown) {
+          const affinity = isLastKnown ? lastKnownPlanets[p.id].racialAffinity : p.racialAffinity;
+          if (affinity) {
+            const raceIcons = {
+              'Federation': '🖖',
+              'Romulan': '🦅',
+              'Klingon': '⚔️',
+              'Gorn': '🐊',
+              'Tholian': '🕸️',
+              'Lyran': '🐯'
+            };
+            const icon = raceIcons[affinity];
+            if (icon) {
+              ctx.save();
+              ctx.font = '14px sans-serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = '#fff';
+              const offset = p.radius * 0.7 + 4;
+              ctx.fillText(icon, p.x - offset, p.y - offset);
+              ctx.restore();
+            }
+          }
+
           const displayShips = isLastKnown ? lastKnownPlanets[p.id].ships : p.ships;
           const displayMaxShips = isLastKnown ? lastKnownPlanets[p.id].maxShips : p.maxShips;
           const text = `${Math.floor(displayShips)} / ${displayMaxShips}`;
@@ -4688,7 +4721,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           
           lines.push({ label: nameLabel, value: '', color: '#0ff', isHeader: true });
           if (hp.racialAffinity) {
-            lines.push({ label: 'Planetary Environment', value: hp.racialAffinity, color: '#e040fb' });
+            const raceIcons = {
+              'Federation': '🖖',
+              'Romulan': '🦅',
+              'Klingon': '⚔️',
+              'Gorn': '🐊',
+              'Tholian': '🕸️',
+              'Lyran': '🐯'
+            };
+            const icon = raceIcons[hp.racialAffinity] || '';
+            lines.push({ label: 'Planetary Environment', value: `${icon} ${hp.racialAffinity}`, color: '#e040fb' });
           }
 
           const resourceMeta = {

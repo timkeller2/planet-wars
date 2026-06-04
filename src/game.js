@@ -410,7 +410,7 @@ export class Game {
       if (bestPos) {
         const newPlanetId = Math.max(...this.planets.map(p => p.id), 0) + 1;
         const initialShips = (!isNaN(parsedVal) && parsedVal > 0) ? parsedVal : 120;
-        targetPlanet = new Planet(newPlanetId, bestPos.x, bestPos.y, newRadius, null, initialShips);
+        targetPlanet = new Planet(newPlanetId, bestPos.x, bestPos.y, newRadius, null, initialShips, this.width, this.height);
         this.planets.push(targetPlanet);
         console.log(`[New Homeworld Created] Created new Planet ${targetPlanet.name} (${targetPlanet.id}) at (${Math.round(bestPos.x)}, ${Math.round(bestPos.y)}) for player ${player.id}. Min dist to other homeworlds: ${maxMinDist.toFixed(1)}`);
       }
@@ -782,7 +782,7 @@ export class Game {
 
         let initialShips = Math.floor(expectedShips + (Math.random() * 2 - 1) * variance);
         initialShips = Math.max(1, initialShips);
-        const newPlanet = new Planet(i, x, y, radius, null, initialShips);
+        const newPlanet = new Planet(i, x, y, radius, null, initialShips, this.width, this.height);
         if (i < countMegaSuper + countSuper) newPlanet.isSuperPlanet = true;
         this.planets.push(newPlanet);
       }
@@ -849,6 +849,9 @@ export class Game {
         x: mRadius + Math.random() * (this.width - mRadius * 2),
         y: mRadius + Math.random() * (this.height - mRadius * 2),
         radius: mRadius,
+        initialRadius: mRadius,
+        mines: Math.round(mRadius * 2),
+        initialMines: Math.round(mRadius * 2),
         intensity: (() => { let v = 0; for(let d=0; d<12; d++) v += Math.floor(Math.random()*6)+1; return v; })(),
         speed: 0,
         heading: 0,
@@ -2235,6 +2238,12 @@ export class Game {
                   const damage = Math.ceil((risk - roll) / 10);
                   ship.health -= damage;
                   
+                  if (storm.type === 'minefield') {
+                    const minesUsed = Math.min(storm.mines !== undefined ? storm.mines : 1, damage);
+                    storm.mines = Math.max(0, (storm.mines !== undefined ? storm.mines : 1) - minesUsed);
+                    storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
+                  }
+
                   this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
                   const boltX = ship.x + (Math.random() - 0.5) * 80;
                   const boltY = ship.y - 30 - Math.random() * 50;
@@ -2261,6 +2270,13 @@ export class Game {
                 }
                 if (destroyedCount > 0) {
                   ship.count -= destroyedCount;
+                  
+                  if (storm.type === 'minefield') {
+                    const minesUsed = Math.min(storm.mines !== undefined ? storm.mines : 1, destroyedCount);
+                    storm.mines = Math.max(0, (storm.mines !== undefined ? storm.mines : 1) - minesUsed);
+                    storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
+                  }
+
                   if (ship.count <= 0) {
                     ship.count = 0;
                     ship.active = false;
@@ -2278,6 +2294,13 @@ export class Game {
           }
         }
       }
+      this.ionStorms = this.ionStorms.filter(storm => {
+        if (storm.type === 'minefield' && storm.mines <= 0) {
+          console.log(`[Minefield Depleted] Minefield ${storm.name} (id: ${storm.id}) has been fully depleted.`);
+          return false;
+        }
+        return true;
+      });
     }
     this.planetDepletionTimer = (this.planetDepletionTimer || 0) + deltaTime;
     if (this.planetDepletionTimer >= 1000) {
