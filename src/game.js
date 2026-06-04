@@ -2603,12 +2603,13 @@ export class Game {
 
         player.tradingPartners = [];
         for (const key in visiblePartnerShips) {
-          const ships = visiblePartnerShips[key];
-          if (ships > 0) {
+          const shipsCapped = visiblePartnerShips[key];
+          if (shipsCapped > 0) {
+            const shipsNonCapped = key === "Domestic Ships" ? playerEffectiveShips : (otherPartners[key] || 0);
             player.tradingPartners.push({
               name: key,
-              ships: ships,
-              rate: qualifyingShipsSum > 0 ? ((ships / qualifyingShipsSum) * tradingIncomeRate) : 0
+              ships: shipsNonCapped,
+              rate: qualifyingShipsSum > 0 ? ((shipsCapped / qualifyingShipsSum) * tradingIncomeRate) : 0
             });
           }
         }
