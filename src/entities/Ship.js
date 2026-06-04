@@ -1596,21 +1596,7 @@ export class Ship {
                 const dy = other.y - this.y;
                 const distSq = dx * dx + dy * dy;
                 
-                let eligible = false;
-                if (distSq <= 500 * 500 && allPlanets) {
-                  for (const p of allPlanets) {
-                    if (p.owner && p.owner.id === this.owner.id) {
-                      const pdx = other.x - p.x;
-                      const pdy = other.y - p.y;
-                      const pDistSq = pdx * pdx + pdy * pdy;
-                      const pGravityRadius = p.getGravityRadius();
-                      if (pDistSq <= pGravityRadius * pGravityRadius) {
-                        eligible = true;
-                        break;
-                      }
-                    }
-                  }
-                }
+                let eligible = (distSq <= 500 * 500);
                 
                 if (eligible && distSq < minEnemyDistSq) {
                   minEnemyDistSq = distSq;

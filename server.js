@@ -395,11 +395,24 @@ async function bootstrap() {
             }
           } else {
             ship.orderQueue = [];
-            ship.isPatrolling = false;
-            ship.cruiserTargetType = targetType;
-            ship.cruiserTargetId = targetId;
-            ship.cruiserTargetClickX = clickX !== undefined ? clickX : null;
-            ship.cruiserTargetClickY = clickY !== undefined ? clickY : null;
+            if (ship.isPatrolling && targetType !== 'ship') {
+              const destPlanet = targetType === 'planet' ? game.planets.find(p => p.id === targetId) : null;
+              const tx = (clickX !== undefined && clickX !== null) ? clickX : (destPlanet ? destPlanet.x : ship.x);
+              const ty = (clickY !== undefined && clickY !== null) ? clickY : (destPlanet ? destPlanet.y : ship.y);
+              ship.patrolStationX = tx;
+              ship.patrolStationY = ty;
+              ship.targetX = tx;
+              ship.targetY = ty;
+              ship.targetPlanet = null;
+              ship.cruiserTargetType = null;
+              ship.cruiserTargetId = null;
+            } else {
+              ship.isPatrolling = false;
+              ship.cruiserTargetType = targetType;
+              ship.cruiserTargetId = targetId;
+              ship.cruiserTargetClickX = clickX !== undefined ? clickX : null;
+              ship.cruiserTargetClickY = clickY !== undefined ? clickY : null;
+            }
           }
         }
       }

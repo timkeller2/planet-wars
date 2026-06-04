@@ -131,7 +131,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     mammoth: { name: 'Mammoth', key: 'm', hp: 50, costShips: 400, costCap: 16, btnId: 'btn-build-mammoth' }
   };
   let cruiserBuildModeActive = false;
-  let starfieldEnabled = false;
+  let starfieldEnabled = true;
   let hoveredPlanet = null;
   let hoveredShip = null;
 
@@ -4745,14 +4745,15 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           if (hp.preferredResource) {
             const meta = resourceMeta[hp.preferredResource];
             if (meta) {
-              lines.push({ label: 'Preferred Resource', value: `${meta.emoji} ${meta.name}`, color: '#ffd740' });
+              let valueStr = `${meta.emoji} ${meta.name}`;
               if (hpOwner) {
                 const qty = hpOwner.resources?.[hp.preferredResource] || 0;
                 if (qty >= 0.1) {
                   const bonus = Math.sqrt(qty) * 3;
-                  lines.push({ label: 'Enjoying Resource', value: `+${bonus.toFixed(1)}%`, color: '#4caf50' });
+                  valueStr += ` (+${bonus.toFixed(1)}%)`;
                 }
               }
+              lines.push({ label: 'Preferred Resource', value: valueStr, color: '#ffd740' });
             }
           }
 
@@ -5079,7 +5080,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             const amoebaHitChance = Math.round(Math.min(100, 10 + techBonus + expBonus + shipExpBonus + hs.maxHealth * 5 + bombBonus)) + '%';
             lines.push({ label: 'Accuracy', value: amoebaHitChance, color: '#f88' });
             const shrugChance = Math.min(95, Math.floor(50 + hs.maxHealth * 1 + (techBonus + expBonus + shipExpBonus) * 1));
-            lines.push({ label: 'Armor Deflection', value: shrugChance + '%', color: '#ccc' });
+            lines.push({ label: 'Deflection', value: shrugChance + '%', color: '#ccc' });
           } else if (hs.isCruiser) {
             let shipClass = "Mammoth";
             if (hs.classType && SHIP_CLASSES[hs.classType]) {
@@ -5098,8 +5099,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             lines.push({ label: headerLabel, value: '', color: hsOwner.color || '#0ff', isHeader: true });
             lines.push({ label: 'Ship Class', value: shipClass, color: '#aaf' });
             lines.push({ label: 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
-            lines.push({ label: 'Base Speed', value: (hs.speed || 35).toFixed(1), color: '#ccc' });
-            lines.push({ label: 'Effective Speed', value: (hs.currentSpeed || 0).toFixed(1), color: '#4f4' });
+            lines.push({
+              label: 'Speed',
+              isSpeedBar: true,
+              currentSpeed: hs.currentSpeed || 0,
+              maxSpeed: hs.speed || 35,
+              color: '#4f4'
+            });
             if (hs.maxArmor && hs.maxArmor > 0) {
               let armorLabel = `Cruiser Armor (${hs.armor})`;
               if (hs.specialduranium && hs.specialduranium > 0) {
@@ -5152,7 +5158,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               shrugChance += 10;
             }
             shrugChance = Math.min(90, shrugChance);
-            let deflectionLabel = hs.shields > 0 ? `Armor Deflection (${hs.shields})` : 'Armor Deflection';
+            let deflectionLabel = hs.shields > 0 ? `Deflection (${hs.shields})` : 'Deflection';
             if (hs.specialduranium && hs.specialduranium > 0) {
               deflectionLabel += '*';
             }
@@ -5498,7 +5504,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           let maxWidth = 0;
           for (const line of lines) {
             ctx.font = line.isHeader ? headerFont : tooltipFont;
-            const w = ctx.measureText(line.label + '  ' + line.value).width;
+            let w;
+            if (line.isSpeedBar) {
+              const speedText = `${(line.currentSpeed || 0).toFixed(1)} / ${(line.maxSpeed || 0).toFixed(1)}`;
+              w = ctx.measureText(line.label + '   ' + speedText).width + 80 + 10;
+            } else {
+              w = ctx.measureText(line.label + '  ' + (line.value || '')).width;
+            }
             if (w > maxWidth) maxWidth = w;
           }
 
@@ -5530,10 +5542,38 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.fillStyle = line.color;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'top';
-            ctx.fillText(line.label, tooltipX + padding, curY);
-            if (line.value) {
+            if (line.isSpeedBar) {
+              ctx.fillText(line.label, tooltipX + padding, curY);
+              const speedText = `${(line.currentSpeed || 0).toFixed(1)} / ${(line.maxSpeed || 0).toFixed(1)}`;
+              const barWidth = 80;
+              const barHeight = 8;
+              const barX = tooltipX + tooltipW - padding - barWidth;
+              const barY = curY + (lh - barHeight) / 2;
+
+              // Draw bar background
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+              ctx.fillRect(barX, barY, barWidth, barHeight);
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+              // Draw fill
+              const maxS = Math.max(1, line.maxSpeed);
+              const fillPct = Math.min(1.0, Math.max(0, line.currentSpeed / maxS));
+              const fillWidth = barWidth * fillPct;
+              ctx.fillStyle = '#00ffcc';
+              ctx.fillRect(barX, barY, fillWidth, barHeight);
+
+              // Text
+              ctx.fillStyle = '#ccc';
               ctx.textAlign = 'right';
-              ctx.fillText(line.value, tooltipX + tooltipW - padding, curY);
+              ctx.fillText(speedText, barX - 6, curY);
+            } else {
+              ctx.fillText(line.label, tooltipX + padding, curY);
+              if (line.value) {
+                ctx.textAlign = 'right';
+                ctx.fillText(line.value, tooltipX + tooltipW - padding, curY);
+              }
             }
             curY += lh;
           }

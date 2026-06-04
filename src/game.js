@@ -1545,14 +1545,24 @@ export class Game {
         }
       } else {
         ship.orderQueue = [];
-        ship.isPatrolling = false;
-        ship.targetPlanet = null;
-        ship.cruiserTargetOffsetX = 0;
-        ship.cruiserTargetOffsetY = 0;
-        ship.cruiserTargetType = null;
-        ship.cruiserTargetId = null;
-        ship.targetX = tX;
-        ship.targetY = tY;
+        if (ship.isPatrolling) {
+          ship.patrolStationX = tX;
+          ship.patrolStationY = tY;
+          ship.targetX = tX;
+          ship.targetY = tY;
+          ship.targetPlanet = null;
+          ship.cruiserTargetType = null;
+          ship.cruiserTargetId = null;
+        } else {
+          ship.isPatrolling = false;
+          ship.targetPlanet = null;
+          ship.cruiserTargetOffsetX = 0;
+          ship.cruiserTargetOffsetY = 0;
+          ship.cruiserTargetType = null;
+          ship.cruiserTargetId = null;
+          ship.targetX = tX;
+          ship.targetY = tY;
+        }
         ship.startX = ship.x;
         ship.startY = ship.y;
         if (speedModifier !== null) ship.speedModifier = speedModifier;
@@ -1705,14 +1715,24 @@ export class Game {
         }
       } else {
         ship.orderQueue = [];
-        ship.isPatrolling = false;
-        ship.targetPlanet = targetPlanet;
-        ship.targetX = null;
-        ship.targetY = null;
-        ship.cruiserTargetType = null;
-        ship.cruiserTargetId = null;
-        ship.cruiserTargetOffsetX = oX;
-        ship.cruiserTargetOffsetY = oY;
+        if (ship.isPatrolling) {
+          ship.patrolStationX = targetPlanet.x + oX;
+          ship.patrolStationY = targetPlanet.y + oY;
+          ship.targetX = ship.patrolStationX;
+          ship.targetY = ship.patrolStationY;
+          ship.targetPlanet = null;
+          ship.cruiserTargetType = null;
+          ship.cruiserTargetId = null;
+        } else {
+          ship.isPatrolling = false;
+          ship.targetPlanet = targetPlanet;
+          ship.targetX = null;
+          ship.targetY = null;
+          ship.cruiserTargetType = null;
+          ship.cruiserTargetId = null;
+          ship.cruiserTargetOffsetX = oX;
+          ship.cruiserTargetOffsetY = oY;
+        }
         ship.startX = ship.x;
         ship.startY = ship.y;
         if (speedModifier !== null) ship.speedModifier = speedModifier;
@@ -2516,11 +2536,7 @@ export class Game {
           qualifyingShipsSum += visiblePartnerShips[key];
         }
 
-        const cap = Math.min(3 * playerShips, otherFriendlyShips);
-        const activeTradingShips = Math.min(qualifyingShipsSum, cap);
-        const prorationFactor = qualifyingShipsSum > 0 ? (activeTradingShips / qualifyingShipsSum) : 0;
-
-        const tradingIncomeRate = activeTradingShips * 0.0001; // credits per second
+        const tradingIncomeRate = qualifyingShipsSum > 0 ? (Math.sqrt(qualifyingShipsSum) / 600) : 0; // credits per second
         const tradingIncome = tradingIncomeRate * (deltaTime / 1000);
         player.credits = (player.credits || 0) + tradingIncome;
         player.passiveIncomeRate = tradingIncomeRate; // Store for client UI display!
@@ -2532,7 +2548,7 @@ export class Game {
             player.tradingPartners.push({
               name: key,
               ships: ships,
-              rate: ships * prorationFactor * 0.0001
+              rate: qualifyingShipsSum > 0 ? ((ships / qualifyingShipsSum) * tradingIncomeRate) : 0
             });
           }
         }
