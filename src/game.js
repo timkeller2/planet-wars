@@ -2531,40 +2531,63 @@ export class Game {
 
       // Passive trading income of 1/10000 credits per ship per second of all ships on planets not at war with the player and visible to the player including the player's own planets, capped at the lower of ( 3 * number of ships the player has on all his planets ) or ( the sum of all other friendly planetary ships, not counting the player's ships )
       if (player !== this.monsterPlayer) {
-        let playerShips = 0;
-        let otherFriendlyShips = 0;
+        let playerEffectiveShips = 0;
         
-        const visiblePartnerShips = {};
-        visiblePartnerShips["Domestic Ships"] = 0;
-        visiblePartnerShips["Neutral"] = 0;
-        for (const p of this.allPlayers) {
-          if (p !== player && p !== this.monsterPlayer) {
-            visiblePartnerShips[p.name] = 0;
+        // 1. Calculate player's own effective ships (doubled if commerce focus)
+        for (const planet of this.planets) {
+          if (planet.dead) continue;
+          const isOwn = (planet.owner && planet.owner.id === player.id);
+          if (isOwn) {
+            const eff = planet.ships + (planet.focusMode === 'commerce' ? planet.ships : 0);
+            playerEffectiveShips += eff;
           }
         }
 
+        // 2. Group other qualifying partners' effective ships
+        const otherPartners = {};
+        otherPartners["Neutral"] = 0;
+        for (const p of this.allPlayers) {
+          if (p !== player && p !== this.monsterPlayer) {
+            otherPartners[p.name] = 0;
+          }
+        }
+
+        let otherEffectiveShips = 0;
         for (const planet of this.planets) {
           if (planet.dead) continue;
           const isOwn = (planet.owner && planet.owner.id === player.id);
           const isNotAtWar = !planet.owner || !player.isAtWarWith(planet.owner);
-
-          if (isOwn) {
-            playerShips += planet.ships;
-          } else if (isNotAtWar) {
-            otherFriendlyShips += planet.ships;
-          }
-
-          const isVisibleOrOnceKnown = this.isPlanetVisibleTo(planet, player) || (player.discoveredPlanets && player.discoveredPlanets.has(planet.id));
-          if ((isOwn || isNotAtWar) && isVisibleOrOnceKnown) {
-            if (isOwn) {
-              visiblePartnerShips["Domestic Ships"] += planet.ships;
-            } else if (planet.owner) {
-              if (planet.owner !== this.monsterPlayer) {
-                visiblePartnerShips[planet.owner.name] = (visiblePartnerShips[planet.owner.name] || 0) + planet.ships;
+          
+          if (!isOwn && isNotAtWar) {
+            const isVisibleOrOnceKnown = this.isPlanetVisibleTo(planet, player) || (player.discoveredPlanets && player.discoveredPlanets.has(planet.id));
+            if (isVisibleOrOnceKnown) {
+              const eff = planet.ships + (planet.focusMode === 'commerce' ? planet.ships : 0);
+              otherEffectiveShips += eff;
+              
+              if (planet.owner) {
+                if (planet.owner !== this.monsterPlayer) {
+                  otherPartners[planet.owner.name] = (otherPartners[planet.owner.name] || 0) + eff;
+                }
+              } else {
+                otherPartners["Neutral"] = (otherPartners["Neutral"] || 0) + eff;
               }
-            } else {
-              visiblePartnerShips["Neutral"] += planet.ships;
             }
+          }
+        }
+
+        // 3. Apply the cap (sum of other effective ships capped at player's own effective ships)
+        let scale = 1.0;
+        if (otherEffectiveShips > playerEffectiveShips) {
+          scale = playerEffectiveShips / otherEffectiveShips;
+        }
+
+        // 4. Build visible partner ships list using the scaled values
+        const visiblePartnerShips = {};
+        visiblePartnerShips["Domestic Ships"] = playerEffectiveShips;
+        for (const key in otherPartners) {
+          const scaledVal = otherPartners[key] * scale;
+          if (scaledVal > 0) {
+            visiblePartnerShips[key] = scaledVal;
           }
         }
 
