@@ -479,7 +479,7 @@ async function bootstrap() {
       for (const shipId of shipIds) {
         const ship = game.ships.find(s => s.id === shipId);
         if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
-          if (['normal', 'short', 'long', 'extreme'].includes(data.value)) {
+          if (['normal', 'short', 'long'].includes(data.value)) {
             ship.strategy = data.value;
           }
         }

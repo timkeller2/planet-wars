@@ -4020,16 +4020,14 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             let defaultTactics = 'normal';
             if (first.cruiserStyle === 'Tholian' || first.cruiserStyle === 'Lyran') {
               defaultTactics = 'patient';
-            } else if (first.cruiserStyle === 'Klingon' || first.cruiserStyle === 'Romulan') {
+            } else if (first.cruiserStyle === 'Romulan') {
               defaultTactics = 'frenzied';
             }
             selTactics.value = first.tactics || defaultTactics;
           }
           if (selStrategy && document.activeElement !== selStrategy) {
             let defaultStrategy = 'normal';
-            if (first.cruiserStyle === 'Tholian' || first.cruiserStyle === 'Romulan') {
-              defaultStrategy = 'extreme';
-            } else if (first.cruiserStyle === 'Klingon') {
+            if (first.cruiserStyle === 'Tholian' || first.cruiserStyle === 'Romulan' || first.cruiserStyle === 'Klingon') {
               defaultStrategy = 'long';
             } else if (first.cruiserStyle === 'Gorn') {
               defaultStrategy = 'short';
@@ -5196,15 +5194,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             let defaultTactics = 'Normal';
             if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Lyran') {
               defaultTactics = 'Patient';
-            } else if (hs.cruiserStyle === 'Klingon' || hs.cruiserStyle === 'Romulan') {
+            } else if (hs.cruiserStyle === 'Romulan') {
               defaultTactics = 'Frenzied';
             }
             const tacDisplay = hs.tactics ? hs.tactics.charAt(0).toUpperCase() + hs.tactics.slice(1) : defaultTactics;
 
             let defaultStrategy = 'Normal';
-            if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Romulan') {
-              defaultStrategy = 'Extreme';
-            } else if (hs.cruiserStyle === 'Klingon') {
+            if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Romulan' || hs.cruiserStyle === 'Klingon') {
               defaultStrategy = 'Long';
             } else if (hs.cruiserStyle === 'Gorn') {
               defaultStrategy = 'Short';
@@ -5311,7 +5307,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               if (!effTactics) {
                 if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Lyran') {
                   effTactics = 'patient';
-                } else if (hs.cruiserStyle === 'Klingon' || hs.cruiserStyle === 'Romulan') {
+                } else if (hs.cruiserStyle === 'Romulan') {
                   effTactics = 'frenzied';
                 } else {
                   effTactics = 'normal';

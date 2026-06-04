@@ -124,15 +124,13 @@ export class Ship {
 
       if (style === 'Tholian' || style === 'Lyran') {
         this.tactics = 'patient';
-      } else if (style === 'Klingon' || style === 'Romulan') {
+      } else if (style === 'Romulan') {
         this.tactics = 'frenzied';
       } else {
         this.tactics = 'normal';
       }
 
-      if (style === 'Tholian' || style === 'Romulan') {
-        this.strategy = 'extreme';
-      } else if (style === 'Klingon') {
+      if (style === 'Tholian' || style === 'Romulan' || style === 'Klingon') {
         this.strategy = 'long';
       } else if (style === 'Gorn') {
         this.strategy = 'short';
@@ -1068,12 +1066,10 @@ export class Ship {
           
           let isWithinBombRange = true;
           if (this.maxHealth > 0 && !this.isAmoeba) {
-            let strategyThreshold = 0.50; // Normal default
+            let strategyThreshold = 0.75; // Normal default
             if (this.strategy === 'short') {
-              strategyThreshold = 0.25;
+              strategyThreshold = 0.50;
             } else if (this.strategy === 'long') {
-              strategyThreshold = 0.75;
-            } else if (this.strategy === 'extreme') {
               strategyThreshold = 1.00;
             }
             
@@ -2930,12 +2926,10 @@ export class Ship {
               }
             } else {
               // Non-brute patrolling cruiser with bombs: try to stay just within its bomb engagement range
-              let strategyThreshold = 0.50; // Normal default
+              let strategyThreshold = 0.75; // Normal default
               if (this.strategy === 'short') {
-                strategyThreshold = 0.25;
+                strategyThreshold = 0.50;
               } else if (this.strategy === 'long') {
-                strategyThreshold = 0.75;
-              } else if (this.strategy === 'extreme') {
                 strategyThreshold = 1.00;
               }
               const bombEngagementRange = maxFrontRange * strategyThreshold;
