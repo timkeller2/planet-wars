@@ -1,12 +1,12 @@
 @echo off
 echo ===================================================
-echo 🚀 Planet Wars - Push to GitHub
+echo 🚀 Amoeba Wars! - Push to GitHub
 echo ===================================================
 echo.
 echo This script will help you push your game to your GitHub repository.
 echo.
 echo Before running:
-echo 1. Create a new repository on GitHub (e.g. named "planet-wars")
+echo 1. Create a new repository on GitHub (e.g. named "amoeba-wars")
 echo    at https://github.com/new
 echo 2. Do NOT check "Add a README file", "Add .gitignore", or "Choose a license"
 echo    (keep it completely empty).
@@ -34,7 +34,7 @@ if %ERRORLEVEL% equ 0 (
     echo.
     echo 1. Go to https://dashboard.render.com
     echo 2. Click "New +" (top right) and select "Web Service"
-    echo 3. Select your "planet-wars" repository
+    echo 3. Select your "amoeba-wars" repository
     echo 4. Render will automatically detect your setup and deploy!
 ) else (
     echo.

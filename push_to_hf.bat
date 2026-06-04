@@ -1,12 +1,12 @@
 @echo off
 echo ===================================================
-echo 🚀 Planet Wars - Hugging Face Spaces Deployer
+echo 🚀 Amoeba Wars! - Hugging Face Spaces Deployer
 echo ===================================================
 echo.
 echo This script will help you automatically push your game to Hugging Face.
 echo.
 echo Before running:
-echo 1. Make sure you created a new Space named "planet-wars" on HF
+echo 1. Make sure you created a new Space named "amoeba-wars" on HF
 echo    at https://huggingface.co/new-space
 echo 2. Choose "Docker" as the SDK (with a "Blank" template)
 echo.
@@ -24,7 +24,7 @@ if "%HF_TOKEN%"=="" goto error_missing
 echo.
 echo [1/2] Configuring Hugging Face Git remote...
 git remote remove hf 2>nul
-git remote add hf https://%HF_USER%:%HF_TOKEN%@huggingface.co/spaces/%HF_USER%/planet-wars
+git remote add hf https://%HF_USER%:%HF_TOKEN%@huggingface.co/spaces/%HF_USER%/amoeba-wars
 
 echo.
 echo [2/2] Pushing local master branch to Hugging Face main branch...
@@ -39,13 +39,13 @@ if %ERRORLEVEL% equ 0 (
     echo Your game is building and will be live in a few minutes.
     echo View building logs and play it at:
     echo.
-    echo https://huggingface.co/spaces/%HF_USER%/planet-wars
+    echo https://huggingface.co/spaces/%HF_USER%/amoeba-wars
     echo.
 ) else (
     echo.
     echo ❌ ERROR: Push failed.
     echo Please make sure:
-    echo 1. Your Space is named "planet-wars" (all lowercase, hyphenated)
+    echo 1. Your Space is named "amoeba-wars" (all lowercase, hyphenated)
     echo 2. Your HF Username and Access Token are correct
     echo 3. The Access Token has WRITE permission
 )
