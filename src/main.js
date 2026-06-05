@@ -282,7 +282,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         const newSize = parseInt(val, 10);
         mapSizeInput.value = newSize; // Keep custom sync'd
         const scale = newSize / 1600;
-        const suggestedPlanets = Math.min(60, Math.round(50 * scale));
+        const suggestedPlanets = Math.min(80, Math.round(40 * scale));
         if (parseInt(planetCountInput.value, 10) === lastSuggestedPlanets) {
           planetCountInput.value = suggestedPlanets;
           planetCountInput.dispatchEvent(new Event('input'));
@@ -297,7 +297,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       if (mapSizeselect && mapSizeselect.value === 'custom') {
         const newSize = parseInt(mapSizeInput.value, 10) || 1600;
         const scale = newSize / 1600;
-        const suggestedPlanets = Math.min(60, Math.round(50 * scale));
+        const suggestedPlanets = Math.min(80, Math.round(40 * scale));
         if (parseInt(planetCountInput.value, 10) === lastSuggestedPlanets) {
           planetCountInput.value = suggestedPlanets;
           planetCountInput.dispatchEvent(new Event('input'));
@@ -1407,8 +1407,15 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       if (sellOrdersHud) {
         const orders = serverState.sellOrders || [];
         
-        // Sort orders strictly from lowest price to highest
-        orders.sort((a, b) => a.price - b.price);
+        // Split auto buy orders from regular sell orders
+        const autoBuyOrders = orders.filter(o => o.isAutoBuy);
+        const regularOrders = orders.filter(o => !o.isAutoBuy);
+        
+        // Sort regular sell orders strictly from lowest price to highest
+        regularOrders.sort((a, b) => a.price - b.price);
+        
+        // Combine: Auto Buy Orders appear before all regular sell orders
+        const allOrders = [...autoBuyOrders, ...regularOrders];
         
         sellOrdersHud.innerHTML = '';
         sellOrdersHud.style.display = 'flex';
@@ -1426,10 +1433,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         const myCredits = myPlayer.credits || 0;
         const myTradeOptions = myPlayer.tradeOptions !== undefined ? myPlayer.tradeOptions : 5;
         
-        for (const order of orders) {
-          const isMine = order.ownerId === localPlayer.id;
+        for (const order of allOrders) {
           const emoji = resourceEmojis[order.resource] || '';
-          
           const card = document.createElement('div');
           card.className = 'cyber-btn sell-order-card';
           card.style.display = 'flex';
@@ -1443,53 +1448,73 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           card.style.fontWeight = 'bold';
           card.style.transition = 'all 0.2s';
           
-          const timeRemainingMs = order.expiresAt - Date.now();
-          if (isMine) {
-            card.style.borderColor = 'rgba(76, 175, 80, 0.4)';
-            card.style.background = 'rgba(76, 175, 80, 0.1)';
-            card.style.color = '#4caf50';
-            card.style.textShadow = '0 0 4px #4caf50';
-            card.title = `Your Order - Click to Cancel (Refunds 1 ${order.resource})`;
+          if (order.isAutoBuy) {
+            // White styling for Auto Buy Order (only visible to owner, prepended to sellOrders by server)
+            card.style.borderColor = 'rgba(255, 255, 255, 0.6)';
+            card.style.background = 'rgba(255, 255, 255, 0.15)';
+            card.style.color = '#ffffff';
+            card.style.textShadow = '0 0 6px #ffffff';
+            card.title = `Auto Buy: ${order.resource} at <= ${order.price} credits - Click to Dismiss`;
+            card.textContent = `🤖${emoji}: <= ${order.price}`;
           } else {
-            if (timeRemainingMs > 0 && timeRemainingMs <= 60000) {
-              card.style.borderColor = 'rgba(244, 67, 54, 0.4)';
-              card.style.background = 'rgba(244, 67, 54, 0.1)';
-              card.style.color = '#f44336';
-              card.style.textShadow = '0 0 4px #f44336';
+            const isMine = order.ownerId === localPlayer.id;
+            const timeRemainingMs = order.expiresAt - Date.now();
+            
+            if (isMine) {
+              card.style.borderColor = 'rgba(76, 175, 80, 0.4)';
+              card.style.background = 'rgba(76, 175, 80, 0.1)';
+              card.style.color = '#4caf50';
+              card.style.textShadow = '0 0 4px #4caf50';
+              card.title = `Your Order - Click to Cancel (Refunds 1 ${order.resource})`;
             } else {
-              card.style.borderColor = 'rgba(33, 150, 243, 0.4)';
-              card.style.background = 'rgba(33, 150, 243, 0.1)';
-              card.style.color = '#2196f3';
-              card.style.textShadow = '0 0 4px #2196f3';
+              if (timeRemainingMs > 0 && timeRemainingMs <= 60000) {
+                card.style.borderColor = 'rgba(244, 67, 54, 0.4)';
+                card.style.background = 'rgba(244, 67, 54, 0.1)';
+                card.style.color = '#f44336';
+                card.style.textShadow = '0 0 4px #f44336';
+              } else {
+                card.style.borderColor = 'rgba(33, 150, 243, 0.4)';
+                card.style.background = 'rgba(33, 150, 243, 0.1)';
+                card.style.color = '#2196f3';
+                card.style.textShadow = '0 0 4px #2196f3';
+              }
+              card.title = `Owner: ${order.ownerName} - Click to Buy for ${order.price} credits (Costs 1 option) | Ctrl-Click to Auto Buy`;
             }
-            card.title = `Owner: ${order.ownerName} - Click to Buy for ${order.price} credits (Costs 1 option)`;
-          }
-          
-          card.textContent = `${emoji}: ${order.price}`;
-          
-          // Make order blink if it is within 30 seconds of expiring (Task 104)
-          if (timeRemainingMs > 0 && timeRemainingMs <= 30000) {
-            card.classList.add('blink-warning');
-          }
-          
-          // Disable / gray out orders if optionless or creditless (except for own orders)
-          if (!isMine) {
-            const hasOptions = myTradeOptions >= 1;
-            const hasCredits = myCredits >= order.price;
-            if (!hasOptions || !hasCredits) {
-              card.style.opacity = '0.35';
-              card.style.pointerEvents = 'none';
-              card.style.cursor = 'not-allowed';
+            
+            card.textContent = `${emoji}: ${order.price}`;
+            
+            // Make order blink if it is within 30 seconds of expiring (Task 104)
+            if (timeRemainingMs > 0 && timeRemainingMs <= 30000) {
+              card.classList.add('blink-warning');
+            }
+            
+            // Disable / gray out orders if optionless or creditless (except for own orders)
+            // Leave pointer events active so Ctrl-click is always possible to setup Auto Buy
+            if (!isMine) {
+              const hasOptions = myTradeOptions >= 1;
+              const hasCredits = myCredits >= order.price;
+              if (!hasOptions || !hasCredits) {
+                card.style.opacity = '0.35';
+                card.style.cursor = 'not-allowed';
+              }
             }
           }
           
           card.addEventListener('mousedown', (e) => {
             e.stopPropagation();
             e.preventDefault();
-            if (isMine) {
-              socket.emit('cancelSellOrder', { orderId: order.id });
+            
+            if (order.isAutoBuy) {
+              socket.emit('cancelAutoBuyOrder', { orderId: order.id });
+            } else if (e.ctrlKey) {
+              socket.emit('createAutoBuyOrder', { resource: order.resource, price: order.price });
             } else {
-              socket.emit('buySellOrder', { orderId: order.id });
+              const isMine = order.ownerId === localPlayer.id;
+              if (isMine) {
+                socket.emit('cancelSellOrder', { orderId: order.id });
+              } else {
+                socket.emit('buySellOrder', { orderId: order.id });
+              }
             }
           });
           
@@ -3391,11 +3416,38 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   window.toggleResourceSellCard = (res) => {
     socket.emit('toggleResourceSell', { resource: res });
   };
-  window.changeSellPriceSetting = () => {
-    socket.emit('changeSellPriceSetting');
+  window.changeSellPriceSetting = (e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+    if (!myPlayer) return;
+    
+    const isRightClick = e && (e.button === 2 || e.type === 'contextmenu');
+    const isCtrl = e && e.ctrlKey;
+    
+    let step = 1;
+    if (isRightClick) step = -1;
+    if (isCtrl) step *= 5;
+    
+    const currentPrice = myPlayer.sellPriceSetting !== undefined ? myPlayer.sellPriceSetting : 2;
+    let offset = currentPrice - 2;
+    let newOffset = (((offset + step) % 29) + 29) % 29;
+    const newPrice = newOffset + 2;
+    
+    socket.emit('changeSellPriceSetting', { value: newPrice });
   };
 
-
+  const sellForDisplayButton = document.getElementById('player-sell-for-display');
+  if (sellForDisplayButton) {
+    sellForDisplayButton.addEventListener('click', (e) => {
+      window.changeSellPriceSetting(e);
+    });
+    sellForDisplayButton.addEventListener('contextmenu', (e) => {
+      window.changeSellPriceSetting(e);
+    });
+  }
 
   const btnSellResources = document.getElementById('btn-sell-resources');
   if (btnSellResources) {

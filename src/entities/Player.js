@@ -94,6 +94,7 @@ export class Player {
     this.tradeOptions = undefined;
     this.tradeRegenAccumulator = 0;
     this.sellPriceSetting = 2;
+    this.autoBuyOrders = [];
   }
 
   addExperience(kills) {

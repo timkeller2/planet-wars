@@ -3128,6 +3128,59 @@ export class Game {
       }
     }
 
+    // 4. Auto Buy Orders Check
+    if (this.sellOrders && this.sellOrders.length > 0) {
+      for (const player of this.allPlayers) {
+        if (!player.isAlive || player.isAI) continue;
+        if (!player.autoBuyOrders || player.autoBuyOrders.length === 0) continue;
+
+        if (player.tradeOptions === undefined) {
+          player.tradeOptions = player.tradeCapacity || 5;
+        }
+
+        let purchasedAny = true;
+        while (purchasedAny && player.tradeOptions >= 1 && this.sellOrders.length > 0) {
+          purchasedAny = false;
+          for (const abo of player.autoBuyOrders) {
+            if (player.tradeOptions < 1) break;
+
+            let bestOrderIdx = -1;
+            let lowestPrice = Infinity;
+
+            for (let i = 0; i < this.sellOrders.length; i++) {
+              const order = this.sellOrders[i];
+              if (order.ownerId !== player.id && order.resource === abo.resource && order.price <= abo.price) {
+                if (order.price < lowestPrice && (player.credits || 0) >= order.price) {
+                  lowestPrice = order.price;
+                  bestOrderIdx = i;
+                }
+              }
+            }
+
+            if (bestOrderIdx !== -1) {
+              const order = this.sellOrders[bestOrderIdx];
+              player.tradeOptions -= 1;
+              player.credits = (player.credits || 0) - order.price;
+              if (!player.resources) player.resources = {};
+              player.resources[order.resource] = (player.resources[order.resource] || 0) + 1.0;
+
+              if (order.ownerId !== 'neutral') {
+                const seller = this.allPlayers.find(p => p.id === order.ownerId);
+                if (seller) {
+                  seller.credits = (seller.credits || 0) + order.price;
+                }
+              }
+
+              console.log(`[Auto Buy Success] Player ${player.id} automatically purchased 1 ${order.resource} from ${order.ownerId} for ${order.price} credits using Auto Buy Order ${abo.id}.`);
+              this.sellOrders.splice(bestOrderIdx, 1);
+              purchasedAny = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
     if (this.onScoreUpdate) {
       const pCount = this.planets.filter(p => p.owner === this.humanPlayer).length;
       const aiCount = this.planets.filter(p => p.owner && p.owner !== this.humanPlayer).length;

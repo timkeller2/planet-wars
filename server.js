@@ -714,12 +714,44 @@ async function bootstrap() {
       }
     });
 
-    socket.on('changeSellPriceSetting', () => {
+    socket.on('changeSellPriceSetting', (data) => {
       const player = connectedClients.get(socket.id);
       if (player) {
-        player.sellPriceSetting = (player.sellPriceSetting || 2) + 1;
-        if (player.sellPriceSetting > 12) {
-          player.sellPriceSetting = 2;
+        if (data && typeof data.value === 'number') {
+          player.sellPriceSetting = Math.max(2, Math.min(30, data.value));
+        } else {
+          player.sellPriceSetting = (player.sellPriceSetting || 2) + 1;
+          if (player.sellPriceSetting > 30) {
+            player.sellPriceSetting = 2;
+          }
+        }
+      }
+    });
+
+    socket.on('createAutoBuyOrder', (data) => {
+      const player = connectedClients.get(socket.id);
+      if (player) {
+        if (!player.autoBuyOrders) player.autoBuyOrders = [];
+        const orderId = "autobuy_" + Math.random().toString(36).substring(2, 9);
+        player.autoBuyOrders.push({
+          id: orderId,
+          isAutoBuy: true,
+          ownerId: player.id,
+          ownerName: player.name,
+          resource: data.resource,
+          price: data.price
+        });
+        console.log(`[Auto Buy Create] Player ${player.id} created Auto Buy Order for ${data.resource} at <= ${data.price} credits.`);
+      }
+    });
+
+    socket.on('cancelAutoBuyOrder', (data) => {
+      const player = connectedClients.get(socket.id);
+      if (player && player.autoBuyOrders) {
+        const idx = player.autoBuyOrders.findIndex(o => o.id === data.orderId);
+        if (idx !== -1) {
+          player.autoBuyOrders.splice(idx, 1);
+          console.log(`[Auto Buy Cancel] Player ${player.id} cancelled Auto Buy Order ${data.orderId}.`);
         }
       }
     });
@@ -1668,7 +1700,10 @@ async function bootstrap() {
         upgradeEnhanceEvents: visibleUpgradeEnhanceEvents,
         accuracyEvents: visibleAccuracyEvents,
         galacticCapacity: game.galacticCapacity,
-        sellOrders: game.sellOrders || [],
+        sellOrders: [
+          ...(player.autoBuyOrders || []),
+          ...(game.sellOrders || [])
+        ],
         isPaused: game.isPaused,
         isRunning: game.isRunning,
         gameOverMessage: game.gameOverMessage,
