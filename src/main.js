@@ -5302,10 +5302,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               else if (hs.maxHealth <= 49) shipClass = "Titan";
             }
 
-            const headerLabel = hsOwner.name + ' ' + (hs.name ? hs.name : shipClass);
-            lines.push({ label: headerLabel, value: '', color: hsOwner.color || '#0ff', isHeader: true });
-            lines.push({ label: 'Ship Class', value: shipClass, color: '#aaf' });
             const raceStyle = hs.cruiserStyle || (hsOwner ? hsOwner.cruiserStyle : null);
+            let raceStr = '';
             if (raceStyle) {
               const raceIcons = {
                 'Federation': '🖖',
@@ -5316,26 +5314,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                 'Lyran': '🐯'
               };
               const icon = raceIcons[raceStyle] || '';
-              lines.push({ label: 'Race', value: `${icon} ${raceStyle}`, color: '#e040fb' });
+              raceStr = (icon ? icon + ' ' : '') + raceStyle;
             }
-            
-            const pkgDisplay = hs.package ? hs.package.charAt(0).toUpperCase() + hs.package.slice(1) : (hs.cruiserStyle === 'Gorn' ? 'Brute' : (hs.cruiserStyle === 'Romulan' || hs.cruiserStyle === 'Tholian' ? 'Sniper' : 'Ranged'));
-            let defaultTactics = 'Normal';
-            if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Lyran') {
-              defaultTactics = 'Patient';
-            } else if (hs.cruiserStyle === 'Romulan') {
-              defaultTactics = 'Frenzied';
-            }
-            const tacDisplay = hs.tactics ? hs.tactics.charAt(0).toUpperCase() + hs.tactics.slice(1) : defaultTactics;
 
-            let defaultStrategy = 'Normal';
-            if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Romulan' || hs.cruiserStyle === 'Klingon') {
-              defaultStrategy = 'Long';
-            }
-            const stratDisplay = hs.strategy ? hs.strategy.charAt(0).toUpperCase() + hs.strategy.slice(1) : defaultStrategy;
-            lines.push({ label: 'Package', value: pkgDisplay, color: '#e040fb' });
-            lines.push({ label: 'Tactics', value: tacDisplay, color: '#e040fb' });
-            lines.push({ label: 'Strategy', value: stratDisplay, color: '#e040fb' });
+            const headerLabel = hsOwner.name + (raceStr ? ' ' + raceStr : '') + ' ' + (hs.name ? hs.name : shipClass);
+            lines.push({ label: headerLabel, value: '', color: hsOwner.color || '#0ff', isHeader: true });
 
             lines.push({ label: 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
             lines.push({
