@@ -1478,7 +1478,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                 card.style.color = '#2196f3';
                 card.style.textShadow = '0 0 4px #2196f3';
               }
-              card.title = `Owner: ${order.ownerName} - Click to Buy for ${order.price} credits (Costs 1 option) | Ctrl-Click to Auto Buy`;
+              card.title = `Owner: ${order.ownerName} - Click to Buy for ${order.price} credits (Costs 1 option)`;
             }
             
             card.textContent = `${emoji}: ${order.price}`;
@@ -1489,12 +1489,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             }
             
             // Disable / gray out orders if optionless or creditless (except for own orders)
-            // Leave pointer events active so Ctrl-click is always possible to setup Auto Buy
             if (!isMine) {
               const hasOptions = myTradeOptions >= 1;
               const hasCredits = myCredits >= order.price;
               if (!hasOptions || !hasCredits) {
                 card.style.opacity = '0.35';
+                card.style.pointerEvents = 'none';
                 card.style.cursor = 'not-allowed';
               }
             }
@@ -1506,9 +1506,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             
             if (order.isAutoBuy) {
               socket.emit('cancelAutoBuyOrder', { orderId: order.id });
-            } else if (e.ctrlKey) {
-              socket.emit('createAutoBuyOrder', { resource: order.resource, price: order.price });
-            } else {
+            } else if (!e.ctrlKey) {
               const isMine = order.ownerId === localPlayer.id;
               if (isMine) {
                 socket.emit('cancelSellOrder', { orderId: order.id });
@@ -3488,7 +3486,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     if (card) {
       card.addEventListener('click', (e) => {
         e.stopPropagation();
-        socket.emit('postSellOrder', { resource: res });
+        if (e.ctrlKey) {
+          const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+          const priceVal = myPlayer ? (myPlayer.sellPriceSetting ?? 2) : 2;
+          socket.emit('createAutoBuyOrder', { resource: res, price: priceVal });
+        } else {
+          socket.emit('postSellOrder', { resource: res });
+        }
       });
     }
   }
