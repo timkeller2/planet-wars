@@ -732,16 +732,23 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (player) {
         if (!player.autoBuyOrders) player.autoBuyOrders = [];
-        const orderId = "autobuy_" + Math.random().toString(36).substring(2, 9);
-        player.autoBuyOrders.push({
-          id: orderId,
-          isAutoBuy: true,
-          ownerId: player.id,
-          ownerName: player.name,
-          resource: data.resource,
-          price: data.price
-        });
-        console.log(`[Auto Buy Create] Player ${player.id} created Auto Buy Order for ${data.resource} at <= ${data.price} credits.`);
+        
+        const existingOrder = player.autoBuyOrders.find(o => o.resource === data.resource);
+        if (existingOrder) {
+          existingOrder.price = data.price;
+          console.log(`[Auto Buy Update] Player ${player.id} updated Auto Buy Order for ${data.resource} to <= ${data.price} credits.`);
+        } else {
+          const orderId = "autobuy_" + Math.random().toString(36).substring(2, 9);
+          player.autoBuyOrders.push({
+            id: orderId,
+            isAutoBuy: true,
+            ownerId: player.id,
+            ownerName: player.name,
+            resource: data.resource,
+            price: data.price
+          });
+          console.log(`[Auto Buy Create] Player ${player.id} created Auto Buy Order for ${data.resource} at <= ${data.price} credits.`);
+        }
       }
     });
 
