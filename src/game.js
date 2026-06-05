@@ -196,6 +196,7 @@ export class Game {
       marines: getRandMod()
     };
     this.upgradeEnhanceEvents = [];
+    this.accuracyEvents = [];
     this.pendingChatMessages = [];
     this.sellOrders = [];
     this.neutralTradeTimer = 0;
@@ -2483,6 +2484,8 @@ export class Game {
       let garrisonWorlds = 0;
       let fullGarrisonWorlds = 0;
       let commerceWorlds = 0;
+      let controlledHomeworlds = 0;
+      let controlsOwnHomeworld = false;
 
       for (const planet of this.planets) {
         if (planet.owner === player) {
@@ -2494,10 +2497,16 @@ export class Game {
           } else if (planet.focusMode === 'commerce') {
             commerceWorlds++;
           }
+          if (planet.homeworldOf) {
+            controlledHomeworlds++;
+            if (planet.homeworldOf === player.id) {
+              controlsOwnHomeworld = true;
+            }
+          }
         }
       }
 
-      player.commandLimit = 5 + Math.ceil((player.planetCount || 0) / 3) + garrisonWorlds + fullGarrisonWorlds;
+      player.commandLimit = 1 + Math.ceil((player.planetCount || 0) / 3) + garrisonWorlds + fullGarrisonWorlds + controlledHomeworlds + (controlsOwnHomeworld ? 1 : 0);
       player.tradeCapacity = Math.ceil((player.planetCount || 0) / 5) + commerceWorlds;
 
       if (player.tradeOptions === undefined) {

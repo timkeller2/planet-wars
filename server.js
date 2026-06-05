@@ -449,6 +449,9 @@ async function bootstrap() {
         if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
           if (['brute', 'ranged', 'sniper'].includes(data.value)) {
             ship.package = data.value;
+            if (ship.package === 'brute' && ship.strategy === 'short') {
+              ship.strategy = 'normal';
+            }
           }
         }
       }
@@ -480,7 +483,11 @@ async function bootstrap() {
         const ship = game.ships.find(s => s.id === shipId);
         if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
           if (['normal', 'short', 'long'].includes(data.value)) {
-            ship.strategy = data.value;
+            if (ship.package === 'brute' && data.value === 'short') {
+              ship.strategy = 'normal';
+            } else {
+              ship.strategy = data.value;
+            }
           }
         }
       }
@@ -1644,6 +1651,10 @@ async function bootstrap() {
         return (targetPlanet.owner && targetPlanet.owner.id === player.id) || isVisible(targetPlanet.x, targetPlanet.y) || hasSympathy;
       });
 
+      const visibleAccuracyEvents = (game.accuracyEvents || []).filter(ev => {
+        return isVisible(ev.x, ev.y);
+      });
+
       const state = {
         planets: visiblePlanets,
         ships: visibleShips,
@@ -1655,6 +1666,7 @@ async function bootstrap() {
         players: game.allPlayers,
         globalUpgradeModifiers: game.globalUpgradeModifiers,
         upgradeEnhanceEvents: visibleUpgradeEnhanceEvents,
+        accuracyEvents: visibleAccuracyEvents,
         galacticCapacity: game.galacticCapacity,
         sellOrders: game.sellOrders || [],
         isPaused: game.isPaused,
@@ -1671,6 +1683,7 @@ async function bootstrap() {
 
     // Clear upgrade enhancement events after broadcasting to all clients
     game.upgradeEnhanceEvents = [];
+    game.accuracyEvents = [];
     
   }, TICK_RATE);
 

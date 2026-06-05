@@ -326,8 +326,8 @@ export class Planet {
       const baseRatePerMinute = this.ships / 1000; // 1/1000 per ship per minute
       const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
       let rate = baseRatePerMinute * (1 + techBonus);
-      if (focus === 'mining') rate *= 3;
-      if (this.ships >= this.maxShips && focus === 'mining') rate *= 3;
+      if (focus === 'mining') rate *= 2;
+      if (this.ships >= this.maxShips && focus === 'mining') rate *= 2;
 
       // Convert from per-minute to per-millisecond and apply deltaTime
       const perMs = rate / 60000;

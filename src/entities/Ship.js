@@ -133,7 +133,7 @@ export class Ship {
       if (style === 'Tholian' || style === 'Romulan' || style === 'Klingon') {
         this.strategy = 'long';
       } else if (style === 'Gorn') {
-        this.strategy = 'short';
+        this.strategy = 'normal';
       } else {
         this.strategy = 'normal';
       }
@@ -779,7 +779,7 @@ export class Ship {
       if (this.package === 'brute') {
         effectiveRange *= 0.5;
       } else if (this.package === 'sniper') {
-        effectiveRange *= 2.0;
+        effectiveRange *= 1.5;
       }
       effectiveRange = Math.floor(effectiveRange);
     } else {
@@ -868,7 +868,22 @@ export class Ship {
             }
             if (targetedByOurBoarding) continue;
           }
-          
+
+          if (this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
+            const isNeutralOrMonsterOrAmoeba = !enemyShip.owner || 
+                                               enemyShip.ownerId === 'neutral' || 
+                                               enemyShip.owner.isMonster || 
+                                               enemyShip.owner.id === 'monsters' || 
+                                               enemyShip.isAmoeba;
+            if (!isNeutralOrMonsterOrAmoeba) {
+              if (game && typeof game.isShipVisibleTo === 'function') {
+                if (!game.isShipVisibleTo(enemyShip, this.owner)) {
+                  continue;
+                }
+              }
+            }
+          }
+
           const edx = enemyShip.x - this.x;
           const edy = enemyShip.y - this.y;
           const distSq = edx * edx + edy * edy;
@@ -884,6 +899,19 @@ export class Ship {
             while (diff > Math.PI) diff -= Math.PI * 2;
             
             const absDiff = Math.abs(diff);
+            const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+            const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+            let targetingRangeBonus = 0;
+            if (this.targeting > 0) {
+              targetingRangeBonus += 0.05;
+              if (this.targeting > 1) {
+                targetingRangeBonus += 0.025;
+              }
+              if (this.targeting > 2) {
+                targetingRangeBonus += 0.025;
+              }
+            }
+
             if (absDiff <= Math.PI / 4) {
               targetType = 'front';
               targetRange = effectiveRange * 1.3;
@@ -892,27 +920,31 @@ export class Ship {
               // Firing aft: do not gain range advantages of munitions (bombs)
               let rangeWithoutMunitions = effectiveRange;
               if (this.bombs > 0) {
-                const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
-                const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
-                
-                let targetingRangeBonus = 0;
-                if (this.targeting > 0) {
-                  targetingRangeBonus += 0.05;
-                  if (this.targeting > 1) {
-                    targetingRangeBonus += 0.025;
-                  }
-                  if (this.targeting > 2) {
-                    targetingRangeBonus += 0.025;
-                  }
-                }
-                
                 const munitionsBonus = baseDogfightRange * 0.10 * (1 + targetingRangeBonus);
                 rangeWithoutMunitions = Math.max(0, effectiveRange - munitionsBonus);
               }
               targetRange = rangeWithoutMunitions * 0.85;
             } else {
               targetType = 'side';
-              targetRange = effectiveRange;
+              
+              let bombRangeBoost = 0;
+              if (this.bombs > 0) {
+                bombRangeBoost = baseDogfightRange * 0.10 * (1 + targetingRangeBonus);
+              }
+              let specialBombRangeBoost = 0;
+              if (this.specialbombs > 0) {
+                specialBombRangeBoost = 10;
+              }
+              let packageMult = 1.0;
+              if (this.package === 'brute') {
+                packageMult = 0.5;
+              } else if (this.package === 'sniper') {
+                packageMult = 1.5;
+              }
+              bombRangeBoost *= packageMult;
+              specialBombRangeBoost *= packageMult;
+
+              targetRange = effectiveRange - 0.5 * bombRangeBoost - 0.5 * specialBombRangeBoost;
             }
           }
           
@@ -946,7 +978,10 @@ export class Ship {
           
           const targetDist = Math.sqrt(targetData.distSq);
           const maxTargetRange = targetData.targetRange;
-          const distRatio = maxTargetRange > 0 ? Math.min(1.0, targetDist / maxTargetRange) : 0;
+          let distRatio = 0;
+          if (maxTargetRange > 25) {
+            distRatio = Math.min(1.0, Math.max(0, targetDist - 25) / (maxTargetRange - 25));
+          }
           const falloff = 1.0 - 0.75 * distRatio;
 
           const bombBonusInFinal = ((this.bombs && this.bombs > 0) ? (this.bombs * 3) : 0) / 100;
@@ -954,8 +989,19 @@ export class Ship {
           const baseHitChance = nonBombHitChance * falloff + bombBonusInFinal;
           const finalHitChance = Math.min(1.0, Math.max(0.01, baseHitChance + friendlyPlanetBoost - defenderPlanetPenalty - hazardPenalty));
           
+          if (s === 0) {
+            if (game && game.accuracyEvents) {
+              game.accuracyEvents.push({
+                x: enemyShip.x,
+                y: enemyShip.y,
+                accuracy: Math.round(finalHitChance * 100),
+                isCruiser: false
+              });
+            }
+          }
+
           if (Math.random() < finalHitChance) {
-            const damageDealt = enemyShip.takeDamage(explosions, this);
+            const damageDealt = enemyShip.takeDamage(explosions, this, false, targetData.targetType || 'side');
             if (damageDealt && this.owner) {
               this.owner.addExperience(1);
               if (this.sourceShipId && allShips) {
@@ -994,6 +1040,7 @@ export class Ship {
                 targetIsBomber: enemyShip.isBomber || false,
                 sourceMaxHealth: this.maxHealth,
                 targetMaxHealth: enemyShip.maxHealth,
+                cruiserStyle: this.isCruiser ? (this.cruiserStyle || (this.owner ? this.owner.cruiserStyle : 'Klingon')) : (this.owner ? this.owner.cruiserStyle : null),
                 index: lasersDrawn
               });
               lasersDrawn++;
@@ -1013,8 +1060,9 @@ export class Ship {
         this.fireCooldown = (shotsPerVolley > 1 ? (1.0 / shotsPerVolley) : 1.0) * cooldownMultiplier;
         maxShots = 1; // Fire only 1 shot per trigger
 
-        let usedBomb = false;
-        let selectedTargetIndex = -1;
+         let usedBomb = false;
+         let selectedTargetIndex = -1;
+         let isFirstVolleyShot = false;
 
         if (validTargets.length > 0) {
           this.combatCooldown = 1.1;
@@ -1048,8 +1096,8 @@ export class Ship {
           const targetData = validTargets[selectedTargetIndex];
           const targetType = targetData.targetType || 'side';
 
-          // Only consume a bomb on the first shot of each volley cycle
-          if (!this.volleyShotIndex) this.volleyShotIndex = 0;
+           if (this.volleyShotIndex === undefined) this.volleyShotIndex = 0;
+           isFirstVolleyShot = (this.volleyShotIndex === 0);
           
           const isAftCruiserShot = (this.maxHealth > 0 && !this.isAmoeba && targetType === 'aft');
           
@@ -1076,12 +1124,20 @@ export class Ship {
               bombConsumption = 1.0;
             }
           }
+          if (targetType === 'side') {
+            bombConsumption *= 0.5;
+          }
 
           if (this.maxHealth > 0 && this.bombs > 0 && this.volleyShotIndex === 0 && !this.isAmoeba && !isAftCruiserShot && isWithinBombRange) {
             usedBomb = true;
             this.bombs -= bombConsumption;
             if (this.bombs < 0) this.bombs = 0;
+            if (this.specialbombs > 0) {
+              this.specialbombs -= bombConsumption;
+              if (this.specialbombs < 0) this.specialbombs = 0;
+            }
           }
+
           this.volleyShotIndex = (this.volleyShotIndex + 1) % shotsPerVolley;
         }
 
@@ -1129,12 +1185,15 @@ export class Ship {
 
           const targetDist = Math.sqrt(targetData.distSq);
           const maxTargetRange = targetData.targetRange;
-          const distRatio = maxTargetRange > 0 ? Math.min(1.0, targetDist / maxTargetRange) : 0;
+          let distRatio = 0;
+          if (maxTargetRange > 25) {
+            distRatio = Math.min(1.0, Math.max(0, targetDist - 25) / (maxTargetRange - 25));
+          }
           
           let falloff = 1.0 - 0.75 * distRatio;
           if (this.maxHealth > 0 && !this.isAmoeba) {
             if (this.package === 'brute') {
-              falloff = 1.5 - 1.0 * distRatio;
+              falloff = 1.5 - 0.75 * distRatio;
             } else if (this.package === 'sniper') {
               falloff = 0.5 - 0.25 * distRatio;
             }
@@ -1172,8 +1231,19 @@ export class Ship {
           const minHitChance = (this.maxHealth > 0 && !this.isAmoeba) ? 0.10 : 0.01;
           finalHitChance = Math.min(1.0, Math.max(minHitChance, finalHitChance + friendlyPlanetBoost - defenderPlanetPenalty - hazardPenalty));
           
+          if (isFirstVolleyShot) {
+            if (game && game.accuracyEvents) {
+              game.accuracyEvents.push({
+                x: enemyShip.x,
+                y: enemyShip.y,
+                accuracy: Math.round(finalHitChance * 100),
+                isCruiser: true
+              });
+            }
+          }
+
           if (Math.random() < finalHitChance) {
-            const damageDealt = enemyShip.takeDamage(explosions, this);
+            const damageDealt = enemyShip.takeDamage(explosions, this, false, targetType);
             if (damageDealt) {
               const isAttackerCruiser = this.maxHealth > 0 && !this.isAmoeba;
               if (isAttackerCruiser) {
@@ -1405,7 +1475,8 @@ export class Ship {
                   endY: p.y + (Math.random() - 0.5) * p.radius,
                   color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
                   age: 0, duration: 0.6, width: 8,
-                  isAmoebaAttack: !!this.isAmoeba
+                  isAmoebaAttack: !!this.isAmoeba,
+                  cruiserStyle: this.owner ? this.owner.cruiserStyle : null
                 });
               }
             }
@@ -1414,6 +1485,10 @@ export class Ship {
             if (isCruiser) {
               this.bombs--;
               if (this.bombs < 0) this.bombs = 0;
+              if (this.specialbombs > 0) {
+                this.specialbombs--;
+                if (this.specialbombs < 0) this.specialbombs = 0;
+              }
               this.planetBombardTimer = 2.0;
             } else {
               this.bombs--;
@@ -1707,8 +1782,15 @@ export class Ship {
               const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
               if (isEnemy) {
                 let isVisible = true;
-                if (game && typeof game.isShipVisibleTo === 'function') {
-                  isVisible = game.isShipVisibleTo(other, this.owner);
+                const isNeutralOrMonsterOrAmoeba = !other.owner || 
+                                                   other.ownerId === 'neutral' || 
+                                                   other.owner.isMonster || 
+                                                   other.owner.id === 'monsters' || 
+                                                   other.isAmoeba;
+                if (!isNeutralOrMonsterOrAmoeba) {
+                  if (game && typeof game.isShipVisibleTo === 'function') {
+                    isVisible = game.isShipVisibleTo(other, this.owner);
+                  }
                 }
                 if (!isVisible) continue;
                 let beingBoardedByUs = false;
@@ -2915,7 +2997,10 @@ export class Ship {
         
         if (isPlanet) {
           const isOwnPlanet = targetObj.owner === this.owner;
-          const stopDist = isOwnPlanet ? (targetObj.radius + 20) : ((effectiveRange + targetObj.radius) * 0.5);
+          let stopDist = isOwnPlanet ? (targetObj.radius + 20) : ((effectiveRange + targetObj.radius) * 0.5);
+          if (this.isPatrolling && this.bombs > 0 && this.package === 'brute') {
+            stopDist = targetObj.radius + 15;
+          }
           if (dist <= stopDist + 2) {
             // Already close enough! Stop moving
             this.targetX = this.x;
@@ -2962,6 +3047,17 @@ export class Ship {
                 this.targetY = targetObj.y - Math.sin(angle) * bombEngagementRange;
                 this.targetPlanet = null;
               }
+            }
+          } else if (this.package === 'brute' && this.bombs > 0) {
+            // Non-patrolling (dogfight) brute cruiser with bombs: get as near as possible (no stop range check except contact range 15px)
+            if (dist <= 15) {
+              this.targetX = this.x;
+              this.targetY = this.y;
+              this.targetPlanet = null;
+            } else {
+              this.targetX = tx;
+              this.targetY = ty;
+              this.targetPlanet = null;
             }
           } else {
             // Standard non-patrolling or non-bomb ship target movement
@@ -3142,6 +3238,7 @@ export class Ship {
             targetIsBomber: this.isBomber || false,
             targetMaxHealth: this.maxHealth,
             sourceIsPlanet: true,
+            cruiserStyle: this.targetPlanet.owner ? this.targetPlanet.owner.cruiserStyle : null,
             index: 0
           });
         }
@@ -3169,6 +3266,7 @@ export class Ship {
             sourceIsBomber: this.isBomber || false,
             sourceMaxHealth: this.maxHealth,
             targetIsPlanet: true,
+            cruiserStyle: this.owner ? this.owner.cruiserStyle : null,
             index: 0
           });
         }
@@ -4043,7 +4141,7 @@ export class Ship {
     this.currentSpeed = effectiveSpeed;
   }
 
-  takeDamage(explosions, attacker = null, isHazard = false) {
+  takeDamage(explosions, attacker = null, isHazard = false, targetType = null) {
     if (this.health >= 0) {
       if (attacker) {
         attacker.lastAttackTimeOnShip = attacker.lastAttackTimeOnShip || {};
@@ -4105,7 +4203,10 @@ export class Ship {
             if (this.count > 1) {
         this.count -= 1;
         if (attacker && attacker.maxHealth > 0 && !attacker.isAmoeba && (attacker.bombs || 0) > 0 && (attacker.splashDamage || 0) > 0) {
-          const baseSplash = attacker.splashDamage;
+          let baseSplash = attacker.splashDamage;
+          if (targetType === 'side') {
+            baseSplash *= 0.5;
+          }
           const splashLimit = Math.floor(this.count / 50);
           const splash = Math.min(baseSplash, splashLimit);
           const toDestroy = Math.min(this.count, splash);
@@ -4143,7 +4244,10 @@ export class Ship {
       this.health -= damageAmt;
 
       if (attacker && attacker.maxHealth > 0 && !attacker.isAmoeba && (attacker.bombs || 0) > 0 && (attacker.splashDamage || 0) > 0) {
-        const baseSplash = attacker.splashDamage;
+        let baseSplash = attacker.splashDamage;
+        if (targetType === 'side') {
+          baseSplash *= 0.5;
+        }
         const splashLimit = Math.floor(this.health / 50);
         const splash = Math.min(baseSplash, splashLimit);
         for (let i = 0; i < splash; i++) {

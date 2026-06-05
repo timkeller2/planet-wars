@@ -357,6 +357,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
   startBtn.addEventListener('click', () => {
     console.log('startBtn clicked!');
+    megalovaniaPlayed = false;
     const nameInput = document.getElementById('player-name-input');
     if (nameInput && nameInput.value.trim() !== '') {
       socket.emit('setName', nameInput.value.trim());
@@ -1132,6 +1133,19 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           age: 0,
           duration: 3.5,
           color: ev.color || '#fff'
+        });
+      }
+    }
+
+    if (state.accuracyEvents && state.accuracyEvents.length > 0) {
+      for (const ev of state.accuracyEvents) {
+        floatingAnimations.push({
+          x: ev.x,
+          y: ev.y,
+          text: `🎯${ev.accuracy}%`,
+          type: 'accuracyIndicator',
+          age: 0,
+          duration: 1.5
         });
       }
     }
@@ -3162,6 +3176,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         const val = e.target.value;
         for (const ship of selectedCruisers) {
           ship.package = val;
+          if (val === 'brute' && ship.strategy === 'short') {
+            ship.strategy = 'normal';
+          }
         }
         socket.emit('setCruiserPackage', { shipIds: selectedCruisers.map(c => c.id), value: val });
       }
@@ -3587,6 +3604,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     endScreen.classList.add('hidden');
     gameUI.classList.remove('hidden');
     if (serverState) serverState.isRunning = true;
+    megalovaniaPlayed = false;
 
     const musicCheckbox = document.getElementById('music-checkbox');
     const bgMusic = document.getElementById('bg-music');
@@ -4030,9 +4048,30 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if (first.cruiserStyle === 'Tholian' || first.cruiserStyle === 'Romulan' || first.cruiserStyle === 'Klingon') {
               defaultStrategy = 'long';
             } else if (first.cruiserStyle === 'Gorn') {
-              defaultStrategy = 'short';
+              defaultStrategy = 'normal';
             }
             selStrategy.value = first.strategy || defaultStrategy;
+          }
+
+          const isBrute = selPackage && selPackage.value === 'brute';
+          if (selStrategy) {
+            const shortOpt = selStrategy.querySelector('option[value="short"]');
+            if (shortOpt) {
+              if (isBrute) {
+                shortOpt.disabled = true;
+                shortOpt.style.display = 'none';
+                if (selStrategy.value === 'short') {
+                  selStrategy.value = 'normal';
+                  for (const ship of selectedCruisers) {
+                    ship.strategy = 'normal';
+                  }
+                  socket.emit('setCruiserStrategy', { shipIds: selectedCruisers.map(c => c.id), value: 'normal' });
+                }
+              } else {
+                shortOpt.disabled = false;
+                shortOpt.style.display = '';
+              }
+            }
           }
         } else {
           dropdownsEl.style.display = 'none';
@@ -4209,6 +4248,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         for (const f of serverState.fleets) {
           const owner = serverState.players.find(pl => pl.id === f.ownerId);
           if (owner) {
+            const isSelectedCruiserCluster = f.isCruiser && selectedShips.some(ss => ss.isCruiser && Math.abs(ss.x - f.x) < 1 && Math.abs(ss.y - f.y) < 1);
+            if (isSelectedCruiserCluster) continue;
+
             const pct = hazardSensorReductionPct(f.x, f.y, f.ownerId);
             const drawRadius = Math.max(10, f.radarRange * pct);
             ctx.beginPath();
@@ -5202,8 +5244,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             let defaultStrategy = 'Normal';
             if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Romulan' || hs.cruiserStyle === 'Klingon') {
               defaultStrategy = 'Long';
-            } else if (hs.cruiserStyle === 'Gorn') {
-              defaultStrategy = 'Short';
             }
             const stratDisplay = hs.strategy ? hs.strategy.charAt(0).toUpperCase() + hs.strategy.slice(1) : defaultStrategy;
             lines.push({ label: 'Package', value: pkgDisplay, color: '#e040fb' });
@@ -5296,7 +5336,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if (hs.package === 'brute') {
               effectiveRange *= 0.5;
             } else if (hs.package === 'sniper') {
-              effectiveRange *= 2.0;
+              effectiveRange *= 1.5;
             }
             effectiveRange = Math.floor(effectiveRange);
 
@@ -5883,7 +5923,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if (s.package === 'brute') {
               range *= 0.5;
             } else if (s.package === 'sniper') {
-              range *= 2.0;
+              range *= 1.5;
             }
             range = Math.floor(range);
           } else {
@@ -5898,12 +5938,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           
           if (s.isCruiser && !s.isAmoeba) {
             // Draw custom directional firing range envelope for cruisers
+            const shipExpBonus = Math.sqrt(s.expScore || 0);
+            const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+            const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+
             let rangeWithoutMunitions = range;
             if (s.bombs > 0) {
-              const shipExpBonus = Math.sqrt(s.expScore || 0);
-              const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
-              const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
-              
               let targetingRangeBonus = 0;
               if (s.targeting > 0) {
                 targetingRangeBonus += 0.05;
@@ -5919,7 +5959,21 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             }
             const rangeAft = rangeWithoutMunitions * 0.85;
             const rangeFront = range * 1.3;
-            const rangeSide = range;
+            let bombRangeBoost = 0;
+            let packageMult = 1.0;
+            if (s.package === 'brute') {
+              packageMult = 0.5;
+            } else if (s.package === 'sniper') {
+              packageMult = 1.5;
+            }
+            if (s.bombs > 0) {
+              bombRangeBoost = baseDogfightRange * 0.10 * (1 + (s.targeting || 0) * 0.05) * packageMult;
+            }
+            let specialBombRangeBoost = 0;
+            if (s.specialbombs && s.specialbombs > 0) {
+              specialBombRangeBoost = 10 * packageMult;
+            }
+            const rangeSide = Math.floor(range - 0.5 * bombRangeBoost - 0.5 * specialBombRangeBoost);
             
             // 1. Draw outer envelope perimeter
             ctx.beginPath();
@@ -6005,6 +6059,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               const techBonus = 0.01 * Math.sqrt(owner.techScore || 0);
               sensorRange *= (1 + techBonus);
             }
+            const pct = hazardSensorReductionPct(s.x, s.y, s.ownerId);
+            sensorRange = Math.max(10, sensorRange * pct);
             
             ctx.save();
             ctx.strokeStyle = 'rgba(0, 255, 255, 0.45)'; // Sleek cyan
@@ -6737,12 +6793,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             }
             
             const style = laser.cruiserStyle || 'Klingon';
-            if (style === 'Tholian' || style === 'Lyran') {
+            if (style === 'Lyran') {
               ctx.save();
               ctx.beginPath();
               ctx.moveTo(startPtX, startPtY);
               ctx.lineTo(endPtX, endPtY);
-              ctx.strokeStyle = style === 'Lyran' ? '#00ff00' : '#ffff00';
+              ctx.strokeStyle = '#00ff00';
               ctx.lineWidth = 3.0;
               ctx.globalAlpha = Math.max(0, 1.0 - progress);
               ctx.stroke();
@@ -6759,6 +6815,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                 ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
                 ctx.fillStyle = '#ffff00';
                 ctx.shadowColor = '#ffff00';
+                ctx.shadowBlur = 8;
+                ctx.fill();
+              } else if (style === 'Tholian') {
+                ctx.beginPath();
+                ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#ff0000';
+                ctx.shadowColor = '#ff0000';
                 ctx.shadowBlur = 8;
                 ctx.fill();
               } else if (style === 'Gorn') {
@@ -6956,7 +7019,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               ctx.beginPath();
               ctx.moveTo(startPtX, startPtY);
               ctx.lineTo(endPtX, endPtY);
-              ctx.strokeStyle = laser.color;
+              ctx.strokeStyle = laser.cruiserStyle === 'Tholian' ? '#ffff00' : laser.color;
               // Vary brightness: multiply fading opacity by a random factor between 0.6 and 1.0
               const brightnessFactor = 0.6 + randVal * 0.4;
               ctx.globalAlpha = Math.max(0, 1.0 - activeProgress) * brightnessFactor;
@@ -7103,6 +7166,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           yOffset = progress * 40 * mult; // float up nicely
         } else if (anim.type === 'outbreak') {
           yOffset = progress * 60; // drifts up nicely
+        } else if (anim.type === 'accuracyIndicator') {
+          yOffset = progress * 40; // float up 40px
         }
 
         // Grow font
@@ -7127,6 +7192,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           fontsize = 12 + (progress * 8); // grows from 12 to 20
         } else if (anim.type === 'outbreak') {
           fontsize = 16 + (progress * 14); // grows moderately
+        } else if (anim.type === 'accuracyIndicator') {
+          fontsize = 10; // constant small font size
         }
 
         ctx.font = `bold ${fontsize}px Orbitron`; // growing font
@@ -7194,6 +7261,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           xOffset = -Math.sin(progress * Math.PI * 3) * 6;
           ctx.fillStyle = `rgba(180, 180, 180, ${alpha})`;
           ctx.shadowColor = `rgba(100, 100, 100, ${alpha})`;
+        } else if (anim.type === 'accuracyIndicator') {
+          xOffset = 0;
+          ctx.fillStyle = `rgba(255, 60, 60, ${alpha})`; // very red
+          ctx.shadowColor = `rgba(255, 0, 0, ${alpha})`; // red glow
         } else if (anim.type === 'pref_resource_diplomacy') {
           xOffset = -Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
