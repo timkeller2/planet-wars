@@ -1712,6 +1712,7 @@ async function bootstrap() {
           ...(player.autoBuyOrders || []),
           ...(game.sellOrders || [])
         ],
+        resourceRarities: game.resourceRarities || {},
         isPaused: game.isPaused,
         isRunning: game.isRunning,
         gameOverMessage: game.gameOverMessage,

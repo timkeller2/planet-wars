@@ -1145,7 +1145,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           text: `🎯${ev.accuracy}%`,
           type: 'accuracyIndicator',
           age: 0,
-          duration: 1.5
+          duration: 2.5,
+          attackerOwnerId: ev.attackerOwnerId,
+          targetOwnerId: ev.targetOwnerId
         });
       }
     }
@@ -1336,6 +1338,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
     const resHud = document.getElementById('resources-hud');
     if (resHud) {
+      console.log('[DEBUG HUD] State resourceRarities:', serverState.resourceRarities);
       resHud.style.display = 'flex';
       
       const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
@@ -1349,9 +1352,28 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         
         const card = document.getElementById(`res-card-${res}`);
         if (card) {
-          card.style.borderColor = 'rgba(0, 229, 255, 0.35)';
-          card.style.boxShadow = 'none';
-          card.style.background = 'rgba(0, 229, 255, 0.05)';
+          const rarity = serverState.resourceRarities?.[res] || 'normal';
+          if (rarity === 'exotic') {
+            card.style.borderColor = '#ff3333';
+            card.style.boxShadow = '0 0 8px rgba(255, 51, 51, 0.4)';
+            card.style.background = 'rgba(255, 51, 51, 0.15)';
+            card.style.color = '#ff3333';
+          } else if (rarity === 'rare') {
+            card.style.borderColor = '#ffeb3b';
+            card.style.boxShadow = '0 0 8px rgba(255, 235, 59, 0.4)';
+            card.style.background = 'rgba(255, 235, 59, 0.15)';
+            card.style.color = '#ffeb3b';
+          } else if (rarity === 'common') {
+            card.style.borderColor = '#4caf50';
+            card.style.boxShadow = '0 0 8px rgba(76, 175, 80, 0.4)';
+            card.style.background = 'rgba(76, 175, 80, 0.15)';
+            card.style.color = '#4caf50';
+          } else {
+            card.style.borderColor = 'rgba(0, 229, 255, 0.35)';
+            card.style.boxShadow = 'none';
+            card.style.background = 'rgba(0, 229, 255, 0.05)';
+            card.style.color = '#00e5ff';
+          }
         }
       }
       
@@ -1455,7 +1477,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             card.style.color = '#ffffff';
             card.style.textShadow = '0 0 6px #ffffff';
             card.title = `Auto Buy: ${order.resource} at <= ${order.price} credits - Click to Dismiss`;
-            card.textContent = `🤖${emoji}: <= ${order.price}`;
+            card.textContent = `${emoji}:${order.price}`;
           } else {
             const isMine = order.ownerId === localPlayer.id;
             const timeRemainingMs = order.expiresAt - Date.now();
@@ -2786,7 +2808,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                   const prevClass = keys[idx - 1];
                   const prevCount = (myPlayer.buildCounts && myPlayer.buildCounts[prevClass]) || 0;
                   const subsequentBuilds = Math.max(0, prevCount - 1);
-                  costMult = Math.max(1, baseMult - subsequentBuilds * 0.2);
+                  costMult = Math.max(1.0, baseMult - subsequentBuilds * 0.5 * (baseMult - 1.0));
                 }
               }
             }
@@ -3484,8 +3506,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   for (const res of resourcesListForClicks) {
     const card = document.getElementById(`res-card-${res}`);
     if (card) {
-      card.addEventListener('click', (e) => {
+      card.addEventListener('mousedown', (e) => {
         e.stopPropagation();
+        e.preventDefault();
         if (e.ctrlKey) {
           const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
           const priceVal = myPlayer ? (myPlayer.sellPriceSetting ?? 2) : 2;
@@ -3974,7 +3997,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                 const prevClass = keys[idx - 1];
                 const prevCount = (myPlayer.buildCounts && myPlayer.buildCounts[prevClass]) || 0;
                 const subsequentBuilds = Math.max(0, prevCount - 1);
-                costMult = Math.max(1, baseMult - subsequentBuilds * 0.2);
+                costMult = Math.max(1.0, baseMult - subsequentBuilds * 0.5 * (baseMult - 1.0));
               }
             }
           }
@@ -7223,7 +7246,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         } else if (anim.type === 'outbreak') {
           yOffset = progress * 60; // drifts up nicely
         } else if (anim.type === 'accuracyIndicator') {
-          yOffset = progress * 40; // float up 40px
+          yOffset = progress * (13.333 * anim.duration); // float at half the speed (13.33px/sec)
         }
 
         // Grow font
@@ -7249,7 +7272,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         } else if (anim.type === 'outbreak') {
           fontsize = 16 + (progress * 14); // grows moderately
         } else if (anim.type === 'accuracyIndicator') {
-          fontsize = 10 / 3; // constant small font size (decreased to 1/3 of original size)
+          fontsize = 4; // constant small font size (20% bigger than 10 / 3)
         }
 
         ctx.font = `bold ${fontsize}px Orbitron`; // growing font
@@ -7319,8 +7342,14 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ctx.shadowColor = `rgba(100, 100, 100, ${alpha})`;
         } else if (anim.type === 'accuracyIndicator') {
           xOffset = 0;
-          ctx.fillStyle = `rgba(255, 60, 60, ${alpha})`; // very red
-          ctx.shadowColor = `rgba(255, 0, 0, ${alpha})`; // red glow
+          const isPlayerAttacker = (localPlayer && anim.attackerOwnerId === localPlayer.id);
+          if (isPlayerAttacker) {
+            ctx.fillStyle = `rgba(60, 255, 60, ${alpha})`; // green
+            ctx.shadowColor = `rgba(0, 255, 0, ${alpha})`; // green glow
+          } else {
+            ctx.fillStyle = `rgba(255, 60, 60, ${alpha})`; // very red
+            ctx.shadowColor = `rgba(255, 0, 0, ${alpha})`; // red glow
+          }
         } else if (anim.type === 'pref_resource_diplomacy') {
           xOffset = -Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;

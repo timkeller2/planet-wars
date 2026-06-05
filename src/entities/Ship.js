@@ -995,7 +995,9 @@ export class Ship {
                 x: enemyShip.x,
                 y: enemyShip.y,
                 accuracy: Math.round(finalHitChance * 100),
-                isCruiser: false
+                isCruiser: false,
+                attackerOwnerId: this.owner ? this.owner.id : null,
+                targetOwnerId: enemyShip.owner ? enemyShip.owner.id : null
               });
             }
           }
@@ -1237,7 +1239,9 @@ export class Ship {
                 x: enemyShip.x,
                 y: enemyShip.y,
                 accuracy: Math.round(finalHitChance * 100),
-                isCruiser: true
+                isCruiser: true,
+                attackerOwnerId: this.owner ? this.owner.id : null,
+                targetOwnerId: enemyShip.owner ? enemyShip.owner.id : null
               });
             }
           }

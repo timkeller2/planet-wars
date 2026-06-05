@@ -615,9 +615,52 @@ export class Game {
       player.needsPlanet = false;
       player.totalCapacity = totalCapacity;
       player.isAlive = true;
+      this.recalculateResourceRarities();
       return true;
     }
     return false;
+  }
+
+  recalculateResourceRarities() {
+    const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+    const counts = {};
+    for (const r of resourcesList) {
+      counts[r] = 0;
+    }
+    
+    let totalDeposits = 0;
+    for (const planet of this.planets) {
+      if (planet.dead) continue;
+      if (planet.resources) {
+        for (const res of planet.resources) {
+          if (resourcesList.includes(res)) {
+            counts[res]++;
+            totalDeposits++;
+          }
+        }
+      }
+    }
+    
+    const average = totalDeposits / 7;
+    this.resourceRarities = {};
+    for (const r of resourcesList) {
+      if (average === 0) {
+        this.resourceRarities[r] = 'normal';
+        continue;
+      }
+      const count = counts[r];
+      const ratio = count / average;
+      if (ratio < 0.25) {
+        this.resourceRarities[r] = 'exotic';
+      } else if (ratio <= 0.50) {
+        this.resourceRarities[r] = 'rare';
+      } else if (ratio > 1.50) {
+        this.resourceRarities[r] = 'common';
+      } else {
+        this.resourceRarities[r] = 'normal';
+      }
+    }
+    console.log(`[Rarities] Recalculated. Average: ${average.toFixed(2)}, Counts:`, counts, `Rarities:`, this.resourceRarities);
   }
 
   initMap() {
@@ -939,7 +982,7 @@ export class Game {
       this.ionStormsCreated++;
     }
 
-
+    this.recalculateResourceRarities();
   }
 
   start() {
@@ -1399,7 +1442,7 @@ export class Game {
             const prevClass = keys[idx - 1];
             const prevCount = (owner.buildCounts && owner.buildCounts[prevClass]) || 0;
             const subsequentBuilds = Math.max(0, prevCount - 1);
-            costMult = Math.max(1, baseMult - subsequentBuilds * 0.2);
+            costMult = Math.max(1.0, baseMult - subsequentBuilds * 0.5 * (baseMult - 1.0));
           }
         }
       }
@@ -2850,6 +2893,7 @@ export class Game {
     // Remove inactive ships and dead planets
     this.ships = this.ships.filter(s => s.active);
     
+    let planetDestroyed = false;
     for (let i = this.planets.length - 1; i >= 0; i--) {
       if (this.planets[i].dead) {
         const deadPlanet = this.planets[i];
@@ -2877,7 +2921,11 @@ export class Game {
         });
         
         this.planets.splice(i, 1);
+        planetDestroyed = true;
       }
+    }
+    if (planetDestroyed) {
+      this.recalculateResourceRarities();
     }
     
     // Execute pending splash damage
@@ -3048,7 +3096,13 @@ export class Game {
       const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
       const randomRes = resourcesList[Math.floor(Math.random() * resourcesList.length)];
       const d3 = Math.floor(Math.random() * 3) + 1; // d3 (1, 2, 3)
-      const startPrice = 7 + d3;
+      let startPrice = 7 + d3;
+      if (this.resourceRarities && this.resourceRarities[randomRes]) {
+        const rarity = this.resourceRarities[randomRes];
+        if (rarity === 'exotic') startPrice = Math.round(startPrice * 3);
+        else if (rarity === 'rare') startPrice = Math.round(startPrice * 2);
+        else if (rarity === 'common') startPrice = Math.round(startPrice * 0.75);
+      }
 
       // Post the new neutral order
       const orderId = "order_" + Math.random().toString(36).substring(2, 9);
@@ -3063,15 +3117,16 @@ export class Game {
       });
       console.log(`[Neutral Market] Posted sell order ${orderId} for ${randomRes} at price ${startPrice}.`);
 
-      // Decrease the price of all existing neutral and AI orders by d2 (1 or 2), capped at minimum 1
-      const d2 = Math.floor(Math.random() * 2) + 1; // d2 (1 or 2)
+      // Decrease the price of all existing neutral and AI orders by 10-30%, min 1
       for (const order of this.sellOrders) {
         const isNeutral = order.ownerId === 'neutral';
         const isAI = this.aiPlayers.some(p => p.id === order.ownerId);
         if ((isNeutral || isAI) && order.id !== orderId) {
           const oldPrice = order.price;
-          order.price = Math.max(1, order.price - d2);
-          console.log(`[Market Decay] Decayed ${isNeutral ? 'Neutral' : 'AI'} order ${order.id} price from ${oldPrice} to ${order.price} (d2=${d2}).`);
+          const pct = 0.10 + Math.random() * 0.20;
+          const decrease = Math.max(1, Math.round(oldPrice * pct));
+          order.price = Math.max(1, oldPrice - decrease);
+          console.log(`[Market Decay] Decayed ${isNeutral ? 'Neutral' : 'AI'} order ${order.id} price from ${oldPrice} to ${order.price} (decay=${decrease}, pct=${Math.round(pct * 100)}%).`);
         }
       }
     }
@@ -3112,7 +3167,13 @@ export class Game {
           // Create the sell order
           const orderId = "order_" + Math.random().toString(36).substring(2, 9);
           const d3 = Math.floor(Math.random() * 3) + 1; // d3 (1, 2, or 3)
-          const startPrice = 7 + d3;
+          let startPrice = 7 + d3;
+          if (this.resourceRarities && this.resourceRarities[mostNumerousRes]) {
+            const rarity = this.resourceRarities[mostNumerousRes];
+            if (rarity === 'exotic') startPrice = Math.round(startPrice * 3);
+            else if (rarity === 'rare') startPrice = Math.round(startPrice * 2);
+            else if (rarity === 'common') startPrice = Math.round(startPrice * 0.75);
+          }
           
           this.sellOrders.push({
             id: orderId,
