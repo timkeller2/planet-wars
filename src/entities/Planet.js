@@ -27,7 +27,7 @@ export class Planet {
     this.expProgress = 0;
 
     // Sci-Fi Planetary Resources System
-    // Cascading chance allocation: 40% in the middle, dwindling down to 10% at the edges/corners.
+    // Cascading chance allocation: 60% in the middle, dwindling down to 20% at the edges/corners.
     // 2nd and 3rd attempts are half of the previous successful chance.
     this.resources = [];
     const centerX = mapWidth / 2;
@@ -37,7 +37,7 @@ export class Planet {
     const dy = this.y - centerY;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const ratio = Math.min(1.0, dist / maxDist);
-    let chance = 0.40 - ratio * 0.30;
+    let chance = 0.60 - ratio * 0.40;
 
     for (let i = 0; i < 3; i++) {
       if (Math.random() < chance) {
