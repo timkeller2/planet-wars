@@ -3527,8 +3527,11 @@ export class Game {
 
                 // Roll disposition if not yet set
                 if (targetPlanet.disposition[ship.owner.id] === undefined) {
-                  const d100 = Math.floor(Math.random() * 100) + 1;
-                  let dispositionVal = d100 - 50;
+                  let rollSum = 0;
+                  for (let i = 0; i < 10; i++) {
+                    rollSum += Math.floor(Math.random() * 10) + 1;
+                  }
+                  let dispositionVal = rollSum - 60;
 
                   if (initialQty >= 0.1) {
                     dispositionVal += (expBonus + shipExpBonus) * 3;

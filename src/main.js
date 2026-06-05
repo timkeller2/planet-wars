@@ -1377,11 +1377,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         }
       }
       
-      // Uncapped surplus scan
+      // Uncapped surplus scan (requires 2.0 for latinum, 1.0 for others)
       const eligible = [];
       for (const r of resourcesList) {
         const qty = myPlayer.resources?.[r] || 0;
-        if (qty >= 1.0) {
+        const req = r === 'latinum' ? 2.0 : 1.0;
+        if (qty >= req) {
           eligible.push({ name: r, qty: qty });
         }
       }
@@ -1389,7 +1390,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const toSell = eligible;
       const L = toSell.length;
       
-      const sellPrice = Math.ceil((L * L) / 2);
+      const sellPrice = Math.ceil((L * L) / 2) + 1;
       const totalGain = sellPrice * L;
       
       const sellBtn = document.getElementById('btn-sell-resources');
@@ -1421,6 +1422,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           sellBtn.disabled = false;
           sellBtn.style.opacity = '1.0';
           sellBtn.style.pointerEvents = 'auto';
+        }
+        
+        const latinumQty = myPlayer.resources?.latinum || 0;
+        if (latinumQty < 2.0) {
+          sellBtn.style.display = 'none';
+        } else {
+          sellBtn.style.display = 'flex';
         }
       }
 

@@ -691,7 +691,8 @@ async function bootstrap() {
         const eligible = [];
         for (const res of resourcesList) {
           const qty = player.resources[res] || 0;
-          if (qty >= 1.0) {
+          const req = res === 'latinum' ? 2.0 : 1.0;
+          if (qty >= req) {
             eligible.push({ name: res, qty: qty });
           }
         }
@@ -700,9 +701,10 @@ async function bootstrap() {
 
         // Allow sale if they have at least 1 trade option
         if (L > 0 && player.tradeOptions >= 1) {
-          const sellPrice = Math.ceil((L * L) / 2);
+          const sellPrice = Math.ceil((L * L) / 2) + 1;
           for (const item of eligible) {
-            player.resources[item.name] = (player.resources[item.name] || 0) - 1.0;
+            const deduct = item.name === 'latinum' ? 2.0 : 1.0;
+            player.resources[item.name] = (player.resources[item.name] || 0) - deduct;
           }
           player.credits = (player.credits || 0) + sellPrice * L;
           
