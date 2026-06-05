@@ -1173,12 +1173,12 @@ export class Ship {
               cruiserBaseHitChance = Math.max(0, cruiserBaseHitChance - bombAccuracyBonus);
             }
             
-            // Double the hit chance for cruisers
-            finalHitChance = cruiserBaseHitChance * 2;
+            // Double the hit chance for cruisers eliminated per user request
+            finalHitChance = cruiserBaseHitChance;
             
-            // Apply front/aft accuracy multipliers
+            // Apply front/aft accuracy multipliers (+30% front instead of +20%)
             if (targetType === 'front') {
-              finalHitChance *= 1.2;
+              finalHitChance *= 1.3;
             } else if (targetType === 'aft') {
               finalHitChance *= 0.85;
             }
@@ -1212,9 +1212,9 @@ export class Ship {
                 bonus = 0.20;
               }
               
-              let factor = 2;
+              let factor = 1;
               if (targetType === 'front') {
-                factor *= 1.2;
+                factor *= 1.3;
               } else if (targetType === 'aft') {
                 factor *= 0.85;
               }

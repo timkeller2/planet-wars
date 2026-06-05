@@ -1145,7 +1145,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           text: `🎯${ev.accuracy}%`,
           type: 'accuracyIndicator',
           age: 0,
-          duration: 2.5,
+          duration: 3.0,
           attackerOwnerId: ev.attackerOwnerId,
           targetOwnerId: ev.targetOwnerId
         });
@@ -7246,7 +7246,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         } else if (anim.type === 'outbreak') {
           yOffset = progress * 60; // drifts up nicely
         } else if (anim.type === 'accuracyIndicator') {
-          yOffset = progress * (13.333 * anim.duration); // float at half the speed (13.33px/sec)
+          yOffset = progress * (8.0 * anim.duration); // float slower (8.0px/sec)
         }
 
         // Grow font
