@@ -7170,7 +7170,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           if (t === 'minefield') {
             ctx.fillText('Ancient Minefield', storm.x, storm.y - 16);
             ctx.font = '10px Rajdhani';
-            ctx.fillText(`Intensity: ${storm.intensity} (${Math.round(effIntensity)})`, storm.x, storm.y);
+            ctx.fillText(`Mines: ${storm.mines ?? 0}  Intensity: ${storm.intensity} (${Math.round(effIntensity)})`, storm.x, storm.y);
           } else if (t === 'nebula') {
             ctx.fillText(`${storm.name} Nebula`, storm.x, storm.y - 8);
             ctx.font = '10px Rajdhani';
@@ -7249,7 +7249,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         } else if (anim.type === 'outbreak') {
           fontsize = 16 + (progress * 14); // grows moderately
         } else if (anim.type === 'accuracyIndicator') {
-          fontsize = 10; // constant small font size
+          fontsize = 10 / 3; // constant small font size (decreased to 1/3 of original size)
         }
 
         ctx.font = `bold ${fontsize}px Orbitron`; // growing font

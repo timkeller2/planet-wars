@@ -1678,7 +1678,8 @@ async function bootstrap() {
             x: storm.x, y: storm.y, radius: storm.radius,
             intensity: storm.intensity, speed: storm.speed,
             heading: Math.round(storm.heading),
-            knowledge: storm.knowledge[player.id] || 0
+            knowledge: storm.knowledge[player.id] || 0,
+            mines: storm.mines
           });
         }
       }
