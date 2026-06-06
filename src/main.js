@@ -234,6 +234,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   const customHomeworldSizeContainer = document.getElementById('custom-homeworld-size-container');
   const homeworldSizeInput = document.getElementById('homeworld-size-input');
 
+  const startingCreditsSelect = document.getElementById('starting-credits-select');
+  const customStartingCreditsContainer = document.getElementById('custom-starting-credits-container');
+  const startingCreditsInput = document.getElementById('starting-credits-input');
+
   if (prodMultipleSelect) {
     prodMultipleSelect.addEventListener('change', () => {
       if (prodMultipleSelect.value === 'custom') {
@@ -324,6 +328,19 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         if (customHomeworldSizeContainer) customHomeworldSizeContainer.style.display = 'flex';
       } else {
         if (customHomeworldSizeContainer) customHomeworldSizeContainer.style.display = 'none';
+      }
+    });
+  }
+
+  if (startingCreditsSelect) {
+    startingCreditsSelect.addEventListener('change', () => {
+      if (startingCreditsSelect.value === 'custom') {
+        if (customStartingCreditsContainer) customStartingCreditsContainer.style.display = 'flex';
+      } else {
+        if (customStartingCreditsContainer) customStartingCreditsContainer.style.display = 'none';
+        if (startingCreditsInput) {
+          startingCreditsInput.value = startingCreditsSelect.value;
+        }
       }
     });
   }
@@ -1490,12 +1507,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         }
         
         const groupedAutoBuyOrders = [];
+        const allResList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
         for (const price in autoBuyGroups) {
           const group = autoBuyGroups[price];
           group.sort((a, b) => a.resource.localeCompare(b.resource));
+          const uniqueRes = new Set(group.map(o => o.resource));
+          const isSimplified = allResList.every(r => uniqueRes.has(r));
           groupedAutoBuyOrders.push({
             isAutoBuy: true,
             isGrouped: true,
+            isSimplified: isSimplified,
             price: parseInt(price, 10),
             orders: group,
             ownerId: group[0].ownerId
@@ -1545,10 +1566,15 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             card.style.background = 'rgba(255, 255, 255, 0.15)';
             card.style.color = '#ffffff';
             card.style.textShadow = '0 0 6px #ffffff';
-            const emojis = order.orders.map(o => resourceEmojis[o.resource] || '').join('');
-            const resourceNames = order.orders.map(o => o.resource).join(', ');
-            card.title = `Auto Buy: ${resourceNames} at <= ${order.price} credits - Click to Dismiss`;
-            card.textContent = `${emojis}: ${order.price}`;
+            if (order.isSimplified) {
+              card.title = `Auto Buy: All resources at <= ${order.price} credits - Click to Dismiss`;
+              card.textContent = `∞: ${order.price}`;
+            } else {
+              const emojis = order.orders.map(o => resourceEmojis[o.resource] || '').join('');
+              const resourceNames = order.orders.map(o => o.resource).join(', ');
+              card.title = `Auto Buy: ${resourceNames} at <= ${order.price} credits - Click to Dismiss`;
+              card.textContent = `${emojis}: ${order.price}`;
+            }
           } else if (order.isFulfill) {
             const isMine = order.ownerId === localPlayer.id;
             if (isMine) {
@@ -3543,12 +3569,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
     if (!myPlayer) return;
     
-    const isRightClick = e && (e.button === 2 || e.type === 'contextmenu');
     const isCtrl = e && e.ctrlKey;
+    if (isCtrl) {
+      socket.emit('setAllAutoBuysToSellPrice');
+      return;
+    }
+    
+    const isRightClick = e && (e.button === 2 || e.type === 'contextmenu');
     
     let step = 1;
     if (isRightClick) step = -1;
-    if (isCtrl) step *= 5;
     
     const currentPrice = myPlayer.sellPriceSetting !== undefined ? myPlayer.sellPriceSetting : 2;
     let offset = currentPrice - 2;
@@ -3770,7 +3800,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const customVal = homeworldSizeInput ? parseInt(homeworldSizeInput.value, 10) : 120;
       homeworldSizeSetting = isNaN(customVal) ? "120" : String(customVal);
     }
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting };
+    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "250";
+    if (startingCreditsVal === 'custom') {
+      const startingCreditsInput = document.getElementById('starting-credits-input');
+      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 250;
+      startingCreditsVal = isNaN(customCredits) ? "250" : String(customCredits);
+    }
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10) };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
@@ -3832,10 +3868,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const customVal = homeworldSizeInput ? parseInt(homeworldSizeInput.value, 10) : 120;
       homeworldSizeSetting = isNaN(customVal) ? "120" : String(customVal);
     }
+    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "250";
+    if (startingCreditsVal === 'custom') {
+      const startingCreditsInput = document.getElementById('starting-credits-input');
+      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 250;
+      startingCreditsVal = isNaN(customCredits) ? "250" : String(customCredits);
+    }
     hasCenteredOnHomeworld = false;
     serverState = null;
     lastKnownPlanets = {}; // Clear cached planet details
-    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting });
+    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10) });
   });
 
   function draw() {
@@ -6527,112 +6569,342 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
           let style = s.cruiserStyle || (ownerPlayer ? ownerPlayer.cruiserStyle : 'Klingon');
 
+          let cohort = 'scout_group';
+          if (s.classType === 'cruiser' || s.classType === 'battlecruiser') {
+            cohort = 'cruiser_group';
+          } else if (s.classType === 'battleship' || s.classType === 'titan') {
+            cohort = 'battleship_group';
+          } else if (s.classType === 'mammoth') {
+            cohort = 'mammoth_group';
+          }
+
           ctx.save();
           ctx.translate(s.x, s.y);
           ctx.rotate(angle + Math.PI / 2);
           ctx.beginPath();
 
           if (style === 'Federation') {
-            ctx.moveTo(0, -size);
-            ctx.lineTo(size * 0.5, -size * 0.8);
-            ctx.lineTo(size * 0.5, -size * 0.4);
-            ctx.lineTo(size * 0.2, -size * 0.3);
-            ctx.lineTo(size * 0.2, size * 0.2);
-            ctx.lineTo(size * 0.7, size * 0.2);
-            ctx.lineTo(size * 0.7, -size * 0.2);
-            ctx.lineTo(size * 0.9, -size * 0.2);
-            ctx.lineTo(size * 0.9, size * 0.8);
-            ctx.lineTo(size * 0.7, size * 0.8);
-            ctx.lineTo(size * 0.7, size * 0.4);
-            ctx.lineTo(size * 0.2, size * 0.4);
-            ctx.lineTo(size * 0.2, size * 0.6);
-            ctx.lineTo(-size * 0.2, size * 0.6);
-            ctx.lineTo(-size * 0.2, size * 0.4);
-            ctx.lineTo(-size * 0.7, size * 0.4);
-            ctx.lineTo(-size * 0.7, size * 0.8);
-            ctx.lineTo(-size * 0.9, size * 0.8);
-            ctx.lineTo(-size * 0.9, -size * 0.2);
-            ctx.lineTo(-size * 0.7, -size * 0.2);
-            ctx.lineTo(-size * 0.7, size * 0.2);
-            ctx.lineTo(-size * 0.2, size * 0.2);
-            ctx.lineTo(-size * 0.2, -size * 0.3);
-            ctx.lineTo(-size * 0.5, -size * 0.4);
-            ctx.lineTo(-size * 0.5, -size * 0.8);
+            if (cohort === 'cruiser_group') {
+              ctx.moveTo(0, -size);
+              ctx.lineTo(size * 0.6, -size * 0.7);
+              ctx.lineTo(size * 0.6, -size * 0.3);
+              ctx.lineTo(size * 0.2, -size * 0.2);
+              ctx.lineTo(size * 0.2, size * 0.1);
+              ctx.lineTo(size * 0.7, size * 0.1);
+              ctx.lineTo(size * 0.7, -size * 0.3);
+              ctx.lineTo(size * 0.85, -size * 0.3);
+              ctx.lineTo(size * 0.85, size * 0.7);
+              ctx.lineTo(size * 0.7, size * 0.7);
+              ctx.lineTo(size * 0.7, size * 0.3);
+              ctx.lineTo(size * 0.2, size * 0.3);
+              ctx.lineTo(size * 0.15, size * 0.5);
+              ctx.lineTo(size * 0.15, size * 0.8);
+              ctx.lineTo(0, size * 0.9);
+              ctx.lineTo(-size * 0.15, size * 0.8);
+              ctx.lineTo(-size * 0.15, size * 0.5);
+              ctx.lineTo(-size * 0.2, size * 0.3);
+              ctx.lineTo(-size * 0.7, size * 0.3);
+              ctx.lineTo(-size * 0.7, size * 0.7);
+              ctx.lineTo(-size * 0.85, size * 0.7);
+              ctx.lineTo(-size * 0.85, -size * 0.3);
+              ctx.lineTo(-size * 0.7, -size * 0.3);
+              ctx.lineTo(-size * 0.7, size * 0.1);
+              ctx.lineTo(-size * 0.2, size * 0.1);
+              ctx.lineTo(-size * 0.2, -size * 0.2);
+              ctx.lineTo(-size * 0.6, -size * 0.3);
+              ctx.lineTo(-size * 0.6, -size * 0.7);
+            } else if (cohort === 'battleship_group') {
+              ctx.moveTo(0, -size);
+              ctx.lineTo(size * 0.7, -size * 0.8);
+              ctx.lineTo(size * 0.7, -size * 0.4);
+              ctx.lineTo(size * 0.3, -size * 0.1);
+              ctx.lineTo(size * 0.5, -size * 0.1);
+              ctx.lineTo(size * 0.5, -size * 0.4);
+              ctx.lineTo(size * 0.65, -size * 0.4);
+              ctx.lineTo(size * 0.65, size * 0.3);
+              ctx.lineTo(size * 0.5, size * 0.3);
+              ctx.lineTo(size * 0.3, size * 0.1);
+              ctx.lineTo(size * 0.3, size * 0.3);
+              ctx.lineTo(size * 0.9, size * 0.3);
+              ctx.lineTo(size * 0.9, 0);
+              ctx.lineTo(size * 1.05, 0);
+              ctx.lineTo(size * 1.05, size * 0.9);
+              ctx.lineTo(size * 0.9, size * 0.9);
+              ctx.lineTo(size * 0.9, size * 0.5);
+              ctx.lineTo(size * 0.2, size * 0.5);
+              ctx.lineTo(size * 0.1, size * 0.7);
+              ctx.lineTo(-size * 0.1, size * 0.7);
+              ctx.lineTo(-size * 0.2, size * 0.5);
+              ctx.lineTo(-size * 0.9, size * 0.5);
+              ctx.lineTo(-size * 0.9, size * 0.9);
+              ctx.lineTo(-size * 1.05, size * 0.9);
+              ctx.lineTo(-size * 1.05, 0);
+              ctx.lineTo(-size * 0.9, 0);
+              ctx.lineTo(-size * 0.9, size * 0.3);
+              ctx.lineTo(-size * 0.3, size * 0.3);
+              ctx.lineTo(-size * 0.3, size * 0.1);
+              ctx.lineTo(-size * 0.5, size * 0.3);
+              ctx.lineTo(-size * 0.65, size * 0.3);
+              ctx.lineTo(-size * 0.65, -size * 0.4);
+              ctx.lineTo(-size * 0.5, -size * 0.4);
+              ctx.lineTo(-size * 0.5, -size * 0.1);
+              ctx.lineTo(-size * 0.3, -size * 0.1);
+              ctx.lineTo(-size * 0.7, -size * 0.4);
+              ctx.lineTo(-size * 0.7, -size * 0.8);
+            } else if (cohort === 'mammoth_group') {
+              ctx.moveTo(0, -size);
+              ctx.lineTo(size * 0.8, -size * 0.8);
+              ctx.lineTo(size * 0.8, -size * 0.2);
+              ctx.lineTo(size * 0.4, -size * 0.1);
+              ctx.lineTo(size * 0.4, size * 0.4);
+              ctx.lineTo(size * 0.9, size * 0.4);
+              ctx.lineTo(size * 0.9, size * 0.2);
+              ctx.lineTo(size * 1.1, size * 0.2);
+              ctx.lineTo(size * 1.1, size * 0.8);
+              ctx.lineTo(size * 0.9, size * 0.8);
+              ctx.lineTo(size * 0.9, size * 0.6);
+              ctx.lineTo(size * 0.4, size * 0.6);
+              ctx.lineTo(size * 0.3, size * 0.9);
+              ctx.lineTo(-size * 0.3, size * 0.9);
+              ctx.lineTo(-size * 0.4, size * 0.6);
+              ctx.lineTo(-size * 0.9, size * 0.6);
+              ctx.lineTo(-size * 0.9, size * 0.8);
+              ctx.lineTo(-size * 1.1, size * 0.8);
+              ctx.lineTo(-size * 1.1, size * 0.2);
+              ctx.lineTo(-size * 0.9, size * 0.2);
+              ctx.lineTo(-size * 0.9, size * 0.4);
+              ctx.lineTo(-size * 0.4, size * 0.4);
+              ctx.lineTo(-size * 0.4, -size * 0.1);
+              ctx.lineTo(-size * 0.8, -size * 0.2);
+              ctx.lineTo(-size * 0.8, -size * 0.8);
+            } else {
+              ctx.moveTo(0, -size);
+              ctx.lineTo(size * 0.5, -size * 0.8);
+              ctx.lineTo(size * 0.5, -size * 0.4);
+              ctx.lineTo(size * 0.2, -size * 0.3);
+              ctx.lineTo(size * 0.2, size * 0.2);
+              ctx.lineTo(size * 0.7, size * 0.2);
+              ctx.lineTo(size * 0.7, -size * 0.2);
+              ctx.lineTo(size * 0.9, -size * 0.2);
+              ctx.lineTo(size * 0.9, size * 0.8);
+              ctx.lineTo(size * 0.7, size * 0.8);
+              ctx.lineTo(size * 0.7, size * 0.4);
+              ctx.lineTo(size * 0.2, size * 0.4);
+              ctx.lineTo(size * 0.2, size * 0.6);
+              ctx.lineTo(-size * 0.2, size * 0.6);
+              ctx.lineTo(-size * 0.2, size * 0.4);
+              ctx.lineTo(-size * 0.7, size * 0.4);
+              ctx.lineTo(-size * 0.7, size * 0.8);
+              ctx.lineTo(-size * 0.9, size * 0.8);
+              ctx.lineTo(-size * 0.9, -size * 0.2);
+              ctx.lineTo(-size * 0.7, -size * 0.2);
+              ctx.lineTo(-size * 0.7, size * 0.2);
+              ctx.lineTo(-size * 0.2, size * 0.2);
+              ctx.lineTo(-size * 0.2, -size * 0.3);
+              ctx.lineTo(-size * 0.5, -size * 0.4);
+              ctx.lineTo(-size * 0.5, -size * 0.8);
+            }
           } else if (style === 'Romulan') {
-            ctx.moveTo(0, -size * 0.8);
-            ctx.lineTo(size * 0.2, -size * 0.6);
-            ctx.lineTo(size * 0.8, -size * 0.2);
-            ctx.lineTo(size * 1.0, 0);
-            ctx.lineTo(size * 0.7, size * 0.6);
-            ctx.lineTo(size * 0.3, size * 0.1);
-            ctx.lineTo(size * 0.2, size * 0.5);
-            ctx.lineTo(-size * 0.2, size * 0.5);
-            ctx.lineTo(-size * 0.3, size * 0.1);
-            ctx.lineTo(-size * 0.7, size * 0.6);
-            ctx.lineTo(-size * 1.0, 0);
-            ctx.lineTo(-size * 0.8, -size * 0.2);
-            ctx.lineTo(-size * 0.2, -size * 0.6);
+            if (cohort === 'cruiser_group') {
+              ctx.moveTo(0, -size);
+              ctx.lineTo(size * 0.3, -size * 0.8);
+              ctx.lineTo(size * 0.5, -size * 0.5);
+              ctx.lineTo(size * 0.9, -size * 0.4);
+              ctx.lineTo(size * 1.1, -size * 0.1);
+              ctx.lineTo(size * 0.8, size * 0.3);
+              ctx.lineTo(size * 0.4, 0);
+              ctx.lineTo(size * 0.3, size * 0.6);
+              ctx.lineTo(0, size * 0.4);
+              ctx.lineTo(-size * 0.3, size * 0.6);
+              ctx.lineTo(-size * 0.4, 0);
+              ctx.lineTo(-size * 0.8, size * 0.3);
+              ctx.lineTo(-size * 1.1, -size * 0.1);
+              ctx.lineTo(-size * 0.9, -size * 0.4);
+              ctx.lineTo(-size * 0.5, -size * 0.5);
+              ctx.lineTo(-size * 0.3, -size * 0.8);
+            } else if (cohort === 'battleship_group') {
+              ctx.moveTo(0, -size);
+              ctx.lineTo(size * 0.25, -size * 0.7);
+              ctx.lineTo(size * 0.6, -size * 0.6);
+              ctx.lineTo(size * 1.2, -size * 0.5);
+              ctx.lineTo(size * 1.0, 0);
+              ctx.lineTo(size * 0.7, -size * 0.2);
+              ctx.lineTo(size * 0.5, size * 0.4);
+              ctx.lineTo(size * 0.25, size * 0.1);
+              ctx.lineTo(size * 0.2, size * 0.8);
+              ctx.lineTo(0, size * 0.6);
+              ctx.lineTo(-size * 0.2, size * 0.8);
+              ctx.lineTo(-size * 0.25, size * 0.1);
+              ctx.lineTo(-size * 0.5, size * 0.4);
+              ctx.lineTo(-size * 0.7, -size * 0.2);
+              ctx.lineTo(-size * 1.0, 0);
+              ctx.lineTo(-size * 1.2, -size * 0.5);
+              ctx.lineTo(-size * 0.6, -size * 0.6);
+              ctx.lineTo(-size * 0.25, -size * 0.7);
+            } else if (cohort === 'mammoth_group') {
+              ctx.moveTo(0, -size * 0.9);
+              ctx.lineTo(size * 0.4, -size * 0.8);
+              ctx.lineTo(size * 0.8, -size * 0.5);
+              ctx.lineTo(size * 1.2, 0);
+              ctx.lineTo(size * 0.8, size * 0.6);
+              ctx.lineTo(size * 0.5, size * 0.2);
+              ctx.lineTo(size * 0.3, size * 0.9);
+              ctx.lineTo(0, size * 0.8);
+              ctx.lineTo(-size * 0.3, size * 0.9);
+              ctx.lineTo(-size * 0.5, size * 0.2);
+              ctx.lineTo(-size * 0.8, size * 0.6);
+              ctx.lineTo(-size * 1.2, 0);
+              ctx.lineTo(-size * 0.8, -size * 0.5);
+              ctx.lineTo(-size * 0.4, -size * 0.8);
+            } else {
+              ctx.moveTo(0, -size * 0.8);
+              ctx.lineTo(size * 0.2, -size * 0.6);
+              ctx.lineTo(size * 0.8, -size * 0.2);
+              ctx.lineTo(size * 1.0, 0);
+              ctx.lineTo(size * 0.7, size * 0.6);
+              ctx.lineTo(size * 0.3, size * 0.1);
+              ctx.lineTo(size * 0.2, size * 0.5);
+              ctx.lineTo(-size * 0.2, size * 0.5);
+              ctx.lineTo(-size * 0.3, size * 0.1);
+              ctx.lineTo(-size * 0.7, size * 0.6);
+              ctx.lineTo(-size * 1.0, 0);
+              ctx.lineTo(-size * 0.8, -size * 0.2);
+              ctx.lineTo(-size * 0.2, -size * 0.6);
+            }
           } else if (style === 'Gorn') {
-            ctx.moveTo(-size * 0.25, -size * 0.56);
-            ctx.lineTo(size * 0.25, -size * 0.56);
-            ctx.lineTo(size * 0.34, -size * 0.28);
-            ctx.lineTo(size * 0.67, -size * 0.14);
-            ctx.lineTo(size * 0.67, size * 0.28);
-            ctx.lineTo(size * 0.42, size * 0.28);
-            ctx.lineTo(size * 0.42, size * 0.56);
-            ctx.lineTo(size * 0.17, size * 0.56);
-            ctx.lineTo(size * 0.17, size * 0.42);
-            ctx.lineTo(-size * 0.17, size * 0.42);
-            ctx.lineTo(-size * 0.17, size * 0.56);
-            ctx.lineTo(-size * 0.42, size * 0.56);
-            ctx.lineTo(-size * 0.42, size * 0.28);
-            ctx.lineTo(-size * 0.67, size * 0.28);
-            ctx.lineTo(-size * 0.67, -size * 0.14);
-            ctx.lineTo(-size * 0.34, -size * 0.28);
+            if (cohort === 'cruiser_group') {
+              ctx.moveTo(-size * 0.4, -size * 0.8);
+              ctx.lineTo(size * 0.4, -size * 0.8);
+              ctx.lineTo(size * 0.4, -size * 0.5);
+              ctx.lineTo(size * 0.2, -size * 0.5);
+              ctx.lineTo(size * 0.2, size * 0.1);
+              ctx.lineTo(size * 0.8, size * 0.1);
+              ctx.lineTo(size * 0.8, size * 0.5);
+              ctx.lineTo(size * 0.5, size * 0.5);
+              ctx.lineTo(size * 0.3, size * 0.8);
+              ctx.lineTo(-size * 0.3, size * 0.8);
+              ctx.lineTo(-size * 0.5, size * 0.5);
+              ctx.lineTo(-size * 0.8, size * 0.5);
+              ctx.lineTo(-size * 0.8, size * 0.1);
+              ctx.lineTo(-size * 0.2, size * 0.1);
+              ctx.lineTo(-size * 0.2, -size * 0.5);
+              ctx.lineTo(-size * 0.4, -size * 0.5);
+            } else if (cohort === 'battleship_group') {
+              ctx.moveTo(0, -size);
+              ctx.lineTo(size * 0.3, -size * 0.7);
+              ctx.lineTo(size * 0.3, -size * 0.4);
+              ctx.lineTo(size * 0.7, -size * 0.4);
+              ctx.lineTo(size * 0.9, -size * 0.1);
+              ctx.lineTo(size * 0.6, 0);
+              ctx.lineTo(size * 0.6, size * 0.4);
+              ctx.lineTo(size * 0.8, size * 0.4);
+              ctx.lineTo(size * 0.8, size * 0.8);
+              ctx.lineTo(size * 0.3, size * 0.6);
+              ctx.lineTo(size * 0.2, size * 0.9);
+              ctx.lineTo(-size * 0.2, size * 0.9);
+              ctx.lineTo(-size * 0.3, size * 0.6);
+              ctx.lineTo(-size * 0.8, size * 0.8);
+              ctx.lineTo(-size * 0.8, size * 0.4);
+              ctx.lineTo(-size * 0.6, size * 0.4);
+              ctx.lineTo(-size * 0.6, 0);
+              ctx.lineTo(-size * 0.9, -size * 0.1);
+              ctx.lineTo(-size * 0.7, -size * 0.4);
+              ctx.lineTo(-size * 0.3, -size * 0.4);
+              ctx.lineTo(-size * 0.3, -size * 0.7);
+            } else if (cohort === 'mammoth_group') {
+              ctx.moveTo(-size * 0.6, -size * 0.9);
+              ctx.lineTo(size * 0.6, -size * 0.9);
+              ctx.lineTo(size * 0.6, -size * 0.3);
+              ctx.lineTo(size * 0.9, -size * 0.3);
+              ctx.lineTo(size * 0.9, size * 0.9);
+              ctx.lineTo(size * 0.5, size * 0.9);
+              ctx.lineTo(size * 0.5, size * 0.3);
+              ctx.lineTo(-size * 0.5, size * 0.3);
+              ctx.lineTo(-size * 0.5, size * 0.9);
+              ctx.lineTo(-size * 0.9, size * 0.9);
+              ctx.lineTo(-size * 0.9, -size * 0.3);
+              ctx.lineTo(-size * 0.6, -size * 0.3);
+            } else {
+              ctx.moveTo(-size * 0.25, -size * 0.56);
+              ctx.lineTo(size * 0.25, -size * 0.56);
+              ctx.lineTo(size * 0.34, -size * 0.28);
+              ctx.lineTo(size * 0.67, -size * 0.14);
+              ctx.lineTo(size * 0.67, size * 0.28);
+              ctx.lineTo(size * 0.42, size * 0.28);
+              ctx.lineTo(size * 0.42, size * 0.56);
+              ctx.lineTo(size * 0.17, size * 0.56);
+              ctx.lineTo(size * 0.17, size * 0.42);
+              ctx.lineTo(-size * 0.17, size * 0.42);
+              ctx.lineTo(-size * 0.17, size * 0.56);
+              ctx.lineTo(-size * 0.42, size * 0.56);
+              ctx.lineTo(-size * 0.42, size * 0.28);
+              ctx.lineTo(-size * 0.67, size * 0.28);
+              ctx.lineTo(-size * 0.67, -size * 0.14);
+              ctx.lineTo(-size * 0.34, -size * 0.28);
+            }
           } else if (style === 'Tholian') {
-            ctx.moveTo(0, -size);
-            ctx.lineTo(size * 0.4, -size * 0.4);
-            ctx.lineTo(size * 0.9, 0);
-            ctx.lineTo(size * 0.4, size * 0.4);
-            ctx.lineTo(0, size);
-            ctx.lineTo(-size * 0.4, size * 0.4);
-            ctx.lineTo(-size * 0.9, 0);
-            ctx.lineTo(-size * 0.4, -size * 0.4);
-            ctx.moveTo(0, -size * 0.5);
-            ctx.lineTo(-size * 0.2, 0);
-            ctx.lineTo(0, size * 0.5);
-            ctx.lineTo(size * 0.2, 0);
+            if (cohort === 'cruiser_group') {
+              ctx.moveTo(0, -size);
+              ctx.lineTo(size * 0.3, -size * 0.5);
+              ctx.lineTo(size * 0.8, -size * 0.5);
+              ctx.lineTo(size * 0.5, 0);
+              ctx.lineTo(size * 0.9, size * 0.5);
+              ctx.lineTo(size * 0.3, size * 0.5);
+              ctx.lineTo(0, size);
+              ctx.lineTo(-size * 0.3, size * 0.5);
+              ctx.lineTo(-size * 0.9, size * 0.5);
+              ctx.lineTo(-size * 0.5, 0);
+              ctx.lineTo(-size * 0.8, -size * 0.5);
+              ctx.lineTo(-size * 0.3, -size * 0.5);
+            } else if (cohort === 'battleship_group') {
+              ctx.moveTo(0, -size);
+              ctx.lineTo(size * 0.4, -size * 0.7);
+              ctx.lineTo(size * 0.9, -size * 0.4);
+              ctx.lineTo(size * 0.6, 0);
+              ctx.lineTo(size * 0.9, size * 0.4);
+              ctx.lineTo(size * 0.4, size * 0.7);
+              ctx.lineTo(0, size);
+              ctx.lineTo(-size * 0.4, size * 0.7);
+              ctx.lineTo(-size * 0.9, size * 0.4);
+              ctx.lineTo(-size * 0.6, 0);
+              ctx.lineTo(-size * 0.9, -size * 0.4);
+              ctx.lineTo(-size * 0.4, -size * 0.7);
+            } else if (cohort === 'mammoth_group') {
+              ctx.moveTo(0, -size);
+              ctx.lineTo(size * 0.2, -size * 0.6);
+              ctx.lineTo(size * 0.7, -size * 0.8);
+              ctx.lineTo(size * 0.5, -size * 0.3);
+              ctx.lineTo(size * 1.0, -size * 0.3);
+              ctx.lineTo(size * 0.6, 0);
+              ctx.lineTo(size * 1.0, size * 0.3);
+              ctx.lineTo(size * 0.5, size * 0.3);
+              ctx.lineTo(size * 0.7, size * 0.8);
+              ctx.lineTo(size * 0.2, size * 0.6);
+              ctx.lineTo(0, size);
+              ctx.lineTo(-size * 0.2, size * 0.6);
+              ctx.lineTo(-size * 0.7, size * 0.8);
+              ctx.lineTo(-size * 0.5, size * 0.3);
+              ctx.lineTo(-size * 1.0, size * 0.3);
+              ctx.lineTo(-size * 0.6, 0);
+              ctx.lineTo(-size * 1.0, -size * 0.3);
+              ctx.lineTo(-size * 0.5, -size * 0.3);
+              ctx.lineTo(-size * 0.7, -size * 0.8);
+              ctx.lineTo(-size * 0.2, -size * 0.6);
+            } else {
+              ctx.moveTo(0, -size);
+              ctx.lineTo(size * 0.4, -size * 0.4);
+              ctx.lineTo(size * 0.9, 0);
+              ctx.lineTo(size * 0.4, size * 0.4);
+              ctx.lineTo(0, size);
+              ctx.lineTo(-size * 0.4, size * 0.4);
+              ctx.lineTo(-size * 0.9, 0);
+              ctx.lineTo(-size * 0.4, -size * 0.4);
+              ctx.moveTo(0, -size * 0.5);
+              ctx.lineTo(-size * 0.2, 0);
+              ctx.lineTo(0, size * 0.5);
+              ctx.lineTo(size * 0.2, 0);
+            }
           } else if (style === 'Lyran') {
-            ctx.moveTo(-size * 0.7, -size * 0.9);
-            ctx.lineTo(-size * 0.3, -size * 0.9);
-            ctx.lineTo(-size * 0.3, size * 0.2);
-            ctx.lineTo(size * 0.3, size * 0.2);
-            ctx.lineTo(size * 0.3, -size * 0.9);
-            ctx.lineTo(size * 0.7, -size * 0.9);
-            ctx.lineTo(size * 0.9, size * 0.6);
-            ctx.lineTo(size * 0.4, size * 0.6);
-            ctx.lineTo(size * 0.2, size * 0.9);
-            ctx.lineTo(-size * 0.2, size * 0.9);
-            ctx.lineTo(-size * 0.4, size * 0.6);
-            ctx.lineTo(-size * 0.9, size * 0.6);
-          } else {
-            ctx.moveTo(0, -size);
-            ctx.lineTo(size / 6, -size * 0.85);
-            ctx.lineTo(size / 8, -size * 0.75);
-            ctx.lineTo(size / 10, -size * 0.2);
-            ctx.lineTo(size * 0.8, -size * 0.1);
-            ctx.lineTo(size * 0.9, size * 0.2);
-            ctx.lineTo(size * 0.9, size * 0.5);
-            ctx.lineTo(size * 0.7, size * 0.5);
-            ctx.lineTo(size * 0.6, size * 0.3);
-            ctx.lineTo(size / 4, size * 0.4);
-            ctx.lineTo(size / 5, size * 0.6);
-            ctx.lineTo(-size / 5, size * 0.6);
-            ctx.lineTo(-size / 4, size * 0.4);
-            ctx.lineTo(-size * 0.6, size * 0.3);
-            ctx.lineTo(-size * 0.7, size * 0.5);
-            ctx.lineTo(-size * 0.9, size * 0.5);
-            ctx.lineTo(-size * 0.9, size * 0.2);
             ctx.lineTo(-size * 0.8, -size * 0.1);
             ctx.lineTo(-size / 10, -size * 0.2);
             ctx.lineTo(-size / 8, -size * 0.75);

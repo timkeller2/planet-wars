@@ -795,6 +795,33 @@ async function bootstrap() {
       }
     });
 
+    socket.on('setAllAutoBuysToSellPrice', () => {
+      const player = connectedClients.get(socket.id);
+      if (player) {
+        if (!player.autoBuyOrders) player.autoBuyOrders = [];
+        const resources = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+        const price = player.sellPriceSetting || 2;
+        
+        for (const res of resources) {
+          const existingOrder = player.autoBuyOrders.find(o => o.resource === res);
+          if (existingOrder) {
+            existingOrder.price = price;
+          } else {
+            const orderId = "autobuy_" + Math.random().toString(36).substring(2, 9);
+            player.autoBuyOrders.push({
+              id: orderId,
+              isAutoBuy: true,
+              ownerId: player.id,
+              ownerName: player.name,
+              resource: res,
+              price: price
+            });
+          }
+        }
+        console.log(`[Auto Buy SetAll] Player ${player.id} set all auto buy orders to <= ${price} credits.`);
+      }
+    });
+
     socket.on('postSellOrder', (data) => {
       const player = connectedClients.get(socket.id);
       if (player && player.resources) {
@@ -1038,7 +1065,8 @@ async function bootstrap() {
           clusters: options && options.clusters !== undefined ? parseInt(options.clusters, 10) : 0,
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
-          homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120"
+          homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
+          startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250
         };
         if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
           game.timeRemaining = parseFloat(game.settings.timedGameLimit);
@@ -1070,7 +1098,8 @@ async function bootstrap() {
           clusters: options && options.clusters !== undefined ? parseInt(options.clusters, 10) : 0,
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
-          homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120"
+          homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
+          startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250
       };
       
       if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
@@ -1102,7 +1131,7 @@ async function bootstrap() {
         p.discoveredPlanets = new Set();
         p.attackedPlanets = new Map();
         p.cruiserStyle = null;
-        p.credits = 0;
+        p.credits = game.settings && game.settings.startingCredits !== undefined ? game.settings.startingCredits : 250;
         p.autoBuyOrders = [];
         
         console.log(`RESTART: Assigning planet for ${p.id}`);

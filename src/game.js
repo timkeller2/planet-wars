@@ -697,7 +697,7 @@ export class Game {
       player.expProgress = 0;
       player.cruiserStyle = null;
       player.prevTechBonus = 0;
-      player.credits = 0;
+      player.credits = this.settings && this.settings.startingCredits !== undefined ? this.settings.startingCredits : 250;
       player.tradingBonus = 0;
       player.useCredits = true;
       player.atWarWith = {};
