@@ -7095,7 +7095,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ctx.beginPath();
 
           drawRacialShipHull(ctx, style, cohort, size);
-          }
           
           ctx.closePath();
           ctx.fill();
