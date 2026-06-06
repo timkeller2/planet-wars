@@ -975,7 +975,7 @@ export class Ship {
           if (maxTargetRange > 25) {
             distRatio = Math.min(1.0, Math.max(0, targetDist - 25) / (maxTargetRange - 25));
           }
-          const falloff = 1.0 - 0.75 * distRatio;
+          const falloff = 1.0 - 0.5 * distRatio;
 
           const bombBonusInFinal = ((this.bombs && this.bombs > 0) ? (this.bombs * 3) : 0) / 100;
           const nonBombHitChance = Math.max(0, hitChance - bombBonusInFinal);
@@ -1185,12 +1185,12 @@ export class Ship {
             distRatio = Math.min(1.0, Math.max(0, targetDist - 25) / (maxTargetRange - 25));
           }
           
-          let falloff = 1.0 - 0.75 * distRatio;
+          let falloff = 1.0 - 0.5 * distRatio;
           if (this.maxHealth > 0 && !this.isAmoeba) {
             if (this.package === 'brute') {
-              falloff = 1.5 - 0.75 * distRatio;
+              falloff = 1.5 - 0.5 * distRatio;
             } else if (this.package === 'sniper') {
-              falloff = 0.5 - 0.25 * distRatio;
+              falloff = 0.75 - 0.25 * distRatio;
             }
           }
 
