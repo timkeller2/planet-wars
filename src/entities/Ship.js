@@ -3039,7 +3039,7 @@ export class Ship {
               } else if (this.strategy === 'long') {
                 strategyThreshold = 1.00;
               }
-              const bombEngagementRange = maxFrontRange * strategyThreshold;
+              const bombEngagementRange = Math.max(15, (maxFrontRange * strategyThreshold) - 15);
               
               if (dist <= bombEngagementRange && isTargetInFront) {
                 this.targetX = this.x;

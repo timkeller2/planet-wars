@@ -5338,13 +5338,15 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             lines.push({ label: headerLabel, value: '', color: hsOwner.color || '#0ff', isHeader: true });
 
             lines.push({ label: 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
-            lines.push({
-              label: 'Speed',
-              isSpeedBar: true,
-              currentSpeed: hs.currentSpeed || 0,
-              maxSpeed: hs.speed || 35,
-              color: '#4f4'
-            });
+
+            let fuelLabel = hs.engine > 0 ? `Fuel (${hs.engine})` : 'Fuel';
+            if (hs.specialfuel && hs.specialfuel > 0) {
+              fuelLabel += '*';
+            }
+            const fuelVal = Math.floor(hs.fuel || 0) + ' / ' + Math.floor(getMaxFuel(hs));
+            const speedVal = (hs.currentSpeed || 0).toFixed(1) + ' / ' + (hs.speed || 35).toFixed(1);
+            lines.push({ label: `⛽ ${fuelLabel}`, value: `${fuelVal}  |  Speed: ${speedVal}`, color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
+
             if (hs.maxArmor && hs.maxArmor > 0) {
               let armorLabel = `Cruiser Armor (${hs.armor})`;
               if (hs.specialduranium && hs.specialduranium > 0) {
@@ -5357,27 +5359,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
             if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ Active`, color: '#ffa500' });
             if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
-            if (hs.marines > 0) lines.push({ label: `Marines (${hs.marines})`, value: `🪖 ${Math.floor(hs.marineCount || 0)} / ${hs.marines * hs.maxHealth}`, color: '#ffb74d' });
-            lines.push({ label: 'Crew', value: `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(2 * hs.health)}`, color: '#81d4fa' });
 
-            const maxBombs = getMaxBombs(hs);
-            let munitionsDisplay = Math.floor(hs.bombs || 0) + ' / ' + maxBombs;
-            let munitionsLabel = hs.munitions > 0 ? `Munitions (${hs.munitions})` : 'Munitions';
-            if (hs.specialbombs && hs.specialbombs > 0) {
-              munitionsLabel += '*';
+            let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(2 * hs.health)}`;
+            if (hs.marines > 0) {
+              crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${hs.marines * hs.maxHealth}`;
             }
-            lines.push({ label: munitionsLabel, value: munitionsDisplay, color: '#ffa' });
-            if (hs.munitions > 0) {
-              lines.push({ label: 'Splash Damage', value: `+${hs.munitions}`, color: '#ffd740' });
-            }
-            let fuelLabel = hs.engine > 0 ? `Fuel Level (${hs.engine})` : 'Fuel Level';
-            if (hs.specialfuel && hs.specialfuel > 0) {
-              fuelLabel += '*';
-            }
-            lines.push({ label: fuelLabel, value: Math.floor(hs.fuel || 0) + ' / ' + Math.floor(getMaxFuel(hs)), color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
-            if (hs.maxsupplies > 0) {
-              lines.push({ label: 'Supplies', value: `📦 ${Math.floor(hs.supplies || 0)} / ${hs.maxsupplies}`, color: '#ffcc80' });
-            }
+            lines.push({ label: 'Crew', value: crewVal, color: '#81d4fa' });
+
             const rawTech = hsOwner.techScore || 0;
             const rawExp = hsOwner.expScore || 0;
             const shipExp = hs.expScore || 0;
@@ -5401,7 +5389,21 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if (hs.specialduranium && hs.specialduranium > 0) {
               deflectionLabel += '*';
             }
-            lines.push({ label: deflectionLabel, value: shrugChance + '%', color: '#ccc' });
+
+            const maxBombs = getMaxBombs(hs);
+            let munitionsDisplay = Math.floor(hs.bombs || 0) + ' / ' + maxBombs;
+            let munitionsLabel = hs.munitions > 0 ? `Munitions (${hs.munitions})` : 'Munitions';
+            if (hs.specialbombs && hs.specialbombs > 0) {
+              munitionsLabel += '*';
+            }
+            lines.push({ label: `💣 ${munitionsLabel}`, value: `${munitionsDisplay}  |  🛡️ ${deflectionLabel}: ${shrugChance}%`, color: '#ffa' });
+            if (hs.munitions > 0) {
+              lines.push({ label: 'Splash Damage', value: `+${hs.munitions}`, color: '#ffd740' });
+            }
+
+            if (hs.maxsupplies > 0) {
+              lines.push({ label: 'Supplies', value: `📦 ${Math.floor(hs.supplies || 0)} / ${hs.maxsupplies}`, color: '#ffcc80' });
+            }
 
             const laserTechBonus = Math.floor(techBonus) * 0.01;
             const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
@@ -5518,13 +5520,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if (hs.specialbombs && hs.specialbombs > 0) {
               rangeLabel += '*';
             }
-            lines.push({ label: rangeLabel, value: effectiveRange, color: '#f88' });
-            
             let accuracyLabel = hs.targeting > 0 ? `Accuracy (${hs.targeting})` : 'Accuracy';
             if (hs.specialbombs && hs.specialbombs > 0) {
               accuracyLabel += '*';
             }
-            lines.push({ label: accuracyLabel, value: hitChance, color: '#f88' });
+            lines.push({ label: `🎯 ${accuracyLabel}`, value: `${hitChance}  |  📏 ${rangeLabel}: ${effectiveRange}px`, color: '#f88' });
             
             const netMapBonus = friendlyGrav - enemyGrav - hazardPenalty;
             if (netMapBonus !== 0) {
