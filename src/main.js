@@ -5070,11 +5070,25 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           const sx = 12 + col * 94;
           const sy = 26 + row * 94;
           
+          // Draw solid backing with shadow glow first (so it goes outside the clip mask)
           ctx.save();
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
           if (owner) {
+            ctx.fillStyle = owner.color;
             ctx.shadowColor = owner.color;
             ctx.shadowBlur = 15;
+          } else {
+            ctx.fillStyle = '#0f141d'; // Dark space backing for neutral
           }
+          ctx.fill();
+          ctx.restore();
+
+          // Clip image to a circle slightly smaller than p.radius to shave off JPEG compression trash
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius - 1, 0, Math.PI * 2);
+          ctx.clip();
           ctx.drawImage(
             planetSpriteSheet,
             sx, sy, 94, 94,
