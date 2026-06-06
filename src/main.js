@@ -4643,8 +4643,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       for (const [classType, cfg] of Object.entries(SHIP_CLASSES)) {
         const el = document.getElementById(cfg.btnId);
         if (el) {
-          el.style.display = 'inline-flex';
-          
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
           
           // Check unlock requirement: except for scouts, previous class must be built
@@ -4723,6 +4721,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             titleStr = `Build ${isFirst ? 'Prototype ' : ''}${baseName} (${shortcutKey}) (Credits allowed if toggled)`;
           }
           el.setAttribute('title', titleStr);
+          el.style.display = isUnlocked ? 'inline-flex' : 'none';
         }
       }
       const elBuildCancel = document.getElementById('btn-build-cancel');
@@ -5209,28 +5208,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
         const isLastKnown = p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id];
         if (!p.inFog || p.permanentlyTracked || isLastKnown) {
-          const affinity = isLastKnown ? lastKnownPlanets[p.id].racialAffinity : p.racialAffinity;
-          if (affinity) {
-            const raceIcons = {
-              'Federation': '🖖',
-              'Romulan': '🦅',
-              'Klingon': '⚔️',
-              'Gorn': '🐊',
-              'Tholian': '🕸️',
-              'Lyran': '🐯'
-            };
-            const icon = raceIcons[affinity];
-            if (icon) {
-              ctx.save();
-              ctx.font = '14px sans-serif';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillStyle = '#fff';
-              const offset = p.radius * 0.7 + 4;
-              ctx.fillText(icon, p.x - offset, p.y - offset);
-              ctx.restore();
-            }
-          }
 
           const displayShips = isLastKnown ? lastKnownPlanets[p.id].ships : p.ships;
           const displayMaxShips = isLastKnown ? lastKnownPlanets[p.id].maxShips : p.maxShips;
@@ -5391,8 +5368,23 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             }
           }
 
-          // Render Sci-Fi raw resource icons below the planet pill
-          if (p.resources && p.resources.length > 0) {
+          // Render Sci-Fi raw resource icons and/or planet race icon below the planet pill
+          const affinity = isLastKnown ? lastKnownPlanets[p.id].racialAffinity : p.racialAffinity;
+          let raceIcon = null;
+          if (affinity) {
+            const raceIcons = {
+              'Federation': '🖖',
+              'Romulan': '🦅',
+              'Klingon': '⚔️',
+              'Gorn': '🐊',
+              'Tholian': '🕸️',
+              'Lyran': '🐯'
+            };
+            raceIcon = raceIcons[affinity] || null;
+          }
+
+          const hasResources = p.resources && p.resources.length > 0;
+          if (hasResources || raceIcon) {
             ctx.save();
             ctx.font = '12px Arial';
             ctx.textAlign = 'center';
@@ -5409,12 +5401,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               latinum: '🏺'
             };
             
-            const rIcons = p.resources.map(r => resourceIcons[r]).join(' ');
+            let displayString = hasResources ? p.resources.map(r => resourceIcons[r]).join(' ') : '';
+            if (raceIcon) {
+              displayString = displayString ? `${displayString} ${raceIcon}` : raceIcon;
+            }
+            
             let yOffset = pillHeight / 2 + 18;
             if (!isLastKnown && ((owner && p.ships < 50) || p.expScore > 0)) {
               yOffset += 12;
             }
-            ctx.fillText(rIcons, p.x, p.y + yOffset);
+            ctx.fillText(displayString, p.x, p.y + yOffset);
             ctx.restore();
           }
           let defenderPlanetPenalty = 0;
