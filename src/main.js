@@ -5096,13 +5096,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           );
           ctx.restore();
           
-          if (owner) {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-            ctx.strokeStyle = owner.color;
-            ctx.lineWidth = 2;
-            ctx.stroke();
-          }
           drawnPlanetImage = true;
         }
 
@@ -5281,7 +5274,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ctx.textBaseline = 'middle';
           ctx.fillText(text, p.x, p.y);
 
-          ctx.fillStyle = isLastKnown ? '#888' : '#000';
+          if (isLastKnown) {
+            ctx.fillStyle = '#888';
+          } else if (owner) {
+            ctx.fillStyle = owner.color;
+          } else {
+            ctx.fillStyle = '#ffffff';
+          }
           ctx.font = 'bold 11px Orbitron';
           let pName = (isLastKnown ? lastKnownPlanets[p.id].name : p.name) || 'Unknown';
           ctx.fillText(pName, p.x, p.y - pillHeight / 2 - 8);
