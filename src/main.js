@@ -4129,7 +4129,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const dropdownsEl = document.getElementById('cruiser-dropdowns');
       if (dropdownsEl) {
         if (selectedCruisers.length > 0) {
-          dropdownsEl.style.display = 'flex';
+          dropdownsEl.style.display = 'none';
           const first = selectedCruisers[0];
           const selPackage = document.getElementById('sel-cruiser-package');
           const selTactics = document.getElementById('sel-cruiser-tactics');
