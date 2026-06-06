@@ -417,7 +417,8 @@ async function bootstrap() {
             }
           } else {
             ship.orderQueue = [];
-            if (ship.isPatrolling && targetType !== 'ship') {
+            const isAttackingAndInjured = ship.isPatrolling && (ship.combatCooldown > 0) && (ship.health < ship.maxHealth);
+            if (ship.isPatrolling && targetType !== 'ship' && !isAttackingAndInjured) {
               const destPlanet = targetType === 'planet' ? game.planets.find(p => p.id === targetId) : null;
               const tx = (clickX !== undefined && clickX !== null) ? clickX : (destPlanet ? destPlanet.x : ship.x);
               const ty = (clickY !== undefined && clickY !== null) ? clickY : (destPlanet ? destPlanet.y : ship.y);
@@ -430,6 +431,7 @@ async function bootstrap() {
               ship.cruiserTargetId = null;
             } else {
               ship.isPatrolling = false;
+              ship.patrolReloading = false;
               ship.cruiserTargetType = targetType;
               ship.cruiserTargetId = targetId;
               ship.cruiserTargetClickX = clickX !== undefined ? clickX : null;
@@ -1231,6 +1233,9 @@ async function bootstrap() {
 
         const tdEvent = p.techDoubleIncreaseEvent;
         p.techDoubleIncreaseEvent = false;
+
+        const prwEvent = p.preferredResourceWantedEvent || false;
+        p.preferredResourceWantedEvent = false;
         
         const cEvent = p.capacityDecreaseEvent;
         p.capacityDecreaseEvent = false;
@@ -1306,7 +1311,8 @@ async function bootstrap() {
           finalRateExceedsOne: finalRate > 1.0,
           resources: p.resources || null,
           preferredResource: p.preferredResource || null,
-          racialAffinity: p.racialAffinity || null
+          racialAffinity: p.racialAffinity || null,
+          preferredResourceWantedEvent: prwEvent
       };
     });
 

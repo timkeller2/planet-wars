@@ -589,7 +589,8 @@ export class Game {
         );
         remainingNeutral.sort((a, b) => a.maxShips - b.maxShips);
         
-        const extraPlanets = remainingNeutral.slice(0, 2);
+        const smallPlanetsCount = Math.max(1, Math.round(this.planets.length / 20));
+        const extraPlanets = remainingNeutral.slice(0, smallPlanetsCount);
         for (const ep of extraPlanets) {
           ep.owner = player;
           ep.ships = ep.maxShips;
@@ -2656,7 +2657,7 @@ export class Game {
     }
     
     for (const planet of this.planets) {
-        planet.update(deltaTime, this.planets, this.settings);
+        planet.update(deltaTime, this.planets, this.settings, this);
     }
 
     // Owned planets exert sympathy on neutral and enemy planets within their gravity well that have less ships than them at the rate of 1 per minute.
@@ -2846,16 +2847,16 @@ export class Game {
       }
     }
     
-    // Award tech score to cruisers with laboratories in sensor range when an amoeba dies
-    let hasInactiveAmoeba = false;
+    // Award tech score to cruisers with laboratories in sensor range when an amoeba or monster ship dies
+    let hasInactiveAmoebaOrMonster = false;
     for (const ship of this.ships) {
-      if (!ship.active && ship.isAmoeba) {
-        hasInactiveAmoeba = true;
+      if (!ship.active && (ship.isAmoeba || (ship.owner && (ship.owner.id === 'monsters' || ship.owner.isMonster)))) {
+        hasInactiveAmoebaOrMonster = true;
         break;
       }
     }
     
-    if (hasInactiveAmoeba) {
+    if (hasInactiveAmoebaOrMonster) {
       const labCruisers = [];
       for (const cruiser of this.ships) {
         if (cruiser.active && cruiser.isCruiser && (cruiser.labs || 0) > 0 && cruiser.owner) {
@@ -2865,7 +2866,8 @@ export class Game {
       
       if (labCruisers.length > 0) {
         for (const ship of this.ships) {
-          if (!ship.active && ship.isAmoeba) {
+          const isAmoebaOrMonster = ship.isAmoeba || (ship.owner && (ship.owner.id === 'monsters' || ship.owner.isMonster));
+          if (!ship.active && isAmoebaOrMonster) {
             for (const cruiser of labCruisers) {
               const dx = cruiser.x - ship.x;
               const dy = cruiser.y - ship.y;

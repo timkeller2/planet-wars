@@ -18,7 +18,8 @@ export class Planet {
     this.retainedShips = false;
     this.revoltCooldown = 0;
     const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-    this.preferredResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
+    this.preferredResource = this.maxShips > 150 ? resourcesList[Math.floor(Math.random() * resourcesList.length)] : null;
+    this.preferredResourceWantedEvent = false;
     const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
     this.racialAffinity = styles[Math.floor(Math.random() * styles.length)];
     this.name = this.generatePlanetName();
@@ -73,8 +74,16 @@ export class Planet {
   }
 
   increaseMaxShips(amount = 1) {
+    const oldMax = this.maxShips;
     this.maxShips += amount;
     this.radius = this.maxShips / 4;
+
+    if (oldMax < 150 && this.maxShips >= 150 && !this.preferredResource) {
+      const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+      this.preferredResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
+      this.preferredResourceWantedEvent = true;
+      this.preferredResourceWantedChatQueued = false;
+    }
   }
 
   decreaseMaxShips(amount = 1) {
@@ -83,7 +92,7 @@ export class Planet {
     this.capacityDecreaseEvent = true;
   }
 
-  update(deltaTime, allPlanets, settings) {
+  update(deltaTime, allPlanets, settings, game) {
     // Handle focus mode transition
     if (this.focusTransition) {
       if (!this.owner || this.owner.id !== this.focusTransition.playerId) {
@@ -340,6 +349,27 @@ export class Planet {
           resRate *= 1.30;
         }
         this.owner.resources[res] = (this.owner.resources[res] || 0) + resRate * deltaTime;
+      }
+    }
+
+    if (this.preferredResourceWantedEvent && game && !this.preferredResourceWantedChatQueued) {
+      this.preferredResourceWantedChatQueued = true;
+      if (this.owner && !this.owner.isAI) {
+        const emojis = {
+          antimatter: '🌀',
+          tritanium: '🔩',
+          merculite: '☄️',
+          dilithium: '💎',
+          duranium: '🔲',
+          deuterium: '💧',
+          latinum: '🏺'
+        };
+        const emoji = emojis[this.preferredResource] || '💎';
+        game.pendingChatMessages = game.pendingChatMessages || [];
+        game.pendingChatMessages.push({
+          playerId: this.owner.id,
+          text: `${this.name} wants ${emoji}!`
+        });
       }
     }
   }

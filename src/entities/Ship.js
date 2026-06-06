@@ -870,16 +870,9 @@ export class Ship {
           }
 
           if (this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
-            const isNeutralOrMonsterOrAmoeba = !enemyShip.owner || 
-                                               enemyShip.ownerId === 'neutral' || 
-                                               enemyShip.owner.isMonster || 
-                                               enemyShip.owner.id === 'monsters' || 
-                                               enemyShip.isAmoeba;
-            if (!isNeutralOrMonsterOrAmoeba) {
-              if (game && typeof game.isShipVisibleTo === 'function') {
-                if (!game.isShipVisibleTo(enemyShip, this.owner)) {
-                  continue;
-                }
+            if (game && typeof game.isShipVisibleTo === 'function') {
+              if (!game.isShipVisibleTo(enemyShip, this.owner)) {
+                continue;
               }
             }
           }
@@ -1658,7 +1651,7 @@ export class Ship {
         // 1. Check if out of bombs -> Reloading State, or low health -> Retreat to repair
         const supplyShip = this.findNearbySupplyShip(allShips);
         const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
-        const needsHealthRetreat = this.health <= this.maxHealth * 0.5;
+        const needsHealthRetreat = this.health < this.maxHealth * 0.5;
         const needsHealthFinish = this.health < this.maxHealth;
         if (needsHealthRetreat || (this.bombs <= 0 && !hasNearbySupply) || (this.patrolReloading && (this.bombs < this.getMaxBombs() || needsHealthFinish))) {
         const wasReloading = this.patrolReloading;
@@ -1788,15 +1781,8 @@ export class Ship {
               const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
               if (isEnemy) {
                 let isVisible = true;
-                const isNeutralOrMonsterOrAmoeba = !other.owner || 
-                                                   other.ownerId === 'neutral' || 
-                                                   other.owner.isMonster || 
-                                                   other.owner.id === 'monsters' || 
-                                                   other.isAmoeba;
-                if (!isNeutralOrMonsterOrAmoeba) {
-                  if (game && typeof game.isShipVisibleTo === 'function') {
-                    isVisible = game.isShipVisibleTo(other, this.owner);
-                  }
+                if (game && typeof game.isShipVisibleTo === 'function') {
+                  isVisible = game.isShipVisibleTo(other, this.owner);
                 }
                 if (!isVisible) continue;
                 let beingBoardedByUs = false;
@@ -1875,22 +1861,24 @@ export class Ship {
     
     // Cruiser Scout Mode Decision Engine
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isScouting) {
-      // 1. Refueling & Rearming Retreat Check: if fuel is half or less, OR if attack is on and bombs are depleted
+      // 1. Refueling & Rearming & Health Retreat Check: if fuel is half or less, OR if attack is on and bombs are depleted, OR health is below 1/2 maxhealth
       const needsRefuel = this.fuel <= this.getMaxFuel() * 0.5;
       const supplyShip = this.findNearbySupplyShip(allShips);
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
       const needsRearm = this.scoutAttackEnabled && this.bombs <= 0 && !hasNearbySupply;
-      if (needsRefuel || needsRearm) {
+      const needsHealthRetreat = this.health < this.maxHealth * 0.5;
+      if (needsRefuel || needsRearm || needsHealthRetreat) {
         this.scoutFuelRetreating = true;
         this.scoutTargetX = null;
         this.scoutTargetY = null;
       }
       
-      // If we are fuel/rearm retreating, remain in this state until fuel and bombs (if attack is enabled) are fully replenished
+      // If we are fuel/rearm/health retreating, remain in this state until fuel, bombs (if attack is enabled), and health are fully replenished
       if (this.scoutFuelRetreating) {
         const fullyFueled = this.fuel >= this.getMaxFuel();
         const fullyArmed = !this.scoutAttackEnabled || this.bombs >= this.getMaxBombs();
-        if (fullyFueled && fullyArmed) {
+        const fullyHealed = this.health >= this.maxHealth;
+        if (fullyFueled && fullyArmed && fullyHealed) {
           this.scoutFuelRetreating = false;
         }
       }
@@ -3033,7 +3021,27 @@ export class Ship {
           }
         } else {
           // Ship target
-          if (this.isPatrolling && this.bombs > 0) {
+          const isMonsterEnemy = targetObj.owner && (targetObj.owner.id === 'monsters' || targetObj.owner.isMonster);
+          const enemyHealth = targetObj.maxHealth > 0 ? targetObj.health : targetObj.count;
+          const sensorRange = this.cruiserRadarRange ? this.cruiserRadarRange() : 150;
+          const isResearchMovement = isMonsterEnemy &&
+                                     enemyHealth < 4 &&
+                                     this.health > this.maxHealth * 0.5 &&
+                                     (this.labs || 0) > 0 &&
+                                     dist > sensorRange;
+
+          if (isResearchMovement) {
+            // Move within sensor range of the target
+            this.targetX = tx;
+            this.targetY = ty;
+            this.targetPlanet = null;
+          } else if (this.package === 'sniper' && dist < maxFrontRange * 0.4) {
+            // Sniper kiting (retreat if enemy gets within 40% of firing range)
+            const angle = Math.atan2(tdy, tdx);
+            this.targetX = this.x - Math.cos(angle) * 100;
+            this.targetY = this.y - Math.sin(angle) * 100;
+            this.targetPlanet = null;
+          } else if (this.isPatrolling && this.bombs > 0) {
             if (this.package === 'brute') {
               // Brute cruiser: attempt to get as near as possible (no stop range check except contact range 15px)
               if (dist <= 15) {

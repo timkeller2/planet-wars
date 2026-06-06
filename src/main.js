@@ -261,12 +261,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   }
 
   let lastSuggestedPlanets = 50;
-  let lastSuggestedAI = 6;
+  let lastSuggestedAI = 4;
 
   if (planetCountInput && aiCountInput) {
     planetCountInput.addEventListener('input', () => {
       const planets = parseInt(planetCountInput.value, 10) || 0;
-      const suggestedAI = Math.floor(planets / 10);
+      const suggestedAI = Math.max(0, Math.floor(planets / 10) - 1);
       aiCountInput.value = suggestedAI;
       lastSuggestedAI = suggestedAI;
     });
@@ -808,6 +808,26 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             duration: 0.75
           });
           playSound('explosion'); // Planet took damage
+        }
+        if (!p.inFog && p.preferredResourceWantedEvent) {
+          const emojis = {
+            antimatter: '🌀',
+            tritanium: '🔩',
+            merculite: '☄️',
+            dilithium: '💎',
+            duranium: '🔲',
+            deuterium: '💧',
+            latinum: '🏺'
+          };
+          const emoji = emojis[p.preferredResource] || '💎';
+          floatingAnimations.push({
+            x: p.x,
+            y: p.y - p.radius,
+            text: `${p.name} wants ${emoji}!`,
+            type: 'resource_wanted',
+            age: 0,
+            duration: 3.5
+          });
         }
         if (!p.inFog && p.justAssigned && !lastPlanetAssignments[p.id]) {
           const owner = state.players.find(pl => pl.id === p.ownerId);
@@ -7274,6 +7294,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           yOffset = progress * 60; // drifts up nicely
         } else if (anim.type === 'accuracyIndicator') {
           yOffset = progress * (8.0 * anim.duration); // float slower (8.0px/sec)
+        } else if (anim.type === 'resource_wanted') {
+          yOffset = progress * 60; // drifts up nicely
         }
 
         // Grow font
@@ -7300,6 +7322,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           fontsize = 16 + (progress * 14); // grows moderately
         } else if (anim.type === 'accuracyIndicator') {
           fontsize = 4; // constant small font size (20% bigger than 10 / 3)
+        } else if (anim.type === 'resource_wanted') {
+          fontsize = 11 + (progress * 9); // grows from 11px to 20px
         }
 
         ctx.font = `bold ${fontsize}px Orbitron`; // growing font
@@ -7381,6 +7405,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           xOffset = -Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
           ctx.shadowColor = `rgba(255, 215, 0, ${alpha})`; // Gold shadow glow
+        } else if (anim.type === 'resource_wanted') {
+          xOffset = Math.sin(progress * Math.PI * 2) * 5;
+          ctx.fillStyle = `rgba(255, 223, 0, ${alpha})`; // gold
+          ctx.shadowColor = `rgba(255, 140, 0, ${alpha})`; // dark orange glow
         } else {
           xOffset = Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
