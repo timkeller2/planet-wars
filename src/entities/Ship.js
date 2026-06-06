@@ -36,6 +36,8 @@ export class Ship {
     this.isSniperKiting = false;
     this.sniperKiteX = null;
     this.sniperKiteY = null;
+    this.lastTimeAttacked = 0;
+    this.lastTimeAttacking = 0;
     this.isPatrolling = false;
     this.patrolReloading = false;
     this.patrolFuelRetreating = false;
@@ -480,9 +482,15 @@ export class Ship {
       const inActiveMode = this.isPatrolling || this.isScouting || this.isResearching || this.isDiplomacy || this.bombPlanetsEnabled;
       const isStandby = this.timeNotMoved >= 60;
 
+      const inCombat = (Date.now() - (this.lastTimeAttacked || 0) < 10000) || 
+                       (Date.now() - (this.lastTimeAttacking || 0) < 10000);
+
       // Trigger condition
-      if (!this.isRetreating && !this.inFriendlyWell) {
-        if (lowFuel || emptyBombs || (lowHealth && (inActiveMode || isStandby))) {
+      if (!this.isRetreating) {
+        const combatTrigger = inCombat && (emptyBombs || lowHealth);
+        const normalTrigger = !this.inFriendlyWell && (lowFuel || emptyBombs || (lowHealth && (inActiveMode || isStandby)));
+
+        if (combatTrigger || normalTrigger) {
           this.isRetreating = true;
           this.retreatTargetPlanetId = null;
         }
@@ -1288,6 +1296,7 @@ export class Ship {
 
         if (validTargets.length > 0) {
           this.combatCooldown = 1.1;
+          this.lastTimeAttacking = Date.now();
 
           if (this.maxHealth > 0 && !this.isAmoeba) {
             // Cruiser: Prioritize front > side > aft targets
@@ -4443,6 +4452,9 @@ export class Ship {
   takeDamage(explosions, attacker = null, isHazard = false, targetType = null) {
     if (this.health >= 0) {
       if (attacker) {
+        if (attacker.owner !== this.owner) {
+          this.lastTimeAttacked = Date.now();
+        }
         attacker.lastAttackTimeOnShip = attacker.lastAttackTimeOnShip || {};
         attacker.lastAttackTimeOnShip[this.id] = Date.now();
         if (this.owner) {

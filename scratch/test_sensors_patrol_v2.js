@@ -44,7 +44,7 @@ console.log("Cruiser sensor range calculations test passed!");
 const game = new Game({ width: 2000, height: 2000 });
 game.allPlayers = [p1];
 
-const patrolShip = new Ship(2, 500, 500, null, p1);
+const patrolShip = new Ship(2, 450, 450, null, p1);
 patrolShip.isCruiser = true;
 patrolShip.maxHealth = 100;
 patrolShip.health = 100;
@@ -66,15 +66,15 @@ game.planets = [planet];
 patrolShip.update(0.1, [patrolShip], [], game.planets, [], [], 2000, game);
 assert(patrolShip.patrolReloading === false, "Cruiser at 100% health should not trigger reload/repair state");
 
-// Damage cruiser to 51% health. It should still not retreat.
-patrolShip.health = 51;
-patrolShip.update(0.1, [patrolShip], [], game.planets, [], [], 2000, game);
-assert(patrolShip.patrolReloading === false, "Cruiser at 51% health should not trigger reload/repair state");
-
-// Damage cruiser to 50% health. It should trigger repair retreat!
+// Damage cruiser to 50% health. It should still not retreat.
 patrolShip.health = 50;
 patrolShip.update(0.1, [patrolShip], [], game.planets, [], [], 2000, game);
-assert(patrolShip.patrolReloading === true, "Cruiser at 50% health should trigger repair retreat");
+assert(patrolShip.patrolReloading === false, "Cruiser at 50% health should not trigger reload/repair state");
+
+// Damage cruiser to 49% health. It should trigger repair retreat!
+patrolShip.health = 49;
+patrolShip.update(0.1, [patrolShip], [], game.planets, [], [], 2000, game);
+assert(patrolShip.patrolReloading === true, "Cruiser at 49% health should trigger repair retreat");
 
 // Heal to 90% health, but still has not reached 100%. It should remain in retreat/reloading state.
 patrolShip.health = 90;
