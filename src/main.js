@@ -1377,18 +1377,28 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         }
       }
       
-      // Uncapped surplus scan (requires 2.0 for latinum, 1.0 for others)
+      // Uncapped surplus scan
       const eligible = [];
       for (const r of resourcesList) {
-        const qty = myPlayer.resources?.[r] || 0;
-        const req = r === 'latinum' ? 2.0 : 1.0;
-        if (qty >= req) {
-          eligible.push({ name: r, qty: qty });
+        if (r === 'latinum') {
+          const qty = myPlayer.resources?.latinum || 0;
+          const latinumSold = Math.min(4, Math.floor(qty));
+          if (latinumSold >= 1) {
+            eligible.push({ name: 'latinum', count: latinumSold });
+          }
+        } else {
+          const qty = myPlayer.resources?.[r] || 0;
+          if (qty >= 1.0) {
+            eligible.push({ name: r, count: 1 });
+          }
         }
       }
       
       const toSell = eligible;
-      const L = toSell.length;
+      let L = 0;
+      for (const item of eligible) {
+        L += item.count;
+      }
       
       const sellPrice = Math.ceil((L * L) / 2) + 1;
       const totalGain = sellPrice * L;
@@ -1406,7 +1416,14 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         };
         
         if (L > 0) {
-          const iconStr = toSell.map(item => resourceEmojis[item.name] || '').join('');
+          const iconParts = [];
+          for (const item of toSell) {
+            const emoji = resourceEmojis[item.name] || '';
+            for (let c = 0; c < item.count; c++) {
+              iconParts.push(emoji);
+            }
+          }
+          const iconStr = iconParts.join('');
           sellBtn.textContent = `${iconStr}: +${totalGain}`;
         } else {
           sellBtn.textContent = 'SELL: +0';
@@ -1425,7 +1442,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         }
         
         const latinumQty = myPlayer.resources?.latinum || 0;
-        if (latinumQty < 2.0) {
+        if (latinumQty < 1.0) {
           sellBtn.style.display = 'none';
         } else {
           sellBtn.style.display = 'flex';

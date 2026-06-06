@@ -687,24 +687,30 @@ async function bootstrap() {
           player.tradeOptions = player.tradeCapacity || 5;
         }
 
-        const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+        const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium'];
         const eligible = [];
         for (const res of resourcesList) {
           const qty = player.resources[res] || 0;
-          const req = res === 'latinum' ? 2.0 : 1.0;
-          if (qty >= req) {
-            eligible.push({ name: res, qty: qty });
+          if (qty >= 1.0) {
+            eligible.push({ name: res, count: 1 });
           }
         }
+        const latinumQty = player.resources['latinum'] || 0;
+        const latinumSold = Math.min(4, Math.floor(latinumQty));
+        if (latinumSold >= 1) {
+          eligible.push({ name: 'latinum', count: latinumSold });
+        }
 
-        const L = eligible.length;
+        let L = 0;
+        for (const item of eligible) {
+          L += item.count;
+        }
 
         // Allow sale if they have at least 1 trade option
         if (L > 0 && player.tradeOptions >= 1) {
           const sellPrice = Math.ceil((L * L) / 2) + 1;
           for (const item of eligible) {
-            const deduct = item.name === 'latinum' ? 2.0 : 1.0;
-            player.resources[item.name] = (player.resources[item.name] || 0) - deduct;
+            player.resources[item.name] = (player.resources[item.name] || 0) - item.count;
           }
           player.credits = (player.credits || 0) + sellPrice * L;
           
