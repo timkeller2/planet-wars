@@ -5485,7 +5485,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
 
           const hasResources = p.resources && p.resources.length > 0;
-          if (hasResources || (raceIcon && graphicalMode)) {
+          if (hasResources) {
             ctx.save();
             ctx.font = '12px Arial';
             ctx.textAlign = 'center';
@@ -5502,11 +5502,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               latinum: '🏺'
             };
             
-            let displayString = hasResources ? p.resources.map(r => resourceIcons[r]).join(' ') : '';
-            // Display race icon BEFORE raw resource icons
-            if (raceIcon && graphicalMode) {
-              displayString = displayString ? `${raceIcon} ${displayString}` : raceIcon;
-            }
+            let displayString = p.resources.map(r => resourceIcons[r]).join(' ');
             
             ctx.fillText(displayString, p.x, currentY);
             ctx.restore();
@@ -5611,6 +5607,28 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
               ctx.fillText(modeIndicator, badgeX, badgeY);
+              ctx.restore();
+            }
+
+            // Draw race icon directly to the left of the planet graphic
+            if (raceIcon) {
+              const iconRadius = 10;
+              const iconX = p.x - p.radius - iconRadius - 4;
+              const iconY = p.y;
+
+              // Draw separate circular backdrop for race icon (premium visual style)
+              ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
+              ctx.beginPath();
+              ctx.arc(iconX, iconY, iconRadius, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Render emoji badge centered in its circular pill
+              ctx.save();
+              ctx.font = `${iconRadius * 1.3}px sans-serif`;
+              ctx.fillStyle = '#fff';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(raceIcon, iconX, iconY);
               ctx.restore();
             }
           }
