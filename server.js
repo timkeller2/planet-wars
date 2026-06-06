@@ -454,6 +454,8 @@ async function bootstrap() {
       const ship = game.ships.find(s => s.id === shipId);
       if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
         ship.bombPlanetsEnabled = !!enabled;
+        ship.isRetreating = false;
+        ship.retreatTargetPlanetId = null;
         if (ship.bombPlanetsEnabled) {
           ship.isPatrolling = false;
           ship.isScouting = false;
@@ -530,6 +532,8 @@ async function bootstrap() {
       if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
         ship.isPatrolling = !!enabled;
         ship.patrolReloading = false;
+        ship.isRetreating = false;
+        ship.retreatTargetPlanetId = null;
         if (ship.isPatrolling) {
           ship.bombPlanetsEnabled = false;
           ship.isScouting = false;
@@ -556,6 +560,8 @@ async function bootstrap() {
       if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
         ship.isScouting = !!enabled;
         ship.scoutFuelRetreating = false;
+        ship.isRetreating = false;
+        ship.retreatTargetPlanetId = null;
         if (ship.isScouting) {
           ship.isPatrolling = false;
           ship.bombPlanetsEnabled = false;
@@ -597,6 +603,8 @@ async function bootstrap() {
         ship.isResearching = !!enabled;
         ship.researchFuelRetreating = false;
         ship.researchRearming = false;
+        ship.isRetreating = false;
+        ship.retreatTargetPlanetId = null;
         if (ship.isResearching) {
           ship.isDiplomacy = false;
           ship.isScouting = false;
@@ -621,6 +629,8 @@ async function bootstrap() {
       if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.diplomat > 0) {
         ship.isDiplomacy = !!enabled;
         ship.diplomacyFuelRetreating = false;
+        ship.isRetreating = false;
+        ship.retreatTargetPlanetId = null;
         if (ship.isDiplomacy) {
           ship.isResearching = false;
           ship.isScouting = false;

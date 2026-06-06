@@ -28,6 +28,11 @@ export class Ship {
     this.cruiserTargetClickY = null;
     this.orderQueue = [];
     this.bombPlanetsEnabled = false;
+    this.isRetreating = false;
+    this.retreatTargetPlanetId = null;
+    this.timeNotMoved = 0;
+    this.lastX = null;
+    this.lastY = null;
     this.isPatrolling = false;
     this.patrolReloading = false;
     this.patrolFuelRetreating = false;
@@ -422,6 +427,279 @@ export class Ship {
       }
       this.currentSpeed = 0;
       return;
+    }
+
+    // Cruiser Standby (Not Moved) Tracking
+    if (this.maxHealth > 0 && !this.isAmoeba) {
+      if (this.lastX === null || this.lastY === null) {
+        this.lastX = this.x;
+        this.lastY = this.y;
+        this.timeNotMoved = 0;
+      } else {
+        const dx = this.x - this.lastX;
+        const dy = this.y - this.lastY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 0.1) {
+          this.timeNotMoved += deltaTime / 1000;
+        } else {
+          this.timeNotMoved = 0;
+          this.lastX = this.x;
+          this.lastY = this.y;
+        }
+      }
+    }
+
+    // Cruiser Standardized Retreat Mode Decision Engine
+    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
+      const maxFuel = this.getMaxFuel();
+      const maxBombs = this.getMaxBombs();
+      
+      const lowFuel = this.fuel < maxFuel * 0.5;
+      const emptyBombs = maxBombs > 0 && this.bombs <= 0;
+      const lowHealth = this.health < this.maxHealth * 0.5;
+
+      const inActiveMode = this.isPatrolling || this.isScouting || this.isResearching || this.isDiplomacy || this.bombPlanetsEnabled;
+      const isStandby = this.timeNotMoved >= 60;
+
+      // Trigger condition
+      if (!this.isRetreating) {
+        if (lowFuel || emptyBombs || (lowHealth && (inActiveMode || isStandby))) {
+          this.isRetreating = true;
+          this.retreatTargetPlanetId = null;
+        }
+      }
+
+      // Exit condition
+      if (this.isRetreating) {
+        const fullyFueled = this.fuel >= maxFuel;
+        const fullyArmed = maxBombs === 0 || this.bombs >= maxBombs;
+        const requiredHealthPct = (this.isResearching || this.isScouting || this.isDiplomacy || this.bombPlanetsEnabled) ? 1.0 : 0.75;
+        const fullyHealed = this.health >= this.maxHealth * requiredHealthPct;
+
+        if (fullyFueled && fullyArmed && fullyHealed) {
+          this.isRetreating = false;
+          this.retreatTargetPlanetId = null;
+        }
+      }
+      
+      // Retreat movement/routing logic
+      if (this.isRetreating) {
+        // A. Enemy Proximity Evasion (fleeing if enemy within 200px)
+        let enemyClose = false;
+        if (allShips) {
+          const queryRange = 200;
+          const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function')
+            ? allShips.getShipsInRadiusSq(this.x, this.y, queryRange * queryRange)
+            : allShips;
+          for (const other of candidateShips) {
+            if (other.active && other.id !== this.id) {
+              const isEnemy = (other.owner && other.owner.id !== this.owner.id && !other.isMaterializing) || other.isAmoeba;
+              if (isEnemy) {
+                const edx = other.x - this.x;
+                const edy = other.y - this.y;
+                if (edx * edx + edy * edy <= queryRange * queryRange) {
+                  enemyClose = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        if (enemyClose) {
+          // Force recalculating retreat target
+          this.retreatTargetPlanetId = null;
+        }
+
+        // B. Safe target selection
+        let needNewTarget = this.targetX === null || this.targetY === null || !this.retreatTargetPlanetId;
+        
+        // Double check existing target ownership
+        if (!needNewTarget && this.retreatTargetPlanetId) {
+          const tp = allPlanets ? allPlanets.find(p => p.id === this.retreatTargetPlanetId) : null;
+          if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
+            needNewTarget = true;
+          }
+        }
+
+        if (needNewTarget) {
+          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+          
+          // Sort friendly planets by distance from the cruiser (closest first)
+          const sortedFriendlyPlanets = [...friendlyPlanets].sort((a, b) => {
+            const da = (a.x - this.x) * (a.x - this.x) + (a.y - this.y) * (a.y - this.y);
+            const db = (b.x - this.x) * (b.x - this.x) + (b.y - this.y) * (b.y - this.y);
+            return da - db;
+          });
+
+          let foundDestination = false;
+
+          for (const p of sortedFriendlyPlanets) {
+            // Find a safe coordinate inside this planet's gravity well (at least 300px from enemies, and avoiding intensity >= 15 hazards)
+            const gRad = p.getGravityRadius();
+            
+            // Try random candidates inside this gravity well
+            let bestLocalCandidate = null;
+            let maxSafetyDistSq = -1;
+
+            for (let attempt = 0; attempt < 250; attempt++) {
+              const theta = Math.random() * Math.PI * 2;
+              const r = Math.random() * gRad * 0.7; // Keep well inside gravity well boundary
+              const tx = p.x + r * Math.cos(theta);
+              const ty = p.y + r * Math.sin(theta);
+
+              // 1. Avoid active ion storms or minefields with effective intensity >= 15
+              let hazardIntensityVal = 0;
+              if (ionStorms) {
+                for (const h of ionStorms) {
+                  if (h.type !== 'nebula') {
+                    const hdx = tx - h.x;
+                    const hdy = ty - h.y;
+                    if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
+                      const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
+                      const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
+                      const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
+                      const sRed = Math.sqrt(this.expScore || 0);
+                      const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+                      if (effectiveIntensity > hazardIntensityVal) {
+                        hazardIntensityVal = effectiveIntensity;
+                      }
+                    }
+                  }
+                }
+              }
+
+              if (hazardIntensityVal >= 15) {
+                continue; // Avoid this candidate
+              }
+
+              // 2. Check distance from active enemies (aiming for at least 300px)
+              let minEnemyDistSq = Infinity;
+              if (allShips) {
+                for (const other of allShips) {
+                  if (other.active && other.id !== this.id) {
+                    const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                    if (isEnemy) {
+                      const edx = other.x - tx;
+                      const edy = other.y - ty;
+                      const distSq = edx * edx + edy * edy;
+                      if (distSq < minEnemyDistSq) {
+                        minEnemyDistSq = distSq;
+                      }
+                    }
+                  }
+                }
+              }
+
+              // If safe, we select the candidate
+              if (minEnemyDistSq >= 300 * 300) {
+                bestLocalCandidate = { x: tx, y: ty, p: p };
+                break;
+              } else {
+                // Keep track of the one with the maximum safety distance in case we need a fallback
+                if (minEnemyDistSq > maxSafetyDistSq) {
+                  maxSafetyDistSq = minEnemyDistSq;
+                  bestLocalCandidate = { x: tx, y: ty, p: p };
+                }
+              }
+            }
+
+            if (bestLocalCandidate && maxSafetyDistSq >= 300 * 300) {
+              this.targetPlanet = null;
+              this.targetX = bestLocalCandidate.x;
+              this.targetY = bestLocalCandidate.y;
+              this.retreatTargetPlanetId = bestLocalCandidate.p.id;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+              foundDestination = true;
+              break;
+            }
+          }
+
+          // Fallback if no candidate meets the 300px requirement
+          if (!foundDestination && sortedFriendlyPlanets.length > 0) {
+            // Find candidate among friendly planets that is as far as possible from enemies
+            let globalBestCandidate = null;
+            let maxSafetyDistSq = -1;
+
+            for (const p of sortedFriendlyPlanets) {
+              const gRad = p.getGravityRadius();
+              for (let attempt = 0; attempt < 100; attempt++) {
+                const theta = Math.random() * Math.PI * 2;
+                const r = Math.random() * gRad * 0.7;
+                const tx = p.x + r * Math.cos(theta);
+                const ty = p.y + r * Math.sin(theta);
+
+                // Check hazards
+                let hazardIntensityVal = 0;
+                if (ionStorms) {
+                  for (const h of ionStorms) {
+                    if (h.type !== 'nebula') {
+                      const hdx = tx - h.x;
+                      const hdy = ty - h.y;
+                      if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
+                        const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
+                        const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
+                        const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
+                        const sRed = Math.sqrt(this.expScore || 0);
+                        const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+                        if (effectiveIntensity > hazardIntensityVal) {
+                          hazardIntensityVal = effectiveIntensity;
+                        }
+                      }
+                    }
+                  }
+                }
+
+                if (hazardIntensityVal >= 15) {
+                  continue;
+                }
+
+                let minEnemyDistSq = Infinity;
+                if (allShips) {
+                  for (const other of allShips) {
+                    if (other.active && other.id !== this.id) {
+                      const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                      if (isEnemy) {
+                        const edx = other.x - tx;
+                        const edy = other.y - ty;
+                        const distSq = edx * edx + edy * edy;
+                        if (distSq < minEnemyDistSq) {
+                          minEnemyDistSq = distSq;
+                        }
+                      }
+                    }
+                  }
+                }
+
+                if (minEnemyDistSq > maxSafetyDistSq) {
+                  maxSafetyDistSq = minEnemyDistSq;
+                  globalBestCandidate = { x: tx, y: ty, p: p };
+                }
+              }
+            }
+
+            if (globalBestCandidate) {
+              this.targetPlanet = null;
+              this.targetX = globalBestCandidate.x;
+              this.targetY = globalBestCandidate.y;
+              this.retreatTargetPlanetId = globalBestCandidate.p.id;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+              foundDestination = true;
+            } else {
+              // Final fallback: Closest friendly planet center
+              const closestPlanet = sortedFriendlyPlanets[0];
+              this.targetPlanet = closestPlanet;
+              this.targetX = closestPlanet.x;
+              this.targetY = closestPlanet.y;
+              this.retreatTargetPlanetId = closestPlanet.id;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+            }
+          }
+        }
+      }
     }
 
     if (this.fuel <= 0) {
@@ -1520,7 +1798,7 @@ export class Ship {
     }
     
     // Cruiser Patrol Mode Decision Engine
-    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isPatrolling) {
+    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isPatrolling && !this.isRetreating) {
       // Check if fuel is 1 or less while patrolling
       if (this.fuel <= 1) {
         this.patrolFuelRetreating = true;
@@ -1860,7 +2138,7 @@ export class Ship {
     }
     
     // Cruiser Scout Mode Decision Engine
-    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isScouting) {
+    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isScouting && !this.isRetreating) {
       // 1. Refueling & Rearming & Health Retreat Check: if fuel is half or less, OR if attack is on and bombs are depleted, OR health is below 1/2 maxhealth
       const needsRefuel = this.fuel <= this.getMaxFuel() * 0.5;
       const supplyShip = this.findNearbySupplyShip(allShips);
@@ -2186,7 +2464,7 @@ export class Ship {
     }
 
     // Cruiser Research Mode Decision Engine
-    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isResearching && this.labs > 0) {
+    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isResearching && this.labs > 0 && !this.isRetreating) {
       // 1. Refueling Retreat Check: if fuel is less than 2
       if (this.fuel < 2) {
         this.researchFuelRetreating = true;
@@ -2509,7 +2787,7 @@ export class Ship {
     }
 
     // Cruiser Diplomacy Mode Decision Engine
-    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isDiplomacy && this.diplomat > 0) {
+    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isDiplomacy && this.diplomat > 0 && !this.isRetreating) {
       // 1. Refueling Retreat Check
       if (this.fuel < 2) {
         this.diplomacyFuelRetreating = true;
@@ -2804,7 +3082,7 @@ export class Ship {
     }
 
     // Cruiser Bombard Mode Decision Engine
-    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && !this.isPatrolling && this.bombPlanetsEnabled !== false && this.scoutAttackEnabled) {
+    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && !this.isPatrolling && this.bombPlanetsEnabled !== false && this.scoutAttackEnabled && !this.isRetreating) {
       // If out of bombs and not in a friendly gravity well, enter rearming retreat mode
       const supplyShip = this.findNearbySupplyShip(allShips);
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
