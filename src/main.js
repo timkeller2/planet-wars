@@ -1459,8 +1459,30 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         // Sort regular sell orders strictly from lowest price to highest
         regularOrders.sort((a, b) => a.price - b.price);
         
+        // Group auto buy orders by price
+        const autoBuyGroups = {};
+        for (const order of autoBuyOrders) {
+          if (!autoBuyGroups[order.price]) {
+            autoBuyGroups[order.price] = [];
+          }
+          autoBuyGroups[order.price].push(order);
+        }
+        
+        const groupedAutoBuyOrders = [];
+        for (const price in autoBuyGroups) {
+          const group = autoBuyGroups[price];
+          group.sort((a, b) => a.resource.localeCompare(b.resource));
+          groupedAutoBuyOrders.push({
+            isAutoBuy: true,
+            isGrouped: true,
+            price: parseInt(price, 10),
+            orders: group,
+            ownerId: group[0].ownerId
+          });
+        }
+        
         // Combine: Auto Buy Orders appear before all regular sell orders
-        const allOrders = [...autoBuyOrders, ...regularOrders];
+        const allOrders = [...groupedAutoBuyOrders, ...regularOrders];
         
         sellOrdersHud.innerHTML = '';
         sellOrdersHud.style.display = 'flex';
@@ -1479,7 +1501,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         const myTradeOptions = myPlayer.tradeOptions !== undefined ? myPlayer.tradeOptions : 5;
         
         for (const order of allOrders) {
-          const emoji = resourceEmojis[order.resource] || '';
+          const emoji = order.isAutoBuy ? '' : (resourceEmojis[order.resource] || '');
           const card = document.createElement('div');
           card.className = 'cyber-btn sell-order-card';
           card.style.display = 'flex';
@@ -1499,8 +1521,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             card.style.background = 'rgba(255, 255, 255, 0.15)';
             card.style.color = '#ffffff';
             card.style.textShadow = '0 0 6px #ffffff';
-            card.title = `Auto Buy: ${order.resource} at <= ${order.price} credits - Click to Dismiss`;
-            card.textContent = `${emoji}:${order.price}`;
+            const emojis = order.orders.map(o => resourceEmojis[o.resource] || '').join('');
+            const resourceNames = order.orders.map(o => o.resource).join(', ');
+            card.title = `Auto Buy: ${resourceNames} at <= ${order.price} credits - Click to Dismiss`;
+            card.textContent = `${emojis}: ${order.price}`;
           } else {
             const isMine = order.ownerId === localPlayer.id;
             const timeRemainingMs = order.expiresAt - Date.now();
@@ -1550,7 +1574,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             e.preventDefault();
             
             if (order.isAutoBuy) {
-              socket.emit('cancelAutoBuyOrder', { orderId: order.id });
+              for (const originalOrder of order.orders) {
+                socket.emit('cancelAutoBuyOrder', { orderId: originalOrder.id });
+              }
             } else if (!e.ctrlKey) {
               const isMine = order.ownerId === localPlayer.id;
               if (isMine) {
@@ -6136,8 +6162,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.beginPath();
             
             // Draw cyan sensor range circle (outline only, no fill!)
-            let baseCruiserRadar = 75 + s.maxHealth * 2;
-            let sensorRange = baseCruiserRadar + 25 * (s.sensorarrays || 0);
+            let baseCruiserRadar = 50 + s.maxHealth * 2;
+            let sensorRange = baseCruiserRadar + 10 * (s.sensorarrays || 0);
             sensorRange *= (1 + 0.25 * (s.sensorarrays || 0));
             if (s.isWarp) sensorRange *= 0.25;
             if (owner) {

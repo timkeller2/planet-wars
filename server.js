@@ -1040,6 +1040,7 @@ async function bootstrap() {
         p.attackedPlanets = new Map();
         p.cruiserStyle = null;
         p.credits = 0;
+        p.autoBuyOrders = [];
         
         console.log(`RESTART: Assigning planet for ${p.id}`);
         game.tryAssignPlanet(p);

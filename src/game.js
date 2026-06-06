@@ -771,6 +771,7 @@ export class Game {
       player.tradeOptions = undefined;
       player.tradeRegenAccumulator = 0;
       player.sellPriceSetting = 2;
+      player.autoBuyOrders = [];
     }
 
     // Reset global upgrade modifiers
@@ -3508,7 +3509,6 @@ export class Game {
             } else {
               ship.diplomatFailureEvent = (ship.diplomatFailureEvent || 0) + 1;
               ship.diplomatFailureChance = Math.round(chancePercent);
-            }
             }
           }
         }

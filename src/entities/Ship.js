@@ -201,8 +201,8 @@ export class Ship {
 
   cruiserRadarRange() {
     if (this.maxHealth <= 0) return 0;
-    let baseCruiserRadar = 75 + this.maxHealth * 2;
-    let range = baseCruiserRadar + 25 * (this.sensorarrays || 0);
+    let baseCruiserRadar = 50 + this.maxHealth * 2;
+    let range = baseCruiserRadar + 10 * (this.sensorarrays || 0);
     range *= (1 + 0.25 * (this.sensorarrays || 0));
     if (this.isWarp) {
       range *= 0.25;
@@ -1655,10 +1655,12 @@ export class Ship {
         this.patrolFuelRetreating = false;
         this.patrolFuelRetreatTargetPlanetId = null;
 
-        // 1. Check if out of bombs -> Reloading State
+        // 1. Check if out of bombs -> Reloading State, or low health -> Retreat to repair
         const supplyShip = this.findNearbySupplyShip(allShips);
         const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
-        if ((this.bombs <= 0 && !hasNearbySupply) || (this.patrolReloading && this.bombs < this.getMaxBombs())) {
+        const needsHealthRetreat = this.health <= this.maxHealth * 0.5;
+        const needsHealthFinish = this.health < this.maxHealth;
+        if (needsHealthRetreat || (this.bombs <= 0 && !hasNearbySupply) || (this.patrolReloading && (this.bombs < this.getMaxBombs() || needsHealthFinish))) {
         const wasReloading = this.patrolReloading;
         this.patrolReloading = true;
         
