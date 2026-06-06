@@ -388,6 +388,22 @@ export class Ship {
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
 
+    let friendlyWellPlanet = null;
+    if (allPlanets && this.owner) {
+      for (const planet of allPlanets) {
+        if (planet.owner && planet.owner === this.owner) {
+          const pdx = this.x - planet.x;
+          const pdy = this.y - planet.y;
+          const gravityRadius = planet.getGravityRadius();
+          if (pdx * pdx + pdy * pdy < gravityRadius * gravityRadius) {
+            friendlyWellPlanet = planet;
+            break;
+          }
+        }
+      }
+    }
+    this.inFriendlyWell = friendlyWellPlanet !== null;
+
     if (this.isMaterializing) {
       const dt = deltaTime / 1000;
       this.materializeProgress = Math.min(1.0, this.materializeProgress + dt / this.materializeDuration);
@@ -465,7 +481,7 @@ export class Ship {
       const isStandby = this.timeNotMoved >= 60;
 
       // Trigger condition
-      if (!this.isRetreating) {
+      if (!this.isRetreating && !this.inFriendlyWell) {
         if (lowFuel || emptyBombs || (lowHealth && (inActiveMode || isStandby))) {
           this.isRetreating = true;
           this.retreatTargetPlanetId = null;
@@ -904,22 +920,6 @@ export class Ship {
     const techBonus = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
     const expBonus = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
     const safeTime = techBonus + expBonus;
-
-    let friendlyWellPlanet = null;
-    if (allPlanets && this.owner) {
-      for (const planet of allPlanets) {
-        if (planet.owner && planet.owner === this.owner) {
-          const pdx = this.x - planet.x;
-          const pdy = this.y - planet.y;
-          const gravityRadius = planet.getGravityRadius();
-          if (pdx * pdx + pdy * pdy < gravityRadius * gravityRadius) {
-            friendlyWellPlanet = planet;
-            break;
-          }
-        }
-      }
-    }
-    this.inFriendlyWell = friendlyWellPlanet !== null;
 
     if (this.flightTime >= safeTime) {
       const timeExposed = this.flightTime - safeTime;
