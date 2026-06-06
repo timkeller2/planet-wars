@@ -3352,9 +3352,33 @@ export class Ship {
             this.targetX = this.x - Math.cos(angle) * 100;
             this.targetY = this.y - Math.sin(angle) * 100;
             this.targetPlanet = null;
-          } else if (this.isPatrolling && this.bombs > 0) {
+          } else {
+            // Determine strength and close-in decision
+            const cruiserStrength = this.health + (this.armorPoints || 0);
+            let enemyTargetStrength = targetObj.maxHealth > 0 ? (targetObj.health + (targetObj.armorPoints || 0)) : (targetObj.count || 1);
+            
+            let totalEnemyStrength = enemyTargetStrength;
+            if (allShips) {
+              for (const other of allShips) {
+                if (other.active && other.id !== this.id && other.id !== targetObj.id && other.owner && other.owner.id !== this.owner.id) {
+                  const dx = other.x - this.x;
+                  const dy = other.y - this.y;
+                  if (dx * dx + dy * dy <= 400 * 400) {
+                    totalEnemyStrength += other.maxHealth > 0 ? (other.health + (other.armorPoints || 0)) : (other.count || 1);
+                  }
+                }
+              }
+            }
+
+            let shouldCloseIn = false;
             if (this.package === 'brute') {
-              // Brute cruiser: attempt to get as near as possible (no stop range check except contact range 15px)
+              shouldCloseIn = (enemyTargetStrength <= cruiserStrength * 1.5);
+            } else {
+              shouldCloseIn = (totalEnemyStrength < cruiserStrength);
+            }
+
+            if (shouldCloseIn) {
+              // Close in to 15px range for the kill
               if (dist <= 15) {
                 this.targetX = this.x;
                 this.targetY = this.y;
@@ -3365,49 +3389,38 @@ export class Ship {
                 this.targetPlanet = null;
               }
             } else {
-              // Non-brute patrolling cruiser with bombs: try to stay just within its bomb engagement range
-              let strategyThreshold = 0.75; // Normal default
-              if (this.strategy === 'short') {
-                strategyThreshold = 0.50;
-              } else if (this.strategy === 'long') {
-                strategyThreshold = 1.00;
-              }
-              const bombEngagementRange = Math.max(15, (maxFrontRange * strategyThreshold) - 15);
-              
-              if (dist <= bombEngagementRange && isTargetInFront) {
-                this.targetX = this.x;
-                this.targetY = this.y;
-                this.targetPlanet = null;
+              // Stay at range
+              if (this.isPatrolling && this.bombs > 0) {
+                let strategyThreshold = 0.75; // Normal default
+                if (this.strategy === 'short') {
+                  strategyThreshold = 0.50;
+                } else if (this.strategy === 'long') {
+                  strategyThreshold = 1.00;
+                }
+                const bombEngagementRange = Math.max(15, (maxFrontRange * strategyThreshold) - 15);
+                
+                if (dist <= bombEngagementRange && isTargetInFront) {
+                  this.targetX = this.x;
+                  this.targetY = this.y;
+                  this.targetPlanet = null;
+                } else {
+                  const angle = Math.atan2(tdy, tdx);
+                  this.targetX = targetObj.x - Math.cos(angle) * bombEngagementRange;
+                  this.targetY = targetObj.y - Math.sin(angle) * bombEngagementRange;
+                  this.targetPlanet = null;
+                }
               } else {
-                const angle = Math.atan2(tdy, tdx);
-                this.targetX = targetObj.x - Math.cos(angle) * bombEngagementRange;
-                this.targetY = targetObj.y - Math.sin(angle) * bombEngagementRange;
-                this.targetPlanet = null;
+                // Standard non-bomb or non-patrolling movement
+                if (isTargetInFront && dist <= maxFrontRange - 5) {
+                  this.targetX = this.x;
+                  this.targetY = this.y;
+                  this.targetPlanet = null;
+                } else {
+                  this.targetX = tx;
+                  this.targetY = ty;
+                  this.targetPlanet = null;
+                }
               }
-            }
-          } else if (this.package === 'brute' && this.bombs > 0) {
-            // Non-patrolling (dogfight) brute cruiser with bombs: get as near as possible (no stop range check except contact range 15px)
-            if (dist <= 15) {
-              this.targetX = this.x;
-              this.targetY = this.y;
-              this.targetPlanet = null;
-            } else {
-              this.targetX = tx;
-              this.targetY = ty;
-              this.targetPlanet = null;
-            }
-          } else {
-            // Standard non-patrolling or non-bomb ship target movement
-            if (isTargetInFront && dist <= maxFrontRange - 5) {
-              // Target is in range and in front arc! Stop moving
-              this.targetX = this.x;
-              this.targetY = this.y;
-              this.targetPlanet = null;
-            } else {
-              // Target is either out of range or in side/aft arc! Move towards it to steer/close in
-              this.targetX = tx;
-              this.targetY = ty;
-              this.targetPlanet = null;
             }
           }
         }
