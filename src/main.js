@@ -3137,9 +3137,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     }
     if (event.key.toLowerCase() === 's') {
       const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id);
-      const techScore = localPlayer ? localPlayer.techScore || 0 : 0;
-      const techBonus = Math.floor(Math.sqrt(techScore));
-      if (selectedCruisers.length > 0 && techBonus >= 10) {
+      if (selectedCruisers.length > 0) {
         event.preventDefault();
         const anyNotScouting = selectedCruisers.some(c => !c.isScouting);
         const nextState = anyNotScouting;
@@ -4226,11 +4224,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
       const btnCruiserScout = document.getElementById('btn-cruiser-scout');
       if (btnCruiserScout) {
-        const techScore = localPlayer ? localPlayer.techScore || 0 : 0;
-        const techBonus = Math.floor(Math.sqrt(techScore));
-        const hasTechBonus10 = techBonus >= 10;
-        btnCruiserScout.style.display = (selectedCruisers.length > 0 && hasTechBonus10) ? 'inline-flex' : 'none';
-        if (selectedCruisers.length > 0 && hasTechBonus10) {
+        btnCruiserScout.style.display = selectedCruisers.length > 0 ? 'inline-flex' : 'none';
+        if (selectedCruisers.length > 0) {
           const anyScouting = selectedCruisers.some(c => c.isScouting);
           btnCruiserScout.classList.toggle('action-btn-active', anyScouting);
         }
