@@ -38,8 +38,95 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   let warpOrderNext = false;
   let controlGroups = {}; // RTS control groups for fleets/cruisers
   let lastKnownPlanets = {}; // Cache of last-known states for planets under Fog of War
+  let transparentPlanetsCanvas = null;
   const planetSpriteSheet = new Image();
+  planetSpriteSheet.onload = () => {
+    // Process image to make black background transparent
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = planetSpriteSheet.naturalWidth;
+    tempCanvas.height = planetSpriteSheet.naturalHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(planetSpriteSheet, 0, 0);
+    try {
+      const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+      const data = imgData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i+1];
+        const b = data[i+2];
+        // JPEG compression noise check: transparent if dark enough (R, G, B < 15)
+        if (r < 15 && g < 15 && b < 15) {
+          data[i+3] = 0;
+        }
+      }
+      tempCtx.putImageData(imgData, 0, 0);
+      transparentPlanetsCanvas = tempCanvas;
+    } catch (e) {
+      console.error('[AntiGravity] Failed to process planet transparency:', e);
+      transparentPlanetsCanvas = planetSpriteSheet;
+    }
+  };
   planetSpriteSheet.src = 'Planets Resource.jpg';
+
+  let transparentShipsCanvas = null;
+  const shipsSpriteSheet = new Image();
+  shipsSpriteSheet.onload = () => {
+    // Process image to make black background transparent
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = shipsSpriteSheet.naturalWidth;
+    tempCanvas.height = shipsSpriteSheet.naturalHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(shipsSpriteSheet, 0, 0);
+    try {
+      const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+      const data = imgData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i+1];
+        const b = data[i+2];
+        // JPEG compression noise check: transparent if dark enough (R, G, B < 15)
+        if (r < 15 && g < 15 && b < 15) {
+          data[i+3] = 0;
+        }
+      }
+      tempCtx.putImageData(imgData, 0, 0);
+      transparentShipsCanvas = tempCanvas;
+    } catch (e) {
+      console.error('[AntiGravity] Failed to process ship transparency:', e);
+      transparentShipsCanvas = shipsSpriteSheet;
+    }
+    updateBuildButtonCanvases();
+  };
+  shipsSpriteSheet.src = 'Ships Resource.jpg';
+
+  const FACTION_MAPPING = {
+    'Federation': { x: 20, w: 121 },
+    'Gorn': { x: 155, w: 107 },
+    'Romulan': { x: 276, w: 114 },
+    'Klingon': { x: 403, w: 113 },
+    'Tholian': { x: 528, w: 116 },
+    'Lyran': { x: 653, w: 119 }
+  };
+
+  const CLASS_MAPPING = {
+    'scout': { y: 20, h: 84 },
+    'frigate': { y: 120, h: 78 },
+    'destroyer': { y: 213, h: 114 },
+    'cruiser': { y: 338, h: 152 },
+    'battlecruiser': { y: 504, h: 83 },
+    'battleship': { y: 596, h: 100 },
+    'titan': { y: 709, h: 102 },
+    'mammoth': { y: 826, h: 319 }
+  };
+
+  const graphicalModeCheckbox = document.getElementById('graphical-mode-checkbox');
+  let graphicalMode = graphicalModeCheckbox ? graphicalModeCheckbox.checked : true;
+  if (graphicalModeCheckbox) {
+    graphicalModeCheckbox.addEventListener('change', () => {
+      graphicalMode = graphicalModeCheckbox.checked;
+      updateBuildButtonCanvases();
+    });
+  }
 
   let speedModifierNext = null;
   let bombOrderNext = false;
@@ -577,14 +664,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const el = document.getElementById(cfg.btnId);
       if (!el) continue;
       
+      const isCruiserBtn = el.classList.contains('cruiser-build-btn');
+      const targetSize = isCruiserBtn ? 40 : 24;
       let canvas = el.querySelector('canvas');
-      if (!canvas) {
+      if (!canvas || canvas.width !== targetSize) {
         const iconSpan = el.querySelector('.btn-icon');
         if (iconSpan) {
           iconSpan.innerHTML = '';
           canvas = document.createElement('canvas');
-          canvas.width = 24;
-          canvas.height = 24;
+          canvas.width = targetSize;
+          canvas.height = targetSize;
           canvas.style.verticalAlign = 'middle';
           iconSpan.appendChild(canvas);
         }
@@ -606,15 +695,43 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           cohort = 'mammoth_group';
         }
         
-        const size = 8;
-        ctxBtn.fillStyle = playerColor;
-        drawRacialShipHull(ctxBtn, style, cohort, size);
-        ctxBtn.closePath();
-        ctxBtn.fill();
-        
-        ctxBtn.strokeStyle = '#000000';
-        ctxBtn.lineWidth = 1;
-        ctxBtn.stroke();
+        let drawnButtonImage = false;
+        if (graphicalMode && transparentShipsCanvas) {
+          let normalizedStyle = style;
+          if (normalizedStyle) {
+            normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
+          }
+          if (!FACTION_MAPPING[normalizedStyle]) {
+            normalizedStyle = 'Klingon';
+          }
+          const faction = FACTION_MAPPING[normalizedStyle];
+          const classRow = CLASS_MAPPING[classType];
+          if (faction && classRow) {
+            const maxDim = Math.max(faction.w, classRow.h);
+            const buttonScale = (isCruiserBtn ? 36 : 20) / maxDim;
+            const drawnW = faction.w * buttonScale;
+            const drawnH = classRow.h * buttonScale;
+            
+            ctxBtn.drawImage(
+              transparentShipsCanvas,
+              faction.x, classRow.y, faction.w, classRow.h,
+              -drawnW / 2, -drawnH / 2, drawnW, drawnH
+            );
+            drawnButtonImage = true;
+          }
+        }
+
+        if (!drawnButtonImage) {
+          const size = isCruiserBtn ? 14 : 8;
+          ctxBtn.fillStyle = playerColor;
+          drawRacialShipHull(ctxBtn, style, cohort, size);
+          ctxBtn.closePath();
+          ctxBtn.fill();
+          
+          ctxBtn.strokeStyle = '#000000';
+          ctxBtn.lineWidth = 1;
+          ctxBtn.stroke();
+        }
         
         ctxBtn.restore();
       }
@@ -1762,13 +1879,19 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     updateBuildButtonCanvases();
 
     const gameTimer = document.getElementById('game-timer');
+    const gameSpeedDisplay = document.getElementById('game-speed-display');
     if (gameTimer) {
+      gameTimer.style.display = 'block';
       if (serverState.settings && serverState.settings.timedGameLimit && serverState.settings.timedGameLimit !== 'unlimited') {
-        gameTimer.style.display = 'block';
         gameTimer.textContent = formatTime(serverState.timeRemaining);
       } else {
-        gameTimer.style.display = 'none';
+        gameTimer.textContent = formatTime(serverState.elapsedTime || 0);
       }
+    }
+    if (gameSpeedDisplay) {
+      gameSpeedDisplay.style.display = 'block';
+      const speedPct = Math.round((serverState.gameSpeed || 1.0) * 100);
+      gameSpeedDisplay.textContent = `Speed: ${speedPct}%`;
     }
 
     const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
@@ -3770,7 +3893,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           socket.emit('toggleCruiserScout', { shipId: ship.id, enabled: nextState });
         });
       } else {
-        scoutModeNext = !scoutModeNext;
+        const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+        const techBonus = myPlayer ? Math.sqrt(myPlayer.techScore || 0) : 0;
+        if (techBonus >= 10) {
+          scoutModeNext = !scoutModeNext;
+        }
       }
     }
     if (event.key.toLowerCase() === 'a') {
@@ -3846,11 +3973,30 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       cameraPanY += (newServerPos.y - oldServerPos.y);
     }
   });
+  const elTimer = document.getElementById('game-timer');
+  if (elTimer) {
+    elTimer.addEventListener('click', (e) => {
+      if (e.button === 0) {
+        e.preventDefault();
+        socket.emit('changeGameSpeed', { direction: 'up' });
+      }
+    });
+    elTimer.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      socket.emit('changeGameSpeed', { direction: 'down' });
+    });
+  }
   document.getElementById('btn-warp').addEventListener('click', () => { warpOrderNext = !warpOrderNext; });
   document.getElementById('btn-bomb').addEventListener('click', () => { bombOrderNext = bombOrderNext === 'eco' ? false : 'eco'; });
   document.getElementById('btn-bomb-ships').addEventListener('click', () => { bombOrderNext = bombOrderNext === 'ships' ? false : 'ships'; });
   document.getElementById('btn-fill').addEventListener('click', () => { fillModeNext = !fillModeNext; });
-  document.getElementById('btn-scout').addEventListener('click', () => { scoutModeNext = !scoutModeNext; });
+  document.getElementById('btn-scout').addEventListener('click', () => {
+    const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+    const techBonus = myPlayer ? Math.sqrt(myPlayer.techScore || 0) : 0;
+    if (techBonus >= 10) {
+      scoutModeNext = !scoutModeNext;
+    }
+  });
   document.getElementById('btn-cruiser').addEventListener('click', () => { cruiserBuildModeActive = !cruiserBuildModeActive; });
   const bindBuildButton = (btnId, classType) => {
     const el = document.getElementById(btnId);
@@ -4346,7 +4492,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 250;
       startingCreditsVal = isNaN(customCredits) ? "250" : String(customCredits);
     }
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10) };
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
@@ -4417,7 +4563,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     hasCenteredOnHomeworld = false;
     serverState = null;
     lastKnownPlanets = {}; // Clear cached planet details
-    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10) });
+    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode });
   });
 
   function draw() {
@@ -4898,15 +5044,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         }
       }
 
-      const simpleStd = ['btn-leaderboard', 'help-btn'];
+      const simpleStd = ['btn-fill', 'btn-leaderboard', 'help-btn'];
       for (const btnId of simpleStd) {
         const el = document.getElementById(btnId);
         if (el) el.style.display = 'inline-flex';
       }
-      const btnFill = document.getElementById('btn-fill');
-      if (btnFill) btnFill.style.display = 'none';
-      const btnScout = document.getElementById('btn-scout');
-      if (btnScout) btnScout.style.display = 'none';
 
       for (const btnId of Object.keys(upButtonsMap)) {
         const el = document.getElementById(btnId);
@@ -4914,6 +5056,21 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       }
       const elCancel = document.getElementById('btn-up-cancel');
       if (elCancel) elCancel.style.display = 'none';
+    }
+
+    // Hide the Scout mode button until tech bonus 10
+    const btnScout = document.getElementById('btn-scout');
+    if (btnScout) {
+      const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+      const techBonus = myPlayer ? Math.sqrt(myPlayer.techScore || 0) : 0;
+      if (techBonus >= 10 && !focusModeActive && !upgradeModeActive && !cruiserBuildModeActive) {
+        btnScout.style.display = 'inline-flex';
+      } else {
+        btnScout.style.display = 'none';
+        if (techBonus < 10) {
+          scoutModeNext = false;
+        }
+      }
     }
 
 
@@ -5062,26 +5219,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         }
 
         let drawnPlanetImage = false;
-        if (planetSpriteSheet.complete && planetSpriteSheet.naturalWidth > 0) {
-          const spriteIdx = p.id % 96;
+        if (graphicalMode && transparentPlanetsCanvas) {
+          const spriteIdx = 2 + (p.id % 78);
           const col = spriteIdx % 8;
           const row = Math.floor(spriteIdx / 8);
           const sx = 12 + col * 94;
           const sy = 26 + row * 94;
-          
-          // Draw solid backing with shadow glow first (so it goes outside the clip mask)
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-          if (owner) {
-            ctx.fillStyle = owner.color;
-            ctx.shadowColor = owner.color;
-            ctx.shadowBlur = 15;
-          } else {
-            ctx.fillStyle = '#0f141d'; // Dark space backing for neutral
-          }
-          ctx.fill();
-          ctx.restore();
 
           // Clip image to a circle slightly smaller than p.radius to shave off JPEG compression trash
           ctx.save();
@@ -5089,7 +5232,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ctx.arc(p.x, p.y, p.radius - 1, 0, Math.PI * 2);
           ctx.clip();
           ctx.drawImage(
-            planetSpriteSheet,
+            transparentPlanetsCanvas,
             sx, sy, 94, 94,
             p.x - p.radius, p.y - p.radius, p.radius * 2, p.radius * 2
           );
@@ -5215,41 +5358,20 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ctx.font = `bold 12px Orbitron`;
           const textWidth = ctx.measureText(text).width;
 
-          ctx.fillStyle = isLastKnown ? 'rgba(200, 200, 200, 0.4)' : 'rgba(255, 255, 255, 0.6)';
           const pillHeight = 16;
-          ctx.fillRect(p.x - textWidth / 2 - 8, p.y - pillHeight / 2, textWidth + 16, pillHeight);
-
+          
           // Get owner properties to check if human owned
           const displayOwnerId = isLastKnown ? lastKnownPlanets[p.id].ownerId : p.ownerId;
           const displayOwner = serverState.players.find(pl => pl.id === displayOwnerId);
           const isHuman = displayOwner && !displayOwner.isAI;
 
-          if (isHuman) {
-            const focus = p.focusMode || 'economy';
-            const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : '📈')));
-            const badgeRadius = pillHeight / 2;
-            const badgeX = p.x + textWidth / 2 + 8 + badgeRadius + 2;
-
-            // Draw separate circular backdrop for focus badge
-            ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
-            ctx.beginPath();
-            ctx.arc(badgeX, p.y, badgeRadius, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Render emoji badge centered in its circular pill
-            ctx.save();
-            ctx.font = `${badgeRadius * 1.3}px sans-serif`;
-            ctx.fillStyle = '#fff';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(modeIndicator, badgeX, p.y);
-            ctx.restore();
+          // 1. Draw Planet Name & Factory above the planet
+          let pName = (isLastKnown ? lastKnownPlanets[p.id].name : p.name) || 'Unknown';
+          const nameY = p.y - p.radius - 12;
+          let displayName = pName;
+          if (graphicalMode) {
+            displayName = `${pName} (${Math.floor(displayShips)}/${displayMaxShips})`;
           }
-
-          ctx.fillStyle = isLastKnown ? '#666' : '#000';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(text, p.x, p.y);
 
           if (isLastKnown) {
             ctx.fillStyle = '#888';
@@ -5259,20 +5381,22 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.fillStyle = '#ffffff';
           }
           ctx.font = 'bold 11px Orbitron';
-          let pName = (isLastKnown ? lastKnownPlanets[p.id].name : p.name) || 'Unknown';
-          ctx.fillText(pName, p.x, p.y - pillHeight / 2 - 8);
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(displayName, p.x, nameY);
  
-           if (!isLastKnown && p.finalRateExceedsOne) {
-             const nameWidth = ctx.measureText(pName).width;
-             ctx.save();
-             ctx.font = '11px sans-serif';
-             ctx.textAlign = 'left';
-             ctx.textBaseline = 'middle';
-             ctx.fillStyle = '#fff';
-             ctx.fillText('🏭', p.x + nameWidth / 2 + 4, p.y - pillHeight / 2 - 8);
-             ctx.restore();
-           }
+          if (!isLastKnown && p.finalRateExceedsOne) {
+            const nameWidth = ctx.measureText(displayName).width;
+            ctx.save();
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#fff';
+            ctx.fillText('🏭', p.x + nameWidth / 2 + 4, nameY);
+            ctx.restore();
+          }
 
+          // 2. Draw special role badges (homeworld, military, research, speed, revolt, rampage) higher up
           const displayHomeworldOf = isLastKnown ? lastKnownPlanets[p.id].homeworldOf : p.homeworldOf;
           const displayIsResearch = isLastKnown ? lastKnownPlanets[p.id].isResearch : p.isResearch;
           const displayIsMilitary = isLastKnown ? lastKnownPlanets[p.id].isMilitary : p.isMilitary;
@@ -5283,31 +5407,26 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if (hwOwner) {
               ctx.fillStyle = isLastKnown ? '#888' : hwOwner.color;
               ctx.font = 'bold 12px Orbitron';
-              ctx.textAlign = 'center';
-              ctx.fillText(`👑 ${hwOwner.name}`, p.x, p.y - p.radius - 8);
+              ctx.fillText(`👑 ${hwOwner.name}`, p.x, nameY - 14);
               ctx.font = 'bold 11px Orbitron'; // Restore font
             }
           } else if (displayIsResearch) {
             ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
             ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText("🔬", p.x, p.y - p.radius - 8);
+            ctx.fillText("🔬", p.x, nameY - 14);
             ctx.font = 'bold 11px Orbitron'; // Restore font
           } else if (displayIsMilitary) {
             ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
             ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText("🚀", p.x, p.y - p.radius - 8);
+            ctx.fillText("🚀", p.x, nameY - 14);
             ctx.font = 'bold 11px Orbitron'; // Restore font
           } else if (displayIsSpeedPlanet) {
             ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
             ctx.font = '14px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText("⚡", p.x, p.y - p.radius - 8);
+            ctx.fillText("⚡", p.x, nameY - 14);
             ctx.font = 'bold 11px Orbitron'; // Restore font
           }
 
-          // Evaluate if the planet is in an unstable state (eligible for revolt)
           const eligibleForRevolt = !isLastKnown && (p.revoltCooldown || 0) <= 0 && p.sympathy && Object.entries(p.sympathy).some(([pId, symVal]) => {
             const isNotOwner = !p.ownerId || pId !== p.ownerId;
             return isNotOwner && symVal > p.ships / 3;
@@ -5320,12 +5439,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.shadowColor = '#f00';
             ctx.shadowBlur = 10;
             ctx.font = '16px Arial';
-            ctx.textAlign = 'center';
-            let iconHeight = 8;
+            let iconHeight = 14;
             if (displayHomeworldOf || displayIsResearch || displayIsMilitary || displayIsSpeedPlanet) {
-              iconHeight = 26;
+              iconHeight = 32;
             }
-            ctx.fillText("✊", p.x, p.y - p.radius - iconHeight);
+            ctx.fillText("✊", p.x, nameY - iconHeight);
             ctx.restore();
           }
 
@@ -5337,38 +5455,21 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.shadowColor = '#0f0';
             ctx.shadowBlur = 10;
             ctx.font = '20px sans-serif';
-            ctx.textAlign = 'center';
-            let iconHeight = 10;
+            let iconHeight = 16;
             if (displayHomeworldOf || displayIsResearch || displayIsMilitary || displayIsSpeedPlanet) {
-              iconHeight = 28;
+              iconHeight = 34;
             }
             if (eligibleForRevolt) {
               iconHeight += 18;
             }
-            ctx.fillText("☣️", p.x, p.y - p.radius - iconHeight + bob);
+            ctx.fillText("☣️", p.x, nameY - iconHeight + bob);
             ctx.restore();
           }
 
-          if (!isLastKnown) {
-            if (owner) {
-              if (p.ships < 50) {
-                const lowPopMultiplier = 0.10 + 0.02 * Math.max(0, p.ships - 5);
-                const prodPercent = Math.round(lowPopMultiplier * 100);
-                ctx.fillStyle = '#ffaa00';
-                ctx.fillText(`${prodPercent}%`, p.x, p.y + pillHeight / 2 + 8);
-              } else if (p.expScore > 0) {
-                const xpPercent = Math.round(Math.sqrt(p.expScore));
-                ctx.fillStyle = '#66ccff';
-                ctx.fillText(`${xpPercent}%`, p.x, p.y + pillHeight / 2 + 8);
-              }
-            } else if (p.expScore > 0) {
-              const xpPercent = Math.round(Math.sqrt(p.expScore));
-              ctx.fillStyle = '#66ccff';
-              ctx.fillText(`${xpPercent}%`, p.x, p.y + pillHeight / 2 + 8);
-            }
-          }
+          // 3. Stack elements below the planet circle (Race & Resources, Percentages)
+          let currentY = p.y + p.radius + 12;
 
-          // Render Sci-Fi raw resource icons and/or planet race icon below the planet pill
+          // A. Race & Resource Icons
           const affinity = isLastKnown ? lastKnownPlanets[p.id].racialAffinity : p.racialAffinity;
           let raceIcon = null;
           if (affinity) {
@@ -5384,7 +5485,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
 
           const hasResources = p.resources && p.resources.length > 0;
-          if (hasResources || raceIcon) {
+          if (hasResources || (raceIcon && graphicalMode)) {
             ctx.save();
             ctx.font = '12px Arial';
             ctx.textAlign = 'center';
@@ -5402,16 +5503,116 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             };
             
             let displayString = hasResources ? p.resources.map(r => resourceIcons[r]).join(' ') : '';
-            if (raceIcon) {
-              displayString = displayString ? `${displayString} ${raceIcon}` : raceIcon;
+            // Display race icon BEFORE raw resource icons
+            if (raceIcon && graphicalMode) {
+              displayString = displayString ? `${raceIcon} ${displayString}` : raceIcon;
             }
             
-            let yOffset = pillHeight / 2 + 18;
-            if (!isLastKnown && ((owner && p.ships < 50) || p.expScore > 0)) {
-              yOffset += 12;
-            }
-            ctx.fillText(displayString, p.x, p.y + yOffset);
+            ctx.fillText(displayString, p.x, currentY);
             ctx.restore();
+            currentY += 14;
+          }
+
+          // B. Low Pop or XP Percentages
+          if (!isLastKnown) {
+            ctx.save();
+            ctx.font = 'bold 11px Orbitron';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            let drewPercent = false;
+            if (owner) {
+              if (p.ships < 50) {
+                const lowPopMultiplier = 0.10 + 0.02 * Math.max(0, p.ships - 5);
+                const prodPercent = Math.round(lowPopMultiplier * 100);
+                ctx.fillStyle = '#ffaa00';
+                ctx.fillText(`${prodPercent}%`, p.x, currentY);
+                drewPercent = true;
+              } else if (p.expScore > 0) {
+                const xpPercent = Math.round(Math.sqrt(p.expScore));
+                ctx.fillStyle = '#66ccff';
+                ctx.fillText(`${xpPercent}%`, p.x, currentY);
+                drewPercent = true;
+              }
+            } else if (p.expScore > 0) {
+              const xpPercent = Math.round(Math.sqrt(p.expScore));
+              ctx.fillStyle = '#66ccff';
+              ctx.fillText(`${xpPercent}%`, p.x, currentY);
+              drewPercent = true;
+            }
+            ctx.restore();
+            if (drewPercent) {
+              currentY += 12;
+            }
+          }
+
+          // C. Ships / Economy Pill Box (at original position if graphicalMode is false)
+          if (!graphicalMode) {
+            const pillY = p.y;
+            ctx.fillStyle = isLastKnown ? 'rgba(200, 200, 200, 0.4)' : 'rgba(255, 255, 255, 0.6)';
+            ctx.fillRect(p.x - textWidth / 2 - 8, pillY - pillHeight / 2, textWidth + 16, pillHeight);
+
+            // Draw race icon to the left of the pill box
+            if (raceIcon) {
+              ctx.save();
+              ctx.font = '12px Arial';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = '#fff';
+              ctx.fillText(raceIcon, p.x - textWidth / 2 - 20, pillY);
+              ctx.restore();
+            }
+
+            if (isHuman) {
+              const focus = p.focusMode || 'economy';
+              const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : '📈')));
+              const badgeRadius = pillHeight / 2;
+              const badgeX = p.x + textWidth / 2 + 8 + badgeRadius + 2;
+
+              // Draw separate circular backdrop for focus badge
+              ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
+              ctx.beginPath();
+              ctx.arc(badgeX, pillY, badgeRadius, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Render emoji badge centered in its circular pill
+              ctx.save();
+              ctx.font = `${badgeRadius * 1.3}px sans-serif`;
+              ctx.fillStyle = '#fff';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(modeIndicator, badgeX, pillY);
+              ctx.restore();
+            }
+
+            ctx.fillStyle = isLastKnown ? '#666' : '#000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = `bold 12px Orbitron`;
+            ctx.fillText(text, p.x, pillY);
+          } else {
+            // In graphical mode, draw focus mode badge directly to the right of the planet graphic
+            if (isHuman) {
+              const focus = p.focusMode || 'economy';
+              const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : '📈')));
+              const badgeRadius = 10;
+              const badgeX = p.x + p.radius + badgeRadius + 4;
+              const badgeY = p.y;
+
+              // Draw separate circular backdrop for focus badge
+              ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
+              ctx.beginPath();
+              ctx.arc(badgeX, badgeY, badgeRadius, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Render emoji badge centered in its circular pill
+              ctx.save();
+              ctx.font = `${badgeRadius * 1.3}px sans-serif`;
+              ctx.fillStyle = '#fff';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(modeIndicator, badgeX, badgeY);
+              ctx.restore();
+            }
           }
           let defenderPlanetPenalty = 0;
           let defenderTechPenalty = 0;
@@ -7162,19 +7363,56 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             cohort = 'mammoth_group';
           }
 
-          ctx.save();
-          ctx.translate(s.x, s.y);
-          ctx.rotate(angle + Math.PI / 2);
-          ctx.beginPath();
+          let drawnShipImage = false;
+          if (graphicalMode && transparentShipsCanvas) {
+            let normalizedStyle = style;
+            if (normalizedStyle) {
+              normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
+            }
+            if (!FACTION_MAPPING[normalizedStyle]) {
+              normalizedStyle = 'Klingon';
+            }
+            const faction = FACTION_MAPPING[normalizedStyle];
+            const classRow = CLASS_MAPPING[s.classType || 'scout'];
+            if (faction && classRow) {
+              let scale = (6 + (s.maxHealth || 0)) / 240;
+              if (s.classType === 'scout') {
+                scale *= 1.6;
+              } else if (s.classType === 'frigate') {
+                scale *= 1.4;
+              }
+              const drawnW = faction.w * scale;
+              const drawnH = classRow.h * scale;
+              
+              ctx.save();
+              ctx.translate(s.x, s.y);
+              ctx.rotate(angle + Math.PI / 2);
+              
+              ctx.drawImage(
+                transparentShipsCanvas,
+                faction.x, classRow.y, faction.w, classRow.h,
+                -drawnW / 2, -drawnH / 2, drawnW, drawnH
+              );
+              ctx.restore();
+              drawnShipImage = true;
+            }
+          }
 
-          drawRacialShipHull(ctx, style, cohort, size);
-          
-          ctx.closePath();
-          ctx.fill();
-          ctx.strokeStyle = '#000';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.restore();
+          if (!drawnShipImage) {
+            ctx.save();
+            ctx.translate(s.x, s.y);
+            ctx.rotate(angle + Math.PI / 2);
+            ctx.beginPath();
+
+            drawRacialShipHull(ctx, style, cohort, size);
+            
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.restore();
+          }
 
           // Draw mini-icons representing active upgrades below the ship when zoomed in (cameraZoom >= 1.0)
           const activeUpgrades = [];

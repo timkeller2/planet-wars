@@ -39,6 +39,7 @@ async function bootstrap() {
   game.gameStartTime = Date.now();
   game.isRunning = true;
   game.settings = null;
+  game.gameSpeed = 1.0;
   
   const connectedClients = new Map(); // socket.id -> player reference
   let lastHumanActivityTime = Date.now();
@@ -636,6 +637,18 @@ async function bootstrap() {
       game.isPaused = !game.isPaused;
     });
 
+    socket.on('changeGameSpeed', (data) => {
+      if (data && data.direction !== undefined) {
+        let current = game.gameSpeed || 1.0;
+        if (data.direction === 'up') {
+          current += 0.1;
+        } else if (data.direction === 'down') {
+          current -= 0.1;
+        }
+        game.gameSpeed = Math.max(0.1, Math.min(5.0, Math.round(current * 10) / 10));
+      }
+    });
+
     socket.on('setName', (name) => {
       const player = connectedClients.get(socket.id);
       if (player && name && typeof name === 'string') {
@@ -1053,7 +1066,7 @@ async function bootstrap() {
     });
 
     socket.on('enterGame', (options) => {
-      if (!game.settings) {
+        if (!game.settings) {
         game.settings = {
           fogOfWar: options && options.fogOfWar !== undefined ? !!options.fogOfWar : true,
           smallEmpires: options && options.smallEmpires !== undefined ? !!options.smallEmpires : true,
@@ -1066,7 +1079,8 @@ async function bootstrap() {
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
-          startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250
+          startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250,
+          graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : true
         };
         if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
           game.timeRemaining = parseFloat(game.settings.timedGameLimit);
@@ -1099,7 +1113,8 @@ async function bootstrap() {
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
-          startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250
+          startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250,
+          graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : true
       };
       
       if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
@@ -1114,6 +1129,7 @@ async function bootstrap() {
       game.gameStartTime = now;
       game.isRunning = true;
       game.isPaused = false;
+      game.gameSpeed = 1.0;
       
       for (const [socketId, oldPlayer] of connectedClients.entries()) {
         const newPlayer = game.allPlayers.find(p => p.id === oldPlayer.id);
@@ -1171,7 +1187,8 @@ async function bootstrap() {
     }
 
     if (game.isRunning && !game.isPaused) {
-      game.update(deltaTime);
+      const speed = game.gameSpeed || 1.0;
+      game.update(deltaTime * speed);
       game.checkWinCondition();
       
       // Process pending game chat messages
@@ -1858,6 +1875,8 @@ async function bootstrap() {
         gameOverMessage: game.gameOverMessage,
         settings: game.settings,
         timeRemaining: game.timeRemaining,
+        elapsedTime: game.gameTime / 1000,
+        gameSpeed: game.gameSpeed || 1.0,
         width: game.width,
         height: game.height
       };

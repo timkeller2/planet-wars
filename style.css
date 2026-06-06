@@ -672,4 +672,19 @@ canvas {
   border-radius: 2px;
 }
 
+.cruiser-build-btn {
+  min-height: 80px !important;
+  min-width: 100px !important;
+  padding: 10px 14px !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
+.cruiser-build-btn .btn-icon canvas {
+  width: 40px !important;
+  height: 40px !important;
+  margin-bottom: 4px !important;
+}
+
+
 

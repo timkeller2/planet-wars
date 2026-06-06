@@ -841,11 +841,12 @@ export class Game {
         valid = true;
 
         if (valid) {
+          const minDistPadding = (this.settings && this.settings.graphicalMode) ? 40 : 25;
           for (const p of this.planets) {
             const dx = p.x - x;
             const dy = p.y - y;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < p.radius + radius + 25) {
+            if (dist < p.radius + radius + minDistPadding) {
               valid = false;
               break;
             }
