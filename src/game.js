@@ -3489,9 +3489,6 @@ export class Game {
               const baseIncreaseAmt = Math.floor(1 + (chancePercent - roll) / 25);
               let increaseAmt = baseIncreaseAmt;
               const isResourceDoubled = prefRes && initialQty >= 0.1;
-              if (isResourceDoubled) {
-                increaseAmt *= 2;
-              }
 
               // If targeting a friendly planet, they gain half the normal sympathy increase rounded up.
               const isTargetFriendly = targetPlanet.owner && targetPlanet.owner.id === ship.owner.id;
@@ -3503,9 +3500,6 @@ export class Game {
 
               // Success XP = 1 + 1/2 of actual sympathy created, rounded down
               let successXP = Math.floor(1 + actualIncrease / 2);
-              if (isResourceDoubled) {
-                successXP *= 2;
-              }
 
               // Give ship the success XP score
               ship.expScore = (ship.expScore || 0) + successXP;
