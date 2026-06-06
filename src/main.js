@@ -1471,6 +1471,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const sellOrdersHud = document.getElementById('sell-orders-hud');
       if (sellOrdersHud) {
         const orders = serverState.sellOrders || [];
+        const fulfillOrders = serverState.fulfillOrders || [];
         
         // Split auto buy orders from regular sell orders
         const autoBuyOrders = orders.filter(o => o.isAutoBuy);
@@ -1501,8 +1502,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           });
         }
         
-        // Combine: Auto Buy Orders appear before all regular sell orders
-        const allOrders = [...groupedAutoBuyOrders, ...regularOrders];
+        const sortedFulfillOrders = [...fulfillOrders];
+        sortedFulfillOrders.sort((a, b) => a.price - b.price);
+
+        // Combine: Auto Buy Orders first, regular sell orders second, fulfill orders third
+        const allOrders = [...groupedAutoBuyOrders, ...regularOrders, ...sortedFulfillOrders];
         
         sellOrdersHud.innerHTML = '';
         sellOrdersHud.style.display = 'flex';
@@ -1545,6 +1549,30 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             const resourceNames = order.orders.map(o => o.resource).join(', ');
             card.title = `Auto Buy: ${resourceNames} at <= ${order.price} credits - Click to Dismiss`;
             card.textContent = `${emojis}: ${order.price}`;
+          } else if (order.isFulfill) {
+            const isMine = order.ownerId === localPlayer.id;
+            if (isMine) {
+              card.style.borderColor = 'rgba(76, 175, 80, 0.4)';
+              card.style.background = 'rgba(76, 175, 80, 0.1)';
+              card.style.color = '#4caf50';
+              card.style.textShadow = '0 0 4px #4caf50';
+              card.title = `Your Fulfill Order - Click to Cancel`;
+            } else {
+              card.style.borderColor = 'rgba(33, 150, 243, 0.4)';
+              card.style.background = 'rgba(33, 150, 243, 0.1)';
+              card.style.color = '#2196f3';
+              card.style.textShadow = '0 0 4px #2196f3';
+              card.title = `Fulfill Order: Click to sell 1 ${order.resource} for ${order.price} credits`;
+              
+              const hasResource = (myPlayer.resources[order.resource] || 0) >= 1.0;
+              if (!hasResource) {
+                card.style.opacity = '0.35';
+                card.style.pointerEvents = 'none';
+                card.style.cursor = 'not-allowed';
+              }
+            }
+            // Display as [PRICE][RESOURCE]
+            card.textContent = `${order.price}${emoji}`;
           } else {
             const isMine = order.ownerId === localPlayer.id;
             const timeRemainingMs = order.expiresAt - Date.now();
@@ -1596,6 +1624,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             if (order.isAutoBuy) {
               for (const originalOrder of order.orders) {
                 socket.emit('cancelAutoBuyOrder', { orderId: originalOrder.id });
+              }
+            } else if (order.isFulfill) {
+              if (!e.ctrlKey) {
+                socket.emit('clickFulfillOrder', { orderId: order.id });
               }
             } else if (!e.ctrlKey) {
               const isMine = order.ownerId === localPlayer.id;
@@ -3576,13 +3608,18 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       card.addEventListener('mousedown', (e) => {
         e.stopPropagation();
         e.preventDefault();
-        if (e.ctrlKey) {
+        if (e.button === 2) {
+          socket.emit('postFulfillOrder', { resource: res });
+        } else if (e.ctrlKey) {
           const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
           const priceVal = myPlayer ? (myPlayer.sellPriceSetting ?? 2) : 2;
           socket.emit('createAutoBuyOrder', { resource: res, price: priceVal });
         } else {
           socket.emit('postSellOrder', { resource: res });
         }
+      });
+      card.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
       });
     }
   }

@@ -823,6 +823,33 @@ async function bootstrap() {
       }
     });
 
+    socket.on('postFulfillOrder', (data) => {
+      const player = connectedClients.get(socket.id);
+      if (player && player.resources && data && data.resource) {
+        if (player.tradeOptions === undefined) {
+          player.tradeOptions = player.tradeCapacity || 5;
+        }
+        const price = player.sellPriceSetting || 2;
+        if (player.tradeOptions >= 1 && (player.credits || 0) > 0) {
+          player.tradeOptions -= 1;
+          
+          if (!game.fulfillOrders) game.fulfillOrders = [];
+          const orderId = "order_" + Math.random().toString(36).substring(2, 9);
+          game.fulfillOrders.push({
+            id: orderId,
+            ownerId: player.id,
+            ownerName: player.name,
+            resource: data.resource,
+            price: price,
+            isFulfill: true,
+            createdAt: Date.now(),
+            expiresAt: Date.now() + 15 * 60000 // 15 minutes
+          });
+          console.log(`[Fulfill Post] Player ${player.id} posted fulfill order ${orderId} for 1 ${data.resource} at price ${price} credits.`);
+        }
+      }
+    });
+
     socket.on('cancelSellOrder', (data) => {
       const player = connectedClients.get(socket.id);
       if (player && game.sellOrders) {
@@ -866,6 +893,40 @@ async function bootstrap() {
             game.sellOrders.splice(idx, 1);
             socket.emit('purchaseSuccess');
             console.log(`[Market Buy] Player ${player.id} bought 1 ${order.resource} from ${order.ownerId} for ${order.price} credits.`);
+          }
+        }
+      }
+    });
+
+    socket.on('clickFulfillOrder', (data) => {
+      const player = connectedClients.get(socket.id); // clicker
+      if (player && player.resources && game.fulfillOrders) {
+        const idx = game.fulfillOrders.findIndex(o => o.id === data.orderId);
+        if (idx !== -1) {
+          const order = game.fulfillOrders[idx];
+          
+          if (order.ownerId === player.id) {
+            // Cancel own fulfill order
+            game.fulfillOrders.splice(idx, 1);
+            console.log(`[Fulfill Cancel] Player ${player.id} cancelled fulfill order ${order.id}.`);
+          } else {
+            // Fulfill the order
+            const resourceAmount = player.resources[order.resource] || 0;
+            if (resourceAmount >= 1.0) {
+              const owner = game.allPlayers.find(p => p.id === order.ownerId);
+              if (owner) {
+                // Transfer 1 resource from clicker to owner
+                player.resources[order.resource] -= 1.0;
+                owner.resources[order.resource] = (owner.resources[order.resource] || 0) + 1.0;
+                
+                // Transfer price credits from owner to clicker (can cause owner's credits to go negative)
+                owner.credits = (owner.credits || 0) - order.price;
+                player.credits = (player.credits || 0) + order.price;
+                
+                game.fulfillOrders.splice(idx, 1);
+                console.log(`[Fulfill Order Fulfilling] Player ${player.id} fulfilled player ${owner.id}'s order ${order.id} for ${order.price} credits.`);
+              }
+            }
           }
         }
       }
@@ -1758,6 +1819,9 @@ async function bootstrap() {
         sellOrders: [
           ...(player.autoBuyOrders || []),
           ...(game.sellOrders || [])
+        ],
+        fulfillOrders: [
+          ...(game.fulfillOrders || [])
         ],
         resourceRarities: game.resourceRarities || {},
         isPaused: game.isPaused,

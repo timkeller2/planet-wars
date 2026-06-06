@@ -199,6 +199,7 @@ export class Game {
     this.accuracyEvents = [];
     this.pendingChatMessages = [];
     this.sellOrders = [];
+    this.fulfillOrders = [];
     this.neutralTradeTimer = 0;
     this.nextNeutralTradeTime = 120000 + Math.random() * 60000;
     this.aiMarketTimer = 0;
@@ -671,6 +672,7 @@ export class Game {
     this.lasers.clear();
     this.ionStorms = [];
     this.sellOrders = [];
+    this.fulfillOrders = [];
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
     this.ionStormsCreated = 0;
@@ -3063,9 +3065,12 @@ export class Game {
 
     this.updateCustomCruiserSystems(deltaTime / 1000);
 
-    // Sell Orders Expiration and Neutral Postings Loops
+    // Sell & Fulfill Orders Expiration and Neutral Postings Loops
     if (!this.sellOrders) {
       this.sellOrders = [];
+    }
+    if (!this.fulfillOrders) {
+      this.fulfillOrders = [];
     }
 
     // 1. Check expirations (15 minutes lifespan)
@@ -3081,6 +3086,13 @@ export class Game {
           console.log(`[Market Expiration] Order ${order.id} expired. 1.0 ${order.resource} returned to ${owner.id}`);
         }
         this.sellOrders.splice(i, 1);
+      }
+    }
+    for (let i = this.fulfillOrders.length - 1; i >= 0; i--) {
+      const order = this.fulfillOrders[i];
+      if (nowTimestamp >= order.expiresAt) {
+        this.fulfillOrders.splice(i, 1);
+        console.log(`[Market Expiration] Fulfill Order ${order.id} expired.`);
       }
     }
 
