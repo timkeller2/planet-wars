@@ -5482,7 +5482,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                 }
               }
               if (effTactics === 'patient') {
-                bombAccuracyBonus = 5;
+                bombAccuracyBonus = 7;
               } else if (effTactics === 'frenzied') {
                 bombAccuracyBonus = 20;
               }

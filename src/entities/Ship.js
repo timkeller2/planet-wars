@@ -796,7 +796,7 @@ export class Ship {
       if (this.bombs > 0) {
         bombAccuracyBonus = 0.10;
         if (this.tactics === 'patient') {
-          bombAccuracyBonus = 0.05;
+          bombAccuracyBonus = 0.07;
         } else if (this.tactics === 'frenzied') {
           bombAccuracyBonus = 0.20;
         }
@@ -1114,7 +1114,7 @@ export class Ship {
           let bombConsumption = 0.5;
           if (this.maxHealth > 0 && !this.isAmoeba) {
             if (this.tactics === 'patient') {
-              bombConsumption = 0.5 / 6;
+              bombConsumption = 0.25;
             } else if (this.tactics === 'frenzied') {
               bombConsumption = 1.0;
             }
@@ -1157,7 +1157,7 @@ export class Ship {
             if (this.bombs > 0) {
               bombAccuracyBonus = 0.10;
               if (this.tactics === 'patient') {
-                bombAccuracyBonus = 0.05;
+                bombAccuracyBonus = 0.07;
               } else if (this.tactics === 'frenzied') {
                 bombAccuracyBonus = 0.20;
               }
@@ -1200,7 +1200,7 @@ export class Ship {
             if (targetType !== 'aft' && this.bombs > 0) {
               let bonus = 0.10;
               if (this.tactics === 'patient') {
-                bonus = 0.05;
+                bonus = 0.07;
               } else if (this.tactics === 'frenzied') {
                 bonus = 0.20;
               }
