@@ -33,6 +33,9 @@ export class Ship {
     this.timeNotMoved = 0;
     this.lastX = null;
     this.lastY = null;
+    this.isSniperKiting = false;
+    this.sniperKiteX = null;
+    this.sniperKiteY = null;
     this.isPatrolling = false;
     this.patrolReloading = false;
     this.patrolFuelRetreating = false;
@@ -3240,6 +3243,12 @@ export class Ship {
       }
     }
     
+    if (this.maxHealth > 0 && !this.isAmoeba && !this.cruiserTargetType) {
+      this.isSniperKiting = false;
+      this.sniperKiteX = null;
+      this.sniperKiteY = null;
+    }
+    
     // Cruiser Target Lock State Machine
     if (this.maxHealth > 0 && !this.isAmoeba && this.cruiserTargetType) {
       let targetObj = null;
@@ -3313,8 +3322,32 @@ export class Ship {
             this.targetX = tx;
             this.targetY = ty;
             this.targetPlanet = null;
+          } else if (this.isSniperKiting) {
+            const distToKite = Math.sqrt((this.x - this.sniperKiteX) * (this.x - this.sniperKiteX) + (this.y - this.sniperKiteY) * (this.y - this.sniperKiteY));
+            if (distToKite < 10) {
+              this.isSniperKiting = false;
+              this.sniperKiteX = null;
+              this.sniperKiteY = null;
+              
+              // Recalculate target position immediately to avoid 1-tick delay
+              this.targetX = tx;
+              this.targetY = ty;
+              this.targetPlanet = null;
+            } else {
+              this.targetX = this.sniperKiteX;
+              this.targetY = this.sniperKiteY;
+              this.targetPlanet = null;
+            }
+          } else if (this.package === 'sniper' && dist < maxFrontRange * 0.5 && (targetObj.maxHealth > 0 ? (targetObj.health > targetObj.maxHealth * 0.75) : true)) {
+            this.isSniperKiting = true;
+            const angle = Math.atan2(tdy, tdx);
+            this.sniperKiteX = this.x - Math.cos(angle) * 100;
+            this.sniperKiteY = this.y - Math.sin(angle) * 100;
+            this.targetX = this.sniperKiteX;
+            this.targetY = this.sniperKiteY;
+            this.targetPlanet = null;
           } else if (this.package === 'sniper' && dist < maxFrontRange * 0.4) {
-            // Sniper kiting (retreat if enemy gets within 40% of firing range)
+            // Fallback standard kiting for low health enemies if they get even closer (within 40%)
             const angle = Math.atan2(tdy, tdx);
             this.targetX = this.x - Math.cos(angle) * 100;
             this.targetY = this.y - Math.sin(angle) * 100;
@@ -3382,6 +3415,9 @@ export class Ship {
         // Target was conquered/destroyed or doesn't exist anymore! Stop moving
         this.cruiserTargetType = null;
         this.cruiserTargetId = null;
+        this.isSniperKiting = false;
+        this.sniperKiteX = null;
+        this.sniperKiteY = null;
         this.targetX = this.x;
         this.targetY = this.y;
         this.targetPlanet = null;
