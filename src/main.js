@@ -38,6 +38,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   let warpOrderNext = false;
   let controlGroups = {}; // RTS control groups for fleets/cruisers
   let lastKnownPlanets = {}; // Cache of last-known states for planets under Fog of War
+  const planetSpriteSheet = new Image();
+  planetSpriteSheet.src = 'Planets Resource.jpg';
 
   let speedModifierNext = null;
   let bombOrderNext = false;
@@ -5060,22 +5062,54 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ctx.globalAlpha = 1.0;
         }
 
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-
-        if (owner) {
-          ctx.fillStyle = owner.color;
-          ctx.shadowColor = owner.color;
-          ctx.shadowBlur = 15;
-        } else {
-          ctx.fillStyle = '#555';
-          ctx.shadowColor = 'transparent';
-          ctx.shadowBlur = 0;
+        let drawnPlanetImage = false;
+        if (planetSpriteSheet.complete && planetSpriteSheet.naturalWidth > 0) {
+          const spriteIdx = p.id % 96;
+          const col = spriteIdx % 8;
+          const row = Math.floor(spriteIdx / 8);
+          const sx = 12 + col * 94;
+          const sy = 26 + row * 94;
+          
+          ctx.save();
+          if (owner) {
+            ctx.shadowColor = owner.color;
+            ctx.shadowBlur = 15;
+          }
+          ctx.drawImage(
+            planetSpriteSheet,
+            sx, sy, 94, 94,
+            p.x - p.radius, p.y - p.radius, p.radius * 2, p.radius * 2
+          );
+          ctx.restore();
+          
+          if (owner) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.strokeStyle = owner.color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+          drawnPlanetImage = true;
         }
 
-        ctx.fill();
+        if (!drawnPlanetImage) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          if (owner) {
+            ctx.fillStyle = owner.color;
+            ctx.shadowColor = owner.color;
+            ctx.shadowBlur = 15;
+          } else {
+            ctx.fillStyle = '#555';
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+          }
+          ctx.fill();
+        }
 
         if (isSelected) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
           ctx.strokeStyle = '#fff';
           ctx.lineWidth = 3;
           ctx.stroke();
