@@ -1889,6 +1889,15 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       
       const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
       
+      const wantedResources = new Set();
+      if (serverState && serverState.planets && localPlayer) {
+        for (const p of serverState.planets) {
+          if (p.ownerId === localPlayer.id && p.preferredResource && p.maxShips >= 150) {
+            wantedResources.add(p.preferredResource);
+          }
+        }
+      }
+
       for (const res of resourcesList) {
         const qtySpan = document.getElementById(`res-qty-${res}`);
         const rawQty = myPlayer.resources?.[res] || 0;
@@ -1898,6 +1907,23 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         
         const card = document.getElementById(`res-card-${res}`);
         if (card) {
+          let wantedIndicator = card.querySelector('.res-wanted-indicator');
+          if (!wantedIndicator) {
+            wantedIndicator = document.createElement('span');
+            wantedIndicator.className = 'res-wanted-indicator';
+            wantedIndicator.style.marginLeft = '6px';
+            wantedIndicator.style.fontSize = '0.9rem';
+            wantedIndicator.style.textShadow = '0 0 5px #ffd700';
+            wantedIndicator.textContent = '⭐';
+            const childSpan = card.querySelector('span');
+            if (childSpan) {
+              childSpan.appendChild(wantedIndicator);
+            } else {
+              card.appendChild(wantedIndicator);
+            }
+          }
+          wantedIndicator.style.display = wantedResources.has(res) ? 'inline-block' : 'none';
+
           const rarity = serverState.resourceRarities?.[res] || 'normal';
           if (rarity === 'exotic') {
             card.style.borderColor = '#ff3333';
@@ -5599,7 +5625,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             const meta = resourceMeta[hp.preferredResource];
             if (meta) {
               let valueStr = `${meta.emoji} ${meta.name}`;
-              if (hpOwner) {
+              if (hp.maxShips >= 150) {
+                valueStr += ' ⭐';
+              }
+              if (hpOwner && hp.maxShips >= 150) {
                 const qty = hpOwner.resources?.[hp.preferredResource] || 0;
                 if (qty >= 0.1) {
                   const bonus = Math.sqrt(qty) * 3;

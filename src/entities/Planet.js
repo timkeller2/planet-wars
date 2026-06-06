@@ -18,7 +18,7 @@ export class Planet {
     this.retainedShips = false;
     this.revoltCooldown = 0;
     const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-    this.preferredResource = this.maxShips > 150 ? resourcesList[Math.floor(Math.random() * resourcesList.length)] : null;
+    this.preferredResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
     this.preferredResourceWantedEvent = false;
     const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
     this.racialAffinity = styles[Math.floor(Math.random() * styles.length)];
@@ -78,9 +78,7 @@ export class Planet {
     this.maxShips += amount;
     this.radius = this.maxShips / 4;
 
-    if (oldMax < 150 && this.maxShips >= 150 && !this.preferredResource) {
-      const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-      this.preferredResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
+    if (oldMax < 150 && this.maxShips >= 150) {
       this.preferredResourceWantedEvent = true;
       this.preferredResourceWantedChatQueued = false;
     }
@@ -147,7 +145,7 @@ export class Planet {
       const tradingBonus = this.owner.tradingBonus || 0;
       const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
       let generatedCredits = (shipsOver100 / 100) * (deltaTime / 1000) * (1 + tradingBonus) * (1 + techBonus);
-      if (this.preferredResource && this.owner.resources) {
+      if (this.preferredResource && this.owner.resources && this.maxShips >= 150) {
         const qty = this.owner.resources[this.preferredResource] || 0;
         if (qty > 0) {
           generatedCredits *= (1 + (Math.sqrt(qty) * 3) / 100);
@@ -175,7 +173,7 @@ export class Planet {
             effectiveRate = 1.0 + ((effectiveRate - 1.0) / 3);
           }
         }
-        if (this.preferredResource && this.owner.resources) {
+        if (this.preferredResource && this.owner.resources && this.maxShips >= 150) {
           const qty = this.owner.resources[this.preferredResource] || 0;
           if (qty > 0) {
             effectiveRate *= (1 + (Math.sqrt(qty) * 3) / 100);
@@ -342,7 +340,7 @@ export class Planet {
       for (const res of this.resources) {
         let resRate = perMs;
         // Preferred resource bonus: sqrt(qty) * 3 percent
-        if (res === this.preferredResource && this.owner.resources[res] > 0) {
+        if (res === this.preferredResource && this.owner.resources[res] > 0 && this.maxShips >= 150) {
           resRate *= (1 + (Math.sqrt(this.owner.resources[res]) * 3) / 100);
         }
         if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
