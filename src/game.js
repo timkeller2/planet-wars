@@ -1912,9 +1912,6 @@ export class Game {
 
             planet.owner = winnerPlayer;
 
-            const sympathyConsumed = Math.floor(oldShips / 3);
-            planet.sympathy[winnerPlayer.id] = Math.max(0, (planet.sympathy[winnerPlayer.id] || 0) - sympathyConsumed);
-
             planet.revoltCooldown = 180000;
             planet.justAssigned = true;
             planet.focusTransition = null;
@@ -2674,10 +2671,7 @@ export class Game {
               const distSq = dx * dx + dy * dy;
               if (distSq <= gravityRadius * gravityRadius) {
                 if (targetPlanet.ships < sourcePlanet.ships) {
-                  targetPlanet.sympathy = targetPlanet.sympathy || {};
-                  const currentSym = targetPlanet.sympathy[sourcePlanet.owner.id] || 0;
-                  const newSym = Math.min(targetPlanet.maxShips, currentSym + (deltaTime / 60000));
-                  targetPlanet.sympathy[sourcePlanet.owner.id] = newSym;
+                  targetPlanet.addSympathy(sourcePlanet.owner.id, deltaTime / 60000);
                 }
               }
             }
@@ -3369,20 +3363,17 @@ export class Game {
       // 4. Diplomats sympathy generation
       if ((ship.diplomat || 0) > 0) {
         ship.diplomatTargetPlanetId = null;
-        // Find all qualifying neutral/enemy planets within sensor range that are not at max empathy/sympathy
+        // Find all qualifying planets (neutral, enemy, or friendly) within sensor range that are not at max empathy/sympathy
         const qualifyingPlanets = [];
         for (const p of this.planets) {
-          const isNeutralOrEnemy = !p.owner || p.owner.id !== ship.owner.id;
-          if (isNeutralOrEnemy) {
-            const dx = p.x - ship.x;
-            const dy = p.y - ship.y;
-            const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist <= radar) {
-              const currentSym = p.sympathy ? (p.sympathy[ship.owner.id] || 0) : 0;
-              const isMaxEmpathy = currentSym >= p.maxShips;
-              if (!isMaxEmpathy) {
-                qualifyingPlanets.push({ planet: p, dist: dist });
-              }
+          const dx = p.x - ship.x;
+          const dy = p.y - ship.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist <= radar) {
+            const currentSym = p.sympathy ? (p.sympathy[ship.owner.id] || 0) : 0;
+            const isMaxEmpathy = currentSym >= p.maxShips;
+            if (!isMaxEmpathy && !p.dead) {
+              qualifyingPlanets.push({ planet: p, dist: dist });
             }
           }
         }
@@ -3400,16 +3391,20 @@ export class Game {
               }
             }
           } else {
-            // General Rule: sort based on the new sympathy tiers and disposition (ties broken by closer distance)
+            // General Rule: sort based on the sympathy tiers and disposition (ties broken by closer distance)
             qualifyingPlanets.sort((a, b) => {
+              const isFriendlyA = a.planet.owner && a.planet.owner.id === ship.owner.id;
+              const isFriendlyB = b.planet.owner && b.planet.owner.id === ship.owner.id;
+
               const symA = a.planet.sympathy ? (a.planet.sympathy[ship.owner.id] || 0) : 0;
               const symB = b.planet.sympathy ? (b.planet.sympathy[ship.owner.id] || 0) : 0;
 
-              const tierA = (symA === 0) ? 3 : ((symA > a.planet.ships) ? 1 : 2);
-              const tierB = (symB === 0) ? 3 : ((symB > b.planet.ships) ? 1 : 2);
+              // Friendly planets are low priority (Tier 0)
+              const tierA = isFriendlyA ? 0 : ((symA === 0) ? 3 : ((symA > a.planet.ships) ? 1 : 2));
+              const tierB = isFriendlyB ? 0 : ((symB === 0) ? 3 : ((symB > b.planet.ships) ? 1 : 2));
 
               if (tierA !== tierB) {
-                return tierB - tierA; // Higher tier first (no sympathy [3] > normal sympathy [2] > sympathy > ships [1])
+                return tierB - tierA; // Higher tier first
               }
 
               const dispA = a.planet.disposition ? (a.planet.disposition[ship.owner.id] || 0) : 0;
@@ -3425,40 +3420,7 @@ export class Game {
           }
         }
 
-        let fallbackPlanet = null;
-        if (!closestPlanet) {
-          // Find friendly planets within range that have enemy sympathy
-          const friendlyPlanetsWithEnemySym = [];
-          for (const p of this.planets) {
-            const isFriendly = p.owner && p.owner.id === ship.owner.id;
-            if (isFriendly) {
-              const dx = p.x - ship.x;
-              const dy = p.y - ship.y;
-              const dist = Math.sqrt(dx*dx + dy*dy);
-              if (dist <= radar) {
-                let hasEnemySym = false;
-                if (p.sympathy) {
-                  for (const [pId, symVal] of Object.entries(p.sympathy)) {
-                    if (pId !== ship.owner.id && symVal > 0) {
-                      hasEnemySym = true;
-                      break;
-                    }
-                  }
-                }
-                if (hasEnemySym) {
-                  friendlyPlanetsWithEnemySym.push({ planet: p, dist: dist });
-                }
-              }
-            }
-          }
-
-          if (friendlyPlanetsWithEnemySym.length > 0) {
-            friendlyPlanetsWithEnemySym.sort((a, b) => a.dist - b.dist);
-            fallbackPlanet = friendlyPlanetsWithEnemySym[0].planet;
-          }
-        }
-
-        const targetPlanet = closestPlanet || fallbackPlanet;
+        const targetPlanet = closestPlanet;
         if (targetPlanet) {
           ship.diplomatTargetPlanetId = targetPlanet.id;
           ship.diplomatTimer = (ship.diplomatTimer || 0) + dt;
@@ -3466,113 +3428,93 @@ export class Game {
           if (ship.diplomatTimer >= attemptInterval) {
             ship.diplomatTimer -= attemptInterval;
 
-            if (fallbackPlanet) {
-              // Fallback friendly planet logic: reduce highest enemy sympathy by 1!
-              let highestEnemyId = null;
-              let highestEnemySym = -1;
-              if (targetPlanet.sympathy) {
-                for (const [pId, symVal] of Object.entries(targetPlanet.sympathy)) {
-                  if (pId !== ship.owner.id && symVal > 0) {
-                    if (symVal > highestEnemySym) {
-                      highestEnemySym = symVal;
-                      highestEnemyId = pId;
-                    }
-                  }
+            // Standard sympathy attempt logic using tooltip formula:
+            const expBonus = Math.sqrt(ship.owner.expScore || 0);
+            const shipExpBonus = Math.sqrt(ship.expScore || 0);
+            const MathSquareBase = expBonus + shipExpBonus;
+            const currentSym = targetPlanet.sympathy ? (targetPlanet.sympathy[ship.owner.id] || 0) : 0;
+            const disposition = targetPlanet.disposition ? (targetPlanet.disposition[ship.owner.id] ?? 0) : 0;
+
+            const prefRes = targetPlanet.preferredResource;
+            const initialQty = prefRes ? (ship.owner.resources?.[prefRes] || 0) : 0;
+
+            // If the player has >= 0.1 of the preferred resource of a planet during a diplomacy event, consume 0.1 of that resource.
+            if (prefRes && initialQty >= 0.1) {
+              ship.owner.resources[prefRes] = Math.max(0, ship.owner.resources[prefRes] - 0.1);
+              ship.diplomatPrefResourceEvent = (ship.diplomatPrefResourceEvent || 0) + 1;
+            }
+
+            const hasPref = initialQty >= 0.1;
+
+            const chanceBase = 30 + disposition + currentSym + MathSquareBase;
+            const chancePref = 30 + disposition + currentSym + (MathSquareBase * 3) + 10;
+            
+            let rawChance = hasPref ? chancePref : chanceBase;
+            if (ship.cruiserStyle === targetPlanet.racialAffinity || (ship.owner && ship.owner.cruiserStyle === targetPlanet.racialAffinity)) {
+              rawChance += 20;
+            }
+            const chancePercent = Math.max(0, Math.min(100, Math.round(rawChance)));
+            
+            const roll = Math.floor(Math.random() * 100) + 1;
+
+            // Give cruiser 1 XP score for the attempt
+            ship.expScore = (ship.expScore || 0) + 1;
+
+            if (roll <= chancePercent) {
+              // Award 1 XP score to player
+              ship.owner.expScore = (ship.owner.expScore || 0) + 1;
+
+              targetPlanet.sympathy = targetPlanet.sympathy || {};
+              targetPlanet.disposition = targetPlanet.disposition || {};
+
+              // Roll disposition if not yet set
+              if (targetPlanet.disposition[ship.owner.id] === undefined) {
+                let rollSum = 0;
+                for (let i = 0; i < 10; i++) {
+                  rollSum += Math.floor(Math.random() * 10) + 1;
                 }
+                let dispositionVal = rollSum - 60;
+
+                if (initialQty >= 0.1) {
+                  dispositionVal += (expBonus + shipExpBonus) * 3;
+                }
+                if (initialQty >= 0.1) {
+                  dispositionVal += 10;
+                }
+                dispositionVal += 0.5 * currentSym;
+
+                targetPlanet.disposition[ship.owner.id] = Math.max(-100, Math.min(100, Math.floor(dispositionVal)));
               }
-              if (highestEnemyId) {
-                targetPlanet.sympathy[highestEnemyId] = Math.max(0, targetPlanet.sympathy[highestEnemyId] - 1);
-                ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + 1;
-                console.log(`[DIPLOMAT COOLDOWN/REDUCTION] Cruiser ${ship.id} reduced enemy ${highestEnemyId} sympathy on friendly planet ${targetPlanet.name} to ${targetPlanet.sympathy[highestEnemyId]}.`);
+
+              const baseIncreaseAmt = Math.floor(1 + (chancePercent - roll) / 25);
+              let increaseAmt = baseIncreaseAmt;
+              const isResourceDoubled = prefRes && initialQty >= 0.1;
+              if (isResourceDoubled) {
+                increaseAmt *= 2;
               }
+
+              // If targeting a friendly planet, they gain half the normal sympathy increase rounded up.
+              const isTargetFriendly = targetPlanet.owner && targetPlanet.owner.id === ship.owner.id;
+              if (isTargetFriendly) {
+                increaseAmt = Math.ceil(increaseAmt / 2);
+              }
+
+              const actualIncrease = targetPlanet.addSympathy(ship.owner.id, increaseAmt);
+
+              // Success XP = 1 + 1/2 of actual sympathy created, rounded down
+              let successXP = Math.floor(1 + actualIncrease / 2);
+              if (isResourceDoubled) {
+                successXP *= 2;
+              }
+
+              // Give ship the success XP score
+              ship.expScore = (ship.expScore || 0) + successXP;
+              
+              ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + actualIncrease;
             } else {
-              // Standard sympathy attempt logic using tooltip formula:
-              const expBonus = Math.sqrt(ship.owner.expScore || 0);
-              const shipExpBonus = Math.sqrt(ship.expScore || 0);
-              const bonusSum = expBonus + shipExpBonus;
-              const currentSym = targetPlanet.sympathy ? (targetPlanet.sympathy[ship.owner.id] || 0) : 0;
-              const disposition = targetPlanet.disposition ? (targetPlanet.disposition[ship.owner.id] ?? 0) : 0;
-
-              const prefRes = targetPlanet.preferredResource;
-              const initialQty = prefRes ? (ship.owner.resources?.[prefRes] || 0) : 0;
-
-              // If the player has >= 0.1 of the preferred resource of a planet during a diplomacy event, consume 0.1 of that resource.
-              if (prefRes && initialQty >= 0.1) {
-                ship.owner.resources[prefRes] = Math.max(0, ship.owner.resources[prefRes] - 0.1);
-                ship.diplomatPrefResourceEvent = (ship.diplomatPrefResourceEvent || 0) + 1;
-              }
-
-              const hasPref = initialQty >= 0.1;
-
-              const chanceBase = 30 + disposition + currentSym + bonusSum;
-              const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10;
-              
-              let rawChance = hasPref ? chancePref : chanceBase;
-              if (ship.cruiserStyle === targetPlanet.racialAffinity || (ship.owner && ship.owner.cruiserStyle === targetPlanet.racialAffinity)) {
-                rawChance += 20;
-              }
-              const chancePercent = Math.max(0, Math.min(100, Math.round(rawChance)));
-              
-              const roll = Math.floor(Math.random() * 100) + 1;
-
-              // Give cruiser 1 XP score for the attempt
-              ship.expScore = (ship.expScore || 0) + 1;
-
-              if (roll <= chancePercent) {
-                // Award 1 XP score to player
-                ship.owner.expScore = (ship.owner.expScore || 0) + 1;
-
-                targetPlanet.sympathy = targetPlanet.sympathy || {};
-                targetPlanet.disposition = targetPlanet.disposition || {};
-
-                // Roll disposition if not yet set
-                if (targetPlanet.disposition[ship.owner.id] === undefined) {
-                  let rollSum = 0;
-                  for (let i = 0; i < 10; i++) {
-                    rollSum += Math.floor(Math.random() * 10) + 1;
-                  }
-                  let dispositionVal = rollSum - 60;
-
-                  if (initialQty >= 0.1) {
-                    dispositionVal += (expBonus + shipExpBonus) * 3;
-                  }
-                  if (initialQty >= 0.1) {
-                    dispositionVal += 10;
-                  }
-                  dispositionVal += 0.5 * currentSym;
-
-                  targetPlanet.disposition[ship.owner.id] = Math.max(-100, Math.min(100, Math.floor(dispositionVal)));
-                }
-
-                const baseIncreaseAmt = Math.floor(1 + (chancePercent - roll) / 25);
-                let increaseAmt = baseIncreaseAmt;
-                const isResourceDoubled = prefRes && initialQty >= 0.1;
-                if (isResourceDoubled) {
-                  increaseAmt *= 2;
-                }
-
-                const newSym = Math.min(targetPlanet.maxShips, currentSym + increaseAmt);
-                const actualIncrease = newSym - currentSym;
-
-                // Calculate base sympathy created without doubling
-                const baseSymCreated = Math.min(targetPlanet.maxShips, currentSym + baseIncreaseAmt) - currentSym;
-
-                // Success XP = 1 + 1/2 of base sympathy created, rounded down
-                let successXP = Math.floor(1 + baseSymCreated / 2);
-                if (isResourceDoubled) {
-                  successXP *= 2;
-                }
-
-                // Give ship the success XP score
-                ship.expScore = (ship.expScore || 0) + successXP;
-
-                targetPlanet.sympathy[ship.owner.id] = newSym;
-                
-                ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + actualIncrease;
-              } else {
-                ship.diplomatFailureEvent = (ship.diplomatFailureEvent || 0) + 1;
-                ship.diplomatFailureChance = Math.round(chancePercent);
-              }
+              ship.diplomatFailureEvent = (ship.diplomatFailureEvent || 0) + 1;
+              ship.diplomatFailureChance = Math.round(chancePercent);
+            }
             }
           }
         }

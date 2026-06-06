@@ -2742,11 +2742,23 @@ export class Ship {
           }
         }
         
-        // Behavior B: Seek planet with highest disposition and sympathy less than ships
+        // Behavior B: Seek planet with highest disposition and sympathy less than ships (or maxShips if friendly)
         if (!didAction) {
-          const qualPlanets = allPlanets ? allPlanets.filter(p => p.owner !== this.owner && (p.sympathy ? (p.sympathy[this.owner.id] || 0) : 0) < p.ships && isPlanetDiscovered(p)) : [];
+          const qualPlanets = allPlanets ? allPlanets.filter(p => {
+            const isFriendly = p.owner && p.owner.id === this.owner.id;
+            const limit = isFriendly ? p.maxShips : p.ships;
+            const currentSym = p.sympathy ? (p.sympathy[this.owner.id] || 0) : 0;
+            return currentSym < limit && isPlanetDiscovered(p);
+          }) : [];
           if (qualPlanets.length > 0) {
             qualPlanets.sort((a, b) => {
+              const isFriendlyA = a.owner && a.owner.id === this.owner.id ? 1 : 0;
+              const isFriendlyB = b.owner && b.owner.id === this.owner.id ? 1 : 0;
+              
+              if (isFriendlyA !== isFriendlyB) {
+                return isFriendlyA - isFriendlyB; // Friendly (1) sorted after non-friendly (0)
+              }
+              
               const enemiesA = hasEnemiesNearby(a) ? 1 : 0;
               const enemiesB = hasEnemiesNearby(b) ? 1 : 0;
               if (enemiesA !== enemiesB) {

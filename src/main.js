@@ -260,7 +260,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     });
   }
 
-  let lastSuggestedPlanets = 60;
+  let lastSuggestedPlanets = 50;
   let lastSuggestedAI = 6;
 
   if (planetCountInput && aiCountInput) {
@@ -281,8 +281,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         customMapsizeContainer.style.display = 'none';
         const newSize = parseInt(val, 10);
         mapSizeInput.value = newSize; // Keep custom sync'd
-        const scale = newSize / 1600;
-        const suggestedPlanets = Math.min(80, Math.round(40 * scale));
+        const suggestedPlanets = Math.round(newSize / 40);
         if (parseInt(planetCountInput.value, 10) === lastSuggestedPlanets) {
           planetCountInput.value = suggestedPlanets;
           planetCountInput.dispatchEvent(new Event('input'));
@@ -296,8 +295,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     mapSizeInput.addEventListener('input', () => {
       if (mapSizeselect && mapSizeselect.value === 'custom') {
         const newSize = parseInt(mapSizeInput.value, 10) || 1600;
-        const scale = newSize / 1600;
-        const suggestedPlanets = Math.min(80, Math.round(40 * scale));
+        const suggestedPlanets = Math.round(newSize / 40);
         if (parseInt(planetCountInput.value, 10) === lastSuggestedPlanets) {
           planetCountInput.value = suggestedPlanets;
           planetCountInput.dispatchEvent(new Event('input'));
@@ -4441,18 +4439,18 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         }
 
         if (p.sympathy) {
-          let ringIndex = 0;
+          let currentAngle = -Math.PI / 2;
+          const ringRadius = p.radius + 6;
           for (const player of serverState.players) {
             const symLevel = p.sympathy[player.id] || 0;
-            if (symLevel > 0 && p.ships > 0) {
-              const pct = Math.min(1.0, symLevel / p.ships);
-              const ringRadius = p.radius + 6 + ringIndex * 4;
+            if (symLevel > 0) {
+              const angleSize = (Math.PI * 2 * symLevel) / p.maxShips;
               ctx.beginPath();
-              ctx.arc(p.x, p.y, ringRadius, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * pct));
+              ctx.arc(p.x, p.y, ringRadius, currentAngle, currentAngle + angleSize);
               ctx.strokeStyle = player.color;
               ctx.lineWidth = 2;
               ctx.stroke();
-              ringIndex++;
+              currentAngle += angleSize;
             }
           }
         }

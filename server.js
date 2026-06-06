@@ -41,9 +41,31 @@ async function bootstrap() {
   game.settings = null;
   
   const connectedClients = new Map(); // socket.id -> player reference
+  let lastHumanActivityTime = Date.now();
 
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
+    
+    lastHumanActivityTime = Date.now();
+    if (game.isPaused && game.pausedForAFK) {
+      game.isPaused = false;
+      game.pausedForAFK = false;
+      console.log(`[Auto-Unpause] Client connection detected. Unpausing game.`);
+    }
+
+    socket.use((packet, next) => {
+      lastHumanActivityTime = Date.now();
+      const player = connectedClients.get(socket.id);
+      if (player) {
+        player.lastCommandTime = Date.now();
+      }
+      if (game.isPaused && game.pausedForAFK) {
+        game.isPaused = false;
+        game.pausedForAFK = false;
+        console.log(`[Auto-Unpause] Human interaction packet detected (${packet ? packet[0] : 'unknown'}). Unpausing game.`);
+      }
+      next();
+    });
     
     const clientId = socket.handshake.query.playerId;
     let assignedPlayer = game.allPlayers.find(p => p.clientPlayerId === clientId);
@@ -949,7 +971,7 @@ async function bootstrap() {
           aiCount: options && options.aiCount !== undefined ? options.aiCount : 5,
           productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
           mapSize: options && options.mapSize !== undefined ? options.mapSize : 1600,
-          planetCount: options && options.planetCount !== undefined ? options.planetCount : 60,
+          planetCount: options && options.planetCount !== undefined ? options.planetCount : (options && options.mapSize !== undefined ? Math.round(options.mapSize / 40) : 40),
           clusters: options && options.clusters !== undefined ? parseInt(options.clusters, 10) : 0,
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
@@ -981,7 +1003,7 @@ async function bootstrap() {
           aiCount: options && options.aiCount !== undefined ? options.aiCount : 5,
           productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
           mapSize: options && options.mapSize !== undefined ? options.mapSize : 1600,
-          planetCount: options && options.planetCount !== undefined ? options.planetCount : 60,
+          planetCount: options && options.planetCount !== undefined ? options.planetCount : (options && options.mapSize !== undefined ? Math.round(options.mapSize / 40) : 40),
           clusters: options && options.clusters !== undefined ? parseInt(options.clusters, 10) : 0,
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
@@ -1025,6 +1047,7 @@ async function bootstrap() {
     });
 
     socket.on('disconnect', () => {
+      lastHumanActivityTime = Date.now();
       const player = connectedClients.get(socket.id);
       if (player && player.id !== game.humanPlayer.id) {
         player.isAI = true; // Revert to AI if it's one of the AI slots
@@ -1044,6 +1067,15 @@ async function bootstrap() {
     const currentTime = Date.now();
     const deltaTime = currentTime - lastTime;
     lastTime = currentTime;
+
+    // Check AFK/Inactivity pause:
+    if (game.isRunning && !game.isPaused) {
+      if (currentTime - lastHumanActivityTime >= 300000) { // 5 minutes
+        game.isPaused = true;
+        game.pausedForAFK = true;
+        console.log(`[Auto-Pause] No human activity for 5 minutes. Pausing game server.`);
+      }
+    }
 
     if (game.isRunning && !game.isPaused) {
       game.update(deltaTime);

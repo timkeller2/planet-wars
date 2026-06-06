@@ -352,6 +352,68 @@ export class Planet {
     }
   }
 
+  addSympathy(playerId, increaseAmt) {
+    if (increaseAmt <= 0) return 0;
+    this.sympathy = this.sympathy || {};
+    const currentSym = this.sympathy[playerId] || 0;
+    
+    if (currentSym >= this.maxShips) {
+      return 0;
+    }
+    
+    let totalSympathy = 0;
+    for (const val of Object.values(this.sympathy)) {
+      totalSympathy += val;
+    }
+    
+    const spaceRemaining = Math.max(0, this.maxShips - totalSympathy);
+    const spaceUsed = Math.min(spaceRemaining, increaseAmt);
+    let newSym = currentSym + spaceUsed;
+    
+    let remaining = increaseAmt - spaceUsed;
+    let actualIncrease = spaceUsed;
+    
+    if (remaining > 0) {
+      const reduction = Math.ceil(remaining / 2);
+      remaining = Math.max(0, remaining - reduction);
+      
+      if (remaining > 0) {
+        let steps = Math.ceil(remaining);
+        const otherSyms = [];
+        for (const [pId, symVal] of Object.entries(this.sympathy)) {
+          if (pId !== playerId && symVal > 0) {
+            otherSyms.push({ id: pId, sympathy: symVal });
+          }
+        }
+        
+        if (otherSyms.length > 0) {
+          otherSyms.sort((a, b) => b.sympathy - a.sympathy);
+          let distributedReduction = 0;
+          while (steps > 0) {
+            let reducedAny = false;
+            for (const enemy of otherSyms) {
+              if (steps <= 0) break;
+              const currentEnemySym = this.sympathy[enemy.id] || 0;
+              if (currentEnemySym > 0) {
+                const toReduce = Math.min(1, currentEnemySym);
+                this.sympathy[enemy.id] = Math.max(0, currentEnemySym - toReduce);
+                steps -= toReduce;
+                distributedReduction += toReduce;
+                reducedAny = true;
+              }
+            }
+            if (!reducedAny) break;
+          }
+          newSym += distributedReduction;
+          actualIncrease += distributedReduction;
+        }
+      }
+    }
+    
+    this.sympathy[playerId] = Math.min(this.maxShips, newSym);
+    return actualIncrease;
+  }
+
   getGravityRadius(mapScale = 1.0) {
     let baseRadius = this.maxShips * 1.5 * mapScale;
     if (this.isMilitary && this.ships >= this.maxShips) {
