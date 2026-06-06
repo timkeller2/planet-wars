@@ -528,112 +528,23 @@ export class Ship {
         if (needNewTarget) {
           const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
           
-          // Sort friendly planets by distance from the cruiser (closest first)
-          const sortedFriendlyPlanets = [...friendlyPlanets].sort((a, b) => {
-            const da = (a.x - this.x) * (a.x - this.x) + (a.y - this.y) * (a.y - this.y);
-            const db = (b.x - this.x) * (b.x - this.x) + (b.y - this.y) * (b.y - this.y);
-            return da - db;
-          });
-
           let foundDestination = false;
-
-          for (const p of sortedFriendlyPlanets) {
-            // Find a safe coordinate inside this planet's gravity well (at least 300px from enemies, and avoiding intensity >= 15 hazards)
-            const gRad = p.getGravityRadius();
+          
+          if (friendlyPlanets.length > 0) {
+            const safeCandidates = [];
+            let globalBestFallback = null;
+            let maxSafetyDistSq = -1;
             
-            // Try random candidates inside this gravity well
-            let bestLocalCandidate = null;
-            let maxSafetyDistSq = -1;
-
-            for (let attempt = 0; attempt < 250; attempt++) {
-              const theta = Math.random() * Math.PI * 2;
-              const r = Math.random() * gRad * 0.7; // Keep well inside gravity well boundary
-              const tx = p.x + r * Math.cos(theta);
-              const ty = p.y + r * Math.sin(theta);
-
-              // 1. Avoid active ion storms or minefields with effective intensity >= 15
-              let hazardIntensityVal = 0;
-              if (ionStorms) {
-                for (const h of ionStorms) {
-                  if (h.type !== 'nebula') {
-                    const hdx = tx - h.x;
-                    const hdy = ty - h.y;
-                    if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
-                      const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
-                      const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
-                      const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
-                      const sRed = Math.sqrt(this.expScore || 0);
-                      const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
-                      if (effectiveIntensity > hazardIntensityVal) {
-                        hazardIntensityVal = effectiveIntensity;
-                      }
-                    }
-                  }
-                }
-              }
-
-              if (hazardIntensityVal >= 15) {
-                continue; // Avoid this candidate
-              }
-
-              // 2. Check distance from active enemies (aiming for at least 300px)
-              let minEnemyDistSq = Infinity;
-              if (allShips) {
-                for (const other of allShips) {
-                  if (other.active && other.id !== this.id) {
-                    const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
-                    if (isEnemy) {
-                      const edx = other.x - tx;
-                      const edy = other.y - ty;
-                      const distSq = edx * edx + edy * edy;
-                      if (distSq < minEnemyDistSq) {
-                        minEnemyDistSq = distSq;
-                      }
-                    }
-                  }
-                }
-              }
-
-              // If safe, we select the candidate
-              if (minEnemyDistSq >= 300 * 300) {
-                bestLocalCandidate = { x: tx, y: ty, p: p };
-                break;
-              } else {
-                // Keep track of the one with the maximum safety distance in case we need a fallback
-                if (minEnemyDistSq > maxSafetyDistSq) {
-                  maxSafetyDistSq = minEnemyDistSq;
-                  bestLocalCandidate = { x: tx, y: ty, p: p };
-                }
-              }
-            }
-
-            if (bestLocalCandidate && maxSafetyDistSq >= 300 * 300) {
-              this.targetPlanet = null;
-              this.targetX = bestLocalCandidate.x;
-              this.targetY = bestLocalCandidate.y;
-              this.retreatTargetPlanetId = bestLocalCandidate.p.id;
-              this.cruiserTargetType = null;
-              this.cruiserTargetId = null;
-              foundDestination = true;
-              break;
-            }
-          }
-
-          // Fallback if no candidate meets the 300px requirement
-          if (!foundDestination && sortedFriendlyPlanets.length > 0) {
-            // Find candidate among friendly planets that is as far as possible from enemies
-            let globalBestCandidate = null;
-            let maxSafetyDistSq = -1;
-
-            for (const p of sortedFriendlyPlanets) {
+            for (const p of friendlyPlanets) {
               const gRad = p.getGravityRadius();
-              for (let attempt = 0; attempt < 100; attempt++) {
+              
+              for (let attempt = 0; attempt < 50; attempt++) {
                 const theta = Math.random() * Math.PI * 2;
-                const r = Math.random() * gRad * 0.7;
+                const r = Math.random() * gRad * 0.7; // Keep well inside gravity well boundary
                 const tx = p.x + r * Math.cos(theta);
                 const ty = p.y + r * Math.sin(theta);
-
-                // Check hazards
+                
+                // 1. Avoid active ion storms or minefields with effective intensity >= 15
                 let hazardIntensityVal = 0;
                 if (ionStorms) {
                   for (const h of ionStorms) {
@@ -653,11 +564,12 @@ export class Ship {
                     }
                   }
                 }
-
+                
                 if (hazardIntensityVal >= 15) {
-                  continue;
+                  continue; // Avoid this candidate
                 }
-
+                
+                // 2. Check distance from active enemies
                 let minEnemyDistSq = Infinity;
                 if (allShips) {
                   for (const other of allShips) {
@@ -674,24 +586,57 @@ export class Ship {
                     }
                   }
                 }
-
-                if (minEnemyDistSq > maxSafetyDistSq) {
-                  maxSafetyDistSq = minEnemyDistSq;
-                  globalBestCandidate = { x: tx, y: ty, p: p };
+                
+                if (minEnemyDistSq >= 300 * 300) {
+                  const cdx = tx - this.x;
+                  const cdy = ty - this.y;
+                  const distToCruiser = Math.sqrt(cdx * cdx + cdy * cdy);
+                  safeCandidates.push({ x: tx, y: ty, p: p, dist: distToCruiser });
+                } else {
+                  // Keep track of the one with the maximum safety distance in case we need a fallback
+                  if (minEnemyDistSq > maxSafetyDistSq) {
+                    maxSafetyDistSq = minEnemyDistSq;
+                    globalBestFallback = { x: tx, y: ty, p: p };
+                  }
                 }
               }
             }
-
-            if (globalBestCandidate) {
+            
+            let selected = null;
+            if (safeCandidates.length > 0) {
+              const closeCandidates = safeCandidates.filter(c => c.dist <= 400);
+              if (closeCandidates.length > 0) {
+                closeCandidates.sort((a, b) => a.dist - b.dist);
+                selected = closeCandidates[0];
+              } else {
+                safeCandidates.sort((a, b) => a.dist - b.dist);
+                selected = safeCandidates[0];
+              }
+            }
+            
+            if (selected) {
               this.targetPlanet = null;
-              this.targetX = globalBestCandidate.x;
-              this.targetY = globalBestCandidate.y;
-              this.retreatTargetPlanetId = globalBestCandidate.p.id;
+              this.targetX = selected.x;
+              this.targetY = selected.y;
+              this.retreatTargetPlanetId = selected.p.id;
+              this.cruiserTargetType = null;
+              this.cruiserTargetId = null;
+              foundDestination = true;
+            } else if (globalBestFallback) {
+              this.targetPlanet = null;
+              this.targetX = globalBestFallback.x;
+              this.targetY = globalBestFallback.y;
+              this.retreatTargetPlanetId = globalBestFallback.p.id;
               this.cruiserTargetType = null;
               this.cruiserTargetId = null;
               foundDestination = true;
             } else {
               // Final fallback: Closest friendly planet center
+              const sortedFriendlyPlanets = [...friendlyPlanets].sort((a, b) => {
+                const da = (a.x - this.x) * (a.x - this.x) + (a.y - this.y) * (a.y - this.y);
+                const db = (b.x - this.x) * (b.x - this.x) + (b.y - this.y) * (b.y - this.y);
+                return da - db;
+              });
               const closestPlanet = sortedFriendlyPlanets[0];
               this.targetPlanet = closestPlanet;
               this.targetX = closestPlanet.x;
@@ -699,6 +644,7 @@ export class Ship {
               this.retreatTargetPlanetId = closestPlanet.id;
               this.cruiserTargetType = null;
               this.cruiserTargetId = null;
+              foundDestination = true;
             }
           }
         }
