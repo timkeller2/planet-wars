@@ -567,8 +567,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
   function updateBuildButtonCanvases() {
     if (!localPlayer) return;
-    const style = localPlayer.cruiserStyle || 'Klingon';
-    const playerColor = localPlayer.color || '#00ffff';
+    const myPlayer = (serverState && serverState.players) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+    const style = myPlayer ? (myPlayer.cruiserStyle || 'Klingon') : (localPlayer.cruiserStyle || 'Klingon');
+    const playerColor = myPlayer ? (myPlayer.color || '#00ffff') : (localPlayer.color || '#00ffff');
 
     for (const [classType, cfg] of Object.entries(SHIP_CLASSES)) {
       const el = document.getElementById(cfg.btnId);
@@ -5512,7 +5513,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
               const matchesAnySelectedAttacker = selectedShips.some(s => s.cruiserStyle === p.racialAffinity) || 
                                                 selectedPlanets.some(sp => sp.racialAffinity === p.racialAffinity) || 
-                                                (localPlayer && localPlayer.cruiserStyle === p.racialAffinity);
+                                                (myPlayer ? myPlayer.cruiserStyle === p.racialAffinity : (localPlayer && localPlayer.cruiserStyle === p.racialAffinity));
               const racialDefenseBonus = !matchesAnySelectedAttacker ? 0.15 : 0;
               const estimatedKillChance = Math.max(minKillChance, baseKillChance - defenderLocalExpPenalty + attackerFleetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - lastStandPenalty - defenderHomeworldPenalty - hazardPenalty - humanDefenderBonus - racialDefenseBonus);
               const displayPercentage = Math.round(estimatedKillChance * 100);
@@ -5689,7 +5690,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           if (hp.racialAffinity) {
             const matchesOurForces = selectedShips.some(s => s.cruiserStyle === hp.racialAffinity) || 
                                      selectedPlanets.some(sp => sp.racialAffinity === hp.racialAffinity) || 
-                                     (localPlayer && localPlayer.cruiserStyle === hp.racialAffinity);
+                                     (myPlayer ? myPlayer.cruiserStyle === hp.racialAffinity : (localPlayer && localPlayer.cruiserStyle === hp.racialAffinity));
             if (hpOwner) {
               if (localPlayer && hpOwner.id === localPlayer.id) {
                 hasEnvDefense = true;
