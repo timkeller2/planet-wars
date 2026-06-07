@@ -11,7 +11,9 @@ const __dirname = path.dirname(__filename);
 async function bootstrap() {
   const app = express();
   const server = createServer(app);
-  const io = new Server(server);
+  const io = new Server(server, {
+    perMessageDeflate: true
+  });
 
   const isProd = process.env.NODE_ENV === 'production';
 
@@ -1544,8 +1546,10 @@ async function bootstrap() {
       }
     });
 
+    const recipients = [];
     for (const [socketId, player] of connectedClients.entries()) {
       const sock = io.sockets.sockets.get(socketId);
+      let shouldSend = false;
       if (sock && sock.conn && sock.conn.writeBuffer) {
         const bufferLen = sock.conn.writeBuffer.length;
         if (bufferLen > 8) {
@@ -1553,11 +1557,27 @@ async function bootstrap() {
           continue;
         } else if (bufferLen > 3) {
           // Mildly congested socket: rate-limit to 5 FPS to reduce traffic without losing telemetry
-          if (tickCount % 4 !== 0) {
-            continue;
-          }
+          shouldSend = (tickCount % 4 === 0);
+        } else {
+          // Healthy socket: rate-limit to 10 FPS to save bandwidth/CPU, client interpolates to 60 FPS
+          shouldSend = (tickCount % 2 === 0);
         }
+      } else {
+        shouldSend = (tickCount % 2 === 0);
       }
+      if (shouldSend) {
+        recipients.push({ socketId, player });
+      }
+    }
+
+    if (recipients.length === 0) {
+      // Clear events that accumulate per-tick
+      game.upgradeEnhanceEvents = [];
+      game.accuracyEvents = [];
+      return;
+    }
+
+    for (const { socketId, player } of recipients) {
 
       if (!player.discoveredPlanets) {
         player.discoveredPlanets = new Set();

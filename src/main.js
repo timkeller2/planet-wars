@@ -1177,6 +1177,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   let planetShields = {};
   let floatingAnimations = [];
   let lastPlanetSpyRooted = {};
+  let visualShips = new Map();
 
   const sounds = {
     laser: new Audio('/laser.wav'),
@@ -1854,6 +1855,21 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       if (scoreBoard && scoreBoard.parentNode !== gameUI) {
         const chatContainer = document.getElementById('chat-container');
         gameUI.insertBefore(scoreBoard, chatContainer);
+      }
+    }
+
+    // Clean up obsolete ship keys from visualShips cache
+    const currentShipIds = new Set(state.ships ? state.ships.map(s => s.id) : []);
+    if (state.flatShips) {
+      const flat = state.flatShips;
+      const len = flat.length;
+      for (let i = 0; i < len; i += 17) {
+        currentShipIds.add(flat[i]);
+      }
+    }
+    for (const id of visualShips.keys()) {
+      if (!currentShipIds.has(id)) {
+        visualShips.delete(id);
       }
     }
 
@@ -6851,6 +6867,37 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
       for (const s of serverState.ships) {
         if (!s.active) continue;
+
+        let vis = visualShips.get(s.id);
+        if (!vis) {
+          vis = { x: s.x, y: s.y, angle: s.angle };
+          visualShips.set(s.id, vis);
+        } else {
+          // smooth lerp
+          const lerpFactor = 0.25; // Adjust for smoothness/latency balance
+          vis.x += (s.x - vis.x) * lerpFactor;
+          vis.y += (s.y - vis.y) * lerpFactor;
+          
+          let diff = s.angle - vis.angle;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          vis.angle += diff * lerpFactor;
+        }
+
+        // Apply visual coordinates to the ship object so that all drawing, selection, and laser logic
+        // automatically use the smoothly interpolated coordinates!
+        s.x = vis.x;
+        s.y = vis.y;
+        s.angle = vis.angle;
+
+        // Frustum culling: skip drawing if ship is way off-screen
+        const isSelected = selectedShips.some(ss => ss.id === s.id);
+        const buffer = 150; // generous buffer to account for spread and range circles
+        const isOffscreen = s.x < viewMinX - buffer || s.x > viewMaxX + buffer || s.y < viewMinY - buffer || s.y > viewMaxY + buffer;
+        if (isOffscreen && !isSelected) {
+          continue;
+        }
+
         const owner = serverState.players.find(pl => pl.id === s.ownerId);
 
         if (s.isBoardingFleet) {
@@ -6895,7 +6942,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           continue;
         }
 
-        const isSelected = selectedShips.some(ss => ss.id === s.id);
         const maxSpread = Math.min(60, 10 + Math.sqrt(s.count || 1) * 2.5);
 
         if (s.count > 1 || s.isCruiser || s.isAmoeba) {
@@ -7219,7 +7265,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         ctx.fillStyle = owner ? owner.color : '#fff';
         
         if (s.count > 1 && !s.isCruiser && !s.isAmoeba) {
-          const renderCount = Math.min(150, s.count);
+          let maxRender = 40;
+          if (cameraZoom < 0.4) {
+            maxRender = 10;
+          } else if (cameraZoom < 0.8) {
+            maxRender = 25;
+          }
+          const renderCount = Math.min(maxRender, s.count);
           for (let i = 0; i < renderCount; i++) {
             const { lx, ly } = getFormationOffset(s.formation, i, renderCount, maxSpread, s.isInterceptor, s.isBomber);
             const cos = Math.cos(s.angle || 0);
@@ -7281,7 +7333,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             }
           }
 
-          if (s.count > 150) {
+          if (s.count > renderCount) {
             ctx.save();
             ctx.font = 'bold 9px "Outfit", "Inter", sans-serif';
             ctx.fillStyle = owner ? owner.color : '#ffffff';
@@ -7695,6 +7747,14 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
       if (serverState.lasers) {
         for (const laser of serverState.lasers) {
+          // Frustum culling for lasers: skip if both endpoints are way off-screen
+          const buffer = 150;
+          const startOff = laser.startX < viewMinX - buffer || laser.startX > viewMaxX + buffer || laser.startY < viewMinY - buffer || laser.startY > viewMaxY + buffer;
+          const endOff = laser.endX < viewMinX - buffer || laser.endX > viewMaxX + buffer || laser.endY < viewMinY - buffer || laser.endY > viewMaxY + buffer;
+          if (startOff && endOff) {
+            continue;
+          }
+
           const progress = laser.age / laser.duration;
           
           if (laser.isBombAttack) {
@@ -7983,6 +8043,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
       if (serverState.explosions) {
         for (const exp of serverState.explosions) {
+          // Frustum culling for explosions
+          const maxRadius = exp.isCatastrophic ? 600 : (exp.isMassive ? 400 : 35);
+          if (exp.x < viewMinX - maxRadius || exp.x > viewMaxX + maxRadius || exp.y < viewMinY - maxRadius || exp.y > viewMaxY + maxRadius) {
+            continue;
+          }
+
           if (exp.isCatastrophic) {
             // Military planet catastrophic explosion â€” huge dual shockwave
             const alpha = Math.max(0, 1 - exp.age);
