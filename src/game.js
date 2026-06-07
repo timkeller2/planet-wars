@@ -2687,8 +2687,41 @@ export class Game {
     
     for (const ship of this.ships) {
       if (ship.targetPlanet && ship.targetPlanet.dead) {
-        ship.active = false;
-        continue;
+        const dx = ship.x - ship.targetPlanet.x;
+        const dy = ship.y - ship.targetPlanet.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 75) {
+          let nearestPlanet = null;
+          let nearestPlanetDistSq = Infinity;
+          for (const p of this.planets) {
+            if (!p.dead && p.id !== ship.targetPlanet.id) {
+              const pdx = p.x - ship.x;
+              const pdy = p.y - ship.y;
+              const pDistSq = pdx * pdx + pdy * pdy;
+              if (pDistSq < nearestPlanetDistSq) {
+                nearestPlanetDistSq = pDistSq;
+                nearestPlanet = p;
+              }
+            }
+          }
+          if (nearestPlanet) {
+            ship.targetPlanet = nearestPlanet;
+            ship.targetX = nearestPlanet.x;
+            ship.targetY = nearestPlanet.y;
+            ship.startX = ship.x;
+            ship.startY = ship.y;
+            ship.cruiserTargetType = null;
+            ship.cruiserTargetId = null;
+            ship.cruiserTargetOffsetX = 0;
+            ship.cruiserTargetOffsetY = 0;
+          } else {
+            ship.active = false;
+            continue;
+          }
+        } else {
+          ship.active = false;
+          continue;
+        }
       }
       ship.update(deltaTime, this.ships, this.explosions, this.planets, this.lasers, this.ionStorms, this.width, this);
         if (ship.needsSplit) {

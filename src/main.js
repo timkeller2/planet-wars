@@ -120,7 +120,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   };
 
   const graphicalModeCheckbox = document.getElementById('graphical-mode-checkbox');
-  let graphicalMode = graphicalModeCheckbox ? graphicalModeCheckbox.checked : true;
+  let graphicalMode = graphicalModeCheckbox ? graphicalModeCheckbox.checked : false;
   if (graphicalModeCheckbox) {
     graphicalModeCheckbox.addEventListener('change', () => {
       graphicalMode = graphicalModeCheckbox.checked;

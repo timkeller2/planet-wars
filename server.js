@@ -1092,7 +1092,7 @@ async function bootstrap() {
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
           startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250,
-          graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : true
+          graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false
         };
         if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
           game.timeRemaining = parseFloat(game.settings.timedGameLimit);
@@ -1126,7 +1126,7 @@ async function bootstrap() {
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
           startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250,
-          graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : true
+          graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false
       };
       
       if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
