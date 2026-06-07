@@ -1104,10 +1104,20 @@ export class Game {
       isTritaniumPaid = true;
       source.owner.resources.tritanium -= tritaniumCost;
     } else {
-      // Standard ship payment fallback
-      if (source.ships < launchCost + 1) return;
+      // Standard ship payment or credits fallback
+      const useCredits = source.owner && source.owner.useCredits !== false;
+      const playerCredits = source.owner ? (source.owner.credits || 0) : 0;
+      let creditsPaid = 0;
+      let shipLaunchCost = launchCost;
+
+      if (useCredits && playerCredits > 0) {
+        creditsPaid = Math.min(playerCredits, launchCost);
+        shipLaunchCost = launchCost - creditsPaid;
+      }
+
+      if (source.ships < shipLaunchCost + 1) return;
       
-      const tempShips = source.ships - launchCost;
+      const tempShips = source.ships - shipLaunchCost;
       let standardShipsToSend;
       if (isReinforcing && !isBombing) {
         const maxS = (target.focusMode === 'garrison') ? (target.maxShips * 2) : target.maxShips;
@@ -1141,8 +1151,11 @@ export class Game {
       if (standardShipsToSend <= 0) {
         return;
       }
+      if (creditsPaid > 0) {
+        source.owner.credits -= creditsPaid;
+      }
       finalShipsToSend = standardShipsToSend;
-      finalLaunchCost = launchCost;
+      finalLaunchCost = shipLaunchCost;
     }
 
     source.ships -= finalLaunchCost;
@@ -1330,10 +1343,20 @@ export class Game {
       isTritaniumPaid = true;
       source.owner.resources.tritanium -= tritaniumCost;
     } else {
-      // Standard ship payment fallback
-      if (source.ships < launchCost + 1) return;
+      // Standard ship payment or credits fallback
+      const useCredits = source.owner && source.owner.useCredits !== false;
+      const playerCredits = source.owner ? (source.owner.credits || 0) : 0;
+      let creditsPaid = 0;
+      let shipLaunchCost = launchCost;
+
+      if (useCredits && playerCredits > 0) {
+        creditsPaid = Math.min(playerCredits, launchCost);
+        shipLaunchCost = launchCost - creditsPaid;
+      }
+
+      if (source.ships < shipLaunchCost + 1) return;
       
-      const tempShips = source.ships - launchCost;
+      const tempShips = source.ships - shipLaunchCost;
       let standardShipsToSend = scoutMode ? Math.max(3, Math.floor(tempShips * 0.1)) : Math.floor(tempShips / 2);
       standardShipsToSend = Math.min(standardShipsToSend, tempShips);
       if (source.rampageEvent) {
@@ -1347,8 +1370,11 @@ export class Game {
       if (standardShipsToSend <= 0) {
         return;
       }
+      if (creditsPaid > 0) {
+        source.owner.credits -= creditsPaid;
+      }
       finalShipsToSend = standardShipsToSend;
-      finalLaunchCost = launchCost;
+      finalLaunchCost = shipLaunchCost;
     }
 
     source.ships -= finalLaunchCost;

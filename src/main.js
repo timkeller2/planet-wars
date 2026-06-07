@@ -2947,16 +2947,34 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                 launchCost = Math.max(0, launchCost - techBonus);
               }
               launchCost = Math.min(250, launchCost);
-              if (sourcePlanet.ships >= launchCost + 1) {
+
+              const useCredits = myPlayer && myPlayer.useCredits !== false;
+              const playerCredits = myPlayer ? (myPlayer.credits || 0) : 0;
+              const creditsPaid = useCredits ? Math.min(playerCredits, launchCost) : 0;
+              const shipLaunchCost = launchCost - creditsPaid;
+
+              if (sourcePlanet.ships >= shipLaunchCost + 1) {
                 socket.emit('sendShips', { sourceId: sourcePlanet.id, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, fillAmount: null, scoutMode: scoutModeNext, isCruiser: false });
-                floatingAnimations.push({
-                  x: sourcePlanet.x,
-                  y: sourcePlanet.y,
-                  text: `-${launchCost}`,
-                  type: 'launchCost',
-                  age: 0,
-                  duration: 2.5
-                });
+                if (creditsPaid > 0) {
+                  floatingAnimations.push({
+                    x: sourcePlanet.x,
+                    y: sourcePlanet.y,
+                    text: `-$${Math.floor(creditsPaid)}`,
+                    type: 'dollar',
+                    age: 0,
+                    duration: 2.5
+                  });
+                }
+                if (shipLaunchCost > 0) {
+                  floatingAnimations.push({
+                    x: sourcePlanet.x,
+                    y: sourcePlanet.y,
+                    text: `-${shipLaunchCost}`,
+                    type: 'launchCost',
+                    age: 0,
+                    duration: 2.5
+                  });
+                }
               }
             });
           }
@@ -2984,16 +3002,34 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                 launchCost = Math.max(0, launchCost - techBonus);
               }
               launchCost = Math.min(250, launchCost);
-              if (sourcePlanet.ships >= launchCost + 1) {
+
+              const useCredits = myPlayer && myPlayer.useCredits !== false;
+              const playerCredits = myPlayer ? (myPlayer.credits || 0) : 0;
+              const creditsPaid = useCredits ? Math.min(playerCredits, launchCost) : 0;
+              const shipLaunchCost = launchCost - creditsPaid;
+
+              if (sourcePlanet.ships >= shipLaunchCost + 1) {
                 socket.emit('sendShipsToSpace', { sourceId: sourcePlanet.id, targetX: targetPos.x, targetY: targetPos.y, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, scoutMode: scoutModeNext, isCruiser: false });
-                floatingAnimations.push({
-                  x: sourcePlanet.x,
-                  y: sourcePlanet.y,
-                  text: `-${launchCost}`,
-                  type: 'launchCost',
-                  age: 0,
-                  duration: 2.5
-                });
+                if (creditsPaid > 0) {
+                  floatingAnimations.push({
+                    x: sourcePlanet.x,
+                    y: sourcePlanet.y,
+                    text: `-$${Math.floor(creditsPaid)}`,
+                    type: 'dollar',
+                    age: 0,
+                    duration: 2.5
+                  });
+                }
+                if (shipLaunchCost > 0) {
+                  floatingAnimations.push({
+                    x: sourcePlanet.x,
+                    y: sourcePlanet.y,
+                    text: `-${shipLaunchCost}`,
+                    type: 'launchCost',
+                    age: 0,
+                    duration: 2.5
+                  });
+                }
               }
             });
           }
