@@ -7344,8 +7344,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.textBaseline = 'bottom';
             ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
             ctx.lineWidth = 2.5;
-            ctx.strokeText(`+${Math.round(s.count - 150)}`, s.x, s.y - maxSpread - 6);
-            ctx.fillText(`+${Math.round(s.count - 150)}`, s.x, s.y - maxSpread - 6);
+            ctx.strokeText(`+${Math.round(s.count - renderCount)}`, s.x, s.y - maxSpread - 6);
+            ctx.fillText(`+${Math.round(s.count - renderCount)}`, s.x, s.y - maxSpread - 6);
             ctx.restore();
           }
 
