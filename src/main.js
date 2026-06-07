@@ -130,7 +130,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
   let speedModifierNext = null;
   let bombOrderNext = false;
-  let fillModeNext = false;
   let scoutModeNext = false;
   // Interceptor order removed
   let upgradeModeActive = false;
@@ -2914,17 +2913,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         }
       } else if (clickedPlanet) {
         if (selectedPlanets.length > 0 || selectedShips.length > 0) {
-          let currentFillNeeded = Infinity;
-          if (fillModeNext) {
-            if (clickedPlanet.ownerId === localPlayer.id) {
-              const maxS = (clickedPlanet.focusMode === 'garrison') ? (clickedPlanet.maxShips * 2) : clickedPlanet.maxShips;
-              currentFillNeeded = Math.ceil(Math.max(0, maxS - clickedPlanet.ships));
-            } else {
-              currentFillNeeded = Math.ceil(Math.max(0, clickedPlanet.ships + 5));
-            }
-            fillModeNext = false;
-          }
-
           if (selectedShips.length > 0) {
             const selectedCruisers = selectedShips.filter(s => s.isCruiser && !s.isUpgrading);
             const selectedFleets = selectedShips.filter(s => !s.isCruiser && !s.isUpgrading);
@@ -2942,24 +2930,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             
             if (selectedFleets.length > 0) {
               let fleetIds = selectedFleets.map(f => f.id);
-              if (currentFillNeeded !== Infinity) {
-                const tosend = Math.min(fleetIds.length, currentFillNeeded);
-                fleetIds = fleetIds.slice(0, tosend);
-                currentFillNeeded -= tosend;
+              if (scoutModeNext) {
+                const scoutCount = Math.max(3, Math.ceil(fleetIds.length * 0.1));
+                fleetIds = fleetIds.slice(0, scoutCount);
               }
-              if (fleetIds.length > 0) {
-                if (scoutModeNext) {
-                  const scoutCount = Math.max(3, Math.ceil(fleetIds.length * 0.1));
-                  fleetIds = fleetIds.slice(0, scoutCount);
-                }
-                socket.emit('moveShipsToPlanet', { shipIds: fleetIds, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext, isShift });
-              }
+              socket.emit('moveShipsToPlanet', { shipIds: fleetIds, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext, isShift });
             }
           }
 
           if (selectedPlanets.length > 0) {
             selectedPlanets.forEach(sourcePlanet => {
-              if (currentFillNeeded === 0) return;
               const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
               let launchCost = myPlayer ? 10 + (myPlayer.planetCount || 0) : 10;
               if (myPlayer) {
@@ -2968,15 +2948,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               }
               launchCost = Math.min(250, launchCost);
               if (sourcePlanet.ships >= launchCost + 1) {
-                let fillAmount = null;
-                if (currentFillNeeded !== Infinity) {
-                  fillAmount = currentFillNeeded;
-                }
-                socket.emit('sendShips', { sourceId: sourcePlanet.id, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, fillAmount, scoutMode: scoutModeNext, isCruiser: false });
-                if (currentFillNeeded !== Infinity) {
-                  const sent = Math.min(Math.floor(sourcePlanet.ships - launchCost), currentFillNeeded);
-                  currentFillNeeded = Math.max(0, currentFillNeeded - sent);
-                }
+                socket.emit('sendShips', { sourceId: sourcePlanet.id, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, fillAmount: null, scoutMode: scoutModeNext, isCruiser: false });
                 floatingAnimations.push({
                   x: sourcePlanet.x,
                   y: sourcePlanet.y,
@@ -3886,9 +3858,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     if (event.key.toLowerCase() === 'q') {
       bombOrderNext = bombOrderNext === 'ships' ? false : 'ships';
     }
-    if (event.key.toLowerCase() === 'f') {
-      fillModeNext = !fillModeNext;
-    }
     if (event.key.toLowerCase() === 'l') {
       scoreBoard.classList.toggle('hidden');
     }
@@ -4005,7 +3974,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   document.getElementById('btn-warp').addEventListener('click', () => { warpOrderNext = !warpOrderNext; });
   document.getElementById('btn-bomb').addEventListener('click', () => { bombOrderNext = bombOrderNext === 'eco' ? false : 'eco'; });
   document.getElementById('btn-bomb-ships').addEventListener('click', () => { bombOrderNext = bombOrderNext === 'ships' ? false : 'ships'; });
-  document.getElementById('btn-fill').addEventListener('click', () => { fillModeNext = !fillModeNext; });
   document.getElementById('btn-scout').addEventListener('click', () => {
     const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
     const techBonus = myPlayer ? Math.sqrt(myPlayer.techScore || 0) : 0;
@@ -4461,7 +4429,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     toggle('btn-warp', warpOrderNext);
     toggle('btn-bomb', bombOrderNext === 'eco');
     toggle('btn-bomb-ships', bombOrderNext === 'ships');
-    toggle('btn-fill', fillModeNext);
     toggle('btn-scout', scoutModeNext);
     toggle('btn-cruiser', cruiserBuildModeActive);
 
@@ -4619,7 +4586,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
     const actionButtonsLeft = document.getElementById('action-buttons-left');
-    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-fill', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-cruiser-bomb', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-cruiser-research', 'btn-cruiser-diplomacy'];
+    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-cruiser-bomb', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-cruiser-research', 'btn-cruiser-diplomacy'];
     const upButtonsMap = {
       'btn-up-sensorarray': 'sensorarrays',
       'btn-up-lab': 'labs',
@@ -5060,7 +5027,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         }
       }
 
-      const simpleStd = ['btn-fill', 'btn-leaderboard', 'help-btn'];
+      const simpleStd = ['btn-leaderboard', 'help-btn'];
       for (const btnId of simpleStd) {
         const el = document.getElementById(btnId);
         if (el) el.style.display = 'inline-flex';
