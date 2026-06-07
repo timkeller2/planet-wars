@@ -222,12 +222,169 @@ export class Ship {
     return range;
   }
 
+  handlePlayerMoveOrder(destination, game) {
+    if (!this.isCruiser) return;
+
+    // Determine target coordinates and planet
+    let tx = this.x;
+    let ty = this.y;
+    let targetPlanet = null;
+
+    if (destination) {
+      if (destination.id !== undefined && typeof destination.getGravityRadius === 'function') {
+        // It's a planet object
+        targetPlanet = destination;
+        tx = destination.x;
+        ty = destination.y;
+      } else {
+        // It's a coordinate/target object
+        tx = destination.x !== undefined ? destination.x : this.x;
+        ty = destination.y !== undefined ? destination.y : this.y;
+        if (destination.planet) {
+          targetPlanet = destination.planet;
+        } else if (destination.targetId !== undefined && destination.targetType === 'planet') {
+          targetPlanet = game ? game.planets.find(p => p.id === destination.targetId) : null;
+        }
+      }
+    }
+
+    // Check if targetPlanet is a friendly, safe planet
+    let isSafe = false;
+    if (targetPlanet && targetPlanet.owner && this.owner && targetPlanet.owner.id === this.owner.id) {
+      // 1. Check active ion storms or minefields with effective intensity >= 15
+      let hazardIntensityVal = 0;
+      if (game && game.ionStorms) {
+        for (const h of game.ionStorms) {
+          if (h.type !== 'nebula') {
+            const hdx = tx - h.x;
+            const hdy = ty - h.y;
+            if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
+              const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
+              const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
+              const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
+              const sRed = Math.sqrt(this.expScore || 0);
+              const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+              if (effectiveIntensity > hazardIntensityVal) {
+                hazardIntensityVal = effectiveIntensity;
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Check distance from active enemies
+      let noEnemiesNearby = true;
+      if (game && game.ships) {
+        for (const other of game.ships) {
+          if (other.active && other.id !== this.id) {
+            const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+            if (isEnemy) {
+              const edx = other.x - tx;
+              const edy = other.y - ty;
+              if (edx * edx + edy * edy < 300 * 300) {
+                noEnemiesNearby = false;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (hazardIntensityVal < 15 && noEnemiesNearby) {
+        isSafe = true;
+      }
+    }
+
+    const isRetreatingNow = this.isRetreating ||
+                            this.patrolFuelRetreating ||
+                            this.bombardRearming ||
+                            this.scoutFuelRetreating ||
+                            this.researchFuelRetreating ||
+                            this.researchRearming ||
+                            this.diplomacyFuelRetreating ||
+                            this.diplomacyFleeing;
+
+    if (isRetreatingNow) {
+      if (!isSafe) {
+        // Exit whichever mode it is in
+        this.isPatrolling = false;
+        this.isScouting = false;
+        this.isResearching = false;
+        this.isDiplomacy = false;
+        this.bombPlanetsEnabled = false;
+
+        // Exit retreat entirely
+        this.isRetreating = false;
+        this.retreatTargetPlanetId = null;
+        this.patrolReloading = false;
+        this.patrolFuelRetreating = false;
+        this.patrolFuelRetreatTargetPlanetId = null;
+        this.bombardRearming = false;
+        this.bombardRearmTargetPlanetId = null;
+        this.scoutFuelRetreating = false;
+        this.scoutFuelRetreatTargetPlanetId = null;
+        this.researchFuelRetreating = false;
+        this.researchFuelRetreatTargetPlanetId = null;
+        this.researchRearming = false;
+        this.researchRearmTargetPlanetId = null;
+        this.diplomacyFuelRetreating = false;
+        this.diplomacyFuelRetreatTargetPlanetId = null;
+        this.diplomacyFleeing = false;
+        this.diplomacyFleeTargetPlanetId = null;
+      } else {
+        // Safe destination: Make it the new retreat destination
+        this.targetPlanet = null;
+        this.targetX = tx;
+        this.targetY = ty;
+        this.cruiserTargetType = null;
+        this.cruiserTargetId = null;
+
+        // Assign to active retreat variable(s)
+        if (this.isRetreating) {
+          this.retreatTargetPlanetId = targetPlanet.id;
+        }
+        if (this.patrolFuelRetreating) {
+          this.patrolFuelRetreatTargetPlanetId = targetPlanet.id;
+        }
+        if (this.bombardRearming) {
+          this.bombardRearmTargetPlanetId = targetPlanet.id;
+        }
+        if (this.scoutFuelRetreating) {
+          this.scoutFuelRetreatTargetPlanetId = targetPlanet.id;
+        }
+        if (this.researchFuelRetreating) {
+          this.researchFuelRetreatTargetPlanetId = targetPlanet.id;
+        }
+        if (this.researchRearming) {
+          this.researchRearmTargetPlanetId = targetPlanet.id;
+        }
+        if (this.diplomacyFuelRetreating) {
+          this.diplomacyFuelRetreatTargetPlanetId = targetPlanet.id;
+        }
+        if (this.diplomacyFleeing) {
+          this.diplomacyFleeTargetPlanetId = targetPlanet.id;
+        }
+      }
+    } else {
+      // Not currently retreating.
+      // If it is in any autonomous mode (scouting, researching, diplomacy, bombard), exit those modes so it obeys the move order.
+      // Patrol mode is preserved since it updates patrol station.
+      this.isScouting = false;
+      this.isResearching = false;
+      this.isDiplomacy = false;
+      this.bombPlanetsEnabled = false;
+    }
+  }
+
   executeNextOrder(allPlanets, allShips, game = null) {
     if (!this.orderQueue || this.orderQueue.length === 0) {
       return;
     }
     const order = this.orderQueue.shift();
     if (order.type === 'moveSpace') {
+      if (this.isCruiser) {
+        this.handlePlayerMoveOrder({ x: order.targetX, y: order.targetY }, game);
+      }
       this.targetPlanet = null;
       this.cruiserTargetOffsetX = 0;
       this.cruiserTargetOffsetY = 0;
@@ -253,6 +410,9 @@ export class Ship {
     } else if (order.type === 'movePlanet') {
       const planet = allPlanets ? allPlanets.find(p => p.id === order.targetId) : null;
       if (planet) {
+        if (this.isCruiser) {
+          this.handlePlayerMoveOrder({ planet, x: planet.x + (order.offsetX || 0), y: planet.y + (order.offsetY || 0) }, game);
+        }
         this.targetPlanet = planet;
         this.targetX = null;
         this.targetY = null;
@@ -300,6 +460,10 @@ export class Ship {
           tx = ship.x;
           ty = ship.y;
         }
+      }
+      if (this.isCruiser) {
+        const targetPlanet = order.targetType === 'planet' ? (allPlanets ? allPlanets.find(p => p.id === order.targetId) : null) : null;
+        this.handlePlayerMoveOrder({ planet: targetPlanet, x: tx, y: ty }, game);
       }
       this.targetX = tx;
       this.targetY = ty;

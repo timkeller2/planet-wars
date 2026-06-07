@@ -1656,6 +1656,7 @@ export class Game {
           ship.executeNextOrder(this.planets, this.ships, this);
         }
       } else {
+        ship.handlePlayerMoveOrder({ x: tX, y: tY }, this);
         ship.orderQueue = [];
         if (ship.isPatrolling) {
           ship.patrolStationX = tX;
@@ -1826,6 +1827,7 @@ export class Game {
           ship.executeNextOrder(this.planets, this.ships, this);
         }
       } else {
+        ship.handlePlayerMoveOrder({ planet: targetPlanet, x: targetPlanet.x + oX, y: targetPlanet.y + oY }, this);
         ship.orderQueue = [];
         if (ship.isPatrolling) {
           ship.patrolStationX = targetPlanet.x + oX;

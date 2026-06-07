@@ -419,12 +419,14 @@ async function bootstrap() {
               ship.executeNextOrder(game.planets, game.ships, game);
             }
           } else {
+            const targetPlanet = targetType === 'planet' ? game.planets.find(p => p.id === targetId) : null;
+            const tx = (clickX !== undefined && clickX !== null) ? clickX : (targetPlanet ? targetPlanet.x : ship.x);
+            const ty = (clickY !== undefined && clickY !== null) ? clickY : (targetPlanet ? targetPlanet.y : ship.y);
+            ship.handlePlayerMoveOrder({ planet: targetPlanet, x: tx, y: ty }, game);
+
             ship.orderQueue = [];
             const isAttackingAndInjured = ship.isPatrolling && (ship.combatCooldown > 0) && (ship.health < ship.maxHealth);
             if (ship.isPatrolling && targetType !== 'ship' && !isAttackingAndInjured) {
-              const destPlanet = targetType === 'planet' ? game.planets.find(p => p.id === targetId) : null;
-              const tx = (clickX !== undefined && clickX !== null) ? clickX : (destPlanet ? destPlanet.x : ship.x);
-              const ty = (clickY !== undefined && clickY !== null) ? clickY : (destPlanet ? destPlanet.y : ship.y);
               ship.patrolStationX = tx;
               ship.patrolStationY = ty;
               ship.targetX = tx;
