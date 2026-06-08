@@ -928,9 +928,30 @@ export class Ship {
             const key = `${pId}_${cx}_${cy}`;
             const wasExplored = (game.exploredGrid[key] || 0) !== 0;
             if (!wasExplored) {
+              let alreadyExploredByAnyone = false;
+              if (game.allPlayers) {
+                for (const p of game.allPlayers) {
+                  if (p.id !== pId && (game.exploredGrid[`${p.id}_${cx}_${cy}`] || 0) !== 0) {
+                    alreadyExploredByAnyone = true;
+                    break;
+                  }
+                }
+              } else {
+                const suffix = `_${cx}_${cy}`;
+                for (const k of Object.keys(game.exploredGrid)) {
+                  if (k.endsWith(suffix) && !k.startsWith(`${pId}_`)) {
+                    if ((game.exploredGrid[k] || 0) !== 0) {
+                      alreadyExploredByAnyone = true;
+                      break;
+                    }
+                  }
+                }
+              }
+
               game.exploredGrid[key] = now;
               if (this.isCruiser) {
-                this.expScore = (this.expScore || 0) + 1;
+                const xpGain = alreadyExploredByAnyone ? 1 : 2;
+                this.expScore = (this.expScore || 0) + xpGain;
               }
             } else {
               game.exploredGrid[key] = now;

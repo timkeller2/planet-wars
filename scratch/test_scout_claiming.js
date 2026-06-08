@@ -116,7 +116,7 @@ scout2.x = 50;
 scout2.y = 50;
 
 // Set up exploredGrid so only key `p1_0_0` is unexplored
-const pId = scout2.owner.id;
+const pId = scout2.owner.id; // 'p1'
 game.exploredGrid = {};
 // Pre-fill cells in radar scan area as explored
 const radarRange = scout2.cruiserRadarRange();
@@ -126,16 +126,40 @@ for (let dx = -cellRadius; dx <= cellRadius; dx++) {
     game.exploredGrid[`${pId}_${dx}_${dy}`] = Date.now();
   }
 }
-// Set one cell to unexplored
+// Set cell 0,0 to unexplored for p1. No other player has explored it either.
 game.exploredGrid[`${pId}_0_0`] = 0;
 
 scout2.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
-// The radar scan should have run and scanned cell 0,0 which was unexplored, awarding 1 XP
-assert(scout2.expScore === 1, `Cruiser should gain 1 XP for scanning unexplored cell 0,0. Got ${scout2.expScore}`);
+// Because scout2 (p1) is the first player to explore cell 0,0, they should get 2 XP (doubled)
+assert(scout2.expScore === 2, `Cruiser should gain 2 XP (doubled) for being the first to scan unexplored cell 0,0. Got ${scout2.expScore}`);
 
-// Subsequent update should not award XP again because 0,0 is now explored
+// Subsequent update should not award XP again because 0,0 is now explored by player 1
 scout2.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
-assert(scout2.expScore === 1, "Experience score should remain 1");
+assert(scout2.expScore === 2, "Experience score should remain 2");
+
+// Now test that if player 2's cruiser scans cell 0,0 (already explored by player 1), player 2 gets only 1 XP
+const p2 = new Player('p2', '#f0f', false);
+game.allPlayers.push(p2);
+scout1.owner = p2;
+scout1.isCruiser = true; // Make scout1 a cruiser
+scout1.x = 50;
+scout1.y = 50;
+scout1.expScore = 0;
+// Reset player 2's grid but pre-fill so only 0,0 is scanned
+const pId2 = scout1.owner.id; // 'p2'
+for (let dx = -cellRadius; dx <= cellRadius; dx++) {
+  for (let dy = -cellRadius; dy <= cellRadius; dy++) {
+    game.exploredGrid[`${pId2}_${dx}_${dy}`] = Date.now();
+  }
+}
+game.exploredGrid[`${pId2}_0_0`] = 0; // Unexplored for p2
+
+// Ensure player 1 has indeed explored cell 0,0
+game.exploredGrid[`p1_0_0`] = Date.now();
+
+scout1.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
+// Because player 1 has already explored cell 0,0, player 2 should get only 1 XP
+assert(scout1.expScore === 1, `Cruiser should gain only 1 XP for scanning cell 0,0 already explored by another player. Got ${scout1.expScore}`);
 
 console.log("Scout experience points award test passed!");
 console.log("All claiming and fuel unit tests completed successfully!");
