@@ -172,32 +172,12 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
   const getMaxFuel = (s) => {
     const baseFuel = s.maxHealth / 5;
-    let bonus = 0;
-    if (s.engine > 0) {
-      bonus += 2;
-      if (s.engine > 1) {
-        bonus += 1;
-      }
-      if (s.engine > 2) {
-        bonus += 1;
-      }
-    }
-    return baseFuel + bonus + (s.fuel_tanker || 0) * (s.maxHealth / 5 + 10);
+    return baseFuel + (s.fuel_tanker || 0) * 5;
   };
 
   const getMaxBombs = (s) => {
     const baseMax = Math.floor(s.maxHealth / 5);
-    let bonus = 0;
-    if (s.munitions > 0) {
-      bonus += 2;
-      if (s.munitions > 1) {
-        bonus += 1;
-      }
-      if (s.munitions > 2) {
-        bonus += 1;
-      }
-    }
-    return baseMax + bonus;
+    return baseMax + (s.munitions || 0);
   };
 
   function drawRacialShipHull(ctx, style, cohort, size) {
