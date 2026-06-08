@@ -1986,7 +1986,8 @@ export class Ship {
             let destroyedDefender = false;
             let finalPlanetHitChance = this.isAmoeba ? (hitChance / 2) : hitChance;
             if (!this.isAmoeba && this.maxHealth > 0) {
-              finalPlanetHitChance = Math.min(1.0, finalPlanetHitChance * 2);
+              const munitionsBonus = (this.munitions || 0) * 0.10;
+              finalPlanetHitChance = Math.min(1.0, finalPlanetHitChance * 2 + munitionsBonus);
             }
             if (Math.random() < finalPlanetHitChance) {
               if (p.ships > 0) {
