@@ -5,6 +5,36 @@ const AMOEBA_SIN = [0, 0.70710678, 1, 0.70710678, 0, -0.70710678, -1, -0.7071067
 window.addEventListener('keydown', e => keysDown[e.key] = true);
 window.addEventListener('keyup', e => keysDown[e.key] = false);
 
+const habIcons = {
+  'Toxic': '☣️',
+  'Radiated': '☢️',
+  'Barren': '🪨',
+  'Desert': '🏜️',
+  'Tundra': '❄️',
+  'Swamp': '🐊',
+  'Jungle': '🌴',
+  'Ocean': '🌊',
+  'Arid': '🌵',
+  'Terran': '🌍',
+  'Gaia': '🍀'
+};
+
+function getHabName(habitability) {
+  const hab = habitability || 0;
+  if (hab < 20) return 'Toxic';
+  if (hab < 30) return 'Radiated';
+  if (hab < 40) return 'Barren';
+  if (hab < 50) return 'Desert';
+  if (hab < 60) return 'Tundra';
+  if (hab < 70) return 'Swamp';
+  if (hab < 80) return 'Jungle';
+  if (hab < 90) return 'Ocean';
+  if (hab < 100) return 'Arid';
+  if (hab < 120) return 'Terran';
+  return 'Gaia';
+}
+
+
 // Run initialization immediately as an ES Module
   console.log('[PlanetWars] Code version: RAF-loop-v1');
   const canvas = document.getElementById('gameCanvas');
@@ -5814,7 +5844,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               'Federation': '🖖',
               'Romulan': '🦅',
               'Klingon': '⚔️',
-              'Gorn': '🐊',
+              'Gorn': '🦎',
               'Tholian': '🕸️',
               'Lyran': '🐯'
             };
@@ -5884,16 +5914,23 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.fillStyle = isLastKnown ? 'rgba(200, 200, 200, 0.4)' : 'rgba(255, 255, 255, 0.6)';
             ctx.fillRect(p.x - textWidth / 2 - 8, pillY - pillHeight / 2, textWidth + 16, pillHeight);
 
-            // Draw race icon to the left of the pill box
+            // Draw race and habitability icons to the left of the pill box
+            const planetDataForHab = isLastKnown ? lastKnownPlanets[p.id] : p;
+            const hName = getHabName(planetDataForHab.habitability);
+            const hIcon = habIcons[hName] || '🍀';
+
+            ctx.save();
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#fff';
             if (raceIcon) {
-              ctx.save();
-              ctx.font = '12px Arial';
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillStyle = '#fff';
-              ctx.fillText(raceIcon, p.x - textWidth / 2 - 20, pillY);
-              ctx.restore();
+              ctx.fillText(raceIcon, p.x - textWidth / 2 - 32, pillY);
+              ctx.fillText(hIcon, p.x - textWidth / 2 - 20, pillY);
+            } else {
+              ctx.fillText(hIcon, p.x - textWidth / 2 - 20, pillY);
             }
+            ctx.restore();
 
             if (isHuman) {
               const focus = p.focusMode || 'economy';
@@ -5947,16 +5984,21 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               ctx.restore();
             }
 
-            // Draw race icon directly to the left of the planet graphic
+            // Draw race and habitability icons directly to the left of the planet graphic
+            const planetDataForHab = isLastKnown ? lastKnownPlanets[p.id] : p;
+            const hName = getHabName(planetDataForHab.habitability);
+            const hIcon = habIcons[hName] || '🍀';
+            const iconRadius = 10;
+            const iconY = p.y;
+
             if (raceIcon) {
-              const iconRadius = 10;
-              const iconX = p.x - p.radius - iconRadius - 4;
-              const iconY = p.y;
+              const raceIconX = p.x - p.radius - 38;
+              const habIconX = p.x - p.radius - 14;
 
               // Draw separate circular backdrop for race icon (premium visual style)
               ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
               ctx.beginPath();
-              ctx.arc(iconX, iconY, iconRadius, 0, Math.PI * 2);
+              ctx.arc(raceIconX, iconY, iconRadius, 0, Math.PI * 2);
               ctx.fill();
 
               // Render emoji badge centered in its circular pill
@@ -5965,7 +6007,39 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               ctx.fillStyle = '#fff';
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
-              ctx.fillText(raceIcon, iconX, iconY);
+              ctx.fillText(raceIcon, raceIconX, iconY);
+              ctx.restore();
+
+              // Draw separate circular backdrop for habitability icon
+              ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
+              ctx.beginPath();
+              ctx.arc(habIconX, iconY, iconRadius, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Render emoji badge centered in its circular pill
+              ctx.save();
+              ctx.font = `${iconRadius * 1.3}px sans-serif`;
+              ctx.fillStyle = '#fff';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(hIcon, habIconX, iconY);
+              ctx.restore();
+            } else {
+              const habIconX = p.x - p.radius - 14;
+
+              // Draw separate circular backdrop for habitability icon
+              ctx.fillStyle = 'rgba(17, 11, 11, 0.7)';
+              ctx.beginPath();
+              ctx.arc(habIconX, iconY, iconRadius, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Render emoji badge centered in its circular pill
+              ctx.save();
+              ctx.font = `${iconRadius * 1.3}px sans-serif`;
+              ctx.fillStyle = '#fff';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(hIcon, habIconX, iconY);
               ctx.restore();
             }
           }
@@ -6248,7 +6322,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               'Federation': '🖖',
               'Romulan': '🦅',
               'Klingon': '⚔️',
-              'Gorn': '🐊',
+              'Gorn': '🦎',
               'Tholian': '🕸️',
               'Lyran': '🐯'
             };
@@ -6669,7 +6743,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                 'Federation': '🖖',
                 'Romulan': '🦅',
                 'Klingon': '⚔️',
-                'Gorn': '🐊',
+                'Gorn': '🦎',
                 'Tholian': '🕸️',
                 'Lyran': '🐯'
               };
@@ -6915,7 +6989,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                 'Federation': '🖖',
                 'Romulan': '🦅',
                 'Klingon': '⚔️',
-                'Gorn': '🐊',
+                'Gorn': '🦎',
                 'Tholian': '🕸️',
                 'Lyran': '🐯'
               };

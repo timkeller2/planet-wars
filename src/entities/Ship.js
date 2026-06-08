@@ -18,7 +18,7 @@ export class Ship {
     this.targetX = targetX;
     this.targetY = targetY;
     this.owner = owner;
-    this.speed = 15; // Halved from 70
+    this.speed = (owner && owner.isAI) ? 35 : 15;
     this.active = true;
     this.flightTime = 0;
     this.startX = x;
@@ -2566,6 +2566,11 @@ export class Ship {
                       if (other.active && other.id !== this.id) {
                         const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
                         if (isEnemy) {
+                          let isVisible = true;
+                          if (game && typeof game.isShipVisibleTo === 'function') {
+                            isVisible = game.isShipVisibleTo(other, this.owner);
+                          }
+                          if (!isVisible) continue;
                           const edx = other.x - tx;
                           const edy = other.y - ty;
                           const distSq = edx * edx + edy * edy;
@@ -2641,6 +2646,11 @@ export class Ship {
             if (other.active && other.id !== this.id) {
               const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
               if (isEnemy) {
+                let isVisible = true;
+                if (game && typeof game.isShipVisibleTo === 'function') {
+                  isVisible = game.isShipVisibleTo(other, this.owner);
+                }
+                if (!isVisible) continue;
                 const dx = other.x - this.x;
                 const dy = other.y - this.y;
                 const distSq = dx * dx + dy * dy;
@@ -2673,6 +2683,11 @@ export class Ship {
                 if (other.active && other.id !== this.id) {
                   const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
                   if (isEnemy) {
+                    let isVisible = true;
+                    if (game && typeof game.isShipVisibleTo === 'function') {
+                      isVisible = game.isShipVisibleTo(other, this.owner);
+                    }
+                    if (!isVisible) continue;
                     const dx = other.x - this.x;
                     const dy = other.y - this.y;
                     if (dx * dx + dy * dy <= 300 * 300) {
