@@ -112,15 +112,15 @@
           <label style="cursor: pointer; display: flex; align-items: center;">
             <select id="starting-credits-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
               <option value="0">No Credits: 0</option>
-              <option value="100">Low Credits: 100</option>
-              <option value="250" selected>Normal Credits: 250</option>
-              <option value="500">High Credits: 500</option>
+              <option value="250">Low Credits: 250</option>
+              <option value="500" selected>Normal Credits: 500</option>
+              <option value="1000">High Credits: 1000</option>
               <option value="custom">Custom</option>
             </select>
             Starting Credits:
           </label>
           <label id="custom-starting-credits-container" style="display: none; cursor: pointer; align-items: center;">
-            <input type="number" id="starting-credits-input" value="250" min="0" max="1000000" style="width: 80px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            <input type="number" id="starting-credits-input" value="500" min="0" max="1000000" style="width: 80px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
             Custom Starting Credits
           </label>
         </div>
@@ -219,6 +219,7 @@
             <button id="btn-cruiser-bomb" class="cyber-btn action-btn-icon" style="display: none;" title="Bomb Planets (B)"><span class="btn-icon">💥</span>B</button>
             <button id="btn-patrol" class="cyber-btn action-btn-icon" style="display: none;" title="Patrol Mode (P)"><span class="btn-icon">⚔️</span>P</button>
             <button id="btn-warp" class="cyber-btn action-btn-icon" title="Warp (W)"><span class="btn-icon">⚡</span>W</button>
+            <button id="btn-dismantle" class="cyber-btn action-btn-icon" style="display: none;" title="Dismantle Cruiser (D)"><span class="btn-icon">♻️</span>D</button>
 
             <!-- Cruiser dropdown selections -->
             <div id="cruiser-dropdowns" style="display: none; gap: 15px; align-items: center; margin-left: 10px; border-left: 1px dashed rgba(0, 229, 255, 0.4); padding-left: 15px;">

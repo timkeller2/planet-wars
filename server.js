@@ -323,6 +323,42 @@ async function bootstrap() {
       }
     });
 
+    socket.on('dismantleCruisers', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      player.lastCommandTime = Date.now();
+      player.afkWarningSent = false;
+      if (player.isAI) {
+        player.isAI = false;
+      }
+
+      if (data && Array.isArray(data.shipIds)) {
+        for (const shipId of data.shipIds) {
+          const ship = game.ships.find(s => s.id === shipId);
+          if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id && !ship.isDismantling) {
+            let inFriendlyWell = false;
+            for (const pl of game.planets) {
+              if (pl.owner && pl.owner.id === player.id) {
+                const gr = pl.getGravityRadius();
+                const dx = pl.x - ship.x;
+                const dy = pl.y - ship.y;
+                if (dx * dx + dy * dy <= gr * gr) {
+                  inFriendlyWell = true;
+                  break;
+                }
+              }
+            }
+            if (inFriendlyWell) {
+              ship.startDismantle(game);
+              console.log(`[Server Dismantle Started] Player: ${player.name}, shipId: ${shipId}`);
+            }
+          }
+        }
+      }
+    });
+
     socket.on('moveShipsToSpace', (data) => {
       if (!game.isRunning || game.isPaused) return;
       const player = connectedClients.get(socket.id);
@@ -460,12 +496,6 @@ async function bootstrap() {
         ship.bombPlanetsEnabled = !!enabled;
         ship.isRetreating = false;
         ship.retreatTargetPlanetId = null;
-        if (ship.bombPlanetsEnabled) {
-          ship.isPatrolling = false;
-          ship.isScouting = false;
-          ship.isResearching = false;
-          ship.isDiplomacy = false;
-        }
       }
     });
 
@@ -539,7 +569,6 @@ async function bootstrap() {
         ship.isRetreating = false;
         ship.retreatTargetPlanetId = null;
         if (ship.isPatrolling) {
-          ship.bombPlanetsEnabled = false;
           ship.isScouting = false;
           ship.isResearching = false;
           ship.isDiplomacy = false;
@@ -566,9 +595,9 @@ async function bootstrap() {
         ship.scoutFuelRetreating = false;
         ship.isRetreating = false;
         ship.retreatTargetPlanetId = null;
+        ship.targetPlanet = null;
         if (ship.isScouting) {
           ship.isPatrolling = false;
-          ship.bombPlanetsEnabled = false;
           ship.isResearching = false;
           ship.isDiplomacy = false;
           ship.orderQueue = [];
@@ -613,7 +642,6 @@ async function bootstrap() {
           ship.isDiplomacy = false;
           ship.isScouting = false;
           ship.isPatrolling = false;
-          ship.bombPlanetsEnabled = false;
           ship.orderQueue = [];
           ship.cruiserTargetType = null;
           ship.cruiserTargetId = null;
@@ -639,7 +667,6 @@ async function bootstrap() {
           ship.isResearching = false;
           ship.isScouting = false;
           ship.isPatrolling = false;
-          ship.bombPlanetsEnabled = false;
           ship.orderQueue = [];
           ship.cruiserTargetType = null;
           ship.cruiserTargetId = null;
@@ -777,12 +804,9 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (player) {
         if (data && typeof data.value === 'number') {
-          player.sellPriceSetting = Math.max(2, Math.min(30, data.value));
+          player.sellPriceSetting = Math.max(1, data.value);
         } else {
-          player.sellPriceSetting = (player.sellPriceSetting || 2) + 1;
-          if (player.sellPriceSetting > 30) {
-            player.sellPriceSetting = 2;
-          }
+          player.sellPriceSetting = (player.sellPriceSetting || 1) + 1;
         }
       }
     });
@@ -827,7 +851,7 @@ async function bootstrap() {
       if (player) {
         if (!player.autoBuyOrders) player.autoBuyOrders = [];
         const resources = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-        const price = player.sellPriceSetting || 2;
+        const price = player.sellPriceSetting || 1;
         
         for (const res of resources) {
           const existingOrder = player.autoBuyOrders.find(o => o.resource === res);
@@ -868,11 +892,11 @@ async function bootstrap() {
             ownerId: player.id,
             ownerName: player.name,
             resource: data.resource,
-            price: player.sellPriceSetting || 2,
+            price: player.sellPriceSetting || 1,
             createdAt: Date.now(),
             expiresAt: Date.now() + 15 * 60000 // 15 minutes
           });
-          console.log(`[Market Post] Player ${player.id} posted 1 ${data.resource} for ${player.sellPriceSetting || 2} credits.`);
+          console.log(`[Market Post] Player ${player.id} posted 1 ${data.resource} for ${player.sellPriceSetting || 1} credits.`);
         }
       }
     });
@@ -883,7 +907,7 @@ async function bootstrap() {
         if (player.tradeOptions === undefined) {
           player.tradeOptions = player.tradeCapacity || 5;
         }
-        const price = player.sellPriceSetting || 2;
+        const price = player.sellPriceSetting || 1;
         if (player.tradeOptions >= 1 && (player.credits || 0) > 0) {
           player.tradeOptions -= 1;
           
@@ -1162,7 +1186,15 @@ async function bootstrap() {
         p.attackedPlanets = new Map();
         p.cruiserStyle = null;
         p.credits = game.settings && game.settings.startingCredits !== undefined ? game.settings.startingCredits : 250;
-        p.autoBuyOrders = [];
+        const resources = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+        p.autoBuyOrders = resources.map(res => ({
+          id: "autobuy_" + Math.random().toString(36).substring(2, 9),
+          isAutoBuy: true,
+          ownerId: p.id,
+          ownerName: p.name || (p.id === 'p1' ? 'Player 1' : 'Player ' + p.id),
+          resource: res,
+          price: 1
+        }));
         
         console.log(`RESTART: Assigning planet for ${p.id}`);
         game.tryAssignPlanet(p);
@@ -1401,7 +1433,7 @@ async function bootstrap() {
           y: p.y,
           radius: p.radius,
           ships: p.ships,
-          maxShips: p.maxShips,
+          maxShips: Math.round(p.maxShips),
           ownerId: p.owner ? p.owner.id : null,
           productionProgress: p.productionProgress,
           expScore: p.expScore || 0,
@@ -1433,7 +1465,9 @@ async function bootstrap() {
           resources: p.resources || null,
           preferredResource: p.preferredResource || null,
           racialAffinity: p.racialAffinity || null,
-          preferredResourceWantedEvent: prwEvent
+          preferredResourceWantedEvent: prwEvent,
+          sizeClass: p.sizeClass || 0,
+          habitability: p.habitability || 0
       };
     });
 
@@ -1499,13 +1533,16 @@ async function bootstrap() {
           isUpgrading: s.isUpgrading || false,
           upgradeTimer: s.upgradeTimer || 0,
           upgradeType: s.upgradeType || null,
+          isDismantling: s.isDismantling || false,
+          dismantleTimer: s.dismantleTimer !== undefined ? s.dismantleTimer : 0,
+          dismantleDuration: s.dismantleDuration || (s.maxHealth / 2) || 15,
           isHungry: s.isAmoeba ? (!s.amoebaGrowCooldown || s.amoebaGrowCooldown <= 0) : false,
           isWarp: s.isWarp || false,
           fuel: s.fuel || 0,
           angle: s.angle || 0,
           flightTime: s.flightTime || 0,
           speedModifier: s.speedModifier || 1.0,
-          speed: s.speed || 20,
+          speed: s.speed || (s.isCruiser ? 22 : 15),
           currentSpeed: s.currentSpeed || 0,
           specialduranium: s.specialduranium || 0,
           targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,
@@ -1533,6 +1570,10 @@ async function bootstrap() {
           bombPlanetsEnabled: s.bombPlanetsEnabled !== false,
           isPatrolling: s.isPatrolling || false,
           isScouting: s.isScouting || false,
+          scoutTargetX: s.scoutTargetX !== undefined ? s.scoutTargetX : null,
+          scoutTargetY: s.scoutTargetY !== undefined ? s.scoutTargetY : null,
+          scoutTargetUnexplored: (s.isScouting && s.scoutTargetX !== null && s.scoutTargetY !== null && s.owner && game.exploredGrid) ?
+            ((game.exploredGrid[`${s.owner.id}_${Math.floor(s.scoutTargetX / 100)}_${Math.floor(s.scoutTargetY / 100)}`] || 0) === 0) : false,
           isResearching: s.isResearching || false,
           isDiplomacy: s.isDiplomacy || false,
           scoutAttackEnabled: s.scoutAttackEnabled || false,
@@ -1778,7 +1819,7 @@ async function bootstrap() {
               radius: p.radius,
               ownerId: p.owner ? p.owner.id : null,
               ships: 0,
-              maxShips: p.maxShips,
+              maxShips: Math.round(p.maxShips),
               inFog: true,
               spyRootedOutEvent: spyRooted,
               isSpeedPlanet: p.isSpeedPlanet,
@@ -1788,7 +1829,9 @@ async function bootstrap() {
               rampageIncubating: p.rampageIncubating || false,
               isAICandidate: p.isAICandidate || false,
               resources: p.resources || null,
-              expScore: p.expScore || 0
+              expScore: p.expScore || 0,
+              sizeClass: p.sizeClass || 0,
+              habitability: p.habitability || 0
             });
           }
         }
@@ -1819,7 +1862,8 @@ async function bootstrap() {
               Math.round((s.health || 0) * 10) / 10,
               Math.round((s.expScore || 0) * 10) / 10,
               Math.round((s.flightTime || 0) * 10) / 10,
-              Math.round((s.currentSpeed || 0) * 10) / 10
+              Math.round((s.currentSpeed || 0) * 10) / 10,
+              s.isMarineFleet ? 1 : 0
             );
           }
         }
@@ -1881,6 +1925,16 @@ async function bootstrap() {
         return isVisible(ev.x, ev.y);
       });
 
+      const playerExploredCells = {};
+      if (game.exploredGrid) {
+        const prefix = `${player.id}_`;
+        for (const [key, value] of Object.entries(game.exploredGrid)) {
+          if (key.startsWith(prefix) && value > 0) {
+            playerExploredCells[key.substring(prefix.length)] = value;
+          }
+        }
+      }
+
       const state = {
         planets: visiblePlanets,
         ships: visibleShips,
@@ -1910,7 +1964,9 @@ async function bootstrap() {
         elapsedTime: game.gameTime / 1000,
         gameSpeed: game.gameSpeed || 1.0,
         width: game.width,
-        height: game.height
+        height: game.height,
+        gameStartTime: game.gameStartTime,
+        exploredCells: playerExploredCells
       };
       
       io.to(socketId).emit('gameStateUpdate', state);

@@ -33,6 +33,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
   let localPlayer = null;
   let serverState = null;
+  let lastGameStartTime = null;
+  let lastSelectedCruiserId = null;
   let selectedPlanets = [];
   let selectedShips = [];
   let warpOrderNext = false;
@@ -133,6 +135,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   let scoutModeNext = false;
   // Interceptor order removed
   let upgradeModeActive = false;
+  let confirmingDismantle = false;
+  let lastSelectedCruiserIdsStr = "";
   let focusModeActive = false;
 
   let cameraZoom = 1.0;
@@ -1360,6 +1364,14 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
   let lastLaserCount = 0;
 
   socket.on('gameStateUpdate', (state) => {
+    if (state.gameStartTime !== undefined && state.gameStartTime !== lastGameStartTime) {
+      lastGameStartTime = state.gameStartTime;
+      hasCenteredOnHomeworld = false;
+      selectedShips = [];
+      selectedPlanets = [];
+      lastKnownPlanets = {};
+    }
+
     if (Object.keys(spriteSheets).length === 0 && state.players && state.players.length > 0) {
       preRenderSprites([...state.players, { id: 'neutral', color: '#ffffff' }]);
     }
@@ -1749,8 +1761,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const flat = state.flatShips;
       const len = flat.length;
       state.ships = state.ships || [];
-      for (let i = 0; i < len; i += 17) {
+      for (let i = 0; i < len; i += 18) {
         const owner = state.players[flat[i + 4]];
+        const isMarine = flat[i + 17] === 1;
         state.ships.push({
           id: flat[i],
           x: flat[i + 1],
@@ -1769,7 +1782,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           expScore: flat[i + 14],
           flightTime: flat[i + 15],
           currentSpeed: flat[i + 16],
-          speed: 20,
+          isMarineFleet: isMarine,
+          speed: isMarine ? 35 : 15,
           formation: 'arrow',
           isCruiser: false,
           isAmoeba: false
@@ -1787,6 +1801,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     }
 
     serverState = state;
+
+    if (state.ships) {
+      selectedShips = selectedShips.map(sel => state.ships.find(s => s.id === sel.id)).filter(Boolean);
+    }
+    if (state.planets) {
+      selectedPlanets = selectedPlanets.map(sel => state.planets.find(p => p.id === sel.id)).filter(Boolean);
+    }
 
     if (state.upgradeEnhanceEvents && state.upgradeEnhanceEvents.length > 0) {
       for (const ev of state.upgradeEnhanceEvents) {
@@ -1862,7 +1883,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     if (state.flatShips) {
       const flat = state.flatShips;
       const len = flat.length;
-      for (let i = 0; i < len; i += 17) {
+      for (let i = 0; i < len; i += 18) {
         currentShipIds.add(flat[i]);
       }
     }
@@ -2016,7 +2037,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
     const sellForDisplay = document.getElementById('player-sell-for-display');
     if (sellForDisplay) {
-      const sellPriceSetting = myPlayer.sellPriceSetting !== undefined ? myPlayer.sellPriceSetting : 2;
+      const sellPriceSetting = myPlayer.sellPriceSetting !== undefined ? myPlayer.sellPriceSetting : 1;
       sellForDisplay.style.display = 'block';
       sellForDisplay.textContent = `💰: ${sellPriceSetting}`;
     }
@@ -2479,6 +2500,32 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     return ship;
   }
 
+  function isCruiserInFriendlyGravityWell(s) {
+    if (!serverState || !localPlayer || !s) return false;
+    if (!serverState.planets) return false;
+    for (const planet of serverState.planets) {
+      if (planet.ownerId !== localPlayer.id) continue;
+      const pOwner = serverState.players.find(pl => pl.id === planet.ownerId);
+      if (!pOwner) continue;
+      const tb = 0.01 * Math.sqrt(pOwner.techScore || 0);
+      const eb = 0.01 * Math.sqrt(pOwner.expScore || 0);
+      let baseRadius = planet.maxShips * 1.5;
+      if (planet.isMilitary && planet.ships >= planet.maxShips) {
+        baseRadius *= 1.5;
+      }
+      const isPlanetHuman = pOwner && !pOwner.isAI;
+      if (isPlanetHuman && planet.focusMode === 'garrison' && planet.ships >= planet.maxShips) {
+        baseRadius += (planet.ships / 2);
+      }
+      const gr = baseRadius * (1 + tb + eb);
+      const pdx = s.x - planet.x, pdy = s.y - planet.y;
+      if (pdx * pdx + pdy * pdy <= gr * gr) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function getSelectedCruisers() {
     if (!serverState || !localPlayer || selectedShips.length === 0) return [];
     const cruisers = [];
@@ -2755,7 +2802,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       // 3. Focus badge button check
       for (const p of serverState.planets) {
         if (p.ownerId === localPlayer.id && !p.inFog) {
-          const text = `${Math.floor(p.ships)} / ${p.maxShips}`;
+          const text = `${Math.floor(p.ships)} / ${Math.round(p.maxShips)}`;
           ctx.save();
           ctx.font = `bold 12px Orbitron`;
           const textWidth = ctx.measureText(text).width;
@@ -2969,7 +3016,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                   floatingAnimations.push({
                     x: sourcePlanet.x,
                     y: sourcePlanet.y,
-                    text: `-${shipLaunchCost}`,
+                    text: `-${Math.round(shipLaunchCost)}`,
                     type: 'launchCost',
                     age: 0,
                     duration: 2.5
@@ -3024,7 +3071,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
                   floatingAnimations.push({
                     x: sourcePlanet.x,
                     y: sourcePlanet.y,
-                    text: `-${shipLaunchCost}`,
+                    text: `-${Math.round(shipLaunchCost)}`,
                     type: 'launchCost',
                     age: 0,
                     duration: 2.5
@@ -3745,59 +3792,64 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             return (currentVal < 5) && (currentVal + 1 <= maxIndividualLevel) && (totalUpgrades + 1 <= maxTotalUpgrades) && shieldCheck;
           };
 
+          let triggered = false;
           if (key === 's') {
             event.preventDefault();
             if (isAllowed('sensorarrays')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'sensorarray' });
-            return;
+            triggered = true;
           }
           if (key === 'l') {
             event.preventDefault();
             if (isAllowed('labs')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'lab' });
-            return;
+            triggered = true;
           }
           if (key === 'a') {
             event.preventDefault();
             if (isAllowed('armor')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'armor' });
-            return;
+            triggered = true;
           }
           if (key === 'h') {
             event.preventDefault();
             if (isAllowed('shields')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'shield' });
-            return;
+            triggered = true;
           }
           if (key === 'e') {
             event.preventDefault();
             if (isAllowed('engine')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'engine' });
-            return;
+            triggered = true;
           }
           if (key === 'm') {
             event.preventDefault();
             if (isAllowed('munitions')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'munitions' });
-            return;
+            triggered = true;
           }
           if (key === 't') {
             event.preventDefault();
             if (isAllowed('targeting')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'targeting' });
-            return;
+            triggered = true;
           }
           if (key === 'd') {
             event.preventDefault();
             if (isAllowed('damagecontrol')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'damagecontrol' });
-            return;
+            triggered = true;
           }
           if (key === 'f') {
             event.preventDefault();
             if (isAllowed('fuel_tanker')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'fueltanker' });
-            return;
+            triggered = true;
           }
           if (key === 'i') {
             event.preventDefault();
             if (isAllowed('diplomat')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'diplomat' });
-            return;
+            triggered = true;
           }
           if (key === 'r') {
             event.preventDefault();
             if (isAllowed('marines')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'marines' });
+            triggered = true;
+          }
+          if (triggered) {
+            upgradeModeActive = false;
             return;
           }
         }
@@ -3810,22 +3862,34 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     if (!isNaN(numKey) && numKey >= 0 && numKey <= 9) {
       if (event.ctrlKey) {
         event.preventDefault();
-        controlGroups[numKey] = selectedShips.map(s => s.id);
-        console.log(`Assigned control group ${numKey} to ships:`, controlGroups[numKey]);
+        controlGroups[numKey] = {
+          shipIds: selectedShips.map(s => s.id),
+          planetIds: selectedPlanets.map(p => p.id)
+        };
+        console.log(`Assigned control group ${numKey}:`, controlGroups[numKey]);
       } else if (!event.altKey && !event.shiftKey && !event.metaKey) {
-        const savedIds = controlGroups[numKey];
-        if (savedIds && savedIds.length > 0) {
+        const group = controlGroups[numKey];
+        if (group && ((group.shipIds && group.shipIds.length > 0) || (group.planetIds && group.planetIds.length > 0))) {
           event.preventDefault();
           selectedShips = [];
-          if (serverState && serverState.ships) {
+          selectedPlanets = [];
+          
+          if (group.shipIds && group.shipIds.length > 0 && serverState && serverState.ships) {
             for (const ship of serverState.ships) {
-              if (ship.active && savedIds.includes(ship.id)) {
+              if (ship.active && group.shipIds.includes(ship.id)) {
                 selectedShips.push(ship);
               }
             }
           }
-          selectedPlanets = [];
-          console.log(`Reselected control group ${numKey}:`, selectedShips.map(s => s.id));
+          
+          if (group.planetIds && group.planetIds.length > 0 && serverState && serverState.planets) {
+            for (const planet of serverState.planets) {
+              if (group.planetIds.includes(planet.id)) {
+                selectedPlanets.push(planet);
+              }
+            }
+          }
+          console.log(`Reselected control group ${numKey}: ships=`, selectedShips.map(s => s.id), "planets=", selectedPlanets.map(p => p.id));
         }
       }
     }
@@ -3861,12 +3925,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         const nextState = anyNotBombing;
         for (const ship of selectedCruisers) {
           ship.bombPlanetsEnabled = nextState;
-          if (nextState) {
-            ship.isPatrolling = false;
-            ship.isScouting = false;
-            ship.isResearching = false;
-            ship.isDiplomacy = false;
-          }
           socket.emit('toggleCruiserBomb', { shipId: ship.id, enabled: nextState });
         }
       } else {
@@ -3882,7 +3940,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         for (const ship of selectedCruisers) {
           ship.isPatrolling = nextState;
           if (nextState) {
-            ship.bombPlanetsEnabled = false;
             ship.isScouting = false;
             ship.isResearching = false;
             ship.isDiplomacy = false;
@@ -3907,7 +3964,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ship.isScouting = nextState;
           if (nextState) {
             ship.isPatrolling = false;
-            ship.bombPlanetsEnabled = false;
             ship.isResearching = false;
             ship.isDiplomacy = false;
           }
@@ -3944,23 +4000,31 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ship.isDiplomacy = false;
           ship.isScouting = false;
           ship.isPatrolling = false;
-          ship.bombPlanetsEnabled = false;
           socket.emit('toggleCruiserResearch', { shipId: ship.id, enabled: nextState });
         });
       }
     }
     if (event.key.toLowerCase() === 'd') {
-      const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id && s.diplomat > 0);
-      if (selectedCruisers.length > 0) {
+      const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id);
+      const hasCruiserInFriendlyWell = selectedCruisers.some(c => !c.isDismantling && isCruiserInFriendlyGravityWell(c));
+      if (hasCruiserInFriendlyWell) {
         event.preventDefault();
-        const anyNotDiplomacy = selectedCruisers.some(c => !c.isDiplomacy);
+        const btnDismantle = document.getElementById('btn-dismantle');
+        if (btnDismantle) {
+          btnDismantle.click();
+        }
+        return;
+      }
+      const selectedDiplomats = selectedCruisers.filter(s => s.diplomat > 0);
+      if (selectedDiplomats.length > 0) {
+        event.preventDefault();
+        const anyNotDiplomacy = selectedDiplomats.some(c => !c.isDiplomacy);
         const nextState = anyNotDiplomacy;
-        selectedCruisers.forEach(ship => {
+        selectedDiplomats.forEach(ship => {
           ship.isDiplomacy = nextState;
           ship.isResearching = false;
           ship.isScouting = false;
           ship.isPatrolling = false;
-          ship.bombPlanetsEnabled = false;
           socket.emit('toggleCruiserDiplomacy', { shipId: ship.id, enabled: nextState });
         });
       }
@@ -4098,12 +4162,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         const nextState = anyNotBombing;
         for (const ship of selectedCruisers) {
           ship.bombPlanetsEnabled = nextState;
-          if (nextState) {
-            ship.isPatrolling = false;
-            ship.isScouting = false;
-            ship.isResearching = false;
-            ship.isDiplomacy = false;
-          }
           socket.emit('toggleCruiserBomb', { shipId: ship.id, enabled: nextState });
         }
       }
@@ -4119,7 +4177,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         for (const ship of selectedCruisers) {
           ship.isPatrolling = nextState;
           if (nextState) {
-            ship.bombPlanetsEnabled = false;
             ship.isScouting = false;
             ship.isResearching = false;
             ship.isDiplomacy = false;
@@ -4140,7 +4197,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ship.isScouting = nextState;
           if (nextState) {
             ship.isPatrolling = false;
-            ship.bombPlanetsEnabled = false;
             ship.isResearching = false;
             ship.isDiplomacy = false;
           }
@@ -4175,7 +4231,6 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ship.isDiplomacy = false;
           ship.isScouting = false;
           ship.isPatrolling = false;
-          ship.bombPlanetsEnabled = false;
           socket.emit('toggleCruiserResearch', { shipId: ship.id, enabled: nextState });
         }
       }
@@ -4193,8 +4248,27 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ship.isResearching = false;
           ship.isScouting = false;
           ship.isPatrolling = false;
-          ship.bombPlanetsEnabled = false;
           socket.emit('toggleCruiserDiplomacy', { shipId: ship.id, enabled: nextState });
+        }
+      }
+    });
+  }
+  const btnDismantleEl = document.getElementById('btn-dismantle');
+  if (btnDismantleEl) {
+    btnDismantleEl.addEventListener('click', () => {
+      const selectedCruisers = getSelectedCruisers();
+      const eligibleCruisers = selectedCruisers.filter(c => !c.isDismantling && isCruiserInFriendlyGravityWell(c));
+      if (eligibleCruisers.length > 0) {
+        if (!confirmingDismantle) {
+          confirmingDismantle = true;
+          btnDismantleEl.innerHTML = '<span class="btn-icon">♻️</span>Confirm "D"ismantle';
+        } else {
+          socket.emit('dismantleCruisers', { shipIds: eligibleCruisers.map(c => c.id) });
+          for (const c of eligibleCruisers) {
+            c.isDismantling = true;
+          }
+          confirmingDismantle = false;
+          btnDismantleEl.innerHTML = '<span class="btn-icon">♻️</span>D';
         }
       }
     });
@@ -4282,14 +4356,13 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     }
     
     const isRightClick = e && (e.button === 2 || e.type === 'contextmenu');
+    const isShift = e && e.shiftKey;
     
-    let step = 1;
-    if (isRightClick) step = -1;
+    let step = isShift ? 5 : 1;
+    if (isRightClick) step = -step;
     
-    const currentPrice = myPlayer.sellPriceSetting !== undefined ? myPlayer.sellPriceSetting : 2;
-    let offset = currentPrice - 2;
-    let newOffset = (((offset + step) % 29) + 29) % 29;
-    const newPrice = newOffset + 2;
+    const currentPrice = myPlayer.sellPriceSetting !== undefined ? myPlayer.sellPriceSetting : 1;
+    const newPrice = Math.max(1, currentPrice + step);
     
     socket.emit('changeSellPriceSetting', { value: newPrice });
   };
@@ -4348,7 +4421,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           socket.emit('postFulfillOrder', { resource: res });
         } else if (e.ctrlKey) {
           const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
-          const priceVal = myPlayer ? (myPlayer.sellPriceSetting ?? 2) : 2;
+          const priceVal = myPlayer ? (myPlayer.sellPriceSetting ?? 1) : 1;
           socket.emit('createAutoBuyOrder', { resource: res, price: priceVal });
         } else {
           socket.emit('postSellOrder', { resource: res });
@@ -4434,6 +4507,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           } else {
             console.log(`[Upgrade Click Rejected] Limits failed. type: ${type}, currentVal: ${currentVal}, nextLevel: ${nextLevel}, maxLevel: ${maxIndividualLevel}, totalUpgrades: ${totalUpgrades}, maxTotalUpgrades: ${maxTotalUpgrades}`);
           }
+          upgradeModeActive = false;
         }
       });
     }
@@ -4505,11 +4579,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const customVal = homeworldSizeInput ? parseInt(homeworldSizeInput.value, 10) : 120;
       homeworldSizeSetting = isNaN(customVal) ? "120" : String(customVal);
     }
-    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "250";
+    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "500";
     if (startingCreditsVal === 'custom') {
       const startingCreditsInput = document.getElementById('starting-credits-input');
-      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 250;
-      startingCreditsVal = isNaN(customCredits) ? "250" : String(customCredits);
+      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 500;
+      startingCreditsVal = isNaN(customCredits) ? "500" : String(customCredits);
     }
     const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode };
 
@@ -4573,11 +4647,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const customVal = homeworldSizeInput ? parseInt(homeworldSizeInput.value, 10) : 120;
       homeworldSizeSetting = isNaN(customVal) ? "120" : String(customVal);
     }
-    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "250";
+    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "500";
     if (startingCreditsVal === 'custom') {
       const startingCreditsInput = document.getElementById('starting-credits-input');
-      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 250;
-      startingCreditsVal = isNaN(customCredits) ? "250" : String(customCredits);
+      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 500;
+      startingCreditsVal = isNaN(customCredits) ? "500" : String(customCredits);
     }
     hasCenteredOnHomeworld = false;
     serverState = null;
@@ -4597,9 +4671,10 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
     // Dynamic button visibility
     const selectedCruiser = getSelectedCruiser();
-    if (!selectedCruiser) {
+    if (!selectedCruiser || (lastSelectedCruiserId !== null && selectedCruiser.id !== lastSelectedCruiserId)) {
       upgradeModeActive = false;
     }
+    lastSelectedCruiserId = selectedCruiser ? selectedCruiser.id : null;
     const upgradeQual = getSelectedCruiserUpgradeQualifiers();
 
     const btnFocusMode = document.getElementById('btn-focus-mode');
@@ -4622,7 +4697,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
     const actionButtonsLeft = document.getElementById('action-buttons-left');
-    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-cruiser-bomb', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-cruiser-research', 'btn-cruiser-diplomacy'];
+    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-cruiser-bomb', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-cruiser-research', 'btn-cruiser-diplomacy', 'btn-dismantle'];
     const upButtonsMap = {
       'btn-up-sensorarray': 'sensorarrays',
       'btn-up-lab': 'labs',
@@ -5063,6 +5138,19 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         }
       }
 
+      const btnDismantle = document.getElementById('btn-dismantle');
+      if (btnDismantle) {
+        const showDismantle = selectedCruisers.length > 0 && selectedCruisers.some(c => !c.isDismantling && isCruiserInFriendlyGravityWell(c));
+        btnDismantle.style.display = showDismantle ? 'inline-flex' : 'none';
+        
+        const currentSelectedCruiserIdsStr = selectedCruisers.map(c => c.id).join(',');
+        if (currentSelectedCruiserIdsStr !== lastSelectedCruiserIdsStr) {
+          confirmingDismantle = false;
+          lastSelectedCruiserIdsStr = currentSelectedCruiserIdsStr;
+          btnDismantle.innerHTML = '<span class="btn-icon">♻️</span>D';
+        }
+      }
+
       const simpleStd = ['btn-leaderboard', 'help-btn'];
       for (const btnId of simpleStd) {
         const el = document.getElementById(btnId);
@@ -5131,6 +5219,30 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         ctx.fill();
       }
 
+      // Draw unexplored cells in transparent yellow
+      if (serverState.exploredCells) {
+        const cellSize = 100;
+        const numCellsX = Math.ceil(mapWidth / cellSize);
+        const numCellsY = Math.ceil(mapHeight / cellSize);
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.04)';
+        for (let cx = 0; cx < numCellsX; cx++) {
+          for (let cy = 0; cy < numCellsY; cy++) {
+            const key = `${cx}_${cy}`;
+            // If it is NOT explored (i.e. not in exploredCells), draw a faint yellow rectangle
+            if (!serverState.exploredCells[key]) {
+              const rx = cx * cellSize;
+              const ry = cy * cellSize;
+              if (rx + cellSize >= viewMinX && rx <= viewMaxX && ry + cellSize >= viewMinY && ry <= viewMaxY) {
+                ctx.fillRect(rx, ry, cellSize, cellSize);
+                ctx.strokeStyle = 'rgba(255, 255, 0, 0.02)';
+                ctx.lineWidth = 0.5;
+                ctx.strokeRect(rx, ry, cellSize, cellSize);
+              }
+            }
+          }
+        }
+      }
+
       // Draw connections if planets are selected
       if (selectedPlanets.length > 0) {
         for (const sp of selectedPlanets) {
@@ -5185,7 +5297,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
         for (const f of serverState.fleets) {
           const owner = serverState.players.find(pl => pl.id === f.ownerId);
           if (owner) {
-            const isSelectedCruiserCluster = f.isCruiser && selectedShips.some(ss => ss.isCruiser && Math.abs(ss.x - f.x) < 1 && Math.abs(ss.y - f.y) < 1);
+            const isSelectedCruiserCluster = f.isCruiser && selectedShips.some(ss => {
+              if (!ss.isCruiser) return false;
+              const rawShip = serverState.ships.find(s => s.id === ss.id);
+              if (!rawShip) return false;
+              const sx = rawShip.rawServerX !== undefined ? rawShip.rawServerX : rawShip.x;
+              const sy = rawShip.rawServerY !== undefined ? rawShip.rawServerY : rawShip.y;
+              const distSqRaw = (sx - f.x) * (sx - f.x) + (sy - f.y) * (sy - f.y);
+              const distSqVis = (rawShip.x - f.x) * (rawShip.x - f.x) + (rawShip.y - f.y) * (rawShip.y - f.y);
+              return distSqRaw < 225 || distSqVis < 225; // within 15 pixels
+            });
             if (isSelectedCruiserCluster) continue;
 
             const pct = hazardSensorReductionPct(f.x, f.y, f.ownerId);
@@ -5283,6 +5404,103 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ctx.stroke();
         }
 
+        // Soft cap and current maxships filled circles (only for known planets)
+        const isLastKnownPlanet = p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id] ? true : false;
+        if (!p.inFog || p.permanentlyTracked || isLastKnownPlanet) {
+          const techBonus = owner ? (owner.techScore || 0) : 0;
+          const threshold = p.sizeClass * ((p.habitability + techBonus) / 100);
+          if (threshold > 0) {
+            ctx.save();
+            
+            // Resolve base RGB color from owner or default
+            const planetColor = owner ? owner.color : '#555555';
+            let r = 85, g = 85, b = 85;
+            let clean = planetColor.replace('#', '');
+            if (clean.length === 3) {
+              clean = clean[0] + clean[0] + clean[1] + clean[1] + clean[2] + clean[2];
+            }
+            const num = parseInt(clean, 16);
+            if (!isNaN(num)) {
+              r = (num >> 16) & 255;
+              g = (num >> 8) & 255;
+              b = num & 255;
+            }
+
+            // 1. Lighter version for the soft cap circle (mix with white)
+            const lightR = Math.floor(r + (255 - r) * 0.6);
+            const lightG = Math.floor(g + (255 - g) * 0.6);
+            const lightB = Math.floor(b + (255 - b) * 0.6);
+            const softCapFillColor = `rgba(${lightR}, ${lightG}, ${lightB}, 0.25)`;
+            const softCapStrokeColor = `rgba(${lightR}, ${lightG}, ${lightB}, 0.4)`;
+
+            // 2. Slightly darker version for the current maxships circle (multiply by 0.55)
+            const darkR = Math.floor(r * 0.55);
+            const darkG = Math.floor(g * 0.55);
+            const darkB = Math.floor(b * 0.55);
+            const currentMaxShipsFillColor = `rgba(${darkR}, ${darkG}, ${darkB}, 0.35)`;
+            const currentMaxShipsStrokeColor = `rgba(${darkR}, ${darkG}, ${darkB}, 0.55)`;
+
+            // Draw soft cap circle first
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, threshold / 4, 0, Math.PI * 2);
+            ctx.fillStyle = softCapFillColor;
+            ctx.fill();
+            ctx.strokeStyle = softCapStrokeColor;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Draw current maxships circle over it
+            if (p.maxShips > 0) {
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, p.maxShips / 4, 0, Math.PI * 2);
+              ctx.fillStyle = currentMaxShipsFillColor;
+              ctx.fill();
+              ctx.strokeStyle = currentMaxShipsStrokeColor;
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+
+            // 3. Draw faint gray ring for size class (if habitability < 100)
+            if (p.habitability < 100 && p.sizeClass > 0) {
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, p.sizeClass / 4, 0, Math.PI * 2);
+              ctx.strokeStyle = 'rgba(150, 150, 150, 0.3)';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+
+            ctx.restore();
+          }
+        }
+
+        // Revolt immunity cooldown red ring
+        if (p.revoltCooldown && p.revoltCooldown > 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius + 6, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(255, 50, 50, 0.85)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        let groupNum = null;
+        for (let g = 0; g <= 9; g++) {
+          if (controlGroups[g] && controlGroups[g].planetIds && controlGroups[g].planetIds.includes(p.id)) {
+            groupNum = g;
+            break;
+          }
+        }
+        if (groupNum !== null) {
+          ctx.save();
+          ctx.font = 'bold 10px Orbitron';
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(groupNum.toString(), p.x - p.radius * 0.7, p.y - p.radius * 0.7);
+          ctx.restore();
+        }
+
         if (planetShields[p.id] > 0) {
           planetShields[p.id] -= 1 / 20;
           if (planetShields[p.id] <= 0) {
@@ -5373,7 +5591,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
           const displayShips = isLastKnown ? lastKnownPlanets[p.id].ships : p.ships;
           const displayMaxShips = isLastKnown ? lastKnownPlanets[p.id].maxShips : p.maxShips;
-          const text = `${Math.floor(displayShips)} / ${displayMaxShips}`;
+          const text = `${Math.floor(displayShips)} / ${Math.round(displayMaxShips)}`;
           ctx.font = `bold 12px Orbitron`;
           const textWidth = ctx.measureText(text).width;
 
@@ -5389,7 +5607,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           const nameY = p.y - p.radius - 12;
           let displayName = pName;
           if (graphicalMode) {
-            displayName = `${pName} (${Math.floor(displayShips)}/${displayMaxShips})`;
+            displayName = `${pName} (${Math.floor(displayShips)}/${Math.round(displayMaxShips)})`;
+          }
+          const displayHomeworldOf = isLastKnown ? lastKnownPlanets[p.id].homeworldOf : p.homeworldOf;
+          if (displayHomeworldOf) {
+            displayName = `👑 ${displayName}`;
           }
 
           if (isLastKnown) {
@@ -5416,20 +5638,11 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           }
 
           // 2. Draw special role badges (homeworld, military, research, speed, revolt, rampage) higher up
-          const displayHomeworldOf = isLastKnown ? lastKnownPlanets[p.id].homeworldOf : p.homeworldOf;
           const displayIsResearch = isLastKnown ? lastKnownPlanets[p.id].isResearch : p.isResearch;
           const displayIsMilitary = isLastKnown ? lastKnownPlanets[p.id].isMilitary : p.isMilitary;
           const displayIsSpeedPlanet = isLastKnown ? lastKnownPlanets[p.id].isSpeedPlanet : p.isSpeedPlanet;
 
-          if (displayHomeworldOf) {
-            const hwOwner = serverState.players.find(pl => pl.id === displayHomeworldOf);
-            if (hwOwner) {
-              ctx.fillStyle = isLastKnown ? '#888' : hwOwner.color;
-              ctx.font = 'bold 12px Orbitron';
-              ctx.fillText(`👑 ${hwOwner.name}`, p.x, nameY - 14);
-              ctx.font = 'bold 11px Orbitron'; // Restore font
-            }
-          } else if (displayIsResearch) {
+          if (displayIsResearch) {
             ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
             ctx.font = '14px Arial';
             ctx.fillText("🔬", p.x, nameY - 14);
@@ -5881,6 +6094,50 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           if (hp.isSpeedPlanet) nameLabel += ' ⚡';
           
           lines.push({ label: nameLabel, value: '', color: '#0ff', isHeader: true });
+
+          // Combined Size and Habitability row right after planet name row
+          let sizeName = 'Huge';
+          const sc = hp.sizeClass || 0;
+          if (sc < 65) sizeName = 'Tiny';
+          else if (sc < 85) sizeName = 'Small';
+          else if (sc < 105) sizeName = 'Average';
+          else if (sc < 125) sizeName = 'Large';
+
+          let habName = 'Gaia';
+          const hab = hp.habitability || 0;
+          if (hab < 20) habName = 'Toxic';
+          else if (hab < 30) habName = 'Radiated';
+          else if (hab < 40) habName = 'Barren';
+          else if (hab < 50) habName = 'Desert';
+          else if (hab < 60) habName = 'Tundra';
+          else if (hab < 70) habName = 'Swamp';
+          else if (hab < 80) habName = 'Jungle';
+          else if (hab < 90) habName = 'Ocean';
+          else if (hab < 100) habName = 'Arid';
+          else if (hab < 120) habName = 'Terran';
+
+          const techBonusForSoftCap = hpOwner ? (hpOwner.techScore || 0) : 0;
+          const maxShipsSoftCap = Math.round(sc * ((hab + techBonusForSoftCap) / 100));
+
+          let worldRowColor = '#b0bec5';
+          if (hp.maxShips > maxShipsSoftCap) {
+            worldRowColor = '#ff3333';
+          } else if (hab > 95) {
+            worldRowColor = '#4caf50';
+          } else if (hab < 75) {
+            worldRowColor = '#ffeb3b';
+          }
+
+          lines.push({
+            isWorldRow: true,
+            sizeName: sizeName,
+            sizeVal: `(${Math.round(sc)})`,
+            habName: habName,
+            habVal: `(${Math.round(hab)})`,
+            restText: ` World: ${maxShipsSoftCap}`,
+            color: worldRowColor
+          });
+
           if (hp.racialAffinity) {
             const raceIcons = {
               'Federation': '🖖',
@@ -6137,13 +6394,20 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               deuterium: '💧',
               latinum: '🏺'
             };
-            const prefEmoji = emojis[hp.preferredResource] || '💎';
-            
-            lines.push({ 
-              label: '🤝 Diplomacy Chance', 
-              value: `${basePercent}%, with ${prefEmoji}: ${prefPercent}%`, 
-              color: '#4caf50' 
-            });
+            if (hp.preferredResource) {
+              const prefEmoji = emojis[hp.preferredResource] || '💎';
+              lines.push({ 
+                label: '🤝 Diplomacy Chance', 
+                value: `${basePercent}%, with ${prefEmoji}: ${prefPercent}%`, 
+                color: '#4caf50' 
+              });
+            } else {
+              lines.push({ 
+                label: '🤝 Diplomacy Chance', 
+                value: `${basePercent}%`, 
+                color: '#4caf50' 
+              });
+            }
           }
 
           if (serverState.storms) {
@@ -6172,7 +6436,22 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           let maxWidth = 0;
           for (const line of lines) {
             ctx.font = line.isHeader ? headerFont : tooltipFont;
-            const w = ctx.measureText(line.label + '  ' + line.value).width;
+            let w = 0;
+            if (line.isWorldRow) {
+              ctx.font = tooltipFont;
+              w += ctx.measureText(line.sizeName).width;
+              w += ctx.measureText(' ').width;
+              ctx.font = '5.5px Orbitron';
+              w += ctx.measureText(line.sizeVal).width;
+              ctx.font = tooltipFont;
+              w += ctx.measureText(` ${line.habName} `).width;
+              ctx.font = '5.5px Orbitron';
+              w += ctx.measureText(line.habVal).width;
+              ctx.font = tooltipFont;
+              w += ctx.measureText(line.restText).width;
+            } else {
+              w = ctx.measureText((line.label || '') + '  ' + (line.value || '')).width;
+            }
             if (w > maxWidth) maxWidth = w;
           }
 
@@ -6199,14 +6478,33 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           let curY = tooltipY + padding;
           for (const line of lines) {
             const lh = line.isHeader ? headerHeight : lineHeight;
-            ctx.font = line.isHeader ? headerFont : tooltipFont;
             ctx.fillStyle = line.color;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'top';
-            ctx.fillText(line.label, tooltipX + padding, curY);
-            if (line.value) {
-              ctx.textAlign = 'right';
-              ctx.fillText(line.value, tooltipX + tooltipW - padding, curY);
+
+            if (line.isWorldRow) {
+              const segments = [
+                { text: line.sizeName, font: tooltipFont },
+                { text: ' ', font: tooltipFont },
+                { text: line.sizeVal, font: '5.5px Orbitron' },
+                { text: ` ${line.habName} `, font: tooltipFont },
+                { text: line.habVal, font: '5.5px Orbitron' },
+                { text: line.restText, font: tooltipFont }
+              ];
+              let xOffset = tooltipX + padding;
+              for (const seg of segments) {
+                ctx.font = seg.font;
+                const yOffset = (seg.font === '5.5px Orbitron') ? 2.5 : 0;
+                ctx.fillText(seg.text, xOffset, curY + yOffset);
+                xOffset += ctx.measureText(seg.text).width;
+              }
+            } else {
+              ctx.font = line.isHeader ? headerFont : tooltipFont;
+              ctx.fillText(line.label || '', tooltipX + padding, curY);
+              if (line.value) {
+                ctx.textAlign = 'right';
+                ctx.fillText(line.value, tooltipX + tooltipW - padding, curY);
+              }
             }
             curY += lh;
           }
@@ -6284,7 +6582,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               fuelLabel += '*';
             }
             const fuelVal = Math.floor(hs.fuel || 0) + ' / ' + Math.floor(getMaxFuel(hs));
-            const speedVal = (hs.currentSpeed || 0).toFixed(1) + ' / ' + (hs.speed || 20).toFixed(1);
+            const speedVal = (hs.currentSpeed || 0).toFixed(1) + ' / ' + (hs.speed || 30).toFixed(1);
             lines.push({ label: `⛽ ${fuelLabel}`, value: `${fuelVal}  |  Speed: ${speedVal}`, color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
 
             if (hs.maxArmor && hs.maxArmor > 0) {
@@ -6519,7 +6817,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               const icon = raceIcons[raceStyle] || '';
               lines.push({ label: 'Race', value: `${icon} ${raceStyle}`, color: '#e040fb' });
             }
-            lines.push({ label: 'Base Speed', value: (hs.speed || 20).toFixed(1), color: '#ccc' });
+            lines.push({ label: 'Base Speed', value: (hs.speed || 30).toFixed(1), color: '#ccc' });
             lines.push({ label: 'Effective Speed', value: (hs.currentSpeed || 0).toFixed(1), color: '#4f4' });
 
             // swarm bonus
@@ -6725,12 +7023,16 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           const tooltipW = maxWidth + padding * 2 + 10;
           const tooltipH = lines.reduce((h, l) => h + (l.isHeader ? headerHeight : lineHeight), 0) + padding * 2;
 
-          let tooltipX = hs.x + 20;
-          let tooltipY = hs.y - tooltipH / 2;
+          const vis = visualShips.get(hs.id);
+          const hsX = vis ? vis.x : hs.x;
+          const hsY = vis ? vis.y : hs.y;
+
+          let tooltipX = hsX + 20;
+          let tooltipY = hsY - tooltipH / 2;
 
           const mapWidth = serverState.width || 1920;
           const mapHeight = serverState.height || 1620;
-          if (tooltipX + tooltipW > mapWidth) tooltipX = hs.x - 20 - tooltipW;
+          if (tooltipX + tooltipW > mapWidth) tooltipX = hsX - 20 - tooltipW;
           if (tooltipY < 0) tooltipY = 5;
           if (tooltipY + tooltipH > mapHeight) tooltipY = mapHeight - tooltipH - 5;
 
@@ -6870,6 +7172,9 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
       for (const s of serverState.ships) {
         if (!s.active) continue;
+
+        s.rawServerX = s.x;
+        s.rawServerY = s.y;
 
         let vis = visualShips.get(s.id);
         if (!vis) {
@@ -7092,6 +7397,65 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.arc(s.x, s.y, range, 0, Math.PI * 2);
             ctx.stroke();
           }
+          ctx.restore();
+        }
+
+        // Draw scout destination markers if scouting
+        if (s.isScouting && s.scoutTargetX !== null && s.scoutTargetX !== undefined && s.scoutTargetY !== null && s.scoutTargetY !== undefined && owner && localPlayer && owner.id === localPlayer.id) {
+          ctx.save();
+          // Dotted line from scout to target
+          ctx.strokeStyle = isSelected ? 'rgba(0, 255, 200, 0.65)' : 'rgba(0, 255, 200, 0.35)';
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([3, 4]);
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(s.scoutTargetX, s.scoutTargetY);
+          ctx.stroke();
+
+          // Target reticle at destination
+          ctx.translate(s.scoutTargetX, s.scoutTargetY);
+          ctx.setLineDash([]);
+          ctx.lineWidth = 1;
+          
+          const isUnexplored = s.scoutTargetUnexplored || false;
+          
+          // Glowing shadow
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = isUnexplored ? '#ffff00' : '#00ffc8';
+          
+          // Outer circle
+          ctx.strokeStyle = isUnexplored 
+            ? (isSelected ? 'rgba(255, 255, 0, 0.95)' : 'rgba(255, 255, 0, 0.55)')
+            : (isSelected ? 'rgba(0, 255, 200, 0.85)' : 'rgba(0, 255, 200, 0.45)');
+          ctx.beginPath();
+          ctx.arc(0, 0, 7, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Inner filled dot
+          ctx.fillStyle = isUnexplored 
+            ? (isSelected ? 'rgba(255, 255, 0, 1.0)' : 'rgba(255, 255, 0, 0.8)')
+            : (isSelected ? 'rgba(0, 255, 200, 0.95)' : 'rgba(0, 255, 200, 0.55)');
+          ctx.beginPath();
+          ctx.arc(0, 0, isUnexplored ? 4 : 2, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Crosshair lines
+          ctx.beginPath();
+          ctx.moveTo(-10, 0); ctx.lineTo(-4, 0);
+          ctx.moveTo(4, 0); ctx.lineTo(10, 0);
+          ctx.moveTo(0, -10); ctx.lineTo(0, -4);
+          ctx.moveTo(0, 4); ctx.lineTo(0, 10);
+          ctx.stroke();
+
+          // Text label
+          if (isSelected) {
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = isUnexplored ? 'rgba(255, 255, 0, 0.95)' : 'rgba(0, 255, 200, 0.95)';
+            ctx.font = 'bold 8px Orbitron';
+            ctx.textAlign = 'center';
+            ctx.fillText(isUnexplored ? 'UNEXPLORED SCOUT TARGET' : 'SCOUT DESTINATION', 0, -13);
+          }
+
           ctx.restore();
         }
 
@@ -7421,6 +7785,8 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           ctx.save();
           if (s.isMaterializing && s.materializeProgress !== undefined) {
             ctx.globalAlpha = s.materializeProgress;
+          } else if (s.isDismantling && s.dismantleTimer !== undefined && s.dismantleDuration) {
+            ctx.globalAlpha = Math.max(0, Math.min(1.0, s.dismantleTimer / s.dismantleDuration));
           }
           const size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0);
           let angle = s.angle || 0;
@@ -7544,6 +7910,17 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.restore();
           }
 
+          if (s.isDismantling) {
+            ctx.save();
+            ctx.globalAlpha = 0.8 + 0.2 * Math.sin(Date.now() / 150);
+            ctx.font = '14px "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const bob = 3 * Math.sin(Date.now() / 200);
+            ctx.fillText('♻️', s.x, s.y - size - 12 + bob);
+            ctx.restore();
+          }
+
           if (s.name) {
             ctx.save();
             ctx.font = 'bold 6px Orbitron';
@@ -7551,6 +7928,42 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
             ctx.fillText(s.name, s.x, s.y + size + 4 + upgradesHeight);
+            ctx.restore();
+          }
+
+          if (s.isDismantling) {
+            ctx.save();
+            const barW = 40;
+            const barH = 5;
+            const barX = s.x - barW / 2;
+            const barY = s.y - 25;
+            
+            ctx.fillStyle = 'rgba(5, 5, 15, 0.92)';
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(barX, barY, barW, barH, 2.5);
+            ctx.fill();
+            ctx.stroke();
+            
+            const totalDuration = s.dismantleDuration || (s.maxHealth / 2) || 15;
+            const remaining = s.dismantleTimer !== undefined ? s.dismantleTimer : 0;
+            const progress = Math.max(0, Math.min(1, (totalDuration - remaining) / totalDuration));
+            if (progress > 0) {
+              ctx.fillStyle = '#f33';
+              ctx.shadowColor = '#f33';
+              ctx.shadowBlur = 6;
+              ctx.beginPath();
+              ctx.roundRect(barX, barY, barW * progress, barH, 2.5);
+              ctx.fill();
+            }
+            
+            ctx.font = 'bold 8px Orbitron';
+            ctx.fillStyle = '#ff3333';
+            ctx.textAlign = 'center';
+            ctx.shadowBlur = 0;
+            ctx.fillText('DISMANTLING', s.x, barY - 4);
+            
             ctx.restore();
           }
 
@@ -7725,7 +8138,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
           let groupNum = null;
           for (let g = 0; g <= 9; g++) {
-            if (controlGroups[g] && controlGroups[g].includes(s.id)) {
+            if (controlGroups[g] && controlGroups[g].shipIds && controlGroups[g].shipIds.includes(s.id)) {
               groupNum = g;
               break;
             }

@@ -1,3 +1,14 @@
+const SHIP_CLASSES = {
+  scout: { name: 'Scout Ship', key: 's', hp: 15, costShips: 50, costCap: 2 },
+  frigate: { name: 'Frigate', key: 'f', hp: 20, costShips: 75, costCap: 3 },
+  destroyer: { name: 'Destroyer', key: 'd', hp: 25, costShips: 100, costCap: 4 },
+  cruiser: { name: 'Cruiser', key: 'c', hp: 30, costShips: 150, costCap: 6 },
+  battlecruiser: { name: 'Battlecruiser', key: 'a', hp: 35, costShips: 175, costCap: 7 },
+  battleship: { name: 'Battleship', key: 'b', hp: 40, costShips: 225, costCap: 9 },
+  titan: { name: 'Titan', key: 't', hp: 45, costShips: 300, costCap: 12 },
+  mammoth: { name: 'Mammoth', key: 'm', hp: 50, costShips: 400, costCap: 16 }
+};
+
 export class Ship {
   constructor(id, x, y, targetPlanet, owner, targetX = null, targetY = null) {
     this.id = id;
@@ -7,7 +18,7 @@ export class Ship {
     this.targetX = targetX;
     this.targetY = targetY;
     this.owner = owner;
-    this.speed = 20; // Halved from 70
+    this.speed = 15; // Halved from 70
     this.active = true;
     this.flightTime = 0;
     this.startX = x;
@@ -93,6 +104,13 @@ export class Ship {
     this.tactics = 'normal';
     this.strategy = 'normal';
     this.isUpgrading = false;
+    this.isDismantling = false;
+    this.dismantleTimer = 0;
+    this.dismantleDuration = 0;
+    this.dismantleCreditsTotal = 0;
+    this.dismantleCreditsReturned = 0;
+    this.dismantleResourcesTotal = {};
+    this.dismantleResourcesReturned = {};
     this.upgradeTimer = 0;
     this.upgradeProp = null;
     this.upgradeType = null;
@@ -211,7 +229,7 @@ export class Ship {
 
   cruiserRadarRange() {
     if (this.maxHealth <= 0) return 0;
-    let baseCruiserRadar = 50 + this.maxHealth * 2;
+    let baseCruiserRadar = 25 + this.maxHealth * 2;
     let range = baseCruiserRadar + 10 * (this.sensorarrays || 0);
     range *= (1 + 0.25 * (this.sensorarrays || 0));
     if (this.isWarp) {
@@ -311,7 +329,6 @@ export class Ship {
         this.isScouting = false;
         this.isResearching = false;
         this.isDiplomacy = false;
-        this.bombPlanetsEnabled = false;
 
         // Exit retreat entirely
         this.isRetreating = false;
@@ -372,7 +389,6 @@ export class Ship {
       this.isScouting = false;
       this.isResearching = false;
       this.isDiplomacy = false;
-      this.bombPlanetsEnabled = false;
     }
   }
 
@@ -551,6 +567,47 @@ export class Ship {
     return false;
   }
 
+  startDismantle(game) {
+    this.isDismantling = true;
+    this.isUpgrading = false;
+    this.upgradeProp = null;
+    this.upgradeType = null;
+    this.upgradePlanetId = null;
+    
+    this.dismantleTimer = this.maxHealth / 2;
+    this.dismantleDuration = this.dismantleTimer;
+    
+    const damageFactor = Math.max(0, Math.min(1, this.health / this.maxHealth));
+    const baseShipValue = SHIP_CLASSES[this.classType] ? SHIP_CLASSES[this.classType].costShips : 150;
+    const totalUpgradeCost = game.getCruiserTotalUpgradeCost(this);
+    
+    this.dismantleCreditsTotal = (baseShipValue + totalUpgradeCost) * 0.70 * damageFactor;
+    this.dismantleCreditsReturned = 0;
+    
+    this.dismantleResourcesTotal = {
+      deuterium: ((this.specialfuel || 0) * (1/12)) + ((this.resourceAccumulators && this.resourceAccumulators.deuterium) || 0),
+      duranium: ((this.specialduranium || 0) * (1/12)) + ((this.resourceAccumulators && this.resourceAccumulators.duranium) || 0),
+      tritanium: (this.resourceAccumulators && this.resourceAccumulators.tritanium) || 0,
+      merculite: (this.resourceAccumulators && this.resourceAccumulators.merculite) || 0,
+      antimatter: (this.resourceAccumulators && this.resourceAccumulators.antimatter) || 0,
+      dilithium: (this.resourceAccumulators && this.resourceAccumulators.dilithium) || 0
+    };
+    
+    let bombResource = 'merculite';
+    const style = this.cruiserStyle || (this.owner ? this.owner.cruiserStyle : null);
+    if (style === 'Romulan' || style === 'Gorn') {
+      bombResource = 'antimatter';
+    } else if (style === 'Tholian' || style === 'Lyran') {
+      bombResource = 'dilithium';
+    }
+    this.dismantleResourcesTotal[bombResource] = (this.dismantleResourcesTotal[bombResource] || 0) + ((this.specialbombs || 0) * (1/12));
+    
+    this.dismantleResourcesReturned = {};
+    for (const res of Object.keys(this.dismantleResourcesTotal)) {
+      this.dismantleResourcesReturned[res] = 0;
+    }
+  }
+
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
 
@@ -651,18 +708,22 @@ export class Ship {
 
       // Trigger condition
       if (!this.isRetreating) {
-        const combatTrigger = inCombat && (emptyBombs || lowHealth);
-        const normalTrigger = !this.inFriendlyWell && (lowFuel || emptyBombs || (lowHealth && (inActiveMode || isStandby)));
+        const specialModeActive = this.isPatrolling || this.isScouting || this.isResearching || this.isDiplomacy;
+        if (specialModeActive) {
+          const combatTrigger = inCombat && (emptyBombs || lowHealth);
+          const normalTrigger = !this.inFriendlyWell && (lowFuel || emptyBombs || (lowHealth && (inActiveMode || isStandby)));
 
-        if (combatTrigger || normalTrigger) {
-          this.isRetreating = true;
-          this.retreatTargetPlanetId = null;
+          if (combatTrigger || normalTrigger) {
+            this.isRetreating = true;
+            this.retreatTargetPlanetId = null;
+          }
         }
       }
 
       // Exit condition
       if (this.isRetreating) {
-        const fullyFueled = this.fuel >= maxFuel;
+        const requiredFuelPct = this.isScouting ? 0.97 : 1.0;
+        const fullyFueled = this.fuel >= maxFuel * requiredFuelPct;
         const fullyArmed = maxBombs === 0 || this.bombs >= maxBombs;
         const requiredHealthPct = (this.isResearching || this.isScouting || this.isDiplomacy || this.bombPlanetsEnabled) ? 1.0 : 0.75;
         const fullyHealed = this.health >= this.maxHealth * requiredHealthPct;
@@ -851,10 +912,10 @@ export class Ship {
         if (!game.exploredGrid) game.exploredGrid = {};
         const pId = this.owner.id;
         const now = Date.now();
-        const scX = Math.floor(this.x / 200);
-        const scY = Math.floor(this.y / 200);
+        const scX = Math.floor(this.x / 100);
+        const scY = Math.floor(this.y / 100);
         const radarRange = this.isCruiser ? this.cruiserRadarRange() : 50;
-        const cellRadius = Math.max(1, Math.ceil(radarRange / 200));
+        const cellRadius = Math.max(1, Math.ceil(radarRange / 100));
         for (let dx = -cellRadius; dx <= cellRadius; dx++) {
           for (let dy = -cellRadius; dy <= cellRadius; dy++) {
             const cx = scX + dx;
@@ -997,6 +1058,74 @@ export class Ship {
           this.upgradeProp = null;
           this.upgradeType = null;
           this.upgradePlanetId = null;
+        }
+      }
+    }
+
+    if (this.isCruiser && this.isDismantling) {
+      if (this.dismantleTimer === undefined) {
+        this.dismantleTimer = this.maxHealth / 2;
+        this.dismantleDuration = this.dismantleTimer;
+        this.dismantleCreditsTotal = 0;
+        this.dismantleCreditsReturned = 0;
+        this.dismantleResourcesTotal = {};
+        this.dismantleResourcesReturned = {};
+      }
+      
+      const dt = deltaTime / 1000;
+      this.dismantleTimer -= dt;
+      
+      let stepFraction = 0;
+      if (this.dismantleTimer <= 0) {
+        stepFraction = 1.0;
+      } else {
+        stepFraction = dt / (this.dismantleDuration || 1.0);
+      }
+      stepFraction = Math.max(0, Math.min(1.0, stepFraction));
+      
+      if (this.owner) {
+        if (this.dismantleTimer <= 0) {
+          const remainingCredits = Math.max(0, this.dismantleCreditsTotal - this.dismantleCreditsReturned);
+          if (remainingCredits > 0) {
+            this.owner.credits = (this.owner.credits || 0) + remainingCredits;
+            this.dismantleCreditsReturned = this.dismantleCreditsTotal;
+          }
+          for (const res of Object.keys(this.dismantleResourcesTotal)) {
+            const remainingRes = Math.max(0, (this.dismantleResourcesTotal[res] || 0) - (this.dismantleResourcesReturned[res] || 0));
+            if (remainingRes > 0) {
+              this.owner.resources = this.owner.resources || {};
+              this.owner.resources[res] = (this.owner.resources[res] || 0) + remainingRes;
+              this.dismantleResourcesReturned[res] = this.dismantleResourcesTotal[res];
+            }
+          }
+        } else {
+          const creditsToGive = Math.min(this.dismantleCreditsTotal - this.dismantleCreditsReturned, this.dismantleCreditsTotal * stepFraction);
+          if (creditsToGive > 0) {
+            this.owner.credits = (this.owner.credits || 0) + creditsToGive;
+            this.dismantleCreditsReturned += creditsToGive;
+          }
+          for (const res of Object.keys(this.dismantleResourcesTotal)) {
+            const totalRes = this.dismantleResourcesTotal[res] || 0;
+            const returnedRes = this.dismantleResourcesReturned[res] || 0;
+            const resToGive = Math.min(totalRes - returnedRes, totalRes * stepFraction);
+            if (resToGive > 0) {
+              this.owner.resources = this.owner.resources || {};
+              this.owner.resources[res] = (this.owner.resources[res] || 0) + resToGive;
+              this.dismantleResourcesReturned[res] += resToGive;
+            }
+          }
+        }
+      }
+      
+      if (this.dismantleTimer <= 0) {
+        this.isDismantling = false;
+        this.active = false;
+        
+        if (this.owner) {
+          const localXp = this.expScore || 0;
+          const gainedExp = this.maxHealth * localXp;
+          this.owner.crewExperience = (this.owner.crewExperience || 0) + gainedExp;
+          console.log(`[Cruiser Dismantled] Ship ${this.id} dismantled. Owner gained ${gainedExp} crew experience. Total: ${this.owner.crewExperience}`);
         }
       }
     }
@@ -2275,7 +2404,7 @@ export class Ship {
       
       // If we are fuel/rearm/health retreating, remain in this state until fuel, bombs (if attack is enabled), and health are fully replenished
       if (this.scoutFuelRetreating) {
-        const fullyFueled = this.fuel >= this.getMaxFuel();
+        const fullyFueled = this.fuel >= this.getMaxFuel() * 0.97;
         const fullyArmed = !this.scoutAttackEnabled || this.bombs >= this.getMaxBombs();
         const fullyHealed = this.health >= this.maxHealth;
         if (fullyFueled && fullyArmed && fullyHealed) {
@@ -2396,6 +2525,7 @@ export class Ship {
         // Active Scouting (Not retreating)
         this.scoutFuelRetreating = false;
         this.scoutFuelRetreatTargetPlanetId = null;
+        this.targetPlanet = null;
 
         // A. Attack / Engage Logic vs Flee Logic
         let enemyNearby = null;
@@ -2478,11 +2608,15 @@ export class Ship {
             const dy = this.scoutTargetY - this.y;
             if (dx * dx + dy * dy < 20 * 20) {
               needNewTarget = true;
+            } else {
+              this.targetX = this.scoutTargetX;
+              this.targetY = this.scoutTargetY;
+              this.targetPlanet = null;
             }
           }
 
           if (needNewTarget) {
-            const cellSize = 200;
+            const cellSize = 100;
             const numCells = Math.ceil(mapWidth / cellSize);
             const candidates = [];
             const now = Date.now();
@@ -2496,71 +2630,153 @@ export class Ship {
               }
             }
 
-             // Filter for unexplored AND safe from storms/minefields
+            // Claiming mechanic: identify cells currently targeted by other friendly scouts
+            const claimedCells = new Set();
+            if (allShips) {
+              for (const other of allShips) {
+                if (other.active && other.id !== this.id && other.owner && this.owner && other.owner.id === this.owner.id && other.isScouting && other.scoutTargetX !== null && other.scoutTargetY !== null) {
+                  const ccx = Math.floor(other.scoutTargetX / cellSize);
+                  const ccy = Math.floor(other.scoutTargetY / cellSize);
+                  claimedCells.add(`${ccx}_${ccy}`);
+                }
+              }
+            }
+
+            // Filter for unexplored AND safe from storms/minefields AND unclaimed
             let eligible = candidates.filter(c => {
               const tx = c.cx * cellSize + cellSize / 2;
               const ty = c.cy * cellSize + cellSize / 2;
-              return c.lastExplored < fiveMinutesAgo && !isCellInStorm(tx, ty);
+              const isClaimed = claimedCells.has(`${c.cx}_${c.cy}`);
+              return !isClaimed && c.lastExplored < fiveMinutesAgo && !isCellInStorm(tx, ty);
             });
+
+            // Claim fallback: if no unclaimed cells are eligible, allow claimed ones
+            if (eligible.length === 0) {
+              eligible = candidates.filter(c => {
+                const tx = c.cx * cellSize + cellSize / 2;
+                const ty = c.cy * cellSize + cellSize / 2;
+                return c.lastExplored < fiveMinutesAgo && !isCellInStorm(tx, ty);
+              });
+            }
             
             let targetCell = null;
 
             if (eligible.length > 0) {
               const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
-              const friendlyShips = allShips ? allShips.filter(other => other.active && other.owner && other.owner.id === this.owner.id && other.id !== this.id) : [];
 
-              const getMinFriendlyDistSq = (tx, ty) => {
-                let minDistSq = Infinity;
-                for (const p of friendlyPlanets) {
-                  const dx = tx - p.x;
-                  const dy = ty - p.y;
-                  const distSq = dx * dx + dy * dy;
-                  if (distSq < minDistSq) minDistSq = distSq;
+              // Find the nearest friendly planet to the scout
+              let nearestFriendlyPlanet = null;
+              let minPlanetDistSq = Infinity;
+              for (const p of friendlyPlanets) {
+                const dx = p.x - this.x;
+                const dy = p.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < minPlanetDistSq) {
+                  minPlanetDistSq = distSq;
+                  nearestFriendlyPlanet = p;
                 }
-                for (const other of friendlyShips) {
-                  const dx = tx - other.x;
-                  const dy = ty - other.y;
-                  const distSq = dx * dx + dy * dy;
-                  if (distSq < minDistSq) minDistSq = distSq;
-                }
-                // Fallback to distance from current ship itself
-                if (minDistSq === Infinity) {
-                  const dx = tx - this.x;
-                  const dy = ty - this.y;
-                  minDistSq = dx * dx + dy * dy;
-                }
-                return minDistSq;
-              };
+              }
 
               eligible.forEach(c => {
                 const tx = c.cx * cellSize + cellSize / 2;
                 const ty = c.cy * cellSize + cellSize / 2;
-                const fDistSq = getMinFriendlyDistSq(tx, ty);
                 
-                // Primary priority: close to friendly space
-                // Secondary priority: never explored (lastExplored === 0)
+                // Distance to scout
+                const dxScout = tx - this.x;
+                const dyScout = ty - this.y;
+                c.distToScout = Math.sqrt(dxScout * dxScout + dyScout * dyScout);
+
+                // Distance to nearest friendly planet from scout
+                if (nearestFriendlyPlanet) {
+                  const dxPlanet = tx - nearestFriendlyPlanet.x;
+                  const dyPlanet = ty - nearestFriendlyPlanet.y;
+                  c.distToPlanet = Math.sqrt(dxPlanet * dxPlanet + dyPlanet * dyPlanet);
+                } else {
+                  c.distToPlanet = 0;
+                }
+
                 const neverExplored = c.lastExplored === 0;
-                const penalty = neverExplored ? 0 : 1500 * 1500;
-                
-                c.score = fDistSq + penalty;
+                c.penalty = neverExplored ? 0 : 1500 * 1500;
               });
 
-              // Sort by composite score (lowest score first)
-              eligible.sort((a, b) => a.score - b.score);
+              // Sort by composite criteria:
+              // 1. Exploration penalty (never explored first)
+              // 2. Closest to himself (scout) - binned by cell size so secondary sorting can break ties
+              // 3. Closest to the nearest friendly planet from himself
+              eligible.sort((a, b) => {
+                if (a.penalty !== b.penalty) {
+                  return a.penalty - b.penalty;
+                }
+                const binA = Math.floor(a.distToScout / cellSize);
+                const binB = Math.floor(b.distToScout / cellSize);
+                if (binA !== binB) {
+                  return binA - binB;
+                }
+                return a.distToPlanet - b.distToPlanet;
+              });
               
-              // Pick a random cell among the 5 closest to avoid congestion
-              const pool = eligible.slice(0, Math.min(5, eligible.length));
-              targetCell = pool[Math.floor(Math.random() * pool.length)];
+              // No randomization - pick the absolute best candidate!
+              targetCell = eligible[0];
             } else {
-              // Fall back to oldest explored cells that are safe from storms
+              // Fall back to oldest explored cells that are safe from storms (and unclaimed if possible)
               let noStormCandidates = candidates.filter(c => {
                 const tx = c.cx * cellSize + cellSize / 2;
                 const ty = c.cy * cellSize + cellSize / 2;
-                return !isCellInStorm(tx, ty);
+                const isClaimed = claimedCells.has(`${c.cx}_${c.cy}`);
+                return !isClaimed && !isCellInStorm(tx, ty);
               });
 
+              if (noStormCandidates.length === 0) {
+                noStormCandidates = candidates.filter(c => {
+                  const tx = c.cx * cellSize + cellSize / 2;
+                  const ty = c.cy * cellSize + cellSize / 2;
+                  return !isCellInStorm(tx, ty);
+                });
+              }
+
               if (noStormCandidates.length > 0) {
-                noStormCandidates.sort((a, b) => a.lastExplored - b.lastExplored);
+                // Find nearest friendly planet
+                let nearestFriendlyPlanet = null;
+                let minPlanetDistSq = Infinity;
+                if (allPlanets) {
+                  const friendlyPlanets = allPlanets.filter(p => p.owner && p.owner.id === this.owner.id);
+                  for (const p of friendlyPlanets) {
+                    const dx = p.x - this.x;
+                    const dy = p.y - this.y;
+                    const distSq = dx * dx + dy * dy;
+                    if (distSq < minPlanetDistSq) {
+                      minPlanetDistSq = distSq;
+                      nearestFriendlyPlanet = p;
+                    }
+                  }
+                }
+
+                noStormCandidates.forEach(c => {
+                  const tx = c.cx * cellSize + cellSize / 2;
+                  const ty = c.cy * cellSize + cellSize / 2;
+                  const dx = tx - this.x;
+                  const dy = ty - this.y;
+                  c.distToScout = Math.sqrt(dx * dx + dy * dy);
+                  if (nearestFriendlyPlanet) {
+                    const dxPlanet = tx - nearestFriendlyPlanet.x;
+                    const dyPlanet = ty - nearestFriendlyPlanet.y;
+                    c.distToPlanet = Math.sqrt(dxPlanet * dxPlanet + dyPlanet * dyPlanet);
+                  } else {
+                    c.distToPlanet = 0;
+                  }
+                });
+
+                noStormCandidates.sort((a, b) => {
+                  if (a.lastExplored !== b.lastExplored) {
+                    return a.lastExplored - b.lastExplored;
+                  }
+                  const binA = Math.floor(a.distToScout / cellSize);
+                  const binB = Math.floor(b.distToScout / cellSize);
+                  if (binA !== binB) {
+                    return binA - binB;
+                  }
+                  return a.distToPlanet - b.distToPlanet;
+                });
                 targetCell = noStormCandidates[0];
               } else {
                 // Ultimate fallback
@@ -3474,7 +3690,9 @@ export class Ship {
           } else {
             // Determine strength and close-in decision
             const cruiserStrength = this.health + (this.armorPoints || 0);
-            let enemyTargetStrength = targetObj.maxHealth > 0 ? (targetObj.health + (targetObj.armorPoints || 0)) : (targetObj.count || 1);
+            let enemyTargetStrength = targetObj.isAmoeba 
+              ? ((Math.floor(targetObj.health) + (targetObj.maxHealth * (targetObj.maxHealth - 1)) / 2) * 2)
+              : (targetObj.maxHealth > 0 ? (targetObj.health + (targetObj.armorPoints || 0)) : (targetObj.count || 1));
             
             let totalEnemyStrength = enemyTargetStrength;
             if (allShips) {
@@ -3483,7 +3701,10 @@ export class Ship {
                   const dx = other.x - this.x;
                   const dy = other.y - this.y;
                   if (dx * dx + dy * dy <= 400 * 400) {
-                    totalEnemyStrength += other.maxHealth > 0 ? (other.health + (other.armorPoints || 0)) : (other.count || 1);
+                    const otherStrength = other.isAmoeba 
+                      ? ((Math.floor(other.health) + (other.maxHealth * (other.maxHealth - 1)) / 2) * 2)
+                      : (other.maxHealth > 0 ? (other.health + (other.armorPoints || 0)) : (other.count || 1));
+                    totalEnemyStrength += otherStrength;
                   }
                 }
               }
@@ -3564,28 +3785,30 @@ export class Ship {
         this.targetY = target.y;
         this.targetPlanet = null;
         
-        // Collision check
-        const tdx = target.x - this.x;
-        const tdy = target.y - this.y;
-        const dist = Math.sqrt(tdx * tdx + tdy * tdy);
-        if (dist < 15) {
-          // Trigger boarding on target ship!
-          target.isUnderBoarding = true;
-          target.boardingPlayer = this.owner;
-          target.boardingMarines = (target.boardingMarines || 0) + this.count;
-          target.boardingSourceId = this.sourceShipId;
-          this.active = false; // consume marine fleet
-          console.log(`[MARINE FLEET BOARDING IMPACT] Marine fleet collided with target ship ${target.id}, boarding with ${this.count} marines.`);
-          
-          if (explosions) {
-            explosions.push({
-              x: this.x,
-              y: this.y,
-              color: this.owner ? this.owner.color : '#fff',
-              age: 0
-            });
+        // Collision check - only board if target is NOT an amoeba
+        if (!target.isAmoeba) {
+          const tdx = target.x - this.x;
+          const tdy = target.y - this.y;
+          const dist = Math.sqrt(tdx * tdx + tdy * tdy);
+          if (dist < 15) {
+            // Trigger boarding on target ship!
+            target.isUnderBoarding = true;
+            target.boardingPlayer = this.owner;
+            target.boardingMarines = (target.boardingMarines || 0) + this.count;
+            target.boardingSourceId = this.sourceShipId;
+            this.active = false; // consume marine fleet
+            console.log(`[MARINE FLEET BOARDING IMPACT] Marine fleet collided with target ship ${target.id}, boarding with ${this.count} marines.`);
+            
+            if (explosions) {
+              explosions.push({
+                x: this.x,
+                y: this.y,
+                color: this.owner ? this.owner.color : '#fff',
+                age: 0
+              });
+            }
+            return;
           }
-          return;
         }
       } else {
         // Target is destroyed
@@ -4596,7 +4819,104 @@ export class Ship {
       }
     }
 
-    if (this.isUpgrading) {
+    // Cruisers stop when at the appropriate firing range from a target while they have bombs and are not retreating
+    if (this.isCruiser && this.bombs > 0) {
+      const isRetreatingNow = this.isRetreating ||
+                              this.patrolFuelRetreating ||
+                              this.bombardRearming ||
+                              this.scoutFuelRetreating ||
+                              this.researchFuelRetreating ||
+                              this.researchRearming ||
+                              this.diplomacyFuelRetreating ||
+                              this.diplomacyFleeing;
+      if (!isRetreatingNow) {
+        let currentTarget = null;
+        let isPlanetTarget = false;
+        if (this.targetPlanet) {
+          currentTarget = this.targetPlanet;
+          isPlanetTarget = true;
+        } else if (this.cruiserTargetType === 'planet' && this.cruiserTargetId) {
+          currentTarget = allPlanets ? allPlanets.find(p => p.id === this.cruiserTargetId) : null;
+          isPlanetTarget = true;
+        } else if (this.cruiserTargetType === 'ship' && this.cruiserTargetId) {
+          currentTarget = allShips ? allShips.find(s => s.id === this.cruiserTargetId) : null;
+          isPlanetTarget = false;
+        }
+
+        if (currentTarget && currentTarget.active !== false) {
+          const isFriendly = (isPlanetTarget && currentTarget.owner && this.owner && currentTarget.owner.id === this.owner.id) ||
+                             (!isPlanetTarget && currentTarget.owner && this.owner && currentTarget.owner.id === this.owner.id);
+          if (!isFriendly) {
+            const tdx = currentTarget.x - this.x;
+            const tdy = currentTarget.y - this.y;
+            const dist = Math.sqrt(tdx * tdx + tdy * tdy);
+            
+            // Calculate relative target direction (angle relative to cruiser's current heading)
+            const targetAngle = Math.atan2(tdy, tdx);
+            let diff = targetAngle - (this.angle || 0);
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            const absDiff = Math.abs(diff);
+
+            let targetingRangeBonus = 0;
+            if (this.targeting > 0) {
+              targetingRangeBonus += 0.05;
+              if (this.targeting > 1) {
+                targetingRangeBonus += 0.025;
+              }
+              if (this.targeting > 2) {
+                targetingRangeBonus += 0.025;
+              }
+            }
+
+            let targetRange = effectiveRange;
+            if (absDiff <= Math.PI / 4) {
+              // Front arc (+30% range bonus)
+              targetRange = effectiveRange * 1.3;
+            } else if (absDiff >= 3 * Math.PI / 4) {
+              // Aft arc: standard range without munitions bonus (cannot fire bombs backward)
+              let rangeWithoutMunitions = effectiveRange;
+              if (this.bombs > 0) {
+                const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+                const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+                const munitionsBonus = baseDogfightRange * 0.10 * (1 + targetingRangeBonus);
+                rangeWithoutMunitions = Math.max(0, effectiveRange - munitionsBonus);
+              }
+              targetRange = rangeWithoutMunitions * 0.85;
+            } else {
+              // Side arc
+              const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+              const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+              let bombRangeBoost = 0;
+              if (this.bombs > 0) {
+                bombRangeBoost = baseDogfightRange * 0.10 * (1 + targetingRangeBonus);
+              }
+              let specialBombRangeBoost = 0;
+              if (this.specialbombs > 0) {
+                specialBombRangeBoost = 10;
+              }
+              let packageMult = 1.0;
+              if (this.package === 'brute') {
+                packageMult = 0.5;
+              } else if (this.package === 'sniper') {
+                packageMult = 1.5;
+              }
+              bombRangeBoost *= packageMult;
+              specialBombRangeBoost *= packageMult;
+
+              targetRange = effectiveRange - 0.5 * bombRangeBoost - 0.5 * specialBombRangeBoost;
+            }
+
+            const range = targetRange + (isPlanetTarget ? currentTarget.radius : 0);
+            if (dist <= range) {
+              effectiveSpeed = 0;
+            }
+          }
+        }
+      }
+    }
+
+    if (this.isUpgrading || this.isDismantling) {
       effectiveSpeed = 0;
     }
 

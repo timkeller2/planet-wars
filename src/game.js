@@ -252,6 +252,66 @@ export class Game {
     return Math.max(1, Math.round(baseCost * (1 + modifier)));
   }
 
+  getCruiserTotalUpgradeCost(ship) {
+    const upgradeProps = [
+      'sensorarrays', 'labs', 'armor', 'shields', 'engine', 
+      'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 
+      'diplomat', 'marines'
+    ];
+    let totalSpent = 0;
+    
+    const levels = {};
+    let sumUpgrades = 0;
+    for (const prop of upgradeProps) {
+      levels[prop] = ship[prop] || 0;
+      sumUpgrades += levels[prop];
+    }
+    
+    while (sumUpgrades > 0) {
+      let foundProp = null;
+      for (const prop of upgradeProps) {
+        if (levels[prop] > 0) {
+          foundProp = prop;
+          break;
+        }
+      }
+      if (!foundProp) break;
+      
+      const prevSum = sumUpgrades - 1;
+      const baseCost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + prevSum / 3)));
+      
+      const typeKeyMap = {
+        sensorarrays: 'sensorarray',
+        labs: 'lab',
+        armor: 'armor',
+        shields: 'shield',
+        engine: 'engine',
+        munitions: 'munitions',
+        targeting: 'targeting',
+        damagecontrol: 'damagecontrol',
+        fuel_tanker: 'fueltanker',
+        diplomat: 'diplomat',
+        marines: 'marines'
+      };
+      const normType = typeKeyMap[foundProp] || foundProp;
+      const globalMod = (this.globalUpgradeModifiers && this.globalUpgradeModifiers[normType] !== undefined)
+        ? Math.max(-0.35, this.globalUpgradeModifiers[normType])
+        : -0.25;
+      let playerMod = 0;
+      if (ship.owner && ship.owner.upgradeModifiers && ship.owner.upgradeModifiers[normType] !== undefined) {
+        playerMod = ship.owner.upgradeModifiers[normType];
+      }
+      const modifier = Math.max(-0.50, globalMod + playerMod);
+      const finalCost = Math.max(1, Math.round(baseCost * (1 + modifier)));
+      totalSpent += finalCost;
+      
+      levels[foundProp]--;
+      sumUpgrades--;
+    }
+    
+    return totalSpent;
+  }
+
   isPlanetInHumanGravityWell(p) {
     const humanPlayers = this.allPlayers.filter(pl => pl && !pl.isAI);
     for (const hp of humanPlayers) {
@@ -551,6 +611,8 @@ export class Game {
         }
       }
       targetPlanet.ships = targetPlanet.maxShips;
+      targetPlanet.sizeClass = Math.round(targetPlanet.maxShips * 1.5);
+      targetPlanet.habitability = 100;
       targetPlanet.justAssigned = true;
       targetPlanet.justAssignedTimer = 0;
       targetPlanet.homeworldOf = player.id;
@@ -778,8 +840,16 @@ export class Game {
       player.tradeCapacity = 5;
       player.tradeOptions = undefined;
       player.tradeRegenAccumulator = 0;
-      player.sellPriceSetting = 2;
-      player.autoBuyOrders = [];
+      player.sellPriceSetting = 1;
+      const resources = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+      player.autoBuyOrders = resources.map(res => ({
+        id: "autobuy_" + Math.random().toString(36).substring(2, 9),
+        isAutoBuy: true,
+        ownerId: player.id,
+        ownerName: player.name,
+        resource: res,
+        price: 1
+      }));
     }
 
     // Reset global upgrade modifiers
@@ -874,7 +944,11 @@ export class Game {
         let initialShips = Math.floor(expectedShips + (Math.random() * 2 - 1) * variance);
         initialShips = Math.max(1, initialShips);
         const newPlanet = new Planet(i, x, y, radius, null, initialShips, this.width, this.height);
-        if (i < countMegaSuper + countSuper) newPlanet.isSuperPlanet = true;
+        if (i < countMegaSuper + countSuper) {
+          newPlanet.isSuperPlanet = true;
+          newPlanet.sizeClass = 200;
+          newPlanet.habitability = 150;
+        }
         this.planets.push(newPlanet);
       }
     }
@@ -1035,6 +1109,7 @@ export class Game {
           source.ships -= costShips;
           source.decreaseMaxShips(costCap);
           const ship = new Ship(this.nextShipId++, source.x, source.y, target, source.owner);
+          ship.speed = 22; // Cruisers default to speed 22 before reductions
           ship.maxHealth = maxHealth;
           ship.health = maxHealth;
           ship.crew = 2 * maxHealth;
@@ -1202,7 +1277,7 @@ export class Game {
     if (isBombing) {
       ship.isBomber = true;
       ship.bomberType = isBombing; // 'eco' or 'ships'
-      ship.speed = 20;
+      ship.speed = 15;
     }
     if (isWarp) {
       if (this.applyWarpToShip(ship, source.owner)) {
@@ -1297,6 +1372,7 @@ export class Game {
           source.ships -= costShips;
           source.decreaseMaxShips(costCap);
           const ship = new Ship(this.nextShipId++, source.x, source.y, null, source.owner, targetX, targetY);
+          ship.speed = 22; // Cruisers default to speed 22 before reductions
           ship.maxHealth = cruiserMaxHealth;
           ship.health = cruiserMaxHealth;
           ship.crew = 2 * cruiserMaxHealth;
@@ -1422,9 +1498,9 @@ export class Game {
     ship.bomberOffsetMag = 0;
     
     if (isBombing) {
-      ship.isBomber = true;
-      ship.bomberType = isBombing;
-      ship.speed = 20;
+       ship.isBomber = true;
+       ship.bomberType = isBombing;
+       ship.speed = 15;
     }
     if (isWarp) {
       if (this.applyWarpToShip(ship, source.owner)) {
@@ -1509,6 +1585,7 @@ export class Game {
         const sy = source.y + Math.sin(angle) * spawnDist;
 
         const ship = new Ship(this.nextShipId++, sx, sy, null, source.owner, sx, sy);
+        ship.speed = 22; // Cruisers default to speed 22 before reductions
         ship.classType = classType;
         ship.maxHealth = finalMaxHealth;
         ship.health = 1;
@@ -1526,7 +1603,12 @@ export class Game {
         if (source.focusMode === 'garrison' && !source.homeworldOf) {
           startingExp += (source.maxShips || 0) / 10;
         }
-        ship.expScore = startingExp;
+        let crewExpXp = 0;
+        if (owner && owner.crewExperience) {
+          crewExpXp = owner.crewExperience / finalMaxHealth;
+          owner.crewExperience = 0;
+        }
+        ship.expScore = startingExp + crewExpXp;
 
         ship.cruiserStyle = source.racialAffinity;
         ship.isCruiser = true;
@@ -1976,7 +2058,12 @@ export class Game {
             });
 
             console.log(`[REVOLT] Planet ${planet.name} revolted through competitive roll and joined player ${winnerPlayer.name}`);
+            return; // Only allow one revolt per minute
           }
+        } else {
+          // Owner successfully defended. Failed revolt attempt!
+          planet.revoltCooldown = 120000; // 120 seconds immunity
+          console.log(`[REVOLT FAILED] Revolt attempt on Planet ${planet.name} failed. 120s immunity applied.`);
         }
       }
     }
@@ -2177,6 +2264,7 @@ export class Game {
           const randomStyle = styles[Math.floor(Math.random() * styles.length)];
 
           const pirate = new Ship(this.nextShipId++, spawnX, spawnY, null, this.monsterPlayer);
+          pirate.speed = 22; // Cruisers default to speed 22 before reductions
           pirate.isCruiser = true;
           pirate.count = 1;
           pirate.maxHealth = maxHealth;
@@ -3526,7 +3614,7 @@ export class Game {
               ship.diplomatPrefResourceEvent = (ship.diplomatPrefResourceEvent || 0) + 1;
             }
 
-            const hasPref = initialQty >= 0.1;
+            const hasPref = prefRes && initialQty >= 0.1;
 
             const chanceBase = 30 + disposition + currentSym + MathSquareBase;
             const chancePref = 30 + disposition + currentSym + (MathSquareBase * 3) + 10;
@@ -3596,7 +3684,10 @@ export class Game {
       }
 
       // 4b. Marine Planet Attack Check
-      if ((ship.marineCount || 0) > 0) {
+      const maxMarinesCapacity = (ship.marines || 0) * (ship.maxHealth || 0);
+      const hasEnoughMarines = maxMarinesCapacity > 0 && ship.marineCount > 0.5 * maxMarinesCapacity && ship.bombPlanetsEnabled === true;
+
+      if ((ship.marineCount || 0) > 0 && hasEnoughMarines) {
         let targetPlanet = null;
         if (ship.cruiserTargetType === 'planet' && ship.cruiserTargetId !== null) {
           const p = this.planets.find(p => p.id === ship.cruiserTargetId);
@@ -3607,7 +3698,6 @@ export class Game {
 
         // If no explicit target planet, search automatically using standard rules
         if (!targetPlanet) {
-          const maxMarinesCapacity = (ship.marines || 0) * (ship.maxHealth || 0);
           if (ship.marineCount >= 0.5 * maxMarinesCapacity) {
             for (const p of this.planets) {
               const isNeutralOrEnemy = !p.owner || p.owner.id !== ship.owner.id;
@@ -3636,6 +3726,7 @@ export class Game {
           marineFleet.speedModifier = 1.0;
           marineFleet.isMarineFleet = true;
           marineFleet.sourceShipId = ship.id;
+          marineFleet.speed = 35;
 
           let startingExp = ship.expScore || 0;
           const tritaniumCost = 0.01 * (count / 3);
@@ -3655,7 +3746,7 @@ export class Game {
         let targetShip = null;
         if ((ship.marineCount || 0) > 0 && ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null) {
           const enemy = this.ships.find(s => s.id === ship.cruiserTargetId && s.active);
-          if (enemy && enemy.owner && enemy.owner.id !== ship.owner.id) {
+          if (enemy && enemy.owner && (enemy.owner.id !== ship.owner.id || enemy.isAmoeba)) {
             targetShip = enemy;
           }
         }
@@ -3669,6 +3760,7 @@ export class Game {
           marineFleet.isMarineFleet = true;
           marineFleet.targetShipId = targetShip.id;
           marineFleet.sourceShipId = ship.id;
+          marineFleet.speed = 35;
 
           let startingExp = ship.expScore || 0;
           const tritaniumCost = 0.01 * (count / 3);
@@ -3686,16 +3778,17 @@ export class Game {
       }
 
       // 5. Boarding Trigger Checks
-      if ((ship.marineCount || 0) > 0) {
+      if ((ship.marineCount || 0) > 0 && hasEnoughMarines) {
         // Find enemy cruiser in full scan range of attacking cruiser
         for (const enemy of cruisers) {
-          if (enemy.owner.id !== ship.owner.id) {
+          if (enemy.owner.id !== ship.owner.id && !enemy.isAmoeba) {
             const dx = enemy.x - ship.x;
             const dy = enemy.y - ship.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist <= radar) {
               const requiredMarines = 2 * (enemy.crew || 0);
-              if (ship.marineCount >= requiredMarines && requiredMarines > 0) {
+              const isSelectedTarget = (ship.cruiserTargetType === 'ship' && ship.cruiserTargetId === enemy.id);
+              if (isSelectedTarget || (ship.marineCount >= requiredMarines && requiredMarines > 0)) {
                 // Launch Boarding Fleet Pod!
                 const pod = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, enemy.x, enemy.y);
                 pod.cruiserStyle = ship.cruiserStyle;

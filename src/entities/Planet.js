@@ -1,3 +1,11 @@
+function randomWeightedMiddle(min, max, iterations = 3) {
+  let sum = 0;
+  for (let i = 0; i < iterations; i++) {
+    sum += Math.random();
+  }
+  return Math.round(min + (sum / iterations) * (max - min));
+}
+
 export class Planet {
   constructor(id, x, y, radius, owner, initialShips, mapWidth = 1920, mapHeight = 1620) {
     this.id = id;
@@ -25,6 +33,12 @@ export class Planet {
     this.name = this.generatePlanetName();
     this.expScore = 0;
     this.expProgress = 0;
+
+    this.sizeClass = randomWeightedMiddle(60, 200);
+    this.habitability = randomWeightedMiddle(15, 150);
+
+    // Cap initial radius to sizeClass
+    this.radius = Math.min(this.sizeClass, this.maxShips) / 4;
 
     // Sci-Fi Planetary Resources System
     // Cascading chance allocation: 60% in the middle, dwindling down to 20% at the edges/corners.
@@ -69,14 +83,20 @@ export class Planet {
   }
 
   setRadius(newRadius) {
-    this.radius = newRadius;
-    this.maxShips = Math.max(60, this.radius * 4);
+    this.maxShips = Math.max(60, newRadius * 4);
+    this.radius = this.sizeClass ? Math.min(this.sizeClass, this.maxShips) / 4 : newRadius;
   }
 
   increaseMaxShips(amount = 1) {
     const oldMax = this.maxShips;
-    this.maxShips += amount;
-    this.radius = this.maxShips / 4;
+    let increase = amount * (this.habitability / 100);
+    const techBonus = this.owner ? (this.owner.techScore || 0) : 0;
+    const threshold = this.sizeClass * ((this.habitability + techBonus) / 100);
+    if (this.maxShips >= threshold) {
+      increase /= 3;
+    }
+    this.maxShips += increase;
+    this.radius = Math.min(this.sizeClass, this.maxShips) / 4;
 
     if (oldMax < 150 && this.maxShips >= 150) {
       this.preferredResourceWantedEvent = true;
@@ -86,7 +106,7 @@ export class Planet {
 
   decreaseMaxShips(amount = 1) {
     this.maxShips -= amount;
-    this.radius = this.maxShips / 4;
+    this.radius = Math.min(this.sizeClass, this.maxShips) / 4;
     this.capacityDecreaseEvent = true;
   }
 
@@ -482,7 +502,7 @@ export class Planet {
     ctx.shadowBlur = 0;
 
     // Draw ship count backdrop pill
-    const text = `${Math.floor(this.ships)} / ${this.maxShips}`;
+    const text = `${Math.floor(this.ships)} / ${Math.round(this.maxShips)}`;
     ctx.font = `bold ${Math.max(10, this.radius * 0.45)}px Orbitron`;
     const textWidth = ctx.measureText(text).width;
 

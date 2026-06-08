@@ -1,6 +1,6 @@
-import { Game } from 'file:///s:/Dist/AntiGravity/Planet Wars/src/game.js';
-import { Ship } from 'file:///s:/Dist/AntiGravity/Planet Wars/src/entities/Ship.js';
-import { Player } from 'file:///s:/Dist/AntiGravity/Planet Wars/src/entities/Player.js';
+import { Game } from '../src/game.js';
+import { Ship } from '../src/entities/Ship.js';
+import { Player } from '../src/entities/Player.js';
 
 function assert(condition, message) {
   if (!condition) {
@@ -19,23 +19,23 @@ const cruiser = new Ship(1, 100, 100, null, p1);
 cruiser.isCruiser = true;
 cruiser.maxHealth = 50;
 
-// Base Range: 50 + 2 * maxHealth = 150.
-// level 0: 150 * 1.0 (no upgrades) * 1.10 (tech bonus) = 165
+// Base Range: 25 + 2 * maxHealth = 125.
+// level 0: 125 * 1.0 (no upgrades) * 1.10 (tech bonus) = 137.5
 let range0 = cruiser.cruiserRadarRange();
-console.log(`Level 0 Range: ${range0} (Expected: 165)`);
-assert(Math.abs(range0 - 165) < 1e-5, `Level 0 range mismatch, got ${range0}`);
+console.log(`Level 0 Range: ${range0} (Expected: 137.5)`);
+assert(Math.abs(range0 - 137.5) < 1e-5, `Level 0 range mismatch, got ${range0}`);
 
-// level 1: (150 + 10 * 1) * (1 + 0.25 * 1) = 160 * 1.25 = 200. With tech bonus: 200 * 1.1 = 220
+// level 1: (125 + 10 * 1) * (1 + 0.25 * 1) = 135 * 1.25 = 168.75. With tech bonus: 168.75 * 1.1 = 185.625
 cruiser.sensorarrays = 1;
 let range1 = cruiser.cruiserRadarRange();
-console.log(`Level 1 Range: ${range1} (Expected: 220)`);
-assert(Math.abs(range1 - 220) < 1e-5, `Level 1 range mismatch, got ${range1}`);
+console.log(`Level 1 Range: ${range1} (Expected: 185.625)`);
+assert(Math.abs(range1 - 185.625) < 1e-5, `Level 1 range mismatch, got ${range1}`);
 
-// level 2: (150 + 10 * 2) * (1 + 0.25 * 2) = 170 * 1.50 = 255. With tech bonus: 255 * 1.1 = 280.5
+// level 2: (125 + 10 * 2) * (1 + 0.25 * 2) = 145 * 1.50 = 217.5. With tech bonus: 217.5 * 1.1 = 239.25
 cruiser.sensorarrays = 2;
 let range2 = cruiser.cruiserRadarRange();
-console.log(`Level 2 Range: ${range2} (Expected: 280.5)`);
-assert(Math.abs(range2 - 280.5) < 1e-5, `Level 2 range mismatch, got ${range2}`);
+console.log(`Level 2 Range: ${range2} (Expected: 239.25)`);
+assert(Math.abs(range2 - 239.25) < 1e-5, `Level 2 range mismatch, got ${range2}`);
 
 console.log("Cruiser sensor range calculations test passed!");
 
@@ -94,9 +94,20 @@ console.log("Patrol health retreat behavior test passed!");
 p1.autoBuyOrders = [{ id: 'order1', resource: 'dilithium', price: 5 }];
 assert(p1.autoBuyOrders.length === 1, "Should have 1 active auto-buy order before restart");
 
-// Call initMap, which should clear autoBuyOrders on allPlayers
+// Call initMap, which should reset autoBuyOrders to default orders for all 7 resources
 game.initMap();
-assert(p1.autoBuyOrders.length === 0, "Restarting game must clear autoBuyOrders on players");
+assert(p1.autoBuyOrders.length === 7, "Restarting game must initialize autoBuyOrders with default resource orders");
 
 console.log("Game restart auto-buy reset test passed!");
+
+// --- 4. Test Planet Radius Cap to Size Class ---
+import { Planet } from '../src/entities/Planet.js';
+const testPlanet = new Planet('tp1', 100, 100, 20, p1, 10);
+testPlanet.sizeClass = 100;
+testPlanet.maxShips = 150; // 150 / 4 = 37.5, which is > sizeClass / 4 (25)
+testPlanet.increaseMaxShips(10);
+console.log(`Planet maxShips: ${testPlanet.maxShips}, radius: ${testPlanet.radius} (Expected radius cap: 25)`);
+assert(testPlanet.radius === 25, "Planet radius should be capped at sizeClass / 4");
+
+console.log("Planet radius size class cap test passed!");
 console.log("All unit tests completed successfully!");
