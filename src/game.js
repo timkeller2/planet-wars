@@ -556,8 +556,13 @@ export class Game {
       targetPlanet.homeworldOf = player.id;
       targetPlanet.focusMode = 'economy';
       
-      // All homeworlds must begin with a resource (randomly assigned)
+      // Ensure homeworld has a preferred resource
       const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+      if (!targetPlanet.preferredResource) {
+        targetPlanet.preferredResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
+      }
+
+      // All homeworlds must begin with a resource (randomly assigned)
       if (!targetPlanet.resources || targetPlanet.resources.length === 0) {
         targetPlanet.resources = [resourcesList[Math.floor(Math.random() * resourcesList.length)]];
       }

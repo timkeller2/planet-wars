@@ -18,7 +18,7 @@ export class Planet {
     this.retainedShips = false;
     this.revoltCooldown = 0;
     const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-    this.preferredResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
+    this.preferredResource = (Math.random() < 1/3) ? resourcesList[Math.floor(Math.random() * resourcesList.length)] : null;
     this.preferredResourceWantedEvent = false;
     const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
     this.racialAffinity = styles[Math.floor(Math.random() * styles.length)];

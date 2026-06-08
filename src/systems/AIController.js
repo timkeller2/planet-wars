@@ -21,7 +21,7 @@ export class AIController {
     
     const techAttrBonus = Math.sqrt(this.aiPlayer.techScore || 0);
     const expAttrBonus = 0.5 * Math.sqrt(this.aiPlayer.expScore || 0);
-    const safeDistance = (techAttrBonus + expAttrBonus) * 35;
+    const safeDistance = (techAttrBonus + expAttrBonus) * 20;
 
     let score = target.ships + (dist * distWeight);
     

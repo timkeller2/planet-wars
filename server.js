@@ -1505,7 +1505,7 @@ async function bootstrap() {
           angle: s.angle || 0,
           flightTime: s.flightTime || 0,
           speedModifier: s.speedModifier || 1.0,
-          speed: s.speed || 35,
+          speed: s.speed || 20,
           currentSpeed: s.currentSpeed || 0,
           specialduranium: s.specialduranium || 0,
           targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,

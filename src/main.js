@@ -1769,7 +1769,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
           expScore: flat[i + 14],
           flightTime: flat[i + 15],
           currentSpeed: flat[i + 16],
-          speed: 35,
+          speed: 20,
           formation: 'arrow',
           isCruiser: false,
           isAmoeba: false
@@ -6284,7 +6284,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               fuelLabel += '*';
             }
             const fuelVal = Math.floor(hs.fuel || 0) + ' / ' + Math.floor(getMaxFuel(hs));
-            const speedVal = (hs.currentSpeed || 0).toFixed(1) + ' / ' + (hs.speed || 35).toFixed(1);
+            const speedVal = (hs.currentSpeed || 0).toFixed(1) + ' / ' + (hs.speed || 20).toFixed(1);
             lines.push({ label: `⛽ ${fuelLabel}`, value: `${fuelVal}  |  Speed: ${speedVal}`, color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
 
             if (hs.maxArmor && hs.maxArmor > 0) {
@@ -6519,7 +6519,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
               const icon = raceIcons[raceStyle] || '';
               lines.push({ label: 'Race', value: `${icon} ${raceStyle}`, color: '#e040fb' });
             }
-            lines.push({ label: 'Base Speed', value: (hs.speed || 35).toFixed(1), color: '#ccc' });
+            lines.push({ label: 'Base Speed', value: (hs.speed || 20).toFixed(1), color: '#ccc' });
             lines.push({ label: 'Effective Speed', value: (hs.currentSpeed || 0).toFixed(1), color: '#4f4' });
 
             // swarm bonus

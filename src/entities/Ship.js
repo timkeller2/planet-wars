@@ -7,7 +7,7 @@ export class Ship {
     this.targetX = targetX;
     this.targetY = targetY;
     this.owner = owner;
-    this.speed = 35; // Halved from 70
+    this.speed = 20; // Halved from 70
     this.active = true;
     this.flightTime = 0;
     this.startX = x;
