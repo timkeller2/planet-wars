@@ -925,7 +925,16 @@ export class Ship {
           for (let dy = -cellRadius; dy <= cellRadius; dy++) {
             const cx = scX + dx;
             const cy = scY + dy;
-            game.exploredGrid[`${pId}_${cx}_${cy}`] = now;
+            const key = `${pId}_${cx}_${cy}`;
+            const wasExplored = (game.exploredGrid[key] || 0) !== 0;
+            if (!wasExplored) {
+              game.exploredGrid[key] = now;
+              if (this.isCruiser) {
+                this.expScore = (this.expScore || 0) + 1;
+              }
+            } else {
+              game.exploredGrid[key] = now;
+            }
           }
         }
       }
@@ -2599,17 +2608,6 @@ export class Ship {
           }
         } else {
           // B. Normal Scouting movement (No threat nearby)
-          if (this.scoutTargetIsUnexplored && this.scoutTargetX !== null && this.scoutTargetY !== null && this.isCruiser) {
-            const scX = Math.floor(this.x / 100);
-            const scY = Math.floor(this.y / 100);
-            const tcX = Math.floor(this.scoutTargetX / 100);
-            const tcY = Math.floor(this.scoutTargetY / 100);
-            if (scX === tcX && scY === tcY) {
-              this.expScore = (this.expScore || 0) + 1;
-              this.scoutTargetIsUnexplored = false;
-            }
-          }
-
           let needNewTarget = this.targetX === null || this.targetY === null || this.scoutTargetX === null || this.scoutTargetY === null;
           
           // Invalidate target if it drifts inside an active ion storm or minefield
@@ -2809,7 +2807,6 @@ export class Ship {
               this.targetY = ty;
               this.scoutTargetX = tx;
               this.scoutTargetY = ty;
-              this.scoutTargetIsUnexplored = (targetCell.lastExplored === 0);
               this.cruiserTargetType = null;
               this.cruiserTargetId = null;
             }

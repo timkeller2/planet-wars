@@ -106,32 +106,34 @@ assert(scout2.scoutTargetY === null, "Scout target Y should be cleared upon ente
 
 console.log("Scout target clearing on general retreat test passed!");
 
-// --- Test 5: Cruiser experience score is incremented on entering unexplored target cell ---
+// --- Test 5: Cruiser experience score is incremented when scanning unexplored tiles ---
 scout2.isRetreating = false;
 scout2.scoutFuelRetreating = false;
 scout2.fuel = 20;
 scout2.expScore = 0;
-// Set scout2 position far away
+// Set scout2 position
 scout2.x = 50;
 scout2.y = 50;
-// Reset exploredGrid so (5, 5) is unexplored
-game.exploredGrid[`p1_5_5`] = 0;
-// Trigger scout2 targeting: should pick (5, 5) as targetCell and set scoutTargetIsUnexplored to true
-scout2.scoutTargetX = null;
-scout2.scoutTargetY = null;
-scout2.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
-assert(scout2.scoutTargetX === 550 && scout2.scoutTargetY === 550, "Scout should target (5, 5)");
-assert(scout2.scoutTargetIsUnexplored === true, "Scout should register the target as unexplored");
-assert(scout2.expScore === 0, "Experience score should start at 0 before entering cell");
 
-// Now move scout2 into the target cell (5, 5), i.e., x=510, y=510
-scout2.x = 510;
-scout2.y = 510;
-scout2.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
-assert(scout2.expScore === 1, `Experience score should be incremented to 1. Got ${scout2.expScore}`);
-assert(scout2.scoutTargetIsUnexplored === false, "scoutTargetIsUnexplored should be set to false after entry");
+// Set up exploredGrid so only key `p1_0_0` is unexplored
+const pId = scout2.owner.id;
+game.exploredGrid = {};
+// Pre-fill cells in radar scan area as explored
+const radarRange = scout2.cruiserRadarRange();
+const cellRadius = Math.max(1, Math.ceil(radarRange / 100));
+for (let dx = -cellRadius; dx <= cellRadius; dx++) {
+  for (let dy = -cellRadius; dy <= cellRadius; dy++) {
+    game.exploredGrid[`${pId}_${dx}_${dy}`] = Date.now();
+  }
+}
+// Set one cell to unexplored
+game.exploredGrid[`${pId}_0_0`] = 0;
 
-// Update again: experience score should not increment again for the same tile
+scout2.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
+// The radar scan should have run and scanned cell 0,0 which was unexplored, awarding 1 XP
+assert(scout2.expScore === 1, `Cruiser should gain 1 XP for scanning unexplored cell 0,0. Got ${scout2.expScore}`);
+
+// Subsequent update should not award XP again because 0,0 is now explored
 scout2.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
 assert(scout2.expScore === 1, "Experience score should remain 1");
 
