@@ -716,6 +716,10 @@ export class Ship {
           if (combatTrigger || normalTrigger) {
             this.isRetreating = true;
             this.retreatTargetPlanetId = null;
+            if (this.isScouting) {
+              this.scoutTargetX = null;
+              this.scoutTargetY = null;
+            }
           }
         }
       }

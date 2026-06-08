@@ -92,4 +92,17 @@ scout2.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
 assert(scout2.scoutFuelRetreating === false, "Scout should resume scouting when fuel is above 97%");
 
 console.log("Scout fuel continuation check test passed!");
+
+// --- Test 4: Scout target coordinates are cleared when entering general retreat mode ---
+scout2.isRetreating = false;
+scout2.scoutTargetX = 550;
+scout2.scoutTargetY = 550;
+scout2.fuel = 2; // Very low fuel, triggers normal lowFuel retreat
+// Trigger general retreat update
+scout2.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
+assert(scout2.isRetreating === true, "Scout should enter general retreat mode");
+assert(scout2.scoutTargetX === null, "Scout target X should be cleared upon entering retreat mode");
+assert(scout2.scoutTargetY === null, "Scout target Y should be cleared upon entering retreat mode");
+
+console.log("Scout target clearing on general retreat test passed!");
 console.log("All claiming and fuel unit tests completed successfully!");
