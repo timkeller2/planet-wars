@@ -624,9 +624,20 @@ export class Game {
         targetPlanet.preferredResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
       }
 
-      // All homeworlds must begin with a resource (randomly assigned)
-      if (!targetPlanet.resources || targetPlanet.resources.length === 0) {
-        targetPlanet.resources = [resourcesList[Math.floor(Math.random() * resourcesList.length)]];
+      // All homeworlds must begin with a resource (the accuracy resource for the player's race/style)
+      const style = player.cruiserStyle || targetPlanet.racialAffinity;
+      let accuracyResource = 'merculite';
+      if (style === 'Romulan' || style === 'Gorn') {
+        accuracyResource = 'antimatter';
+      } else if (style === 'Tholian' || style === 'Lyran') {
+        accuracyResource = 'dilithium';
+      }
+      targetPlanet.resources = [accuracyResource];
+
+      // Ensure preferred resource is not the same as the mined accuracy resource
+      if (targetPlanet.preferredResource === accuracyResource) {
+        const otherPreferredList = resourcesList.filter(r => r !== accuracyResource);
+        targetPlanet.preferredResource = otherPreferredList[Math.floor(Math.random() * otherPreferredList.length)];
       }
 
       // Player stockpiles start at 0

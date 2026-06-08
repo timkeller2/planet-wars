@@ -110,4 +110,41 @@ console.log(`Planet maxShips: ${testPlanet.maxShips}, radius: ${testPlanet.radiu
 assert(testPlanet.radius === 25, "Planet radius should be capped at sizeClass / 4");
 
 console.log("Planet radius size class cap test passed!");
+
+// --- 5. Test Homeworld Weapon Accuracy Resource Matching ---
+const mockPlayers = [
+  { id: 'player_fed', cruiserStyle: 'Federation', name: 'Fed', resources: {} },
+  { id: 'player_gorn', cruiserStyle: 'Gorn', name: 'Gorn', resources: {} },
+  { id: 'player_rom', cruiserStyle: 'Romulan', name: 'Romulan', resources: {} },
+  { id: 'player_kling', cruiserStyle: 'Klingon', name: 'Klingon', resources: {} },
+  { id: 'player_tholian', cruiserStyle: 'Tholian', name: 'Tholian', resources: {} },
+  { id: 'player_lyran', cruiserStyle: 'Lyran', name: 'Lyran', resources: {} }
+];
+
+for (const mp of mockPlayers) {
+  // Clear any existing planets for a clean slate
+  game.planets = [];
+  // Add a candidate neutral planet
+  const candidate = new Planet('cand_' + mp.id, 200, 200, 20, null, 10);
+  game.planets.push(candidate);
+  
+  game.assignPlanet(mp);
+  
+  const assigned = game.planets.find(p => p.homeworldOf === mp.id);
+  assert(assigned !== undefined, "Planet should be assigned as homeworld");
+  assert(assigned.resources.length === 1, "Homeworld should have exactly 1 assigned resource");
+  
+  const assignedRes = assigned.resources[0];
+  if (mp.cruiserStyle === 'Federation' || mp.cruiserStyle === 'Klingon') {
+    assert(assignedRes === 'merculite', `Expected merculite for ${mp.cruiserStyle}. Got ${assignedRes}`);
+  } else if (mp.cruiserStyle === 'Romulan' || mp.cruiserStyle === 'Gorn') {
+    assert(assignedRes === 'antimatter', `Expected antimatter for ${mp.cruiserStyle}. Got ${assignedRes}`);
+  } else if (mp.cruiserStyle === 'Tholian' || mp.cruiserStyle === 'Lyran') {
+    assert(assignedRes === 'dilithium', `Expected dilithium for ${mp.cruiserStyle}. Got ${assignedRes}`);
+  }
+  
+  assert(assigned.preferredResource !== assignedRes, `Preferred resource ${assigned.preferredResource} must not be the same as assigned accuracy resource ${assignedRes}`);
+}
+
+console.log("Homeworld weapon accuracy resource matching test passed!");
 console.log("All unit tests completed successfully!");
