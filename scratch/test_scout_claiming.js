@@ -105,4 +105,35 @@ assert(scout2.scoutTargetX === null, "Scout target X should be cleared upon ente
 assert(scout2.scoutTargetY === null, "Scout target Y should be cleared upon entering retreat mode");
 
 console.log("Scout target clearing on general retreat test passed!");
+
+// --- Test 5: Cruiser experience score is incremented on entering unexplored target cell ---
+scout2.isRetreating = false;
+scout2.scoutFuelRetreating = false;
+scout2.fuel = 20;
+scout2.expScore = 0;
+// Set scout2 position far away
+scout2.x = 50;
+scout2.y = 50;
+// Reset exploredGrid so (5, 5) is unexplored
+game.exploredGrid[`p1_5_5`] = 0;
+// Trigger scout2 targeting: should pick (5, 5) as targetCell and set scoutTargetIsUnexplored to true
+scout2.scoutTargetX = null;
+scout2.scoutTargetY = null;
+scout2.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
+assert(scout2.scoutTargetX === 550 && scout2.scoutTargetY === 550, "Scout should target (5, 5)");
+assert(scout2.scoutTargetIsUnexplored === true, "Scout should register the target as unexplored");
+assert(scout2.expScore === 0, "Experience score should start at 0 before entering cell");
+
+// Now move scout2 into the target cell (5, 5), i.e., x=510, y=510
+scout2.x = 510;
+scout2.y = 510;
+scout2.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
+assert(scout2.expScore === 1, `Experience score should be incremented to 1. Got ${scout2.expScore}`);
+assert(scout2.scoutTargetIsUnexplored === false, "scoutTargetIsUnexplored should be set to false after entry");
+
+// Update again: experience score should not increment again for the same tile
+scout2.update(0.1, [scout1, scout2], [], [], [], [], 1000, game);
+assert(scout2.expScore === 1, "Experience score should remain 1");
+
+console.log("Scout experience points award test passed!");
 console.log("All claiming and fuel unit tests completed successfully!");
