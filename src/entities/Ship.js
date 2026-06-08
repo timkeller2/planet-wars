@@ -41,6 +41,7 @@ export class Ship {
     this.bombPlanetsEnabled = false;
     this.isRetreating = false;
     this.retreatTargetPlanetId = null;
+    this.retreatTargetShipId = null;
     this.timeNotMoved = 0;
     this.lastX = null;
     this.lastY = null;
@@ -334,6 +335,7 @@ export class Ship {
         // Exit retreat entirely
         this.isRetreating = false;
         this.retreatTargetPlanetId = null;
+        this.retreatTargetShipId = null;
         this.patrolReloading = false;
         this.patrolFuelRetreating = false;
         this.patrolFuelRetreatTargetPlanetId = null;
@@ -360,6 +362,7 @@ export class Ship {
         // Assign to active retreat variable(s)
         if (this.isRetreating) {
           this.retreatTargetPlanetId = targetPlanet.id;
+          this.retreatTargetShipId = null;
         }
         if (this.patrolFuelRetreating) {
           this.patrolFuelRetreatTargetPlanetId = targetPlanet.id;
@@ -736,11 +739,32 @@ export class Ship {
         if (fullyFueled && fullyArmed && fullyHealed) {
           this.isRetreating = false;
           this.retreatTargetPlanetId = null;
+          this.retreatTargetShipId = null;
         }
       }
       
       // Retreat movement/routing logic
       if (this.isRetreating) {
+        if (this.retreatTargetShipId && allShips) {
+          const targetShip = allShips.find(s => s.id === this.retreatTargetShipId);
+          if (targetShip && targetShip.active) {
+            const hasExcessFuel = (targetShip.fuel || 0) > targetShip.getMaxFuel();
+            const hasSupplies = (targetShip.supplies || 0) > 0;
+            if (hasExcessFuel || hasSupplies) {
+              this.targetX = targetShip.x;
+              this.targetY = targetShip.y;
+            } else {
+              this.retreatTargetShipId = null;
+              this.targetX = null;
+              this.targetY = null;
+            }
+          } else {
+            this.retreatTargetShipId = null;
+            this.targetX = null;
+            this.targetY = null;
+          }
+        }
+
         // A. Enemy Proximity Evasion (fleeing if enemy within 200px)
         let enemyClose = false;
         if (allShips) {
@@ -766,10 +790,11 @@ export class Ship {
         if (enemyClose) {
           // Force recalculating retreat target
           this.retreatTargetPlanetId = null;
+          this.retreatTargetShipId = null;
         }
 
         // B. Safe target selection
-        let needNewTarget = this.targetX === null || this.targetY === null || !this.retreatTargetPlanetId;
+        let needNewTarget = this.targetX === null || this.targetY === null || (!this.retreatTargetPlanetId && !this.retreatTargetShipId);
         
         // Double check existing target ownership
         if (!needNewTarget && this.retreatTargetPlanetId) {
@@ -781,14 +806,48 @@ export class Ship {
 
         if (needNewTarget) {
           const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+          const safeCandidates = [];
+          let globalBestFallback = null;
+          let maxSafetyDistSq = -1;
+
+          // 1. Look for friendly cruisers with supplies or excess fuel to refuel
+          if (allShips && this.owner && this.fuel < this.getMaxFuel() * 0.97) {
+            for (const other of allShips) {
+              if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id) {
+                const hasExcessFuel = (other.fuel || 0) > other.getMaxFuel();
+                const hasSupplies = (other.supplies || 0) > 0;
+                if (hasExcessFuel || hasSupplies) {
+                  // Ensure this destination cruiser doesn't have active enemies close to it
+                  let safeFromEnemies = true;
+                  if (allShips) {
+                    for (const enemy of allShips) {
+                      if (enemy.active && enemy.id !== this.id) {
+                        const isEnemy = (enemy.owner && enemy.owner.id !== this.owner.id) || enemy.isAmoeba;
+                        if (isEnemy) {
+                          const edx = enemy.x - other.x;
+                          const edy = enemy.y - other.y;
+                          if (edx * edx + edy * edy < 300 * 300) {
+                            safeFromEnemies = false;
+                            break;
+                          }
+                        }
+                      }
+                    }
+                  }
+                  if (safeFromEnemies) {
+                    const cdx = other.x - this.x;
+                    const cdy = other.y - this.y;
+                    const distToCruiser = Math.sqrt(cdx * cdx + cdy * cdy);
+                    safeCandidates.push({ x: other.x, y: other.y, ship: other, dist: distToCruiser });
+                  }
+                }
+              }
+            }
+          }
           
           let foundDestination = false;
           
           if (friendlyPlanets.length > 0) {
-            const safeCandidates = [];
-            let globalBestFallback = null;
-            let maxSafetyDistSq = -1;
-            
             for (const p of friendlyPlanets) {
               const gRad = p.getGravityRadius();
               
@@ -855,51 +914,59 @@ export class Ship {
                 }
               }
             }
-            
-            let selected = null;
-            if (safeCandidates.length > 0) {
-              const closeCandidates = safeCandidates.filter(c => c.dist <= 400);
-              if (closeCandidates.length > 0) {
-                closeCandidates.sort((a, b) => a.dist - b.dist);
-                selected = closeCandidates[0];
-              } else {
-                safeCandidates.sort((a, b) => a.dist - b.dist);
-                selected = safeCandidates[0];
-              }
-            }
-            
-            if (selected) {
-              this.targetPlanet = null;
-              this.targetX = selected.x;
-              this.targetY = selected.y;
-              this.retreatTargetPlanetId = selected.p.id;
-              this.cruiserTargetType = null;
-              this.cruiserTargetId = null;
-              foundDestination = true;
-            } else if (globalBestFallback) {
-              this.targetPlanet = null;
-              this.targetX = globalBestFallback.x;
-              this.targetY = globalBestFallback.y;
-              this.retreatTargetPlanetId = globalBestFallback.p.id;
-              this.cruiserTargetType = null;
-              this.cruiserTargetId = null;
-              foundDestination = true;
+          }
+          
+          let selected = null;
+          if (safeCandidates.length > 0) {
+            const closeCandidates = safeCandidates.filter(c => c.dist <= 400);
+            if (closeCandidates.length > 0) {
+              closeCandidates.sort((a, b) => a.dist - b.dist);
+              selected = closeCandidates[0];
             } else {
-              // Final fallback: Closest friendly planet center
-              const sortedFriendlyPlanets = [...friendlyPlanets].sort((a, b) => {
-                const da = (a.x - this.x) * (a.x - this.x) + (a.y - this.y) * (a.y - this.y);
-                const db = (b.x - this.x) * (b.x - this.x) + (b.y - this.y) * (b.y - this.y);
-                return da - db;
-              });
-              const closestPlanet = sortedFriendlyPlanets[0];
-              this.targetPlanet = closestPlanet;
-              this.targetX = closestPlanet.x;
-              this.targetY = closestPlanet.y;
-              this.retreatTargetPlanetId = closestPlanet.id;
-              this.cruiserTargetType = null;
-              this.cruiserTargetId = null;
-              foundDestination = true;
+              safeCandidates.sort((a, b) => a.dist - b.dist);
+              selected = safeCandidates[0];
             }
+          }
+          
+          if (selected) {
+            this.targetPlanet = null;
+            this.targetX = selected.x;
+            this.targetY = selected.y;
+            if (selected.p) {
+              this.retreatTargetPlanetId = selected.p.id;
+              this.retreatTargetShipId = null;
+            } else if (selected.ship) {
+              this.retreatTargetPlanetId = null;
+              this.retreatTargetShipId = selected.ship.id;
+            }
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+            foundDestination = true;
+          } else if (globalBestFallback) {
+            this.targetPlanet = null;
+            this.targetX = globalBestFallback.x;
+            this.targetY = globalBestFallback.y;
+            this.retreatTargetPlanetId = globalBestFallback.p.id;
+            this.retreatTargetShipId = null;
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+            foundDestination = true;
+          } else if (friendlyPlanets.length > 0) {
+            // Final fallback: Closest friendly planet center
+            const sortedFriendlyPlanets = [...friendlyPlanets].sort((a, b) => {
+              const da = (a.x - this.x) * (a.x - this.x) + (a.y - this.y) * (a.y - this.y);
+              const db = (b.x - this.x) * (b.x - this.x) + (b.y - this.y) * (b.y - this.y);
+              return da - db;
+            });
+            const closestPlanet = sortedFriendlyPlanets[0];
+            this.targetPlanet = closestPlanet;
+            this.targetX = closestPlanet.x;
+            this.targetY = closestPlanet.y;
+            this.retreatTargetPlanetId = closestPlanet.id;
+            this.retreatTargetShipId = null;
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+            foundDestination = true;
           }
         }
       }
@@ -2028,7 +2095,10 @@ export class Ship {
                   destroysDefender: destroyedDefender,
                   targetPlanetId: p.id,
                   sourceShipId: this.id,
-                  splashDamage: this.splashDamage || 0
+                  splashDamage: this.splashDamage || 0,
+                  accuracy: Math.round(finalPlanetHitChance * 100),
+                  attackerOwnerId: this.owner ? this.owner.id : null,
+                  targetOwnerId: p.owner ? p.owner.id : null
                 });
               } else {
                 lasers.push({
@@ -4161,8 +4231,29 @@ export class Ship {
         }
       }
 
-      if (this.inFriendlyWell) {
-        if (this.armorPoints < this.maxArmor) {
+      const supplyShipForFuel = this.findNearbySupplyShip(allShips);
+      let fuelSourceShip = null;
+      if (allShips && this.owner) {
+        let closestSource = null;
+        let closestDistSq = Infinity;
+        const radarRange = this.cruiserRadarRange();
+        const radarRangeSq = radarRange * radarRange;
+        for (const other of allShips) {
+          if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.fuel || 0) > other.getMaxFuel()) {
+            const dx = other.x - this.x;
+            const dy = other.y - this.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq <= radarRangeSq && distSq < closestDistSq) {
+              closestDistSq = distSq;
+              closestSource = other;
+            }
+          }
+        }
+        fuelSourceShip = closestSource;
+      }
+
+      if (this.inFriendlyWell || supplyShipForFuel || fuelSourceShip) {
+        if (this.armorPoints < this.maxArmor && this.inFriendlyWell) {
           let armorHealRate = (deltaTime / 60000) * 3;
           this.armorPoints = Math.min(this.maxArmor, (this.armorPoints || 0) + armorHealRate);
         }
@@ -4177,7 +4268,11 @@ export class Ship {
           const deuteriumSellPrice = owner ? (owner.offerPrice?.deuterium ?? 3) : 3;
 
           let canAffordRefuel = false;
-          if (hasExcessDeuterium && deuteriumSellPrice < 12) {
+          if (supplyShipForFuel && (supplyShipForFuel.supplies || 0) > 0) {
+            canAffordRefuel = true;
+          } else if (fuelSourceShip && (fuelSourceShip.fuel || 0) > fuelSourceShip.getMaxFuel()) {
+            canAffordRefuel = true;
+          } else if (hasExcessDeuterium && deuteriumSellPrice < 12) {
             canAffordRefuel = true;
           } else if (owner && owner.useCredits !== false) {
             canAffordRefuel = true;
@@ -4195,7 +4290,27 @@ export class Ship {
                 costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.fuel_tanker));
               }
 
-              if (hasExcessDeuterium && deuteriumSellPrice < 12) {
+              if (supplyShipForFuel && (supplyShipForFuel.supplies || 0) > 0) {
+                const suppliesUsed = amountRefueled * costMultiplier;
+                if (supplyShipForFuel.supplies >= suppliesUsed) {
+                  supplyShipForFuel.supplies -= suppliesUsed;
+                } else {
+                  const remainingRefuel = suppliesUsed - supplyShipForFuel.supplies;
+                  supplyShipForFuel.supplies = 0;
+                  if (hasExcessDeuterium && deuteriumSellPrice < 12) {
+                    const consumed = (1/12) * remainingRefuel;
+                    owner.resources.deuterium = (owner.resources.deuterium || 0) - consumed;
+                    this.specialfuel = (this.specialfuel || 0) + remainingRefuel;
+                  } else if (owner.useCredits !== false) {
+                    owner.credits = (owner.credits || 0) - 1.0 * remainingRefuel;
+                  } else if (friendlyWellPlanet) {
+                    friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * remainingRefuel);
+                  }
+                }
+              } else if (fuelSourceShip && (fuelSourceShip.fuel || 0) > fuelSourceShip.getMaxFuel()) {
+                const fuelTaken = amountRefueled;
+                fuelSourceShip.fuel = Math.max(fuelSourceShip.getMaxFuel(), fuelSourceShip.fuel - fuelTaken);
+              } else if (hasExcessDeuterium && deuteriumSellPrice < 12) {
                 const consumed = (1/12) * amountRefueled * costMultiplier;
                 owner.resources.deuterium = (owner.resources.deuterium || 0) - consumed;
                 this.specialfuel = (this.specialfuel || 0) + amountRefueled;

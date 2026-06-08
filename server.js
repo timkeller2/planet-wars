@@ -4,6 +4,7 @@ import { Server } from 'socket.io';
 import { Game } from './src/game.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import readline from 'readline';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,6 +46,143 @@ async function bootstrap() {
   
   const connectedClients = new Map(); // socket.id -> player reference
   let lastHumanActivityTime = Date.now();
+
+  function executeCommand(cmdStr, player, socket, io, game) {
+    const hasCheats = game.settings && game.settings.enableCheats;
+    if (!hasCheats) {
+      return "Cheats are disabled. You must check 'Enable Cheats' on the startup screen to use commands.";
+    }
+
+    const cleanCmd = cmdStr.trim().replace(/^\//, '');
+    const parts = cleanCmd.split(/\s+/);
+    const cmd = parts[0].toLowerCase();
+    const args = parts.slice(1);
+
+    let targetPlayer = player || game.humanPlayer;
+    if (!targetPlayer) {
+      return "No valid player target found.";
+    }
+
+    switch (cmd) {
+      case 'help':
+        return `Available Commands:
+/ships <number> - Set ships on all owned planets.
+/credits <number> - Set credits.
+/tech <number> - Set technology level.
+/exp <number> - Set experience level.
+/pause - Toggle game pause.
+/speed <number> - Set game simulation speed multiplier.
+/amoeba - Spawn a space amoeba.
+/clear - Clear all space amoebas.
+/<resource> <number> - Set resource stockpile (e.g. /latinum 100).`;
+
+      case 'ships': {
+        const amt = parseInt(args[0], 10);
+        if (isNaN(amt)) return "Usage: /ships <number>";
+        let count = 0;
+        for (const p of game.planets) {
+          if (p.owner === targetPlayer) {
+            p.ships = amt;
+            count++;
+          }
+        }
+        if (count === 0) {
+          // If they don't own any planets, find the first neutral and set it
+          const homeworld = game.planets.find(p => p.homeworldOf === targetPlayer.id);
+          if (homeworld) {
+            homeworld.owner = targetPlayer;
+            homeworld.ships = amt;
+            count++;
+          }
+        }
+        return `Set ships to ${amt} on ${count} planets owned by ${targetPlayer.name}.`;
+      }
+
+      case 'credits': {
+        const amt = parseInt(args[0], 10);
+        if (isNaN(amt)) return "Usage: /credits <number>";
+        targetPlayer.credits = amt;
+        return `Set credits of ${targetPlayer.name} to ${amt}.`;
+      }
+
+      case 'tech': {
+        const amt = parseFloat(args[0]);
+        if (isNaN(amt)) return "Usage: /tech <number>";
+        targetPlayer.techScore = amt;
+        return `Set techScore of ${targetPlayer.name} to ${amt}.`;
+      }
+
+      case 'exp': {
+        const amt = parseFloat(args[0]);
+        if (isNaN(amt)) return "Usage: /exp <number>";
+        targetPlayer.expScore = amt;
+        return `Set expScore of ${targetPlayer.name} to ${amt}.`;
+      }
+
+      case 'pause': {
+        game.isPaused = !game.isPaused;
+        return `Game is now ${game.isPaused ? 'PAUSED' : 'UNPAUSED'}.`;
+      }
+
+      case 'speed': {
+        const val = parseFloat(args[0]);
+        if (isNaN(val)) return "Usage: /speed <number>";
+        game.gameSpeed = val;
+        return `Game simulation speed modifier set to ${val}.`;
+      }
+
+      case 'amoeba': {
+        if (typeof game.spawnAmoebaCheat === 'function') {
+          const spawned = game.spawnAmoebaCheat();
+          if (spawned) {
+            return `Spawned Amoeba ship ${spawned.id} at (${Math.round(spawned.x)}, ${Math.round(spawned.y)}).`;
+          }
+        }
+        return "Spawn amoeba failed (monster player or spawn method not initialized).";
+      }
+
+      case 'clear': {
+        let count = 0;
+        for (let i = game.ships.length - 1; i >= 0; i--) {
+          if (game.ships[i].isAmoeba) {
+            game.ships[i].active = false;
+            game.ships.splice(i, 1);
+            count++;
+          }
+        }
+        return `Cleared ${count} active amoeba ships from simulation.`;
+      }
+
+      default: {
+        // Check if it's a resource command
+        const resources = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+        if (resources.includes(cmd)) {
+          const amt = parseFloat(args[0]);
+          if (isNaN(amt)) return `Usage: /${cmd} <number>`;
+          if (!targetPlayer.resources) targetPlayer.resources = {};
+          targetPlayer.resources[cmd] = amt;
+          return `Set ${cmd} resource of ${targetPlayer.name} to ${amt}.`;
+        }
+        return `Unknown command: "${cmd}". Type /help for a list of commands.`;
+      }
+    }
+  }
+
+  // Set up standard input console command listener
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: false
+  });
+
+  rl.on('line', (line) => {
+    const text = line.trim();
+    if (!text) return;
+    
+    // Target the human player by default
+    const feedback = executeCommand(text, game.humanPlayer, null, io, game);
+    console.log(`[Console Command Result] ${feedback}`);
+  });
 
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
@@ -376,11 +514,22 @@ async function bootstrap() {
     socket.on('chatMessage', (text) => {
       const player = connectedClients.get(socket.id);
       if (player && text && typeof text === 'string' && text.trim().length > 0) {
-        const cleanText = text.trim().substring(0, 100);
+        const cleanText = text.trim();
+        if (cleanText.startsWith('/')) {
+          const feedback = executeCommand(cleanText, player, socket, io, game);
+          socket.emit('chatMessage', {
+            sender: 'System',
+            color: '#00e5ff',
+            text: feedback
+          });
+          console.log(`[Cheat Command] Player ${player.name} (${player.id}) ran command: ${cleanText}`);
+          return;
+        }
+        const cleanTextToBroadcast = cleanText.substring(0, 100);
         io.emit('chatMessage', {
           sender: player.name,
           color: player.color,
-          text: cleanText
+          text: cleanTextToBroadcast
         });
       }
     });
@@ -1118,7 +1267,8 @@ async function bootstrap() {
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
           startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250,
-          graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false
+          graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
+          enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false
         };
         if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
           game.timeRemaining = parseFloat(game.settings.timedGameLimit);
@@ -1152,7 +1302,8 @@ async function bootstrap() {
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
           startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250,
-          graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false
+          graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
+          enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false
       };
       
       if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {

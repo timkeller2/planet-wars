@@ -1919,7 +1919,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
 
       // Render custom tooltip panel HTML (Task 101 Overhaul)
       const tooltipPanel = document.getElementById('credits-tooltip-panel');
-      if (tooltipPanel) {
+      if (tooltipPanel && tooltipPanel.style.display === 'block' && tooltipPanel.dataset.source === 'credits') {
         if (myPlayer.tradingPartners && myPlayer.tradingPartners.length > 0) {
           let rowsHtml = "";
           let totalRate = 0;
@@ -2013,6 +2013,32 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const tradeCapacity = myPlayer.tradeCapacity !== undefined ? Math.floor(myPlayer.tradeCapacity) : 5;
       tradeOptionsDisplay.style.display = 'block';
       tradeOptionsDisplay.textContent = `⚖️: ${tradeOptions}/${tradeCapacity}`;
+    }
+
+    const stockpileCapacityDisplay = document.getElementById('player-stockpile-capacity-display');
+    if (stockpileCapacityDisplay) {
+      const resourcesListForStockpile = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+      let totalStockpile = 0;
+      if (myPlayer.resources) {
+        for (const res of resourcesListForStockpile) {
+          totalStockpile += (myPlayer.resources[res] || 0);
+        }
+      }
+      const stockpileCapacity = myPlayer.stockpileCapacity || 3;
+      stockpileCapacityDisplay.style.display = 'block';
+      stockpileCapacityDisplay.textContent = `📦: ${Math.floor(totalStockpile)}/${stockpileCapacity}`;
+
+      if (totalStockpile > stockpileCapacity) {
+        stockpileCapacityDisplay.style.color = '#ff5252';
+        stockpileCapacityDisplay.style.borderColor = 'rgba(255, 82, 82, 0.4)';
+        stockpileCapacityDisplay.style.textShadow = '0 0 5px #ff5252';
+        stockpileCapacityDisplay.style.background = 'rgba(255, 82, 82, 0.1)';
+      } else {
+        stockpileCapacityDisplay.style.color = '#00e676';
+        stockpileCapacityDisplay.style.borderColor = 'rgba(0, 230, 118, 0.2)';
+        stockpileCapacityDisplay.style.textShadow = '0 0 5px #00e676';
+        stockpileCapacityDisplay.style.background = 'rgba(0, 230, 118, 0.05)';
+      }
     }
 
     const sellForDisplay = document.getElementById('player-sell-for-display');
@@ -4375,6 +4401,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     btnCreditsDisplay.addEventListener('mouseenter', () => {
       const tooltipPanel = document.getElementById('credits-tooltip-panel');
       if (tooltipPanel) {
+        tooltipPanel.dataset.source = 'credits';
         const rect = btnCreditsDisplay.getBoundingClientRect();
         tooltipPanel.style.left = `${rect.left + window.scrollX}px`;
         tooltipPanel.style.top = `${rect.bottom + window.scrollY + 5}px`;
@@ -4385,6 +4412,103 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     btnCreditsDisplay.addEventListener('mouseleave', () => {
       const tooltipPanel = document.getElementById('credits-tooltip-panel');
       if (tooltipPanel) {
+        tooltipPanel.dataset.source = '';
+        tooltipPanel.style.display = 'none';
+      }
+    });
+  }
+
+  const tradeOptionsDisplayBtn = document.getElementById('player-trade-options-display');
+  if (tradeOptionsDisplayBtn) {
+    tradeOptionsDisplayBtn.style.cursor = 'pointer';
+    tradeOptionsDisplayBtn.style.pointerEvents = 'auto';
+    tradeOptionsDisplayBtn.addEventListener('mouseenter', () => {
+      const tooltipPanel = document.getElementById('credits-tooltip-panel');
+      if (tooltipPanel) {
+        tooltipPanel.dataset.source = 'trade';
+        tooltipPanel.innerHTML = `
+          <div style="font-weight: bold; font-size: 0.85rem; color: #ff9800; border-bottom: 1px solid rgba(255, 152, 0, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Trade Capacity</div>
+          <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.3;">
+            Trades availabe. Homeworlds + Commerce planets.
+          </div>
+        `;
+        const rect = tradeOptionsDisplayBtn.getBoundingClientRect();
+        tooltipPanel.style.left = `${rect.left + window.scrollX}px`;
+        tooltipPanel.style.top = `${rect.bottom + window.scrollY + 5}px`;
+        tooltipPanel.style.display = 'block';
+      }
+    });
+    tradeOptionsDisplayBtn.addEventListener('mouseleave', () => {
+      const tooltipPanel = document.getElementById('credits-tooltip-panel');
+      if (tooltipPanel) {
+        tooltipPanel.dataset.source = '';
+        tooltipPanel.style.display = 'none';
+      }
+    });
+  }
+
+  const commandLimitDisplayBtn = document.getElementById('player-command-limit-display');
+  if (commandLimitDisplayBtn) {
+    commandLimitDisplayBtn.style.cursor = 'pointer';
+    commandLimitDisplayBtn.style.pointerEvents = 'auto';
+    commandLimitDisplayBtn.addEventListener('mouseenter', () => {
+      const tooltipPanel = document.getElementById('credits-tooltip-panel');
+      if (tooltipPanel) {
+        tooltipPanel.dataset.source = 'command';
+        tooltipPanel.innerHTML = `
+          <div style="font-weight: bold; font-size: 0.85rem; color: #00e5ff; border-bottom: 1px solid rgba(0, 229, 255, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Command Limit</div>
+          <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.4;">
+            Command capacity. Homeworlds + Garrison planets.<br><br>
+            <span style="color: #00e5ff; font-weight: bold;">Calculation:</span><br>
+            • Base: 1 + ceil(Planet Count / 3)<br>
+            • Garrison Focus: +1 per Garrison planet<br>
+            • Full Garrison: +1 per fully garrisoned planet<br>
+            • Controlled Homeworlds: +1 per controlled Homeworld<br>
+            • Own Homeworld: +1 if controlling own Homeworld
+          </div>
+        `;
+        const rect = commandLimitDisplayBtn.getBoundingClientRect();
+        tooltipPanel.style.left = `${rect.left + window.scrollX}px`;
+        tooltipPanel.style.top = `${rect.bottom + window.scrollY + 5}px`;
+        tooltipPanel.style.display = 'block';
+      }
+    });
+    commandLimitDisplayBtn.addEventListener('mouseleave', () => {
+      const tooltipPanel = document.getElementById('credits-tooltip-panel');
+      if (tooltipPanel) {
+        tooltipPanel.dataset.source = '';
+        tooltipPanel.style.display = 'none';
+      }
+    });
+  }
+
+  const stockpileCapacityDisplayBtn = document.getElementById('player-stockpile-capacity-display');
+  if (stockpileCapacityDisplayBtn) {
+    stockpileCapacityDisplayBtn.style.cursor = 'pointer';
+    stockpileCapacityDisplayBtn.style.pointerEvents = 'auto';
+    stockpileCapacityDisplayBtn.addEventListener('mouseenter', () => {
+      const tooltipPanel = document.getElementById('credits-tooltip-panel');
+      if (tooltipPanel) {
+        tooltipPanel.dataset.source = 'stockpile';
+        tooltipPanel.innerHTML = `
+          <div style="font-weight: bold; font-size: 0.85rem; color: #e91e63; border-bottom: 1px solid rgba(233, 30, 99, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Stockpile Capacity</div>
+          <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.3;">
+            Resource Stockpile Capacity = (Command Capacity + Trade Capacity) * 3.<br><br>
+            If exceeded, a Resource Storage Fee is charged every second:<br>
+            <span style="color: #ff5252; font-weight: bold;">Fee = (excess resources / capacity) rounded up</span>,<br>
+            deducted from credits first. If out of credits, resources are deducted starting with the highest stockpiles first.
+          </div>
+        `;
+        const rect = stockpileCapacityDisplayBtn.getBoundingClientRect();
+        tooltipPanel.style.left = `${rect.left + window.scrollX}px`;
+        tooltipPanel.style.top = `${rect.bottom + window.scrollY + 5}px`;
+        tooltipPanel.style.display = 'block';
+      }
+    });
+    stockpileCapacityDisplayBtn.addEventListener('mouseleave', () => {
+      const tooltipPanel = document.getElementById('credits-tooltip-panel');
+      if (tooltipPanel) {
+        tooltipPanel.dataset.source = '';
         tooltipPanel.style.display = 'none';
       }
     });
@@ -4538,6 +4662,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
     const fogOfWar = document.getElementById('fog-of-war-checkbox').checked;
     const smallEmpires = document.getElementById('small-empires-checkbox').checked;
     const noRampagers = document.getElementById('no-rampagers-checkbox').checked;
+    const enableCheats = document.getElementById('cheats-checkbox').checked;
     const aiCount = parseInt(document.getElementById('ai-count-input').value, 10);
     const productionMultiple = parseFloat(document.getElementById('production-multiple-input').value) || 1.0;
     const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 2000;
@@ -4565,7 +4690,7 @@ window.addEventListener('keyup', e => keysDown[e.key] = false);
       const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 500;
       startingCreditsVal = isNaN(customCredits) ? "500" : String(customCredits);
     }
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode };
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, enableCheats };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;

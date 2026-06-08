@@ -205,6 +205,20 @@ export class Game {
     this.aiMarketTimer = 0;
   }
 
+  spawnAmoebaCheat() {
+    const spawnX = Math.random() * this.width;
+    const spawnY = Math.random() * this.height;
+    if (!this.monsterPlayer) return null;
+    const amoeba = new Ship(this.nextShipId++, spawnX, spawnY, null, this.monsterPlayer);
+    amoeba.isAmoeba = true;
+    amoeba.cruiserStyle = 'Romulan';
+    amoeba.speed = 10;
+    amoeba.maxHealth = 15;
+    amoeba.health = 15;
+    this.ships.push(amoeba);
+    return amoeba;
+  }
+
   getUpgradeCost(ship, type) {
     const totalUpgrades = (ship.sensorarrays || 0) +
                           (ship.labs || 0) +
@@ -2685,6 +2699,56 @@ export class Game {
 
       player.commandLimit = 1 + Math.ceil((player.planetCount || 0) / 3) + garrisonWorlds + fullGarrisonWorlds + controlledHomeworlds + (controlsOwnHomeworld ? 1 : 0);
       player.tradeCapacity = Math.ceil((player.planetCount || 0) / 5) + commerceWorlds;
+      player.stockpileCapacity = ((player.commandLimit || 0) + (player.tradeCapacity || 0)) * 3;
+
+      player.storageFeeAccumulator = (player.storageFeeAccumulator || 0) + deltaTime;
+      while (player.storageFeeAccumulator >= 1000) {
+        player.storageFeeAccumulator -= 1000;
+        
+        const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+        let totalStockpile = 0;
+        if (!player.resources) {
+          player.resources = { dilithium: 0, merculite: 0, duranium: 0, tritanium: 0, antimatter: 0, deuterium: 0, latinum: 0 };
+        }
+        for (const res of resourcesList) {
+          totalStockpile += (player.resources[res] || 0);
+        }
+        
+        const stockpileCapacity = player.stockpileCapacity || 3;
+        player.totalStockpile = totalStockpile;
+
+        if (totalStockpile > stockpileCapacity) {
+          const excess = totalStockpile - stockpileCapacity;
+          const storageFee = Math.ceil(excess / stockpileCapacity);
+
+          if ((player.credits || 0) >= storageFee) {
+            player.credits -= storageFee;
+          } else {
+            let remainingFee = storageFee - (player.credits || 0);
+            player.credits = 0;
+
+            while (remainingFee > 0) {
+              let highestRes = null;
+              let highestQty = 0;
+              for (const res of resourcesList) {
+                const qty = player.resources[res] || 0;
+                if (qty > highestQty) {
+                  highestQty = qty;
+                  highestRes = res;
+                }
+              }
+
+              if (highestQty <= 0 || !highestRes) {
+                break;
+              }
+
+              const deductAmt = Math.min(remainingFee, highestQty);
+              player.resources[highestRes] -= deductAmt;
+              remainingFee -= deductAmt;
+            }
+          }
+        }
+      }
 
       if (player.tradeOptions === undefined) {
         player.tradeOptions = player.tradeCapacity;
@@ -2941,6 +3005,16 @@ export class Game {
       if (this.lasers[i].age > this.lasers[i].duration) {
         const laser = this.lasers[i];
         if (laser.color === 'cruiser-projectile') {
+          if (this.accuracyEvents && laser.accuracy !== undefined) {
+            this.accuracyEvents.push({
+              x: laser.endX,
+              y: laser.endY,
+              accuracy: laser.accuracy,
+              isCruiser: true,
+              attackerOwnerId: laser.attackerOwnerId,
+              targetOwnerId: laser.targetOwnerId
+            });
+          }
           if (laser.destroysDefender) {
             if (laser.targetPlanetId !== undefined) {
               const targetPlanet = this.planets.find(pl => pl.id === laser.targetPlanetId);
