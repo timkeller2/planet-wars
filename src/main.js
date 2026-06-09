@@ -1323,7 +1323,8 @@ function getHabName(habitability) {
         }
         const fuelVal = Math.floor(hs.fuel || 0) + '/' + Math.floor(getMaxFuel(hs));
         const speedVal = (hs.currentSpeed || 0).toFixed(1) + '/' + (hs.speed || 30).toFixed(1);
-        lines.push({ label: `⚡ Speed / Fuel`, value: `Speed: ${speedVal}  Fuel: ${fuelVal}`, color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
+        lines.push({ label: `⚡ Speed`, value: `${speedVal}`, color: '#ffa500' });
+        lines.push({ label: `⛽ ${fuelLabel}`, value: `${fuelVal}`, color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
 
         if (hs.maxsupplies > 0) {
           lines.push({ label: '📦 Supplies', value: `${Math.floor(hs.supplies || 0)} / ${hs.maxsupplies}`, color: '#ffcc80' });
@@ -4374,7 +4375,7 @@ function getHabName(habitability) {
     } else {
       cameraZoom /= zoomFactor;
     }
-    cameraZoom = Math.max(0.2, Math.min(cameraZoom, 5.0));
+    cameraZoom = Math.max(0.2, Math.min(cameraZoom, 20.0));
 
     const newServerPos = getMouseServerPos(mouseX, mouseY);
     cameraPanX += (newServerPos.x - oldServerPos.x);
@@ -4568,7 +4569,7 @@ function getHabName(habitability) {
       const targetZoom = initialPinchZoom * zoomFactor;
 
       const oldServerPos = getMouseServerPos(mid.x, mid.y);
-      cameraZoom = Math.max(0.2, Math.min(targetZoom, 5.0));
+      cameraZoom = Math.max(0.2, Math.min(targetZoom, 20.0));
 
       const newServerPos = getMouseServerPos(mid.x, mid.y);
       cameraPanX += (newServerPos.x - oldServerPos.x);
@@ -5230,7 +5231,7 @@ function getHabName(habitability) {
       } else {
         cameraZoom /= zoomFactor;
       }
-      cameraZoom = Math.max(0.2, Math.min(cameraZoom, 5.0));
+      cameraZoom = Math.max(0.2, Math.min(cameraZoom, 20.0));
 
       const newServerPos = getMouseServerPos(mouseX, mouseY);
       cameraPanX += (newServerPos.x - oldServerPos.x);
@@ -7949,7 +7950,8 @@ function getHabName(habitability) {
             }
             const fuelVal = Math.floor(hs.fuel || 0) + ' / ' + Math.floor(getMaxFuel(hs));
             const speedVal = (hs.currentSpeed || 0).toFixed(1) + ' / ' + (hs.speed || 30).toFixed(1);
-            lines.push({ label: `⛽ ${fuelLabel}`, value: `${fuelVal}  |  Speed: ${speedVal}`, color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
+            lines.push({ label: `⚡ Speed`, value: `${speedVal}`, color: '#ffa500' });
+            lines.push({ label: `⛽ ${fuelLabel}`, value: `${fuelVal}`, color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
 
             if (hs.maxArmor && hs.maxArmor > 0) {
               let armorLabel = `Cruiser Armor (${hs.armor})`;
