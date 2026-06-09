@@ -248,6 +248,31 @@ export class Ship {
     return baseFuel + (this.fuel_tanker || 0) * 5;
   }
 
+  getMaxSpeed() {
+    const speedTechBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
+    let maxSp = this.speed * (1 + speedTechBonus);
+    let engineBonus = (this.engine || 0) * 3;
+    maxSp += engineBonus;
+    if (this.isWarp) {
+      maxSp += this.warpBonus || 0;
+    }
+    if (this.fuel_tanker && this.fuel_tanker > 0) {
+      maxSp = Math.max(5, maxSp - this.fuel_tanker * 3);
+    }
+    if (this.specialfuel && this.specialfuel > 0) {
+      maxSp += 10;
+    }
+    if (this.speedModifier) {
+      maxSp *= this.speedModifier;
+    }
+    if (this.owner && (this.owner.isMonster || this.owner.id === 'monsters')) {
+      if (this.isCruiser) {
+        maxSp *= 0.5;
+      }
+    }
+    return maxSp;
+  }
+
   cruiserRadarRange() {
     if (this.maxHealth <= 0) return 0;
     let baseCruiserRadar = 25 + this.maxHealth * 2;
@@ -767,7 +792,7 @@ export class Ship {
         if (this.retreatTargetShipId && allShips) {
           const targetShip = allShips.find(s => s.id === this.retreatTargetShipId);
           if (targetShip && targetShip.active) {
-            const hasExcessFuel = (targetShip.fuel || 0) > targetShip.getMaxFuel();
+            const hasExcessFuel = (targetShip.fuel || 0) > 4;
             const hasSupplies = (targetShip.supplies || 0) > 0;
             if (hasExcessFuel || hasSupplies) {
               this.targetX = targetShip.x;
@@ -838,7 +863,7 @@ export class Ship {
           if (allShips && this.owner && this.fuel < this.getMaxFuel() * 0.97) {
             for (const other of allShips) {
               if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id) {
-                const hasExcessFuel = (other.fuel || 0) > other.getMaxFuel();
+                const hasExcessFuel = (other.fuel || 0) > 4;
                 const hasSupplies = (other.supplies || 0) > 0;
                 if (hasExcessFuel || hasSupplies) {
                   // Ensure this destination cruiser doesn't have active enemies close to it
@@ -4244,10 +4269,30 @@ export class Ship {
       
       // Don't convert fuel to munitions.
       
-      // Load supplies if in friendly gravity well, up to maxsupplies, 1 every 10 seconds.
-      if (this.maxsupplies > 0 && this.supplies < this.maxsupplies && this.inFriendlyWell && !this.isWarp) {
+      // Load supplies if in friendly gravity well, up to maxsupplies, 1 every 5 seconds, only if not near enemies.
+      let hasEnemyNear = false;
+      if (allShips && this.owner) {
+        const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function')
+          ? allShips.getShipsInRadiusSq(this.x, this.y, 200 * 200)
+          : allShips;
+        for (const other of candidateShips) {
+          if (other.active && other.id !== this.id) {
+            const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+            if (isEnemy) {
+              const dx = other.x - this.x;
+              const dy = other.y - this.y;
+              if (dx * dx + dy * dy < 200 * 200) {
+                hasEnemyNear = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (this.maxsupplies > 0 && this.supplies < this.maxsupplies && this.inFriendlyWell && !this.isWarp && !hasEnemyNear) {
         this.supplyLoadAccumulator = (this.supplyLoadAccumulator || 0) + deltaTime;
-        while (this.supplyLoadAccumulator >= 10000 && this.supplies < this.maxsupplies) {
+        while (this.supplyLoadAccumulator >= 5000 && this.supplies < this.maxsupplies) {
           const owner = this.owner;
           if (owner) {
             const discount = 0.10 * (this.fuel_tanker || 0);
@@ -4269,7 +4314,7 @@ export class Ship {
             }
 
             if (loaded) {
-              this.supplyLoadAccumulator -= 10000;
+              this.supplyLoadAccumulator -= 5000;
             } else {
               break;
             }
@@ -4369,7 +4414,7 @@ export class Ship {
         const radarRange = this.cruiserRadarRange();
         const radarRangeSq = radarRange * radarRange;
         for (const other of allShips) {
-          if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.fuel || 0) > other.getMaxFuel()) {
+          if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.fuel || 0) > 4) {
             const dx = other.x - this.x;
             const dy = other.y - this.y;
             const distSq = dx * dx + dy * dy;
@@ -4400,7 +4445,7 @@ export class Ship {
           let canAffordRefuel = false;
           if (supplyShipForFuel && (supplyShipForFuel.supplies || 0) > 0) {
             canAffordRefuel = true;
-          } else if (fuelSourceShip && (fuelSourceShip.fuel || 0) > fuelSourceShip.getMaxFuel()) {
+          } else if (fuelSourceShip && (fuelSourceShip.fuel || 0) > 4) {
             canAffordRefuel = true;
           } else if (hasExcessDeuterium && deuteriumSellPrice < 12) {
             canAffordRefuel = true;
@@ -4437,9 +4482,9 @@ export class Ship {
                     friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * remainingRefuel);
                   }
                 }
-              } else if (fuelSourceShip && (fuelSourceShip.fuel || 0) > fuelSourceShip.getMaxFuel()) {
+              } else if (fuelSourceShip && (fuelSourceShip.fuel || 0) > 4) {
                 const fuelTaken = amountRefueled;
-                fuelSourceShip.fuel = Math.max(fuelSourceShip.getMaxFuel(), fuelSourceShip.fuel - fuelTaken);
+                fuelSourceShip.fuel = Math.max(4, fuelSourceShip.fuel - fuelTaken);
               } else if (hasExcessDeuterium && deuteriumSellPrice < 12) {
                 const consumed = (1/12) * amountRefueled * costMultiplier;
                 owner.resources.deuterium = (owner.resources.deuterium || 0) - consumed;

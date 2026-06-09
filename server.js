@@ -1715,7 +1715,7 @@ async function bootstrap() {
           angle: s.angle || 0,
           flightTime: s.flightTime || 0,
           speedModifier: s.speedModifier || 1.0,
-          speed: s.speed || (s.isCruiser ? 22 : 15),
+          speed: typeof s.getMaxSpeed === 'function' ? s.getMaxSpeed() : (s.speed || (s.isCruiser ? 22 : 15)),
           currentSpeed: s.currentSpeed || 0,
           specialduranium: s.specialduranium || 0,
           targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,

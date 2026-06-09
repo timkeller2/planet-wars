@@ -778,8 +778,15 @@ function getHabName(habitability) {
   let hoveredPlanet = null;
   let hoveredShip = null;
   let activeInfoPanel = null;
+  let infoPanelTimer = null;
+  let mouseMovedSinceOpen = false;
+  let lastMouseTarget = null;
+  let panelOpenedThisTick = false;
+  let lastCanvasMouseX = undefined;
+  let lastCanvasMouseY = undefined;
 
   const infoPanelModal = document.getElementById('info-panel-modal');
+  const infoPanelContainer = document.querySelector('.info-panel-container');
   const infoPanelTitle = document.getElementById('info-panel-title');
   const infoPanelBody = document.getElementById('info-panel-body');
   const infoPanelCloseBtn = document.querySelector('.info-panel-close-btn');
@@ -787,16 +794,73 @@ function getHabName(habitability) {
   const infoPanelImagePlaceholder = document.querySelector('.info-panel-image-placeholder');
   const infoPanelImageHologram = document.querySelector('.info-panel-image-hologram');
 
+  function isMouseOverActiveEntity() {
+    if (!activeInfoPanel) return false;
+    if (lastCanvasMouseX === undefined || lastCanvasMouseY === undefined) return false;
+
+    // If the mouse is over the info panel container, it is not hovering over the active unit/planet
+    const container = document.querySelector('.info-panel-container');
+    if (container && lastMouseTarget && container.contains(lastMouseTarget)) {
+      return false;
+    }
+    
+    if (activeInfoPanel.type === 'planet') {
+      const p = getPlanetAt(lastCanvasMouseX, lastCanvasMouseY);
+      return p && p.id === activeInfoPanel.id;
+    } else if (activeInfoPanel.type === 'ship' || activeInfoPanel.type === 'fleet') {
+      const serverPos = getMouseServerPos(lastCanvasMouseX, lastCanvasMouseY);
+      if (serverState && serverState.ships) {
+        for (const ship of serverState.ships) {
+          if (ship.id === activeInfoPanel.id && ship.active) {
+            const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
+            const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
+            const sdx = ship.x - serverPos.x;
+            const sdy = ship.y - serverPos.y;
+            if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  function checkInfoPanelDismiss() {
+    if (!activeInfoPanel) return;
+    if (!mouseMovedSinceOpen) return; // hold the tooltip if the mouse hasn't physically moved since open
+    if (infoPanelTimer) return;
+    
+    infoPanelTimer = setTimeout(() => {
+      infoPanelTimer = null;
+      if (!isMouseOverActiveEntity()) {
+        closeInfoPanel();
+      }
+    }, 250);
+  }
+
   function openInfoPanel(type, id) {
     activeInfoPanel = { type, id };
     if (infoPanelModal) {
       infoPanelModal.classList.remove('hidden');
     }
+    panelOpenedThisTick = true;
+    setTimeout(() => { panelOpenedThisTick = false; }, 0);
+    mouseMovedSinceOpen = false; // reset flag on open
     updateInfoPanelContent();
   }
+  window.openInfoPanel = openInfoPanel;
+  window.getServerState = () => serverState;
+  window.getLocalPlayer = () => localPlayer;
+  window.getCameraPan = () => ({ x: cameraPanX, y: cameraPanY });
+  window.setCameraPan = (x, y) => { cameraPanX = x; cameraPanY = y; };
 
   function closeInfoPanel() {
     activeInfoPanel = null;
+    if (infoPanelTimer) {
+      clearTimeout(infoPanelTimer);
+      infoPanelTimer = null;
+    }
     if (infoPanelModal) {
       infoPanelModal.classList.add('hidden');
     }
@@ -821,8 +885,17 @@ function getHabName(habitability) {
 
     if (infoPanelImagePlaceholder && infoPanelImageHologram) {
       if (type === 'fleet') {
-        infoPanelImagePlaceholder.style.backgroundImage = "url('/Art/transports.jpg')";
-        infoPanelImagePlaceholder.style.backgroundSize = "contain";
+        const hs = serverState.ships.find(ss => ss.id === id);
+        const hsOwner = hs && hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
+        const isMonster = hsOwner && (hsOwner.id === 'monsters' || hsOwner.id === 'monster');
+
+        if (isMonster) {
+          infoPanelImagePlaceholder.style.backgroundImage = "url('/Art/amoeba.jpg')";
+          infoPanelImagePlaceholder.style.backgroundSize = "cover";
+        } else {
+          infoPanelImagePlaceholder.style.backgroundImage = "url('/Art/transports.jpg')";
+          infoPanelImagePlaceholder.style.backgroundSize = "contain";
+        }
         infoPanelImagePlaceholder.style.backgroundRepeat = "no-repeat";
         infoPanelImagePlaceholder.style.backgroundPosition = "center center";
         infoPanelImageHologram.style.display = "none";
@@ -848,10 +921,26 @@ function getHabName(habitability) {
         const hs = serverState.ships.find(ss => ss.id === id);
         const hsOwner = hs && hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
         const raceStyle = hs ? (hs.cruiserStyle || (hsOwner ? hsOwner.cruiserStyle : null)) : null;
+        const isMonster = hsOwner && (hsOwner.id === 'monsters' || hsOwner.id === 'monster');
 
-        if (raceStyle && ['Federation', 'Romulan', 'Gorn'].includes(raceStyle)) {
-          const imgName = raceStyle.toLowerCase();
-          infoPanelImagePlaceholder.style.backgroundImage = `url('/Art/${imgName}.jpg')`;
+        const raceImages = {
+          'Federation': 'federation.jpg',
+          'Romulan': 'romulan.jpg',
+          'Gorn': 'gorn.jpg',
+          'Klingon': 'Klingon.png',
+          'Tholian': 'tholian.png',
+          'Lyran': 'lyran.png'
+        };
+
+        if ((hs && hs.isAmoeba) || isMonster) {
+          infoPanelImagePlaceholder.style.backgroundImage = "url('/Art/amoeba.jpg')";
+          infoPanelImagePlaceholder.style.backgroundSize = "cover";
+          infoPanelImagePlaceholder.style.backgroundRepeat = "no-repeat";
+          infoPanelImagePlaceholder.style.backgroundPosition = "center center";
+          infoPanelImageHologram.style.display = "none";
+        } else if (raceStyle && raceImages[raceStyle]) {
+          const imgName = raceImages[raceStyle];
+          infoPanelImagePlaceholder.style.backgroundImage = `url('/Art/${imgName}')`;
           infoPanelImagePlaceholder.style.backgroundSize = "cover";
           infoPanelImagePlaceholder.style.backgroundRepeat = "no-repeat";
           infoPanelImagePlaceholder.style.backgroundPosition = "center center";
@@ -903,11 +992,42 @@ function getHabName(habitability) {
         latinum: '🏺'
       };
 
+      const hpOwner = owner || { techScore: 0, expScore: 0, id: 'neutral' };
+      const techScoreVal = hpOwner ? (hpOwner.techScore || 0) : 0;
+      const softCap = Math.round(p.sizeClass * ((p.habitability + techScoreVal) / 100));
+      lines.push({ label: `Improvement Rate: ${p.habitability}`, value: `Potential: ${softCap}`, color: '#ffb74d' });
+
       const producedIcons = p.resources ? p.resources.map(r => resourceEmojis[r] || '').filter(Boolean).join(' ') : '';
       const wantedResourceName = p.preferredResource ? p.preferredResource.charAt(0).toUpperCase() + p.preferredResource.slice(1) : 'None';
       const wantedStr = p.preferredResource ? `${resourceEmojis[p.preferredResource] || ''} ${wantedResourceName}` : 'None';
 
       lines.push({ label: `Produces: ${producedIcons}`, value: `Wants: ${wantedStr}`, color: '#fff' });
+
+      const assocPlayers = new Set();
+      if (p.sympathy) {
+        for (const pId of Object.keys(p.sympathy)) {
+          assocPlayers.add(pId);
+        }
+      }
+      if (p.disposition) {
+        for (const pId of Object.keys(p.disposition)) {
+          assocPlayers.add(pId);
+        }
+      }
+      for (const pId of assocPlayers) {
+        const targetPlayer = serverState.players.find(pl => pl.id === pId);
+        const pName = targetPlayer ? targetPlayer.name : pId;
+        const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
+        const dispVal = p.disposition?.[pId] ?? 0;
+        const symVal = p.sympathy?.[pId] ?? 0;
+        if (dispVal !== 0 || symVal !== 0) {
+          lines.push({
+            label: `🎭 Disp (${pName}): ${Math.round(dispVal)}`,
+            value: `💖 Sym: ${Math.round(symVal)}`,
+            color: pColor
+          });
+        }
+      }
 
       if (owner) {
         let capacityMultiplier = 1.0;
@@ -917,14 +1037,12 @@ function getHabName(habitability) {
         const maxPop = Math.round(p.maxShips * capacityMultiplier);
 
         lines.push({ label: 'Garrison', value: `${Math.floor(p.ships)} / ${maxPop}`, color: '#fff' });
-        lines.push({ label: 'Owner Tech 🧪', value: `${owner.techScore} (√Tech: +${Math.round(Math.sqrt(owner.techScore))})`, color: '#00e5ff' });
-        lines.push({ label: 'Owner Exp 🎯', value: `${owner.expScore} (√Exp: +${Math.round(Math.sqrt(owner.expScore))})`, color: '#ffeb3b' });
       } else {
         lines.push({ label: 'Garrison', value: `${Math.floor(p.ships)} / ${Math.round(p.maxShips)}`, color: '#fff' });
       }
 
       let totalDefense = 0;
-      const hpOwner = owner || { techScore: 0, expScore: 0, id: 'neutral' };
+      const defenseLines = [];
 
       // Gravity Well Support calculation helper
       const getGravityRadiusClient = (pl) => {
@@ -968,40 +1086,40 @@ function getHabName(habitability) {
       
       if (gravityWellBonusTotal > 0) {
         totalDefense += gravityWellBonusTotal;
-        lines.push({ label: 'Gravity Well Support', value: `${Math.round(gravityWellBonusTotal)}%`, color: '#00e676' });
+        defenseLines.push({ label: 'Gravity Well Support', value: `${Math.round(gravityWellBonusTotal)}%`, color: '#00e676' });
       }
 
       // Garrison defense bonus
       const garrisonBonus = Math.floor(p.ships / 5);
       if (garrisonBonus > 0) {
         totalDefense += garrisonBonus;
-        lines.push({ label: 'Garrison Shielding', value: `${garrisonBonus}%`, color: '#4caf50' });
+        defenseLines.push({ label: 'Garrison Shielding', value: `${garrisonBonus}%`, color: '#4caf50' });
       }
 
       // Tech defense bonus
       const techBonus = Math.round(Math.sqrt(hpOwner.techScore || 0));
       if (techBonus > 0) {
         totalDefense += techBonus;
-        lines.push({ label: 'Owner Tech Defense', value: `${techBonus}%`, color: '#00e5ff' });
+        defenseLines.push({ label: 'Owner Tech Defense', value: `${techBonus}%`, color: '#00e5ff' });
       }
 
       // Owner Experience defense bonus
       const expBonus = Math.round(Math.sqrt(hpOwner.expScore || 0));
       if (expBonus > 0) {
         totalDefense += expBonus;
-        lines.push({ label: 'Owner Exp Defense', value: `${expBonus}%`, color: '#ffeb3b' });
+        defenseLines.push({ label: 'Owner Exp Defense', value: `${expBonus}%`, color: '#ffeb3b' });
       }
 
       // Planet Local Experience defense bonus
       const planetExpBonus = Math.round(Math.sqrt(p.expScore || 0));
       if (planetExpBonus > 0) {
         totalDefense += planetExpBonus;
-        lines.push({ label: 'Planet Exp Defense', value: `${planetExpBonus}%`, color: '#ffea00' });
+        defenseLines.push({ label: 'Planet Exp Defense', value: `${planetExpBonus}%`, color: '#ffea00' });
       }
 
       if (p.isMilitary) {
         totalDefense += 15;
-        lines.push({ label: 'Military Base', value: `15%`, color: '#ff5722' });
+        defenseLines.push({ label: 'Military Base', value: `15%`, color: '#ff5722' });
       }
       
       const envLabel = p.preferredResource === 'deuterium' ? 'Frozen' : p.preferredResource === 'antimatter' ? 'Volcanic' : p.preferredResource === 'latinum' ? 'Oceanic' : 'Desert';
@@ -1009,15 +1127,15 @@ function getHabName(habitability) {
       if (p.ownerId) {
         if (hasEnvDefense) {
           totalDefense += 15;
-          lines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
+          defenseLines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
         }
         if (hpOwner.id === p.homeworldOf) {
           totalDefense += 15;
-          lines.push({ label: 'Homeworld', value: `15%`, color: '#ff0' });
+          defenseLines.push({ label: 'Homeworld', value: `15%`, color: '#ff0' });
         }
         if (hpOwner.planetCount === 1) {
           totalDefense += 15;
-          lines.push({ label: 'Last stand', value: `15%`, color: '#ff0' });
+          defenseLines.push({ label: 'Last stand', value: `15%`, color: '#ff0' });
         }
         if (localPlayer && !localPlayer.isAI && !hpOwner.isAI) {
           const aiOwners = new Set();
@@ -1030,15 +1148,15 @@ function getHabName(habitability) {
           const hvhBonus = aiOwners.size * 2;
           if (hvhBonus > 0) {
             totalDefense += hvhBonus;
-            lines.push({ label: 'PvP Defense', value: `${hvhBonus}%`, color: '#ff0' });
+            defenseLines.push({ label: 'PvP Defense', value: `${hvhBonus}%`, color: '#ff0' });
           }
         }
       } else {
         if (hasEnvDefense) {
           totalDefense += 15;
-          lines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
+          defenseLines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
         } else {
-          lines.push({ label: 'Neutral', value: 'No defense bonuses', color: '#888' });
+          defenseLines.push({ label: 'Neutral', value: 'No defense bonuses', color: '#888' });
         }
       }
 
@@ -1056,39 +1174,20 @@ function getHabName(habitability) {
             if (eff > 0) {
               totalDefense += eff;
               const label = storm.type === 'nebula' ? 'Nebula Shielding' : 'Ion Interference';
-              lines.push({ label: label, value: `${Math.round(eff)}%`, color: storm.type === 'nebula' ? '#ff4444' : '#ffff44' });
+              defenseLines.push({ label: label, value: `${Math.round(eff)}%`, color: storm.type === 'nebula' ? '#ff4444' : '#ffff44' });
             }
           }
         }
       }
-      lines.unshift({ label: 'Total Defense Modifier', value: totalDefense > 0 ? `🛡️ ${Math.round(totalDefense)}%` : '0%', color: '#fff', isHeader: true });
+      lines.push({ label: 'Total Defense Modifier', value: totalDefense > 0 ? `🛡️ ${Math.round(totalDefense)}%` : '0%', color: '#fff', isHeader: true });
+      lines.push(...defenseLines);
 
-      const techScoreVal = hpOwner ? (hpOwner.techScore || 0) : 0;
-      const softCap = Math.round(p.sizeClass * ((p.habitability + techScoreVal) / 100));
-      lines.push({ label: `Improvement Rate: ${p.habitability}`, value: `Potential: ${softCap}`, color: '#ffb74d' });
-
-
-      if (p.sympathy) {
-        for (const [pId, symVal] of Object.entries(p.sympathy)) {
-          if (symVal > 0) {
-            const targetPlayer = serverState.players.find(pl => pl.id === pId);
-            const pName = targetPlayer ? targetPlayer.name : pId;
-            const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
-            lines.push({ label: `💖 Sympathy (${pName})`, value: `${Math.round(symVal)}`, color: pColor });
-          }
-        }
+      if (owner) {
+        lines.push({ label: 'Owner Tech 🧪', value: `+${Math.round(Math.sqrt(owner.techScore))} (${owner.techScore})`, color: '#00e5ff' });
+        lines.push({ label: 'Owner Exp 🎯', value: `+${Math.round(Math.sqrt(owner.expScore))} (${owner.expScore})`, color: '#ffeb3b' });
       }
 
-      if (p.disposition) {
-        for (const [pId, dispVal] of Object.entries(p.disposition)) {
-          if (dispVal !== undefined && dispVal !== null) {
-            const targetPlayer = serverState.players.find(pl => pl.id === pId);
-            const pName = targetPlayer ? targetPlayer.name : pId;
-            const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
-            lines.push({ label: `🎭 Disposition (${pName})`, value: `${Math.round(dispVal)}`, color: pColor });
-          }
-        }
-      }
+
 
       const isNeutralOrEnemy = !p.ownerId || p.ownerId !== localPlayer.id;
       if (isNeutralOrEnemy) {
@@ -1221,17 +1320,20 @@ function getHabName(habitability) {
           raceStr = (icon ? icon + ' ' : '') + raceStyle;
         }
 
-        titleHTML = `<span style="color: ${hsOwner ? hsOwner.color : '#0ff'}">${(hsOwner ? hsOwner.name : 'Unknown')}'s ${hs.name || shipClass}</span>`;
-        lines.push({ label: 'Class / Race', value: `${shipClass} ${raceStr ? `(${raceStr})` : ''}`, color: '#fff', isHeader: true });
+        titleHTML = `<span style="color: ${hsOwner ? hsOwner.color : '#0ff'}">${(hsOwner ? hsOwner.name : 'Unknown')}'s ${raceStr ? raceStr + ' ' : ''}${hs.name || shipClass}</span>`;
         lines.push({ label: 'Hull Integrity', value: `${Math.floor(hs.health)} / ${hs.maxHealth}`, color: '#fff' });
 
         let fuelLabel = hs.engine > 0 ? `Fuel (${hs.engine})` : 'Fuel';
         if (hs.specialfuel && hs.specialfuel > 0) {
           fuelLabel += '*';
         }
-        const fuelVal = Math.floor(hs.fuel || 0) + ' / ' + Math.floor(getMaxFuel(hs));
-        const speedVal = (hs.currentSpeed || 0).toFixed(1) + ' / ' + (hs.speed || 30).toFixed(1);
-        lines.push({ label: `⛽ ${fuelLabel}`, value: `${fuelVal}  |  Speed: ${speedVal}`, color: (hs.fuel <= 0 ? '#f00' : '#ffa500'), isSpeedBar: true, currentSpeed: hs.currentSpeed || 0, maxSpeed: hs.speed || 30 });
+        const fuelVal = Math.floor(hs.fuel || 0) + '/' + Math.floor(getMaxFuel(hs));
+        const speedVal = (hs.currentSpeed || 0).toFixed(1) + '/' + (hs.speed || 30).toFixed(1);
+        lines.push({ label: `⚡ Speed / Fuel`, value: `Speed: ${speedVal}  Fuel: ${fuelVal}`, color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
+
+        if (hs.maxsupplies > 0) {
+          lines.push({ label: '📦 Supplies', value: `${Math.floor(hs.supplies || 0)} / ${hs.maxsupplies}`, color: '#ffcc80' });
+        }
 
         if (hs.maxArmor && hs.maxArmor > 0) {
           let armorLabel = `Cruiser Armor (${hs.armor})`;
@@ -1240,11 +1342,6 @@ function getHabName(habitability) {
           }
           lines.push({ label: armorLabel, value: Math.floor(hs.armorPoints) + ' / ' + Math.floor(hs.maxArmor), color: '#b0bec5' });
         }
-        if (hs.sensorarrays > 0) lines.push({ label: `Sensor Array (${hs.sensorarrays})`, value: `📡 Active`, color: '#ffb300' });
-        if (hs.labs > 0) lines.push({ label: `Laboratories (${hs.labs})`, value: `🔬 Active`, color: '#00e5ff' });
-        if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
-        if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ Active`, color: '#ffa500' });
-        if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
 
         let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(2 * hs.health)}`;
         if (hs.marines > 0) {
@@ -1285,10 +1382,6 @@ function getHabName(habitability) {
         lines.push({ label: `💣 ${munitionsLabel}`, value: `${munitionsDisplay}  |  🛡️ ${deflectionLabel}: ${shrugChance}%`, color: '#ffa' });
         if (hs.munitions > 0) {
           lines.push({ label: 'Splash Damage', value: `+${hs.munitions}`, color: '#ffd740' });
-        }
-
-        if (hs.maxsupplies > 0) {
-          lines.push({ label: 'Supplies', value: `📦 ${Math.floor(hs.supplies || 0)} / ${hs.maxsupplies}`, color: '#ffcc80' });
         }
 
         const laserTechBonus = Math.floor(techBonus) * 0.01;
@@ -1426,7 +1519,13 @@ function getHabName(habitability) {
         }
         
         lines.push({ label: 'Volley Size', value: volleySize, color: '#ffa' });
-        lines.push({ label: 'XP', value: `${Math.round(shipExp)} (√ShipExp: +${Math.round(shipExpBonus)})`, color: '#00d5ff' });
+        lines.push({ label: 'XP', value: `+${Math.round(shipExpBonus)} (${Math.round(shipExp)})`, color: '#00d5ff' });
+
+        if (hs.sensorarrays > 0) lines.push({ label: `Sensor Array (${hs.sensorarrays})`, value: `📡 Active`, color: '#ffb300' });
+        if (hs.labs > 0) lines.push({ label: `Laboratories (${hs.labs})`, value: `🔬 Active`, color: '#00e5ff' });
+        if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
+        if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ Active`, color: '#ffa500' });
+        if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
       } else {
         const swarmRange = 100;
         const swarmRangesq = swarmRange * swarmRange;
@@ -1659,6 +1758,59 @@ function getHabName(habitability) {
 
     infoPanelTitle.innerHTML = titleHTML;
     infoPanelBody.innerHTML = bodyHTML;
+
+    // Position as tooltip near the selected target
+    let targetX = 0;
+    let targetY = 0;
+    let hasTargetCoords = false;
+
+    if (type === 'planet') {
+      let p = serverState.planets.find(pp => pp.id === id);
+      const isLastKnown = p && p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id];
+      if (isLastKnown) {
+        p = lastKnownPlanets[p.id];
+      }
+      if (p) {
+        targetX = p.x;
+        targetY = p.y;
+        hasTargetCoords = true;
+      }
+    } else if (type === 'ship' || type === 'fleet') {
+      let s = serverState.ships.find(ss => ss.id === id);
+      if (s) {
+        targetX = s.x;
+        targetY = s.y;
+        hasTargetCoords = true;
+      }
+    }
+
+    if (hasTargetCoords) {
+      const screenPos = getServerToScreenPos(targetX, targetY);
+      const container = document.querySelector('.info-panel-container');
+      if (container) {
+        let top = screenPos.y - 150;
+        let left = screenPos.x + 25;
+
+        // Retrieve container dimensions. Use standard fallbacks if container is not fully rendered yet.
+        const width = 380;
+        const height = 450;
+
+        if (left + width > window.innerWidth) {
+          left = screenPos.x - width - 25;
+        }
+        if (left < 10) left = 10;
+
+        if (top + height > window.innerHeight) {
+          top = window.innerHeight - height - 10;
+        }
+        if (top < 10) top = 10;
+
+        container.style.position = 'fixed';
+        container.style.left = `${left}px`;
+        container.style.top = `${top}px`;
+        container.style.margin = '0';
+      }
+    }
   }
 
   // UI Elements
@@ -1729,6 +1881,13 @@ function getHabName(habitability) {
   window.addEventListener('click', (event) => {
     if (event.target === helpModal) {
       helpModal.classList.add('hidden');
+    }
+    // Dismiss info panel with a click outside the container
+    if (activeInfoPanel && !panelOpenedThisTick) {
+      const container = document.querySelector('.info-panel-container');
+      if (container && !container.contains(event.target)) {
+        closeInfoPanel();
+      }
     }
   });
 
@@ -3693,6 +3852,26 @@ function getHabName(habitability) {
     };
   }
 
+  function getServerToScreenPos(serverX, serverY) {
+    const mapWidth = serverState ? (serverState.width || 1920) : 1920;
+    const mapHeight = serverState ? (serverState.height || 1620) : 1620;
+    const scaleX = canvas.width / mapWidth;
+    const scaleY = canvas.height / mapHeight;
+    const baseScale = Math.min(scaleX, scaleY);
+    const finalScale = baseScale * cameraZoom;
+    const centerServerX = mapWidth / 2 - cameraPanX;
+    const centerServerY = mapHeight / 2 - cameraPanY;
+
+    const canvasX = (serverX - centerServerX) * finalScale + canvas.width / 2;
+    const canvasY = (serverY - centerServerY) * finalScale + canvas.height / 2;
+
+    const rect = canvas.getBoundingClientRect();
+    const cssX = canvasX / (canvas.width / rect.width) + rect.left;
+    const cssY = canvasY / (canvas.height / rect.height) + rect.top;
+
+    return { x: cssX, y: cssY };
+  }
+
   function handlePointerDown(x, y, isShift = false, isTouch = false, button = 0) {
     if (!serverState || !localPlayer) return;
 
@@ -4131,36 +4310,7 @@ function getHabName(habitability) {
   }
 
   canvas.addEventListener('dblclick', (event) => {
-    if (!serverState) return;
-    const cPos = getCanvasPos(event.clientX, event.clientY);
-    const serverPos = getMouseServerPos(cPos.x, cPos.y);
-
-    // check clicked planet first
-    const clickedPlanet = getPlanetAt(cPos.x, cPos.y);
-    let clickedShip = null;
-    
-    if (serverState && serverState.ships) {
-      for (const ship of serverState.ships) {
-        if (!ship.active) continue;
-        const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
-        const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
-        const sdx = ship.x - serverPos.x;
-        const sdy = ship.y - serverPos.y;
-        if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
-          if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
-            clickedShip = ship;
-          }
-        }
-      }
-    }
-
-    if (clickedShip && clickedShip.isCruiser) {
-      openInfoPanel('ship', clickedShip.id);
-    } else if (clickedPlanet) {
-      openInfoPanel('planet', clickedPlanet.id);
-    } else if (clickedShip) {
-      openInfoPanel('fleet', clickedShip.id);
-    }
+    // Info panels are now tooltips triggered by hover / single tap.
   });
 
   let mouseTimeout = null;
@@ -4239,7 +4389,9 @@ function getHabName(habitability) {
 
   let lastMouseEmitTime = 0;
 
-  canvas.addEventListener('mousemove', (event) => {
+  window.addEventListener('mousemove', (event) => {
+    mouseMovedSinceOpen = true;
+    lastMouseTarget = event.target;
     const rect = canvas.getBoundingClientRect();
     const cssToCanvasX = canvas.width / rect.width;
     const cssToCanvasY = canvas.height / rect.height;
@@ -4262,7 +4414,40 @@ function getHabName(habitability) {
 
     // Always update hover state and lasso
     const cPos = getCanvasPos(event.clientX, event.clientY);
+    lastCanvasMouseX = cPos.x;
+    lastCanvasMouseY = cPos.y;
     handlePointerMove(cPos.x, cPos.y, false);
+
+    // Tooltip hover check
+    let newType = null;
+    let newId = null;
+    if (hoveredShip && hoveredShip.isCruiser) {
+      newType = 'ship';
+      newId = hoveredShip.id;
+    } else if (hoveredPlanet) {
+      newType = 'planet';
+      newId = hoveredPlanet.id;
+    } else if (hoveredShip) {
+      newType = 'fleet';
+      newId = hoveredShip.id;
+    }
+
+    if (newType && newId) {
+      if (activeInfoPanel && activeInfoPanel.type === newType && activeInfoPanel.id === newId) {
+        if (infoPanelTimer) {
+          clearTimeout(infoPanelTimer);
+          infoPanelTimer = null;
+        }
+      } else {
+        if (infoPanelTimer) {
+          clearTimeout(infoPanelTimer);
+          infoPanelTimer = null;
+        }
+        openInfoPanel(newType, newId);
+      }
+    } else {
+      checkInfoPanelDismiss();
+    }
 
     const now = Date.now();
     if (now - lastMouseEmitTime > 5000) {
@@ -4330,49 +4515,13 @@ function getHabName(habitability) {
       touchLongPressed = false;
       isDraggingCamera = false;
 
-      // Double tap check
+      // Keep track of touch position and time
       const now = Date.now();
-      const timeDiff = now - lastTouchTime;
-      const distSq = (tx - lastTouchX) * (tx - lastTouchX) + (ty - lastTouchY) * (ty - lastTouchY);
-      
-      let isDoubleTap = false;
-      if (timeDiff < 300 && distSq < 900) {
-        isDoubleTap = true;
-      }
-      
       lastTouchTime = now;
       lastTouchX = tx;
       lastTouchY = ty;
 
       const cPos = getCanvasPos(tx, ty);
-
-      if (isDoubleTap) {
-        const clickedPlanet = getPlanetAt(cPos.x, cPos.y);
-        let clickedShip = null;
-        const serverPos = getMouseServerPos(cPos.x, cPos.y);
-        if (serverState && serverState.ships) {
-          for (const ship of serverState.ships) {
-            if (!ship.active) continue;
-            const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
-            const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
-            const sdx = ship.x - serverPos.x;
-            const sdy = ship.y - serverPos.y;
-            if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
-              if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
-                clickedShip = ship;
-              }
-            }
-          }
-        }
-        
-        if (clickedShip && clickedShip.isCruiser) {
-          openInfoPanel('ship', clickedShip.id);
-        } else if (clickedPlanet) {
-          openInfoPanel('planet', clickedPlanet.id);
-        } else if (clickedShip) {
-          openInfoPanel('fleet', clickedShip.id);
-        }
-      }
 
       // Update hover tooltip immediately on touch down!
       handlePointerMove(cPos.x, cPos.y, true);
@@ -4500,6 +4649,52 @@ function getHabName(habitability) {
     // Quick tap: trigger selection (button 0 / left-click) only if hold was not fired
     if (touchStartActive && !touchLongPressed) {
       const cPos = getCanvasPos(touchStartX, touchStartY);
+
+      const clickedPlanet = getPlanetAt(cPos.x, cPos.y);
+      let clickedShip = null;
+      const serverPos = getMouseServerPos(cPos.x, cPos.y);
+      if (serverState && serverState.ships) {
+        for (const ship of serverState.ships) {
+          if (!ship.active) continue;
+          const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
+          const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
+          const sdx = ship.x - serverPos.x;
+          const sdy = ship.y - serverPos.y;
+          if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
+            if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
+              clickedShip = ship;
+            }
+          }
+        }
+      }
+
+      let tappedType = null;
+      let tappedId = null;
+      if (clickedShip && clickedShip.isCruiser) {
+        tappedType = 'ship';
+        tappedId = clickedShip.id;
+      } else if (clickedPlanet) {
+        tappedType = 'planet';
+        tappedId = clickedPlanet.id;
+      } else if (clickedShip) {
+        tappedType = 'fleet';
+        tappedId = clickedShip.id;
+      }
+
+      if (tappedType && tappedId) {
+        if (activeInfoPanel && activeInfoPanel.type === tappedType && activeInfoPanel.id === tappedId) {
+          closeInfoPanel();
+        } else {
+          openInfoPanel(tappedType, tappedId);
+          panelOpenedThisTick = true;
+          setTimeout(() => { panelOpenedThisTick = false; }, 0);
+        }
+      } else {
+        if (activeInfoPanel) {
+          closeInfoPanel();
+        }
+      }
+
       handlePointerDown(cPos.x, cPos.y, event.shiftKey, true, 0);
     }
 
@@ -9237,6 +9432,15 @@ function getHabName(habitability) {
               ctx.fillRect(s.x - barW / 2, currentY, barW, barH);
               ctx.fillStyle = '#00d5ff';
               ctx.fillRect(s.x - barW / 2, currentY, barW * Math.min(1.0, shipExpBonus / 10), barH);
+              currentY -= 1;
+            }
+            
+            if (s.isCruiser && s.maxsupplies > 0) {
+              currentY -= barH;
+              ctx.fillStyle = '#3a1a4a';
+              ctx.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctx.fillStyle = '#a855f7';
+              ctx.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.supplies || 0) / s.maxsupplies), barH);
               currentY -= 1;
             }
             
