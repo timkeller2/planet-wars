@@ -257,7 +257,7 @@ async function bootstrap() {
       const sourcePlanet = game.planets.find(p => p.id === data.sourceId);
       const targetPlanet = game.planets.find(p => p.id === data.targetId);
       if (sourcePlanet && targetPlanet && sourcePlanet.owner && sourcePlanet.owner.id === player.id) {
-
+        if (sourcePlanet.inRevolt) return;
         game.sendShips(sourcePlanet, targetPlanet, data.isWarp, data.speedModifier, data.isBombing, data.fillAmount, data.scoutMode, data.isCruiser);
       }
     });
@@ -276,6 +276,7 @@ async function bootstrap() {
       const sourcePlanet = game.planets.find(p => p.id === data.sourceId);
 
       if (sourcePlanet && sourcePlanet.owner && sourcePlanet.owner.id === player.id) {
+        if (sourcePlanet.inRevolt) return;
         game.sendShipsToSpace(sourcePlanet, data.targetX, data.targetY, data.isWarp, data.speedModifier, data.isBombing, data.scoutMode, data.isCruiser);
       }
     });
@@ -293,6 +294,7 @@ async function bootstrap() {
 
       const p = game.planets.find(pl => pl.id === data.planetId);
       if (p && p.owner && p.owner.id === player.id) {
+        if (p.inRevolt) return;
         game.buildCapitalShip(p, data.classType);
       }
     });
@@ -1174,6 +1176,7 @@ async function bootstrap() {
       if (!data || data.planetId === undefined || !data.focusMode) return;
       const planet = game.planets.find(p => p.id === data.planetId);
       if (!planet || !planet.owner || planet.owner.id !== player.id) return;
+      if (planet.inRevolt) return;
 
       const validModes = ['economy', 'research', 'garrison', 'commerce', 'mining'];
       if (!validModes.includes(data.focusMode)) return;
@@ -1630,6 +1633,8 @@ async function bootstrap() {
           revoltCooldown: p.revoltCooldown || 0,
           maxRevoltCooldown: p.maxRevoltCooldown || 0,
           revoltAttemptEvent: rAttemptEvent,
+          inRevolt: p.inRevolt || false,
+          revoltTimer: p.revoltTimer || 0,
           focusTransition: p.focusTransition ? {
             targetMode: p.focusTransition.targetMode,
             progress: Math.min(1.0, p.focusTransition.elapsed / 15000)
@@ -1697,6 +1702,7 @@ async function bootstrap() {
           specialbombs: s.specialbombs || 0,
           resourceConsumeEvents: consumeEvents,
           diplomat: s.diplomat || 0,
+          parley: s.parley !== undefined ? s.parley : 0,
           marines: s.marines || 0,
           diplomatTargetPlanetId: s.diplomatTargetPlanetId || null,
           crew: s.crew || 0,
@@ -2004,7 +2010,9 @@ async function bootstrap() {
               resources: p.resources || null,
               expScore: p.expScore || 0,
               sizeClass: p.sizeClass || 0,
-              habitability: p.habitability || 0
+              habitability: p.habitability || 0,
+              inRevolt: p.inRevolt || false,
+              revoltTimer: p.revoltTimer || 0
             });
           }
         }

@@ -113,6 +113,7 @@ export class Planet {
   }
 
   update(deltaTime, allPlanets, settings, game) {
+    this.prorateSympathiesIfNeeded();
     // Handle focus mode transition
     if (this.focusTransition) {
       if (!this.owner || this.owner.id !== this.focusTransition.playerId) {
@@ -418,7 +419,9 @@ export class Planet {
     this.sympathy = this.sympathy || {};
     const currentSym = this.sympathy[playerId] || 0;
     
-    if (currentSym >= this.maxShips) {
+    const limit = Math.max(this.maxShips, this.ships || 0);
+    
+    if (currentSym >= limit) {
       return 0;
     }
     
@@ -427,7 +430,7 @@ export class Planet {
       totalSympathy += val;
     }
     
-    const spaceRemaining = Math.max(0, this.maxShips - totalSympathy);
+    const spaceRemaining = Math.max(0, limit - totalSympathy);
     const spaceUsed = Math.min(spaceRemaining, increaseAmt);
     let newSym = currentSym + spaceUsed;
     
@@ -471,8 +474,63 @@ export class Planet {
       }
     }
     
-    this.sympathy[playerId] = Math.min(this.maxShips, newSym);
+    this.sympathy[playerId] = Math.min(limit, newSym);
+    this.prorateSympathiesIfNeeded();
     return actualIncrease;
+  }
+
+  prorateSympathiesIfNeeded() {
+    if (!this.sympathy) return;
+    const limit = Math.max(this.maxShips, this.ships || 0);
+    let totalSympathy = 0;
+    for (const val of Object.values(this.sympathy)) {
+      totalSympathy += val;
+    }
+    if (totalSympathy > limit && totalSympathy > 0) {
+      const scale = limit / totalSympathy;
+      for (const [pId, val] of Object.entries(this.sympathy)) {
+        this.sympathy[pId] = val * scale;
+      }
+    }
+  }
+
+  isBeingInvaded(game) {
+    if (!game || !game.ships) return false;
+    
+    const gravityRadius = this.getGravityRadius ? this.getGravityRadius() : (this.maxShips * 1.5);
+    const range = Math.max(200, gravityRadius);
+    const rangeSq = range * range;
+    
+    for (const ship of game.ships) {
+      if (!ship.active) continue;
+      
+      let isHostile = false;
+      if (this.owner) {
+        if (ship.owner && ship.owner.id !== this.owner.id) {
+          isHostile = true;
+        } else if (ship.isAmoeba) {
+          isHostile = true;
+        }
+      } else {
+        if (ship.owner) {
+          isHostile = true;
+        } else if (ship.isAmoeba) {
+          isHostile = true;
+        }
+      }
+      
+      if (isHostile) {
+        if (ship.targetPlanet === this) {
+          return true;
+        }
+        const dx = ship.x - this.x;
+        const dy = ship.y - this.y;
+        if (dx * dx + dy * dy <= rangeSq) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   getGravityRadius(mapScale = 1.0) {

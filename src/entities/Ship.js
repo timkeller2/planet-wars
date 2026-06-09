@@ -48,6 +48,7 @@ export class Ship {
     this.isSniperKiting = false;
     this.sniperKiteX = null;
     this.sniperKiteY = null;
+    this.isMovingBackward = false;
     this.lastTimeAttacked = 0;
     this.lastTimeAttacking = 0;
     this.isPatrolling = false;
@@ -93,6 +94,7 @@ export class Ship {
     this.supplies = 0;
     this.maxsupplies = 0;
     this.diplomat = 0;
+    this.parley = 0;
     this.marines = 0;
     this.specialfuel = 0;
     this.specialbombs = 0;
@@ -658,6 +660,7 @@ export class Ship {
 
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
+    this.isMovingBackward = false;
 
     let friendlyWellPlanet = null;
     if (allPlanets && this.owner) {
@@ -2106,8 +2109,14 @@ export class Ship {
           let firedAtPlanet = false;
           while (shotsFired < maxShots && validPlanets.length > 0) {
             firedAtPlanet = true;
-            const targetIndex = Math.floor(Math.random() * validPlanets.length);
-            const p = validPlanets[targetIndex];
+            let p;
+            if (this.cruiserTargetType === 'planet' && this.cruiserTargetId) {
+              p = validPlanets.find(pl => pl.id === this.cruiserTargetId);
+            }
+            if (!p) {
+              const targetIndex = Math.floor(Math.random() * validPlanets.length);
+              p = validPlanets[targetIndex];
+            }
             
             if (p.owner && this.owner && p.owner.id !== this.owner.id) {
               this.lastAttackTimeByPlayer = this.lastAttackTimeByPlayer || {};
@@ -4000,7 +4009,7 @@ export class Ship {
                 }
                 const bombEngagementRange = Math.max(15, (maxFrontRange * strategyThreshold) - 15);
                 
-                if (dist <= bombEngagementRange && isTargetInFront) {
+                if (dist <= bombEngagementRange && isTargetInFront && this.package !== 'sniper') {
                   this.targetX = this.x;
                   this.targetY = this.y;
                   this.targetPlanet = null;
@@ -4153,7 +4162,30 @@ export class Ship {
     }
     
     if (moveDistanceToDest > 0) {
-      const desiredAngle = Math.atan2(dy, dx);
+      let desiredAngle = Math.atan2(dy, dx);
+      if (this.isCruiser && !this.isUpgrading) {
+        let targetObj = null;
+        if (this.targetPlanet) {
+          targetObj = this.targetPlanet;
+        } else if (this.cruiserTargetType === 'planet' && this.cruiserTargetId) {
+          targetObj = allPlanets ? allPlanets.find(p => p.id === this.cruiserTargetId) : null;
+        } else if (this.cruiserTargetType === 'ship' && this.cruiserTargetId) {
+          targetObj = allShips ? allShips.find(s => s.id === this.cruiserTargetId) : null;
+        }
+        
+        if (targetObj && targetObj.active !== false && targetObj.owner !== this.owner) {
+          const targetAngle = Math.atan2(targetObj.y - this.y, targetObj.x - this.x);
+          let angleDiff = desiredAngle - targetAngle;
+          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+          
+          if (Math.abs(angleDiff) > Math.PI / 2) {
+            this.isMovingBackward = true;
+            desiredAngle = targetAngle;
+          }
+        }
+      }
+
       if (this.isAmoeba) {
         this.angle = desiredAngle;
       } else {
@@ -5234,12 +5266,16 @@ export class Ship {
             }
 
             const range = targetRange + (isPlanetTarget ? currentTarget.radius : 0);
-            if (dist <= range) {
+            if (dist <= range && !this.isMovingBackward) {
               effectiveSpeed = 0;
             }
           }
         }
       }
+    }
+
+    if (this.isCruiser && this.isMovingBackward) {
+      effectiveSpeed *= 1/3;
     }
 
     if (this.isUpgrading || this.isDismantling) {
@@ -5252,8 +5288,13 @@ export class Ship {
         this.x += (dx / moveDistanceToDest) * moveDistance;
         this.y += (dy / moveDistanceToDest) * moveDistance;
       } else {
-        this.x += Math.cos(this.angle) * moveDistance;
-        this.y += Math.sin(this.angle) * moveDistance;
+        if (this.isCruiser && this.isMovingBackward) {
+          this.x -= Math.cos(this.angle) * moveDistance;
+          this.y -= Math.sin(this.angle) * moveDistance;
+        } else {
+          this.x += Math.cos(this.angle) * moveDistance;
+          this.y += Math.sin(this.angle) * moveDistance;
+        }
       }
     }
     this.currentSpeed = effectiveSpeed;

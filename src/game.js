@@ -912,71 +912,272 @@ export class Game {
     if (countTiny < 0) { countSmall += countTiny; countTiny = 0; }
     if (countSmall < 0) { countMedium += countSmall; countSmall = 0; }
 
-    for (let i = 0; i < numPlanets; i++) {
-      let x, y, radius;
-      let valid = false;
-      let attempts = 0;
-      
-      while (!valid && attempts < 100) {
+    const isClustersOff = !this.settings || !this.settings.clusters || this.settings.clusters === 0;
+
+    if (isClustersOff) {
+      // Pre-generate specifications for all planets to ensure sizes match the counts
+      const planetSpecs = [];
+      for (let i = 0; i < numPlanets; i++) {
         let generatedMaxShips;
         if (i < countMegaSuper) {
-          generatedMaxShips = 300; // Mega Super planet
+          generatedMaxShips = 300;
         } else if (i < countMegaSuper + countSuper) {
           if (width < 1600) {
-            generatedMaxShips = 200 + Math.floor(Math.random() * 21); // Super planet (small map)
+            generatedMaxShips = 200 + Math.floor(Math.random() * 21);
           } else {
-            generatedMaxShips = 250; // Super planet (normal/large map)
+            generatedMaxShips = 250;
           }
         } else if (i < countMegaSuper + countSuper + countLarge) {
-          generatedMaxShips = 150 + Math.floor(Math.random() * 31); // Large planets 150-180
+          generatedMaxShips = 150 + Math.floor(Math.random() * 31);
         } else if (i < countMegaSuper + countSuper + countLarge + countMedium) {
-          generatedMaxShips = 120 + Math.floor(Math.random() * 31); // Medium planets 120-150
+          generatedMaxShips = 120 + Math.floor(Math.random() * 31);
         } else if (i < countMegaSuper + countSuper + countLarge + countMedium + countSmall) {
-          generatedMaxShips = 75 + Math.floor(Math.random() * 41); // Small planets 75-115
+          generatedMaxShips = 75 + Math.floor(Math.random() * 41);
         } else {
-          generatedMaxShips = 53 + Math.floor(Math.random() * 22); // Tiny planets 53-74
+          generatedMaxShips = 53 + Math.floor(Math.random() * 22);
         }
-        radius = generatedMaxShips / 4;
-        x = radius + Math.random() * (width - radius * 2);
-        y = radius + Math.random() * (height - radius * 2);
-        
-        valid = true;
-
-        if (valid) {
-          const minDistPadding = (this.settings && this.settings.graphicalMode) ? 40 : 25;
-          for (const p of this.planets) {
-            const dx = p.x - x;
-            const dy = p.y - y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < p.radius + radius + minDistPadding) {
-              valid = false;
-              break;
-            }
-          }
-        }
-        attempts++;
+        const radius = generatedMaxShips / 4;
+        const isSuperPlanet = (i < countMegaSuper + countSuper);
+        planetSpecs.push({ id: i, radius, maxShips: generatedMaxShips, isSuperPlanet });
       }
-      
-      if (valid) {
-        const maxShips = radius * 4;
+
+      const createPlanetFromSpec = (spec, px, py) => {
+        const maxShips = spec.maxShips;
         const expectedPercentage = maxShips / 100;
         let expectedShips = maxShips * expectedPercentage;
         let variance = maxShips * 0.4;
         
         if (maxShips > 150) {
           expectedShips *= 2;
-          variance = expectedShips * 0.15; // Randomize slightly
+          variance = expectedShips * 0.15;
         }
 
         let initialShips = Math.floor(expectedShips + (Math.random() * 2 - 1) * variance);
         initialShips = Math.max(1, initialShips);
-        const newPlanet = new Planet(i, x, y, radius, null, initialShips, this.width, this.height);
-        if (i < countMegaSuper + countSuper) {
+        const newPlanet = new Planet(spec.id, px, py, spec.radius, null, initialShips, this.width, this.height);
+        if (spec.isSuperPlanet) {
           newPlanet.isSuperPlanet = true;
           newPlanet.sizeClass = 200;
           newPlanet.habitability = 150;
         }
-        this.planets.push(newPlanet);
+        return newPlanet;
+      };
+
+      let currentIndex = 0;
+      while (currentIndex < planetSpecs.length) {
+        const spec = planetSpecs[currentIndex];
+        let x, y;
+        
+        // Find 3 possible locations, pick the one furthest from other worlds
+        let bestPos = null;
+        let maxMinDist = -1;
+        
+        for (let c = 0; c < 3; c++) {
+          let candX, candY;
+          let candValid = false;
+          let candAttempts = 0;
+          while (!candValid && candAttempts < 100) {
+            candX = spec.radius + Math.random() * (width - spec.radius * 2);
+            candY = spec.radius + Math.random() * (height - spec.radius * 2);
+            candValid = true;
+            
+            const minDistPadding = (this.settings && this.settings.graphicalMode) ? 40 : 25;
+            for (const p of this.planets) {
+              const dx = p.x - candX;
+              const dy = p.y - candY;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist < p.radius + spec.radius + minDistPadding) {
+                candValid = false;
+                break;
+              }
+            }
+            candAttempts++;
+          }
+          
+          if (candValid) {
+            let minDist = Infinity;
+            if (this.planets.length === 0) {
+              minDist = 999999;
+            } else {
+              for (const p of this.planets) {
+                const dx = p.x - candX;
+                const dy = p.y - candY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < minDist) {
+                  minDist = dist;
+                }
+              }
+            }
+            
+            if (minDist > maxMinDist) {
+              maxMinDist = minDist;
+              bestPos = { x: candX, y: candY };
+            }
+          }
+        }
+        
+        // Fallback to random if 3 candidates search failed
+        if (!bestPos) {
+          let valid = false;
+          let attempts = 0;
+          while (!valid && attempts < 100) {
+            x = spec.radius + Math.random() * (width - spec.radius * 2);
+            y = spec.radius + Math.random() * (height - spec.radius * 2);
+            valid = true;
+            
+            const minDistPadding = (this.settings && this.settings.graphicalMode) ? 40 : 25;
+            for (const p of this.planets) {
+              const dx = p.x - x;
+              const dy = p.y - y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist < p.radius + spec.radius + minDistPadding) {
+                valid = false;
+                break;
+              }
+            }
+            attempts++;
+          }
+          if (valid) {
+            bestPos = { x, y };
+          }
+        }
+        
+        if (bestPos) {
+          x = bestPos.x;
+          y = bestPos.y;
+          
+          const newPlanet = createPlanetFromSpec(spec, x, y);
+          this.planets.push(newPlanet);
+          currentIndex++;
+          
+          // Try to place up to 3 more planets nearby in little groups (1 to 4 total)
+          let prevX = x;
+          let prevY = y;
+          let prevRadius = spec.radius;
+          const groupChances = [0.60, 0.40, 0.20];
+          
+          for (let g = 0; g < groupChances.length; g++) {
+            if (currentIndex >= planetSpecs.length) break;
+            
+            if (Math.random() < groupChances[g]) {
+              const nextSpec = planetSpecs[currentIndex];
+              
+              let nearbyValid = false;
+              let nearbyAttempts = 0;
+              let nearbyX, nearbyY;
+              while (!nearbyValid && nearbyAttempts < 100) {
+                const gap = 30 + Math.random() * 80;
+                const D = prevRadius + nextSpec.radius + gap;
+                const angle = Math.random() * Math.PI * 2;
+                nearbyX = prevX + Math.cos(angle) * D;
+                nearbyY = prevY + Math.sin(angle) * D;
+                
+                if (nearbyX >= nextSpec.radius && nearbyX <= width - nextSpec.radius &&
+                    nearbyY >= nextSpec.radius && nearbyY <= height - nextSpec.radius) {
+                  
+                  nearbyValid = true;
+                  const minDistPadding = (this.settings && this.settings.graphicalMode) ? 40 : 25;
+                  for (const p of this.planets) {
+                    const dx = p.x - nearbyX;
+                    const dy = p.y - nearbyY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < p.radius + nextSpec.radius + minDistPadding) {
+                      nearbyValid = false;
+                      break;
+                    }
+                  }
+                }
+                nearbyAttempts++;
+              }
+              
+              if (nearbyValid) {
+                const nearbyPlanet = createPlanetFromSpec(nextSpec, nearbyX, nearbyY);
+                this.planets.push(nearbyPlanet);
+                currentIndex++;
+                
+                prevX = nearbyX;
+                prevY = nearbyY;
+                prevRadius = nextSpec.radius;
+              } else {
+                break;
+              }
+            } else {
+              break;
+            }
+          }
+        } else {
+          // Skip if unable to find space
+          currentIndex++;
+        }
+      }
+    } else {
+      // Original planet placement logic when clusters setting is ON
+      for (let i = 0; i < numPlanets; i++) {
+        let x, y, radius;
+        let valid = false;
+        let attempts = 0;
+        
+        while (!valid && attempts < 100) {
+          let generatedMaxShips;
+          if (i < countMegaSuper) {
+            generatedMaxShips = 300;
+          } else if (i < countMegaSuper + countSuper) {
+            if (width < 1600) {
+              generatedMaxShips = 200 + Math.floor(Math.random() * 21);
+            } else {
+              generatedMaxShips = 250;
+            }
+          } else if (i < countMegaSuper + countSuper + countLarge) {
+            generatedMaxShips = 150 + Math.floor(Math.random() * 31);
+          } else if (i < countMegaSuper + countSuper + countLarge + countMedium) {
+            generatedMaxShips = 120 + Math.floor(Math.random() * 31);
+          } else if (i < countMegaSuper + countSuper + countLarge + countMedium + countSmall) {
+            generatedMaxShips = 75 + Math.floor(Math.random() * 41);
+          } else {
+            generatedMaxShips = 53 + Math.floor(Math.random() * 22);
+          }
+          radius = generatedMaxShips / 4;
+          x = radius + Math.random() * (width - radius * 2);
+          y = radius + Math.random() * (height - radius * 2);
+          
+          valid = true;
+
+          if (valid) {
+            const minDistPadding = (this.settings && this.settings.graphicalMode) ? 40 : 25;
+            for (const p of this.planets) {
+              const dx = p.x - x;
+              const dy = p.y - y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist < p.radius + radius + minDistPadding) {
+                valid = false;
+                break;
+              }
+            }
+          }
+          attempts++;
+        }
+        
+        if (valid) {
+          const maxShips = radius * 4;
+          const expectedPercentage = maxShips / 100;
+          let expectedShips = maxShips * expectedPercentage;
+          let variance = maxShips * 0.4;
+          
+          if (maxShips > 150) {
+            expectedShips *= 2;
+            variance = expectedShips * 0.15;
+          }
+
+          let initialShips = Math.floor(expectedShips + (Math.random() * 2 - 1) * variance);
+          initialShips = Math.max(1, initialShips);
+          const newPlanet = new Planet(i, x, y, radius, null, initialShips, this.width, this.height);
+          if (i < countMegaSuper + countSuper) {
+            newPlanet.isSuperPlanet = true;
+            newPlanet.sizeClass = 200;
+            newPlanet.habitability = 150;
+          }
+          this.planets.push(newPlanet);
+        }
       }
     }
     
@@ -2059,7 +2260,10 @@ export class Game {
 
   checkSinglePlanetSympathyRevolt(planet) {
     if ((planet.revoltCooldown || 0) > 0) return;
+    if (planet.inRevolt) return;
     if (!planet.sympathy) return;
+
+    if (typeof planet.isBeingInvaded === 'function' && planet.isBeingInvaded(this)) return;
 
     const threshold = planet.ships / 3;
 
@@ -2072,8 +2276,6 @@ export class Game {
     }
 
     if (eligibleNonOwners.length > 0) {
-      // If a successful revolt happened globally in the last 60 seconds, we don't allow another one.
-      // We skip the roll/check this time, which staggers/delays it to the next 60s window.
       if ((this.globalRevoltCooldown || 0) > 0) return;
 
       const competitors = [];
@@ -2081,134 +2283,161 @@ export class Game {
       if (planet.owner) {
         const ownerSym = planet.sympathy[planet.owner.id] || 0;
         const maxRoll = Math.floor(planet.ships + ownerSym);
-        const rollVal = Math.floor(Math.random() * (maxRoll + 1));
-        competitors.push({ id: planet.owner.id, roll: rollVal, maxRoll, isOwner: true, name: planet.owner.name });
+        competitors.push({ id: planet.owner.id, maxRoll, isOwner: true, name: planet.owner.name });
       } else {
         const maxRoll = Math.floor(planet.ships);
-        const rollVal = Math.floor(Math.random() * (maxRoll + 1));
-        competitors.push({ id: 'neutral', roll: rollVal, maxRoll, isOwner: true, name: 'Neutral' });
+        competitors.push({ id: 'neutral', maxRoll, isOwner: true, name: 'Neutral' });
       }
 
       for (const competitor of eligibleNonOwners) {
         const maxRoll = Math.floor(competitor.sympathy);
-        const rollVal = Math.floor(Math.random() * (maxRoll + 1));
         const compPlayer = this.allPlayers.find(p => p.id === competitor.id);
         const compName = compPlayer ? compPlayer.name : competitor.id;
-        competitors.push({ id: competitor.id, roll: rollVal, maxRoll, isOwner: false, name: compName });
+        competitors.push({ id: competitor.id, maxRoll, isOwner: false, name: compName });
       }
 
-      // Calculate exact odds using a quick, robust simulation
-      const wins = {};
-      for (const c of competitors) wins[c.id] = 0;
-      const simRuns = 5000;
-      for (let r = 0; r < simRuns; r++) {
-        let bestId = null;
-        let bestRoll = -1;
-        for (const c of competitors) {
-          const roll = Math.floor(Math.random() * (c.maxRoll + 1));
-          if (roll > bestRoll) {
-            bestRoll = roll;
-            bestId = c.id;
-          }
-        }
-        if (bestId !== null) wins[bestId]++;
-      }
-      const oddsMap = {};
-      for (const c of competitors) {
-        oddsMap[c.id] = ((wins[c.id] / simRuns) * 100).toFixed(1) + '%';
-      }
-
-      competitors.sort((a, b) => b.roll - a.roll);
-      const winner = competitors[0];
-
-      // Trigger the revolt attempt event for the client sound/effects
+      // Initialize revolt state
+      planet.inRevolt = true;
+      planet.revoltTimer = 15000; // 15 seconds
+      planet.revoltCompetitors = competitors;
       planet.revoltAttemptEvent = true;
 
-      if (winner && !winner.isOwner) {
-        const winnerPlayer = this.allPlayers.find(p => p.id === winner.id);
-        if (winnerPlayer) {
-          const oldShips = planet.ships;
-          const originalOwner = planet.owner;
+      // Construct and queue the start chat message: [Planet Name] is in revolt! [Participant 1] [Maxroll 1], ...
+      const participantsText = competitors.map(c => `${c.name} ${c.maxRoll}`).join(', ');
+      const startText = `✊ ${planet.name} is in revolt! ${participantsText}`;
 
-          planet.owner = winnerPlayer;
+      this.pendingChatMessages = this.pendingChatMessages || [];
+      for (const comp of competitors) {
+        if (comp.id !== 'neutral') {
+          this.pendingChatMessages.push({
+            playerId: comp.id,
+            text: startText
+          });
+        }
+      }
 
-          planet.revoltCooldown = 180000;
-          planet.maxRevoltCooldown = 180000;
-          planet.justAssigned = true;
-          planet.focusTransition = null;
+      console.log(`[REVOLT START] Revolt started on Planet ${planet.name} for 15 seconds.`);
+    }
+  }
 
-          // Set global cooldown for successful revolts
-          this.globalRevoltCooldown = 60000;
+  resolveRevolt(planet) {
+    const competitors = planet.revoltCompetitors;
+    if (!competitors || competitors.length === 0) return;
 
-          if (!originalOwner) {
-            if (oldShips > planet.maxShips) {
-              planet.retainedShips = true;
-            }
-            const roll = Math.random();
-            if (roll < 0.10) {
-              planet.isResearch = true;
-            } else if (roll < 0.20) {
-              planet.isMilitary = true;
-            } else if (roll < 0.30) {
-              planet.isSpeedPlanet = true;
-            }
+    for (const c of competitors) {
+      c.roll = Math.floor(Math.random() * (c.maxRoll + 1));
+    }
+
+    competitors.sort((a, b) => b.roll - a.roll);
+    const winner = competitors[0];
+
+    const wins = {};
+    for (const c of competitors) wins[c.id] = 0;
+    const simRuns = 5000;
+    for (let r = 0; r < simRuns; r++) {
+      let bestId = null;
+      let bestRoll = -1;
+      for (const c of competitors) {
+        const roll = Math.floor(Math.random() * (c.maxRoll + 1));
+        if (roll > bestRoll) {
+          bestRoll = roll;
+          bestId = c.id;
+        }
+      }
+      if (bestId !== null) wins[bestId]++;
+    }
+    const oddsMap = {};
+    for (const c of competitors) {
+      oddsMap[c.id] = ((wins[c.id] / simRuns) * 100).toFixed(1) + '%';
+    }
+
+    this.pendingChatMessages = this.pendingChatMessages || [];
+
+    if (winner && !winner.isOwner) {
+      const winnerPlayer = this.allPlayers.find(p => p.id === winner.id);
+      if (winnerPlayer) {
+        const oldShips = planet.ships;
+        const originalOwner = planet.owner;
+
+        planet.owner = winnerPlayer;
+
+        planet.revoltCooldown = 180000;
+        planet.maxRevoltCooldown = 180000;
+        planet.justAssigned = true;
+        planet.focusTransition = null;
+
+        this.globalRevoltCooldown = 60000;
+
+        if (!originalOwner) {
+          if (oldShips > planet.maxShips) {
+            planet.retainedShips = true;
           }
+          const roll = Math.random();
+          if (roll < 0.10) {
+            planet.isResearch = true;
+          } else if (roll < 0.20) {
+            planet.isMilitary = true;
+          } else if (roll < 0.30) {
+            planet.isSpeedPlanet = true;
+          }
+        }
 
-          // Construct and queue the detailed report message for participants
-          const statusText = "SUCCESSFUL REVOLT";
-          let reportText = `[${statusText}] Planet ${planet.name}: `;
-          const details = competitors.map(c => {
-            const odds = oddsMap[c.id] || '0%';
-            return `${c.name} (Odds: ${odds}, Rolled ${c.roll}/${c.maxRoll})`;
-          }).join(', ');
-          reportText += `${details}. Winner: ${winnerPlayer.name}.`;
+        const controlText = `${planet.name} Revolt! ${winnerPlayer.name} gains control!`;
+        const statusText = "SUCCESSFUL REVOLT";
+        let reportText = `[${statusText}] ${controlText} `;
+        const details = competitors.map(c => {
+          const odds = oddsMap[c.id] || '0%';
+          return `${c.name} (Odds: ${odds}, Rolled ${c.roll}/${c.maxRoll})`;
+        }).join(', ');
+        reportText += `Details: ${details}.`;
 
-          this.pendingChatMessages = this.pendingChatMessages || [];
-          for (const comp of competitors) {
+        for (const comp of competitors) {
+          if (comp.id !== 'neutral') {
             this.pendingChatMessages.push({
               playerId: comp.id,
               text: reportText
             });
           }
-
-          console.log(`[REVOLT] Planet ${planet.name} revolted through competitive roll and joined player ${winnerPlayer.name}`);
-          return; // Only allow one successful revolt globally in this tick (and sets global cooldown)
         }
-      } else {
-        // Owner successfully defended. Failed revolt attempt!
-        const ownerComp = competitors.find(c => c.isOwner);
-        const ownerRoll = ownerComp ? ownerComp.roll : 0;
 
-        const challengers = competitors.filter(c => !c.isOwner);
-        const highestChallengerRoll = challengers.length > 0 ? Math.max(...challengers.map(c => c.roll)) : 0;
+        console.log(`[REVOLT] Planet ${planet.name} revolted and joined player ${winnerPlayer.name}`);
+      }
+    } else {
+      const ownerComp = competitors.find(c => c.isOwner);
+      const ownerRoll = ownerComp ? ownerComp.roll : 0;
 
-        const rollDiff = Math.max(0, ownerRoll - highestChallengerRoll);
-        const cooldownSeconds = 60 + rollDiff * 3;
+      const challengers = competitors.filter(c => !c.isOwner);
+      const highestChallengerRoll = challengers.length > 0 ? Math.max(...challengers.map(c => c.roll)) : 0;
 
-        planet.revoltCooldown = cooldownSeconds * 1000;
-        planet.maxRevoltCooldown = cooldownSeconds * 1000;
+      const rollDiff = Math.max(0, ownerRoll - highestChallengerRoll);
+      const cooldownSeconds = 60 + rollDiff * 3;
 
-        // Construct and queue the detailed report message for participants
-        const statusText = "REVOLT FAILED";
-        let reportText = `[${statusText}] Planet ${planet.name}: `;
-        const details = competitors.map(c => {
-          const odds = oddsMap[c.id] || '0%';
-          return `${c.name} (Odds: ${odds}, Rolled ${c.roll}/${c.maxRoll})`;
-        }).join(', ');
-        const ownerName = winner.name;
-        reportText += `${details}. Winner: ${ownerName}.`;
+      planet.revoltCooldown = cooldownSeconds * 1000;
+      planet.maxRevoltCooldown = cooldownSeconds * 1000;
 
-        this.pendingChatMessages = this.pendingChatMessages || [];
-        for (const comp of competitors) {
+      const ownerName = winner.name;
+      const controlText = `${planet.name} Revolt! ${ownerName} retains control!`;
+      const statusText = "REVOLT FAILED";
+      let reportText = `[${statusText}] ${controlText} `;
+      const details = competitors.map(c => {
+        const odds = oddsMap[c.id] || '0%';
+        return `${c.name} (Odds: ${odds}, Rolled ${c.roll}/${c.maxRoll})`;
+      }).join(', ');
+      reportText += `Details: ${details}.`;
+
+      for (const comp of competitors) {
+        if (comp.id !== 'neutral') {
           this.pendingChatMessages.push({
             playerId: comp.id,
             text: reportText
           });
         }
-
-        console.log(`[REVOLT FAILED] Revolt attempt on Planet ${planet.name} failed. 120s immunity applied.`);
       }
+
+      console.log(`[REVOLT FAILED] Revolt attempt on Planet ${planet.name} failed. Cooldown: ${cooldownSeconds}s.`);
     }
+
+    planet.revoltCompetitors = null;
   }
 
   update(deltaTime) {
@@ -2969,7 +3198,32 @@ export class Game {
     }
     
     for (const planet of this.planets) {
+      if (planet.inRevolt) {
+        planet.revoltTimer = Math.max(0, (planet.revoltTimer || 0) - deltaTime);
+        if (Math.random() < 0.15) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = Math.random() * planet.radius;
+          const ex = planet.x + Math.cos(angle) * dist;
+          const ey = planet.y + Math.sin(angle) * dist;
+          const isFirework = Math.random() < 0.4;
+          this.explosions.push({
+            id: 'exp_' + Math.random().toString(36).substr(2, 9),
+            x: ex,
+            y: ey,
+            color: '#ff3333',
+            age: 0,
+            duration: 1.0,
+            isFirework: isFirework,
+            size: 10 + Math.random() * 20
+          });
+        }
+        if (planet.revoltTimer <= 0) {
+          planet.inRevolt = false;
+          this.resolveRevolt(planet);
+        }
+      } else {
         planet.update(deltaTime, this.planets, this.settings, this);
+      }
     }
 
     // Owned planets exert sympathy on neutral and enemy planets within their gravity well that have less ships than them at the rate of 1 per minute.
@@ -3732,9 +3986,11 @@ export class Game {
 
       // 4. Diplomats sympathy generation
       if ((ship.diplomat || 0) > 0) {
+        ship.parley = Math.min((ship.diplomat || 0) * 3, (ship.parley || 0) + ((ship.diplomat || 0) / 60) * dt);
         ship.diplomatTargetPlanetId = null;
         // Find all qualifying planets (neutral, enemy, or friendly) within sensor range that are not at max empathy/sympathy
         const qualifyingPlanets = [];
+        const isParleyFull = (ship.parley || 0) >= (ship.diplomat || 0) * 3 - 0.01;
         for (const p of this.planets) {
           const dx = p.x - ship.x;
           const dy = p.y - ship.y;
@@ -3743,6 +3999,15 @@ export class Game {
             const currentSym = p.sympathy ? (p.sympathy[ship.owner.id] || 0) : 0;
             const isMaxEmpathy = currentSym >= p.maxShips;
             if (!isMaxEmpathy && !p.dead) {
+              const isFriendly = p.owner && p.owner.id === ship.owner.id;
+              if (isFriendly) {
+                const isTargeted = (ship.targetPlanet && ship.targetPlanet.id === p.id) || 
+                                   (ship.cruiserTargetType === 'planet' && ship.cruiserTargetId === p.id);
+                if (!isParleyFull && !isTargeted) {
+                  // Don't use parleys on a friendly world unless parley capacity is full or targeted
+                  continue;
+                }
+              }
               qualifyingPlanets.push({ planet: p, dist: dist });
             }
           }
@@ -3794,9 +4059,10 @@ export class Game {
         if (targetPlanet) {
           ship.diplomatTargetPlanetId = targetPlanet.id;
           ship.diplomatTimer = (ship.diplomatTimer || 0) + dt;
-          const attemptInterval = 60 / ship.diplomat;
-          if (ship.diplomatTimer >= attemptInterval) {
+          const attemptInterval = 6;
+          if (ship.diplomatTimer >= attemptInterval && (ship.parley || 0) > 0.99) {
             ship.diplomatTimer -= attemptInterval;
+            ship.parley = Math.max(0, ship.parley - 1);
 
             // Standard sympathy attempt logic using tooltip formula:
             const expBonus = Math.sqrt(ship.owner.expScore || 0);
@@ -3823,7 +4089,7 @@ export class Game {
             if (ship.cruiserStyle === targetPlanet.racialAffinity || (ship.owner && ship.owner.cruiserStyle === targetPlanet.racialAffinity)) {
               rawChance += 20;
             }
-            const chancePercent = Math.max(0, Math.min(100, Math.round(rawChance)));
+            const chancePercent = Math.max(0, Math.round(rawChance));
             
             const roll = Math.floor(Math.random() * 100) + 1;
 

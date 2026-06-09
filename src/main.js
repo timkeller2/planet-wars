@@ -1003,6 +1003,42 @@ function getHabName(habitability) {
 
       lines.push({ label: `Produces: ${producedIcons}`, value: `Wants: ${wantedStr}`, color: '#fff' });
 
+      const isNeutralOrEnemy = !p.ownerId || p.ownerId !== localPlayer.id;
+      if (isNeutralOrEnemy) {
+        const currentSym = p.sympathy?.[localPlayer.id] || 0;
+        const expBonus = Math.sqrt(localPlayer.expScore || 0);
+        const selectedCruiser = getSelectedCruiser();
+        const shipExpBonus = selectedCruiser ? Math.sqrt(selectedCruiser.expScore || 0) : 0;
+        const bonusSum = expBonus + shipExpBonus;
+        const disposition = p.disposition?.[localPlayer.id] ?? 0;
+        
+        let racialBonus = 0;
+        if (selectedCruiser && (selectedCruiser.cruiserStyle === p.racialAffinity || (selectedCruiser.owner && selectedCruiser.owner.cruiserStyle === p.racialAffinity))) {
+          racialBonus = 20;
+        }
+
+        const chanceBase = 30 + disposition + currentSym + bonusSum + racialBonus;
+        const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10 + racialBonus;
+        
+        const basePercent = Math.max(0, Math.round(chanceBase));
+        const prefPercent = Math.max(0, Math.round(chancePref));
+        
+        if (p.preferredResource) {
+          const prefEmoji = resourceEmojis[p.preferredResource] || '💎';
+          lines.push({ 
+            label: '🤝 Diplomacy Chance', 
+            value: `${basePercent}%, w/ ${prefEmoji}: ${prefPercent}%`, 
+            color: '#4caf50' 
+          });
+        } else {
+          lines.push({ 
+            label: '🤝 Diplomacy Chance', 
+            value: `${basePercent}%`, 
+            color: '#4caf50' 
+          });
+        }
+      }
+
       const assocPlayers = new Set();
       if (p.sympathy) {
         for (const pId of Object.keys(p.sympathy)) {
@@ -1190,50 +1226,7 @@ function getHabName(habitability) {
 
 
 
-      const isNeutralOrEnemy = !p.ownerId || p.ownerId !== localPlayer.id;
-      if (isNeutralOrEnemy) {
-        const currentSym = p.sympathy?.[localPlayer.id] || 0;
-        const expBonus = Math.sqrt(localPlayer.expScore || 0);
-        const selectedCruiser = getSelectedCruiser();
-        const shipExpBonus = selectedCruiser ? Math.sqrt(selectedCruiser.expScore || 0) : 0;
-        const bonusSum = expBonus + shipExpBonus;
-        const disposition = p.disposition?.[localPlayer.id] ?? 0;
-        
-        let racialBonus = 0;
-        if (selectedCruiser && (selectedCruiser.cruiserStyle === p.racialAffinity || (selectedCruiser.owner && selectedCruiser.owner.cruiserStyle === p.racialAffinity))) {
-          racialBonus = 20;
-        }
 
-        const chanceBase = 30 + disposition + currentSym + bonusSum + racialBonus;
-        const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10 + racialBonus;
-        
-        const basePercent = Math.max(0, Math.min(100, Math.round(chanceBase)));
-        const prefPercent = Math.max(0, Math.min(100, Math.round(chancePref)));
-        
-        const emojis = {
-          dilithium: '💎',
-          merculite: '☄️',
-          duranium: '🔲',
-          tritanium: '🔩',
-          antimatter: '🌀',
-          deuterium: '💧',
-          latinum: '🏺'
-        };
-        if (p.preferredResource) {
-          const prefEmoji = emojis[p.preferredResource] || '💎';
-          lines.push({ 
-            label: '🤝 Diplomacy Chance', 
-            value: `${basePercent}%, w/ ${prefEmoji}: ${prefPercent}%`, 
-            color: '#4caf50' 
-          });
-        } else {
-          lines.push({ 
-            label: '🤝 Diplomacy Chance', 
-            value: `${basePercent}%`, 
-            color: '#4caf50' 
-          });
-        }
-      }
 
       if (serverState.storms) {
         for (const storm of serverState.storms) {
@@ -2644,7 +2637,7 @@ function getHabName(habitability) {
           floatingAnimations.push({
             x: p.x,
             y: p.y - 30,
-            text: '✊ REVOLT ATTEMPT! ✊',
+            text: `✊ ${p.name} is in revolt! ✊`,
             type: 'revolt',
             age: 0,
             duration: 4.0
@@ -6808,6 +6801,28 @@ function getHabName(habitability) {
           }
         }
 
+        if (p.inRevolt) {
+          ctx.save();
+          ctx.beginPath();
+          const pulseRadius = p.radius + 15 + Math.sin(Date.now() / 100) * 4;
+          ctx.arc(p.x, p.y, pulseRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = '#ff3333';
+          ctx.lineWidth = 3;
+          ctx.shadowColor = '#ff3333';
+          ctx.shadowBlur = 12;
+          ctx.stroke();
+
+          ctx.font = 'bold 13px Orbitron';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.shadowColor = '#000';
+          ctx.shadowBlur = 4;
+          const alpha = 0.5 + Math.sin(Date.now() / 150) * 0.5;
+          ctx.fillStyle = `rgba(255, 51, 51, ${alpha})`;
+          ctx.fillText('✊ REVOLTING', p.x, p.y - p.radius - 20);
+          ctx.restore();
+        }
+
         ctx.shadowBlur = 0;
 
         if (p.focusTransition) {
@@ -7507,6 +7522,52 @@ function getHabName(habitability) {
             }
           }
 
+          // Show Diplomacy Chance on neutral/enemy planets
+          const isNeutralOrEnemy = !hp.ownerId || hp.ownerId !== localPlayer.id;
+          if (isNeutralOrEnemy) {
+            const currentSym = hp.sympathy?.[localPlayer.id] || 0;
+            const expBonus = Math.sqrt(myPlayer.expScore || 0);
+            const selectedCruiser = getSelectedCruiser();
+            const shipExpBonus = selectedCruiser ? Math.sqrt(selectedCruiser.expScore || 0) : 0;
+            const bonusSum = expBonus + shipExpBonus;
+            const disposition = hp.disposition?.[localPlayer.id] ?? 0;
+            
+            let racialBonus = 0;
+            if (selectedCruiser && (selectedCruiser.cruiserStyle === hp.racialAffinity || (selectedCruiser.owner && selectedCruiser.owner.cruiserStyle === hp.racialAffinity))) {
+              racialBonus = 20;
+            }
+
+            const chanceBase = 30 + disposition + currentSym + bonusSum + racialBonus;
+            const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10 + racialBonus;
+            
+            const basePercent = Math.max(0, Math.round(chanceBase));
+            const prefPercent = Math.max(0, Math.round(chancePref));
+            
+            const emojis = {
+              dilithium: '💎',
+              merculite: '☄️',
+              duranium: '🔲',
+              tritanium: '🔩',
+              antimatter: '🌀',
+              deuterium: '💧',
+              latinum: '🏺'
+            };
+            if (hp.preferredResource) {
+              const prefEmoji = emojis[hp.preferredResource] || '💎';
+              lines.push({ 
+                label: '🤝 Diplomacy Chance', 
+                value: `${basePercent}%, with ${prefEmoji}: ${prefPercent}%`, 
+                color: '#4caf50' 
+              });
+            } else {
+              lines.push({ 
+                label: '🤝 Diplomacy Chance', 
+                value: `${basePercent}%`, 
+                color: '#4caf50' 
+              });
+            }
+          }
+
           // Garrison
           const garrisonPenalty = Math.floor(hp.ships / 5);
           if (garrisonPenalty > 0) {
@@ -7693,51 +7754,7 @@ function getHabName(habitability) {
             }
           }
 
-          // Show Diplomacy Chance on neutral/enemy planets
-          const isNeutralOrEnemy = !hp.ownerId || hp.ownerId !== localPlayer.id;
-          if (isNeutralOrEnemy) {
-            const currentSym = hp.sympathy?.[localPlayer.id] || 0;
-            const expBonus = Math.sqrt(myPlayer.expScore || 0);
-            const selectedCruiser = getSelectedCruiser();
-            const shipExpBonus = selectedCruiser ? Math.sqrt(selectedCruiser.expScore || 0) : 0;
-            const bonusSum = expBonus + shipExpBonus;
-            const disposition = hp.disposition?.[localPlayer.id] ?? 0;
-            
-            let racialBonus = 0;
-            if (selectedCruiser && (selectedCruiser.cruiserStyle === hp.racialAffinity || (selectedCruiser.owner && selectedCruiser.owner.cruiserStyle === hp.racialAffinity))) {
-              racialBonus = 20;
-            }
 
-            const chanceBase = 30 + disposition + currentSym + bonusSum + racialBonus;
-            const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10 + racialBonus;
-            
-            const basePercent = Math.max(0, Math.min(100, Math.round(chanceBase)));
-            const prefPercent = Math.max(0, Math.min(100, Math.round(chancePref)));
-            
-            const emojis = {
-              dilithium: '💎',
-              merculite: '☄️',
-              duranium: '🔲',
-              tritanium: '🔩',
-              antimatter: '🌀',
-              deuterium: '💧',
-              latinum: '🏺'
-            };
-            if (hp.preferredResource) {
-              const prefEmoji = emojis[hp.preferredResource] || '💎';
-              lines.push({ 
-                label: '🤝 Diplomacy Chance', 
-                value: `${basePercent}%, with ${prefEmoji}: ${prefPercent}%`, 
-                color: '#4caf50' 
-              });
-            } else {
-              lines.push({ 
-                label: '🤝 Diplomacy Chance', 
-                value: `${basePercent}%`, 
-                color: '#4caf50' 
-              });
-            }
-          }
 
           if (serverState.storms) {
             for (const storm of serverState.storms) {
@@ -9445,6 +9462,17 @@ function getHabName(habitability) {
               currentY -= 1;
             }
             
+            if (s.isCruiser && (s.diplomat || 0) > 0) {
+              currentY -= barH;
+              ctx.fillStyle = '#443d00';
+              ctx.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctx.fillStyle = '#ffff00';
+              const maxParley = (s.diplomat || 0) * 3;
+              const ratio = maxParley > 0 ? Math.min(1.0, Math.max(0, s.parley || 0) / maxParley) : 0;
+              ctx.fillRect(s.x - barW / 2, currentY, barW * ratio, barH);
+              currentY -= 1;
+            }
+            
             if (s.health < s.maxHealth) {
               currentY -= barH;
               ctx.fillStyle = 'red';
@@ -9837,6 +9865,27 @@ function getHabName(habitability) {
               ctx.lineWidth = 6;
               ctx.stroke();
             }
+          } else if (exp.isFirework) {
+            const particleCount = 12;
+            const alpha = Math.max(0, 1 - exp.age);
+            const radius = exp.age * (exp.size || 25);
+            ctx.save();
+            ctx.strokeStyle = `rgba(255, 51, 51, ${alpha})`;
+            ctx.lineWidth = 2.5;
+            ctx.shadowColor = '#ff3333';
+            ctx.shadowBlur = 8;
+            for (let p = 0; p < particleCount; p++) {
+              const angle = (p / particleCount) * Math.PI * 2 + (exp.age * 0.5);
+              const startX = exp.x + Math.cos(angle) * (radius * 0.4);
+              const startY = exp.y + Math.sin(angle) * (radius * 0.4);
+              const endX = exp.x + Math.cos(angle) * radius;
+              const endY = exp.y + Math.sin(angle) * radius;
+              ctx.beginPath();
+              ctx.moveTo(startX, startY);
+              ctx.lineTo(endX, endY);
+              ctx.stroke();
+            }
+            ctx.restore();
           } else if (exp.color === 'amoeba-shrug') {
             ctx.beginPath();
             const maxRadius = 6;
@@ -10029,6 +10078,8 @@ function getHabName(habitability) {
           fontsize = 4; // constant small font size (20% bigger than 10 / 3)
         } else if (anim.type === 'resource_wanted') {
            fontsize = 11 + (progress * 9); // grows from 11px to 20px
+        } else if (anim.type === 'revolt') {
+           fontsize = 18 + (progress * 22); // starts at 18px, grows to 40px
         }
 
         ctx.font = `bold ${fontsize}px Orbitron`; // growing font
@@ -10114,6 +10165,10 @@ function getHabName(habitability) {
           xOffset = Math.sin(progress * Math.PI * 2) * 5;
           ctx.fillStyle = `rgba(255, 223, 0, ${alpha})`; // gold
           ctx.shadowColor = `rgba(255, 140, 0, ${alpha})`; // dark orange glow
+        } else if (anim.type === 'revolt') {
+          xOffset = (Math.random() - 0.5) * 12; // Jitter text slightly
+          ctx.fillStyle = `rgba(255, 51, 51, ${alpha})`; // bright red
+          ctx.shadowColor = `rgba(139, 0, 0, ${alpha})`; // deep red glow
         } else {
           xOffset = Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
