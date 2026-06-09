@@ -25,6 +25,8 @@ export class Planet {
     this.disposition = {};
     this.retainedShips = false;
     this.revoltCooldown = 0;
+    this.maxRevoltCooldown = 0;
+    this.revoltCheckTimer = Math.random() * 60000;
     const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
     this.preferredResource = (Math.random() < 1/3) ? resourcesList[Math.floor(Math.random() * resourcesList.length)] : null;
     this.preferredResourceWantedEvent = false;
@@ -34,7 +36,7 @@ export class Planet {
     this.expScore = 0;
     this.expProgress = 0;
 
-    this.sizeClass = randomWeightedMiddle(60, 200);
+    this.sizeClass = randomWeightedMiddle(60, 150);
     this.habitability = randomWeightedMiddle(15, 150);
 
     // Cap initial radius to sizeClass
@@ -335,6 +337,17 @@ export class Planet {
 
     if (this.revoltCooldown > 0) {
       this.revoltCooldown = Math.max(0, this.revoltCooldown - deltaTime);
+      if (this.revoltCooldown <= 0) {
+        this.maxRevoltCooldown = 0;
+      }
+    }
+
+    this.revoltCheckTimer = (this.revoltCheckTimer || 0) + deltaTime;
+    if (this.revoltCheckTimer >= 60000) {
+      this.revoltCheckTimer -= 60000;
+      if (game && typeof game.checkSinglePlanetSympathyRevolt === 'function') {
+        game.checkSinglePlanetSympathyRevolt(this);
+      }
     }
 
     if (this.justAssigned) {
@@ -510,7 +523,13 @@ export class Planet {
     const pillHeight = Math.max(14, this.radius * 0.55);
     ctx.fillRect(this.x - textWidth / 2 - 6, this.y - pillHeight / 2, textWidth + 12, pillHeight);
 
-    ctx.fillStyle = '#000';
+    const techBonus = this.owner ? (this.owner.techScore || 0) : 0;
+    const threshold = this.sizeClass * ((this.habitability + techBonus) / 100);
+    if (this.maxShips >= threshold) {
+      ctx.fillStyle = '#00ff00'; // green for dark background
+    } else {
+      ctx.fillStyle = '#000';
+    }
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, this.x, this.y);

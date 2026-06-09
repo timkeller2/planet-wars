@@ -1147,6 +1147,11 @@ export class Game {
           ship.cruiserStyle = source.racialAffinity;
           ship.isCruiser = true;
           ship.count = 1;
+          let startingExp = source.expScore || 0;
+          if (source.focusMode === 'garrison') {
+            startingExp += (source.maxShips || 0) / 10;
+          }
+          ship.expScore = startingExp;
           this.ships.push(ship);
           return;
         }
@@ -1290,7 +1295,7 @@ export class Game {
     ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
     ship.sourcePlanet = source;
     let startingExp = source.expScore || 0;
-    if (source.focusMode === 'garrison' && !source.homeworldOf) {
+    if (source.focusMode === 'garrison') {
       startingExp += (source.maxShips || 0) / 10;
     }
     if (isTritaniumPaid) {
@@ -1328,41 +1333,59 @@ export class Game {
     if (ship.count > 1) {
       const explodedCount = Math.round(ship.count * explodeChance);
       if (explodedCount > 0) {
-        ship.count -= explodedCount;
-        if (!this.explosions) this.explosions = [];
-        this.explosions.push({
-          x: ship.x,
-          y: ship.y,
-          color: '#add8e6',
-          age: 0,
-          isMassive: explodedCount > 10
-        });
+        const playerCredits = player ? (player.credits || 0) : 0;
+        const creditsToPay = Math.min(playerCredits, explodedCount);
+        if (creditsToPay > 0 && player) {
+          player.credits -= creditsToPay;
+          console.log(`[Warp Casualties Paid] Player ${player.id} paid ${creditsToPay} credits to save warp casualties.`);
+        }
+        const unpaidCasualties = explodedCount - creditsToPay;
+        if (unpaidCasualties > 0) {
+          ship.count -= unpaidCasualties;
+          if (!this.explosions) this.explosions = [];
+          this.explosions.push({
+            x: ship.x,
+            y: ship.y,
+            color: '#add8e6',
+            age: 0,
+            isMassive: unpaidCasualties > 10
+          });
+        }
       }
       if (ship.count <= 0) {
         return true; // Whole fleet exploded
       }
     } else {
       if (Math.random() < explodeChance) {
-        if (!this.explosions) this.explosions = [];
-        this.explosions.push({
-          x: ship.x,
-          y: ship.y,
-          color: '#add8e6',
-          age: 0,
-          isMassive: false
-        });
-        
-        if (ship.maxHealth > 0) {
-          if (ship.fuel > 0) {
-            ship.fuel -= 1;
+        const isCruiser = ship.maxHealth > 0;
+        const playerCredits = player ? (player.credits || 0) : 0;
+        if (playerCredits >= 1 && player && !isCruiser) {
+          player.credits -= 1;
+          console.log(`[Warp Casualties Paid] Player ${player.id} paid 1 credit to save single ship warp casualty.`);
+        } else {
+          if (!this.explosions) this.explosions = [];
+          this.explosions.push({
+            x: ship.x,
+            y: ship.y,
+            color: '#add8e6',
+            age: 0,
+            isMassive: false
+          });
+          
+          if (ship.maxHealth > 0) {
+            if (ship.fuel > 0) {
+              ship.fuel -= 1;
+            } else {
+              const warpDamage = Math.floor(Math.random() * 6) + 1;
+              ship.health -= warpDamage;
+              console.log(`[Warp Damage] Cruiser ${ship.id} took ${warpDamage} warp damage (fuel was empty).`);
+            }
+            if (ship.health <= 0) {
+              return true;
+            }
           } else {
-            ship.health -= 1;
-          }
-          if (ship.health <= 0) {
             return true;
           }
-        } else {
-          return true;
         }
       }
     }
@@ -1410,6 +1433,11 @@ export class Game {
           ship.cruiserStyle = source.racialAffinity;
           ship.isCruiser = true;
           ship.count = 1;
+          let startingExp = source.expScore || 0;
+          if (source.focusMode === 'garrison') {
+            startingExp += (source.maxShips || 0) / 10;
+          }
+          ship.expScore = startingExp;
           this.ships.push(ship);
           return;
         }
@@ -1624,16 +1652,22 @@ export class Game {
         }
         ship.speedModifier = 1.0;
         
-        let startingExp = source.expScore || 0;
-        if (source.focusMode === 'garrison' && !source.homeworldOf) {
-          startingExp += (source.maxShips || 0) / 10;
+        const cap = owner ? (owner.expScore || 0) : 0;
+        let baseStartingExp = source.expScore || 0;
+        if (source.focusMode === 'garrison') {
+          baseStartingExp += (source.maxShips || 0) / 10;
         }
+        let finalStartingExp = Math.min(baseStartingExp, cap);
+
         let crewExpXp = 0;
-        if (owner && owner.crewExperience) {
-          crewExpXp = owner.crewExperience / finalMaxHealth;
-          owner.crewExperience = 0;
+        if (owner && owner.crewExperience && finalStartingExp < cap) {
+          const diff = cap - finalStartingExp;
+          const neededCrewExp = diff * finalMaxHealth;
+          const crewExpToUse = Math.min(owner.crewExperience, neededCrewExp);
+          owner.crewExperience -= crewExpToUse;
+          crewExpXp = crewExpToUse / finalMaxHealth;
         }
-        ship.expScore = startingExp + crewExpXp;
+        ship.expScore = finalStartingExp + crewExpXp;
 
         ship.cruiserStyle = source.racialAffinity;
         ship.isCruiser = true;
@@ -2017,90 +2051,164 @@ export class Game {
   }
   checkSympathyRevolts() {
     for (const planet of this.planets) {
-      if ((planet.revoltCooldown || 0) > 0) continue;
-      if (!planet.sympathy) continue;
+      this.checkSinglePlanetSympathyRevolt(planet);
+    }
+  }
 
-      const threshold = planet.ships / 3;
+  checkSinglePlanetSympathyRevolt(planet) {
+    if ((planet.revoltCooldown || 0) > 0) return;
+    if (!planet.sympathy) return;
 
-      const eligibleNonOwners = [];
-      for (const [pId, symVal] of Object.entries(planet.sympathy)) {
-        const isNotOwner = !planet.owner || pId !== planet.owner.id;
-        if (isNotOwner && symVal > threshold) {
-          eligibleNonOwners.push({ id: pId, sympathy: symVal });
-        }
+    const threshold = planet.ships / 3;
+
+    const eligibleNonOwners = [];
+    for (const [pId, symVal] of Object.entries(planet.sympathy)) {
+      const isNotOwner = !planet.owner || pId !== planet.owner.id;
+      if (isNotOwner && symVal > threshold) {
+        eligibleNonOwners.push({ id: pId, sympathy: symVal });
+      }
+    }
+
+    if (eligibleNonOwners.length > 0) {
+      // If a successful revolt happened globally in the last 60 seconds, we don't allow another one.
+      // We skip the roll/check this time, which staggers/delays it to the next 60s window.
+      if ((this.globalRevoltCooldown || 0) > 0) return;
+
+      const competitors = [];
+
+      if (planet.owner) {
+        const ownerSym = planet.sympathy[planet.owner.id] || 0;
+        const maxRoll = Math.floor(planet.ships + ownerSym);
+        const rollVal = Math.floor(Math.random() * (maxRoll + 1));
+        competitors.push({ id: planet.owner.id, roll: rollVal, maxRoll, isOwner: true, name: planet.owner.name });
       }
 
-      if (eligibleNonOwners.length > 0) {
-        const competitors = [];
+      for (const competitor of eligibleNonOwners) {
+        const maxRoll = Math.floor(competitor.sympathy);
+        const rollVal = Math.floor(Math.random() * (maxRoll + 1));
+        const compPlayer = this.allPlayers.find(p => p.id === competitor.id);
+        const compName = compPlayer ? compPlayer.name : competitor.id;
+        competitors.push({ id: competitor.id, roll: rollVal, maxRoll, isOwner: false, name: compName });
+      }
 
-        if (planet.owner) {
-          const ownerSym = planet.sympathy[planet.owner.id] || 0;
-          const maxRoll = planet.ships + ownerSym;
-          const rollVal = Math.floor(Math.random() * (maxRoll + 1));
-          competitors.push({ id: planet.owner.id, roll: rollVal, isOwner: true });
-        }
-
-        for (const competitor of eligibleNonOwners) {
-          const maxRoll = competitor.sympathy;
-          const rollVal = Math.floor(Math.random() * (maxRoll + 1));
-          competitors.push({ id: competitor.id, roll: rollVal, isOwner: false });
-        }
-
-        competitors.sort((a, b) => b.roll - a.roll);
-        const winner = competitors[0];
-
-        if (winner && !winner.isOwner) {
-          const winnerPlayer = this.allPlayers.find(p => p.id === winner.id);
-          if (winnerPlayer) {
-            const oldShips = planet.ships;
-            const originalOwner = planet.owner;
-
-            planet.owner = winnerPlayer;
-
-            planet.revoltCooldown = 180000;
-            planet.justAssigned = true;
-            planet.focusTransition = null;
-
-            if (!originalOwner) {
-              if (oldShips > planet.maxShips) {
-                planet.retainedShips = true;
-              }
-              const roll = Math.random();
-              if (roll < 0.10) {
-                planet.isResearch = true;
-              } else if (roll < 0.20) {
-                planet.isMilitary = true;
-              } else if (roll < 0.30) {
-                planet.isSpeedPlanet = true;
-              }
-            }
-
-            // Queue a chat message for the player who wins the revolt
-            this.pendingChatMessages = this.pendingChatMessages || [];
-            this.pendingChatMessages.push({
-              playerId: winnerPlayer.id,
-              text: `Your subverters succeeded! Planet ${planet.name} has revolted and joined your empire!`
-            });
-
-            console.log(`[REVOLT] Planet ${planet.name} revolted through competitive roll and joined player ${winnerPlayer.name}`);
-            return; // Only allow one revolt per minute
+      // Calculate exact odds using a quick, robust simulation
+      const wins = {};
+      for (const c of competitors) wins[c.id] = 0;
+      const simRuns = 5000;
+      for (let r = 0; r < simRuns; r++) {
+        let bestId = null;
+        let bestRoll = -1;
+        for (const c of competitors) {
+          const roll = Math.floor(Math.random() * (c.maxRoll + 1));
+          if (roll > bestRoll) {
+            bestRoll = roll;
+            bestId = c.id;
           }
-        } else {
-          // Owner successfully defended. Failed revolt attempt!
-          planet.revoltCooldown = 120000; // 120 seconds immunity
-          console.log(`[REVOLT FAILED] Revolt attempt on Planet ${planet.name} failed. 120s immunity applied.`);
         }
+        if (bestId !== null) wins[bestId]++;
+      }
+      const oddsMap = {};
+      for (const c of competitors) {
+        oddsMap[c.id] = ((wins[c.id] / simRuns) * 100).toFixed(1) + '%';
+      }
+
+      competitors.sort((a, b) => b.roll - a.roll);
+      const winner = competitors[0];
+
+      // Trigger the revolt attempt event for the client sound/effects
+      planet.revoltAttemptEvent = true;
+
+      if (winner && !winner.isOwner) {
+        const winnerPlayer = this.allPlayers.find(p => p.id === winner.id);
+        if (winnerPlayer) {
+          const oldShips = planet.ships;
+          const originalOwner = planet.owner;
+
+          planet.owner = winnerPlayer;
+
+          planet.revoltCooldown = 180000;
+          planet.maxRevoltCooldown = 180000;
+          planet.justAssigned = true;
+          planet.focusTransition = null;
+
+          // Set global cooldown for successful revolts
+          this.globalRevoltCooldown = 60000;
+
+          if (!originalOwner) {
+            if (oldShips > planet.maxShips) {
+              planet.retainedShips = true;
+            }
+            const roll = Math.random();
+            if (roll < 0.10) {
+              planet.isResearch = true;
+            } else if (roll < 0.20) {
+              planet.isMilitary = true;
+            } else if (roll < 0.30) {
+              planet.isSpeedPlanet = true;
+            }
+          }
+
+          // Construct and queue the detailed report message for participants
+          const statusText = "SUCCESSFUL REVOLT";
+          let reportText = `[${statusText}] Planet ${planet.name}: `;
+          const details = competitors.map(c => {
+            const odds = oddsMap[c.id] || '0%';
+            return `${c.name} (Odds: ${odds}, Rolled ${c.roll}/${c.maxRoll})`;
+          }).join(', ');
+          reportText += `${details}. Winner: ${winnerPlayer.name}.`;
+
+          this.pendingChatMessages = this.pendingChatMessages || [];
+          for (const comp of competitors) {
+            this.pendingChatMessages.push({
+              playerId: comp.id,
+              text: reportText
+            });
+          }
+
+          console.log(`[REVOLT] Planet ${planet.name} revolted through competitive roll and joined player ${winnerPlayer.name}`);
+          return; // Only allow one successful revolt globally in this tick (and sets global cooldown)
+        }
+      } else {
+        // Owner successfully defended. Failed revolt attempt!
+        const ownerComp = competitors.find(c => c.isOwner);
+        const ownerRoll = ownerComp ? ownerComp.roll : 0;
+
+        const challengers = competitors.filter(c => !c.isOwner);
+        const highestChallengerRoll = challengers.length > 0 ? Math.max(...challengers.map(c => c.roll)) : 0;
+
+        const rollDiff = Math.max(0, ownerRoll - highestChallengerRoll);
+        const cooldownSeconds = 60 + rollDiff * 3;
+
+        planet.revoltCooldown = cooldownSeconds * 1000;
+        planet.maxRevoltCooldown = cooldownSeconds * 1000;
+
+        // Construct and queue the detailed report message for participants
+        const statusText = "REVOLT FAILED";
+        let reportText = `[${statusText}] Planet ${planet.name}: `;
+        const details = competitors.map(c => {
+          const odds = oddsMap[c.id] || '0%';
+          return `${c.name} (Odds: ${odds}, Rolled ${c.roll}/${c.maxRoll})`;
+        }).join(', ');
+        const ownerPlayer = this.allPlayers.find(p => p.id === winner.id);
+        const ownerName = ownerPlayer ? ownerPlayer.name : winner.id;
+        reportText += `${details}. Winner: ${ownerName}.`;
+
+        this.pendingChatMessages = this.pendingChatMessages || [];
+        for (const comp of competitors) {
+          this.pendingChatMessages.push({
+            playerId: comp.id,
+            text: reportText
+          });
+        }
+
+        console.log(`[REVOLT FAILED] Revolt attempt on Planet ${planet.name} failed. 120s immunity applied.`);
       }
     }
   }
 
   update(deltaTime) {
     this.ships.updateGrid();
-    this.revoltCheckTimer = (this.revoltCheckTimer || 0) + deltaTime;
-    if (this.revoltCheckTimer >= 60000) {
-      this.revoltCheckTimer -= 60000;
-      this.checkSympathyRevolts();
-    }
+    this.globalRevoltCooldown = Math.max(0, (this.globalRevoltCooldown || 0) - deltaTime);
 
     this.gameTime += deltaTime;
 
@@ -2699,7 +2807,7 @@ export class Game {
 
       player.commandLimit = 1 + Math.ceil((player.planetCount || 0) / 3) + garrisonWorlds + fullGarrisonWorlds + controlledHomeworlds + (controlsOwnHomeworld ? 1 : 0);
       player.tradeCapacity = Math.ceil((player.planetCount || 0) / 5) + commerceWorlds;
-      player.stockpileCapacity = ((player.commandLimit || 0) + (player.tradeCapacity || 0)) * 3;
+      player.stockpileCapacity = (player.commandLimit || 0) + (player.tradeCapacity || 0);
 
       player.storageFeeAccumulator = (player.storageFeeAccumulator || 0) + deltaTime;
       while (player.storageFeeAccumulator >= 1000) {
@@ -2714,7 +2822,7 @@ export class Game {
           totalStockpile += (player.resources[res] || 0);
         }
         
-        const stockpileCapacity = player.stockpileCapacity || 3;
+        const stockpileCapacity = player.stockpileCapacity || 1;
         player.totalStockpile = totalStockpile;
 
         if (totalStockpile > stockpileCapacity) {
@@ -3012,7 +3120,9 @@ export class Game {
               accuracy: laser.accuracy,
               isCruiser: true,
               attackerOwnerId: laser.attackerOwnerId,
-              targetOwnerId: laser.targetOwnerId
+              targetOwnerId: laser.targetOwnerId,
+              isBombAttack: !!laser.isBombAttack,
+              hit: !!laser.destroysDefender
             });
           }
           if (laser.destroysDefender) {

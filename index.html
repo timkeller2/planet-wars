@@ -367,17 +367,19 @@
                 </ul>
               </li>
             </ul>
-            <p style="margin-top: 12px; font-size: 0.95rem; color: #aaa;"><strong>Order Modifiers</strong> (toggle before issuing an order):</p>
+            <p style="margin-top: 12px; font-size: 0.95rem; color: #aaa;"><strong>Order Modifiers</strong> (toggle keybinds):</p>
             <ul>
-              <li><strong>W — Warp:</strong> Toggle warp mode for the next launch.</li>
-              <li><strong>B — Bomb Eco:</strong> Launch eco bombers (requires 🚀 Military planet).</li>
-              <li><strong>Q — Bomb Ships:</strong> Launch ship bombers (requires 🚀 Military planet).</li>
-              <li><strong>F — Fill Mode:</strong> Sends only enough ships to fill the target friendly planet to capacity.</li>
-              <li><strong>S — Scout Mode:</strong> Sends only 10% of selected ships (min 3) as a scouting party.</li>
-              <li><strong>C — Cruiser Build:</strong> Open cruiser construction menu (requires 🚀 Military planet or Homeworld).</li>
-              <li><strong>O — Focus Mode:</strong> Open planet focus mode selector (select an owned planet first).</li>
-              <li><strong>U — Upgrade Mode:</strong> Open cruiser upgrade menu (cruiser must be near a friendly planet).</li>
-              <li><strong>P — Patrol:</strong> Toggle patrol mode for selected cruiser(s). Cruiser attacks enemies in range, returns to a friendly well to rearm, then returns to patrol station.</li>
+              <li><strong>W — Warp:</strong> Toggles warp speed/danger for the next fleet launch.</li>
+              <li><strong>B — Bomb Mode / Eco:</strong> When a planet is selected, toggles Eco bombers for the next launch. When cruiser(s) are selected, toggles auto-planet-bombardment.</li>
+              <li><strong>Q — Ship Bombers:</strong> Toggles ship bombers for the next launch (requires 🚀 Military planet).</li>
+              <li><strong>S — Scout / Scout Mode:</strong> When a planet is selected, toggles launching a 10% scouting fleet (requires Tech ≥ 100). When cruiser(s) are selected, toggles autonomous Scout mode.</li>
+              <li><strong>A — Attack:</strong> Toggles autonomous Attack/Engage mode for selected cruiser(s).</li>
+              <li><strong>R — Research:</strong> Toggles autonomous Research/Lab mode for selected cruiser(s) with Laboratories.</li>
+              <li><strong>D — Diplomat / Dismantle:</strong> Dismantles selected cruiser if inside a friendly gravity well; otherwise, toggles autonomous Diplomat mode for cruisers with the Diplomat upgrade.</li>
+              <li><strong>P — Patrol:</strong> Toggles autonomous Patrol mode for selected cruiser(s). Target-locking a planet automatically deactivates patrol.</li>
+              <li><strong>C — Cruiser Build:</strong> Opens the cruiser construction menu (requires 🚀 Military planet or Homeworld).</li>
+              <li><strong>O — Focus Mode:</strong> Opens the focus mode selector for a selected owned planet.</li>
+              <li><strong>U — Upgrade Mode:</strong> Opens the cruiser upgrade menu (cruiser must be near a friendly planet).</li>
             </ul>
           </div>
 
@@ -386,12 +388,13 @@
             <ul>
               <li><strong>Production:</strong> Owned planets auto-produce ships. Rate scales with how many ships the planet is missing, boosted by Tech Score. Human production above 1× is reduced by 1/3.</li>
               <li><strong>Low Population Penalty:</strong> Planets below 50 ships suffer reduced production. Below 5 ships, production drops to just <strong>10%</strong>.</li>
-              <li><strong>Capacity Growth:</strong> Full planets slowly gain +1 max capacity (in Economy focus). Homeworlds gain <strong>+2</strong>. Research-focused planets earn Tech instead. Garrison-focused planets hold double capacity but don't grow. Commerce-focused planets generate credits instead.</li>
+              <li><strong>Capacity Growth:</strong> Full planets slowly gain +1 max capacity (in Economy focus). Homeworlds gain <strong>+2</strong>. Research-focused planets earn Tech instead. Garrison-focused planets hold double capacity, don't grow, and grant a starting experience bonus (maxShips/10) to all launched fleets, cruisers, and capital ships built there. Commerce-focused planets generate credits instead.</li>
               <li><strong>Tech Score 🧪:</strong> Earned when planets at max capacity sit in <strong>Research</strong> focus. Human players have a failure chance based on galaxy capacity percentage (<code>failChance = capacityPercent × 2</code>). Success costs <strong>2 ships</strong> and grants +1 Tech (or +2 on 🔬 Research planets). Failure costs <strong>1 ship</strong> (🔬 Research planets still gain +1 on failure).</li>
               <li><strong>Tech Enhancement Bonuses:</strong> Each time your √Tech bonus increases by 1, you receive a random <strong>-10% upgrade cost discount</strong> on one upgrade category (down to -50% max). A floating text and chat message announce the discount.</li>
               <li><strong>Exp Score 🎯:</strong> Earned through combat (every 20 kills = +1 Exp). Eliminating a player or destroying a Homeworld awards <strong>+100 Exp</strong>. Diplomats also earn Exp through sympathy generation.</li>
               <li><strong>Credits 💲:</strong> A currency earned by <strong>Commerce</strong>-focused planets. Credits can supplement ship costs when building cruisers, paying for upgrades, and transitioning focus modes — reducing the garrison drain.</li>
-              <li><strong>Gravity Fields:</strong> Planets project gravity wells (radius = maxShips × 1.5, expanded by Tech/Exp). Military planets at full capacity get <strong>1.5× gravity radius</strong>. Garrison-focused planets at full capacity extend gravity by <strong>+ships/2</strong>. Friendly wells protect ships from attrition and allow cruiser healing/rearming.</li>
+              <li><strong>Resource Stockpile Capacity 📦:</strong> Caps the amount of resources you can stockpile before incurring storage fees. Capacity = Command Capacity + Trade Capacity.</li>
+              <li><strong>Gravity Fields:</strong> Planets project gravity wells (radius = maxShips × 1.5, expanded by Tech/Exp). Military planets at full capacity get <strong>1.5× gravity radius</strong>. Garrison-focused planets at full capacity extend gravity by <strong>+ships/2</strong>. Friendly wells protect ships from attrition, allow cruiser healing/rearming, and grant starting experience bonuses.</li>
               <li><strong>Orbital Bombardment:</strong> Each defending ship killed has an <strong>8%</strong> chance to reduce max capacity by 1. Below 55 max capacity = <strong>planet destroyed!</strong></li>
               <li><strong>Planet Explosion:</strong> Destroyed planets deal <strong>3d6 splash damage</strong> to all planets within 400px (reduced by 1 per 25px). Max capacity takes 1/3 of that. Military planet explosions deal <strong>3× damage</strong> in a <strong>600px</strong> radius. Chain reactions are possible!</li>
               <li><strong>Sacrificial Upgrade:</strong> Sending ships to a full friendly planet sacrifices them. Every <strong>20 sacrificed = +1 max capacity</strong>.</li>
@@ -414,7 +417,7 @@
               <li><strong>Overview:</strong> Every owned planet operates in one of five focus modes. Press <strong>O</strong> (or click the focus badge) on a selected planet to switch. Focus transitions take <strong>15 seconds</strong> and cost <strong>half the planet's max capacity</strong> in ships (payable with credits). Planets start in a random mode (Economy, Research, or Garrison).</li>
               <li><strong>📈 Economy (E):</strong> The default growth mode. When the planet is at full capacity, it gains <strong>+1 max capacity</strong> periodically (+2 for Homeworlds). This is how you expand your economy over time.</li>
               <li><strong>🔬 Research (R):</strong> When at full capacity, the planet generates <strong>Tech Score 🧪</strong> instead of growing capacity. Success rate decreases as your share of galactic capacity increases. Research planets (🔬 type) earn double tech. Essential for Tech Domination victory!</li>
-              <li><strong>🛡️ Garrison (G):</strong> The planet can hold up to <strong>2× its max capacity</strong> in ships, producing beyond the normal cap. It does not grow max capacity or earn tech when full. Garrison planets extend their gravity well radius by <strong>+ships/2</strong> when above capacity, creating massive defensive zones. Excess ships are sacrificed for capacity upgrades when transitioning out.</li>
+              <li><strong>🛡️ Garrison (G):</strong> The planet can hold up to <strong>2× its max capacity</strong> in ships, producing beyond the normal cap. It does not grow max capacity or earn tech when full. Garrison planets extend their gravity well radius by <strong>+ships/2</strong> when above capacity, and grant a starting experience bonus (maxShips/10) to all launched fleets, cruisers, and capital ships built there. Excess ships are sacrificed for capacity upgrades when transitioning out.</li>
               <li><strong>💲 Commerce (C):</strong> Requires <strong>&gt;100 max capacity</strong> to unlock. When at full capacity, the planet generates <strong>Credits</strong> at a rate proportional to ships above 100. Credits can be used to pay for cruiser construction, upgrades, and focus transitions — reducing the need to drain planet garrisons. Commerce planets do not grow capacity or earn tech.</li>
               <li><strong>⛏️ Mining (M):</strong> When selected, the planet passively extracts dilithium crystals, merculite, duranium, and other raw sci-fi materials found on it at double rate. If the planet is at full capacity (ships &gt;= max capacity), the extraction rate is doubled again. Stockpiled resources can be traded or sold to the galactic bank.</li>
             </ul>
@@ -423,7 +426,7 @@
           <!-- SHIPS & COMBAT -->
           <div id="help-topic-ships" class="help-page hidden">
             <ul>
-              <li><strong>Launch Cost:</strong> Each launch costs <strong>10 + your planet count − √Tech</strong> ships (capped at 250). Invest in Tech to launch cheaply!</li>
+              <li><strong>Launch Cost:</strong> Each launch costs <strong>10 + your planet count − √Tech</strong> ships (capped at 250). If you have credits and credits-pay is enabled (default), your credits will automatically be consumed to pay/offset this ship cost on a 1-to-1 basis!</li>
               <li><strong>Smart Reinforcements:</strong> Friendly planet-to-planet reinforcement launches are automated:
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
                   <li>If the destination is already full, <strong>0 ships</strong> are launched, preventing wastage.</li>
@@ -455,7 +458,7 @@
           <!-- CRUISERS -->
           <div id="help-topic-cruisers" class="help-page hidden">
             <ul>
-              <li><strong>Building Cruisers 🛸:</strong> Built from 🚀 Military planets or your Homeworld. Press <strong>C</strong> to open the build menu. Choose from 8 hull classes (Scout 15HP to Mammoth 50HP). Cost = ships + max capacity deducted from the planet. The planet must retain at least 55 max capacity after construction.</li>
+              <li><strong>Building Cruisers 🛸:</strong> Built from 🚀 Military planets or your Homeworld. Press <strong>C</strong> to open the build menu. Choose from 8 hull classes (Scout 15HP to Mammoth 50HP). Cost = ships + max capacity deducted from the planet. Starting XP is capped at the player's overall XP score (`player.expScore`), only consuming as much player `crewExperience` as needed. The planet must retain at least 55 max capacity after construction.</li>
               <li><strong>Hull Classes:</strong>
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
                   <li><strong>Scout (S):</strong> 15 HP — 50 ships, 2 cap</li>
@@ -468,15 +471,15 @@
                   <li><strong>Mammoth (M):</strong> 50 HP — 400 ships, 16 cap</li>
                 </ul>
               </li>
-              <li><strong>Movement &amp; Speed:</strong> Cruisers always launch at normal speed. Larger cruisers move slower. Engine upgrades add +3 speed per level. Damaged cruisers suffer a speed penalty (reduced by Damage Control).</li>
+              <li><strong>Movement &amp; Speed:</strong> Cruisers always launch at normal speed. Larger cruisers move slower. Engine upgrades add +3 speed per level. Damaged cruisers suffer a speed penalty. Moving at 1/2 or 1/4 speed settings grants hazard saving rolls (75% or 90% save chance).</li>
               <li><strong>Fuel System:</strong> Cruisers consume fuel outside friendly gravity wells. Flying costs <strong>4 fuel/tick</strong> (8 in warp). Stationary outside wells costs <strong>2 fuel/tick</strong>. Inside friendly wells, fuel regenerates. Base fuel capacity = maxHealth/5 (increased by Engine upgrades and Fuel Tanker).</li>
               <li><strong>Out of Fuel Penalty:</strong> At 0 fuel, cruisers move at <strong>1/4 speed</strong> and take <strong>1d6 direct HP damage</strong> per tick outside friendly wells.</li>
               <li><strong>Fuel Transfer:</strong> Friendly cruisers within sensor range autonomously share fuel — if one has fuel &gt;1, it donates 1 to a stranded ally.</li>
               <li><strong>Multi-shot Weapons:</strong> Cruisers fire laser shots per second equal to their current health. They target enemy ships, amoebas, and planets.</li>
               <li><strong>Bomb Sacs:</strong> Carry bombs = maxHealth/5 (increased by Munitions). Each bombardment volley on planets uses 1 bomb. Bombs reload inside friendly gravity wells.</li>
-              <li><strong>Armor Deflection:</strong> Base shrug chance = <strong>(MaxHealth + √Tech + √Exp×0.5 + √ShipExp×0.5)%</strong>, capped at <strong>75%</strong>. Shields upgrade adds +10% per level. If out of bombs (0), deflection is <strong>halved</strong> — keep them loaded!</li>
+              <li><strong>Armor Deflection:</strong> Base shrug chance = <strong>(MaxHealth + √Tech + √Exp + √ShipExp)%</strong>, capped at <strong>90%</strong>. Shields upgrade closes the deflection gap by <strong>20% of the remaining gap</strong> to 100% per level. Carrying Duranium resource adds a flat <strong>+10%</strong> shrug chance. If out of bombs (0), deflection is <strong>halved</strong> — keep them loaded!</li>
               <li><strong>Crew System:</strong> Cruisers have crew (up to 2× current health). Crew restores at 1/sec inside friendly wells when no enemies are within <strong>100px</strong>. Crew is consumed during boarding combat.</li>
-              <li><strong>Patrol Mode (P):</strong> Toggled via <strong>P</strong> key or button. Cruiser attacks enemies in sensor range, flies to a nearby friendly well to rearm, then returns to its patrol station. Great for automated area defense.</li>
+              <li><strong>Patrol Mode (P):</strong> Toggled via <strong>P</strong> key or button. Cruiser attacks enemies in sensor range, flies to a nearby friendly well to rearm, then returns to its patrol station. Target-locking a planet automatically deactivates patrol mode.</li>
               <li><strong>Bombardment Threat Safety:</strong> Cruisers automatically <strong>suspend bombardment</strong> when any enemy ship or Amoeba is within sensor range, switching to defensive engagement.</li>
               <li><strong>Order Queueing (Shift+Right-click):</strong> Queue movement and targeting orders. Cruisers execute them sequentially, advancing to the next waypoint automatically.</li>
               <li><strong>Cruiser Bomb Toggle (B):</strong> When cruiser(s) are selected, <strong>B</strong> toggles auto-planet-bombardment on/off for those cruisers.</li>
@@ -493,15 +496,15 @@
                 <ul style="margin-top: 6px; padding-left: 20px;">
                   <li><strong>📡 Sensor Array (S):</strong> <strong>+25% scan/weapon range per level</strong>. Expands the cruiser's detection, attack, and diplomacy radius.</li>
                   <li><strong>🔬 Laboratories (L):</strong> <strong>+1 lab per level</strong>. Labs accumulate hazard knowledge when near storms/nebulae, reducing their danger. Uses 🔬 icon.</li>
-                  <li><strong>🛡️ Armor Plating (A):</strong> <strong>+4 flat + 10% maxHealth</strong> armor capacity per level. Absorbs damage before hull.</li>
-                  <li><strong>🌀 Energy Shields (H):</strong> <strong>+10% deflect chance per level</strong>. Hard cap: cannot purchase if next level would exceed <strong>80%</strong> total deflection.</li>
+                  <li><strong>🛡️ Armor Plating (A):</strong> <strong>+4 flat + 10% maxHealth</strong> armor capacity per level. Consuming Duranium resource (if available in player stockpile) boosts this armor capacity bonus by <strong>+50%</strong>. Absorbs damage before hull.</li>
+                  <li><strong>🌀 Energy Shields (H):</strong> Closes the deflection gap by <strong>20% of the remaining gap</strong> to 100% per level. Cannot purchase if the next level would exceed the hard cap of <strong>90%</strong> total deflection.</li>
                   <li><strong>🚀 Overcharged Engine (E):</strong> <strong>+3 speed and +3°/sec turn rate per level</strong>. Also adds +2/+1/+1 bonus fuel capacity at Levels 1/2/3.</li>
                   <li><strong>💣 Munition Pods (M):</strong> <strong>+1 bomb capacity and +1 splash damage per level</strong>. Splash destroys additional fleet ships or deals bonus HP damage to cruisers/amoebas (limited to 1/50th of target's size).</li>
                   <li><strong>🎯 Targeting Computer (T):</strong> <strong>+5% weapon range and +5% accuracy per level</strong>.</li>
                   <li><strong>🔧 Damage Control (D):</strong> <strong>+50% hull repair speed per level</strong> inside friendly wells. Enables out-of-combat deep-space healing at 20% per level (100% at L5). Reduces damaged-cruiser speed penalty by <code>1/(1+level)</code>.</li>
                   <li><strong>⛽ Fuel Tanker (F):</strong> <strong>+(maxHealth/5 + 10) fuel capacity</strong> and <strong>+15 maxsupplies</strong> per level. Reduces speed by -3, laser accuracy by -5%, and weapon range by -5 per level.</li>
                   <li><strong>🤝 Diplomat (I):</strong> <strong>+1 diplomatic attempt per 60/level seconds</strong>. Generates sympathy on neutral and enemy planets in sensor range, potentially flipping them via revolt. Also reduces enemy sympathy on your own planets. Earns Exp on success. See 🤝 Diplomacy topic.</li>
-                  <li><strong>🪖 Marines (R):</strong> <strong>Marine capacity = level × maxHealth</strong>. Automatically loads marines from nearby friendly planets (&gt;50% garrison). Marines launch fleet assaults on enemy planets when they outnumber defenders 3:1. Can also board enemy cruisers when marines exceed 2× enemy crew — capturing the ship!</li>
+                  <li><strong>🪖 Marines (R):</strong> <strong>Marine capacity = level × maxHealth</strong>. Automatically loads marines from nearby friendly planets (&gt;50% garrison). Marines launch fleet assaults on enemy planets when they outnumber defenders 3:1. Can also board enemy cruisers when marines exceed 2× enemy crew — capturing the ship! Consumes Tritanium (if available) to grant <strong>+400</strong> starting Exp to launched marine fleets.</li>
                 </ul>
               </li>
               <li><strong>Cancel:</strong> Press <strong>C</strong>, <strong>U</strong>, <strong>Escape</strong>, or click ❌ Cancel to exit Upgrade Mode. The cruiser stays selected.</li>
@@ -514,10 +517,10 @@
               <li><strong>Sympathy System:</strong> Planets accumulate <strong>sympathy</strong> toward players, representing soft influence. Sympathy accrues from two sources: nearby owned planets (gravitational influence) and cruiser Diplomat modules.</li>
               <li><strong>Gravity-Based Sympathy:</strong> Owned planets passively exert sympathy on neutral/enemy planets within their gravity well that have fewer ships than them, at a rate of <strong>1 sympathy per minute</strong>. Larger, fuller planets naturally extend influence further.</li>
               <li><strong>Diplomat Sympathy:</strong> Cruisers with the 🤝 Diplomat upgrade attempt sympathy rolls on neutral/enemy planets in sensor range every <strong>60/diplomat_level seconds</strong>. Success chance = <strong>(30 + Disposition + Sympathy + √PlayerExp + √ShipExp)%</strong> (or <strong>(30 + Disposition + Sympathy + (√PlayerExp + √ShipExp) * 3 + 10)%</strong> if you have their preferred resource). Success rolls a d100 vs success chance and increases sympathy by <strong>1 + (chance - roll) / 25</strong> rounded down (doubled if preferred resource is used). Awards +1 player Exp and ship Exp equal to sympathy gained.</li>
-              <li><strong>Disposition:</strong> On first successful diplomat contact, a planet rolls a disposition toward you: <strong>10d10 - 60 + (PlayerExp + ShipExp) * 3</strong> (if you have &gt; 0.1 of their preferred resource) <strong>+ 10</strong> (if you have the preferred resource) <strong>+ 1/2 of any existing sympathy</strong>. Higher disposition means larger sympathy gains per success.</li>
-              <li><strong>Sympathy Cap:</strong> A player's sympathy on any planet caps at the planet's <strong>max capacity</strong>.</li>
+              <li><strong>Disposition:</strong> On first successful diplomat contact, a planet rolls a disposition toward you: <strong>10d10 - 60 + (√PlayerExp + √ShipExp) * 3</strong> (if you have &gt; 0.1 of their preferred resource) <strong>+ 10</strong> (if you have the preferred resource) <strong>+ 1/2 of any existing sympathy</strong>. Higher disposition means larger sympathy gains per success.</li>
+              <li><strong>Sympathy Cap:</strong> A player's sympathy on a planet caps at the planet's max capacity. The sum total of all players' sympathy on a planet is also capped at the planet's capacity. Exceeding this total cap wastes 50% of the excess sympathy, and applies the remaining 50% to actively reduce/displace competitors' sympathy on that planet (highest first).</li>
               <li><strong>Counter-Espionage:</strong> If no enemy/neutral planets are in range, diplomats will instead target friendly planets that have enemy sympathy, <strong>reducing</strong> the highest enemy sympathy by 1 per attempt.</li>
-              <li><strong>Revolts:</strong> When a non-owner's sympathy exceeds <strong>1/3 of the planet's garrison</strong>, a revolt can occur. All eligible factions (including the current owner) roll dice — owner rolls up to <code>garrison + own sympathy</code>, challengers roll up to their sympathy. Highest roll wins! The winner consumes sympathy equal to 1/3 of the garrison. Revolts have a <strong>3-minute cooldown</strong>.</li>
+              <li><strong>Revolts:</strong> When a non-owner's sympathy exceeds <strong>1/3 of the planet's garrison</strong>, a revolt can trigger. Factions enter a competitive roll with win odds computed via real-time Monte Carlo simulations. The highest roll wins, consuming sympathy equal to 1/3 of the garrison. Successful revolts trigger a 60-second global cooldown (restricting other successful revolts) and grant the planet 180 seconds of immunity. Failed revolts apply a dynamic cooldown to that planet: <code>60 + (Owner Roll - Highest Challenger Roll) * 3</code> seconds.</li>
               <li><strong>Spy Rooted Out 👁️:</strong> When your ships are cleared from an enemy planet you attacked, a 👁️ icon appears, indicating your espionage attempt has been discovered.</li>
               <li><strong>Marine Boarding:</strong> Cruisers with Marines can <strong>board enemy cruisers</strong> when their marine count exceeds 2× the enemy's crew. Boarding sends a pod that initiates combat between marines and the target's crew+marines. Victory captures the enemy cruiser! Surviving marines return to the launching cruiser via return pod.</li>
               <li><strong>Marine Planet Assaults:</strong> When a cruiser's marines exceed 3× a nearby enemy planet's garrison (or the planet is explicitly targeted), it launches the marines as a standard fleet to capture the planet.</li>
@@ -529,9 +532,9 @@
             <ul>
               <li><strong>Ion Storms ⚡:</strong> Moving hazards that drift across the map. New storms spawn roughly every 5 minutes. Intensity = 10d6 (capped by spawn count). Ships and planets inside take periodic damage.</li>
               <li><strong>Ancient Minefields 💣:</strong> Stationary. Intensity = 12d6. Massive burst damage on entry, especially to fast ships. Ongoing damage to ships inside. Do <em>not</em> damage planets.</li>
-              <li><strong>Nebulae 🌫️:</strong> Stationary, 30% larger. Intensity = 10d8. Slow ships passing through, reduce combat effectiveness by intensity/4 %. No direct damage or entry burst.</li>
+              <li><strong>Nebulae 🌫️:</strong> Stationary, 30% larger. Intensity = <strong>5d12</strong> (5–60). Slow ships passing through, reduce combat effectiveness by intensity/4 %. No direct damage or entry burst.</li>
               <li><strong>Sensor Reduction:</strong> Hazards reduce your gravity well sensor range while planets/ships are inside them. Effective intensity is displayed as a clean integer on the starmap.</li>
-              <li><strong>Damage Formula:</strong> Chance = (intensity − knowledge − (√Tech + √Exp)/2 − √ShipExp) / divisor. Higher stats = much safer.</li>
+              <li><strong>Damage Formula:</strong> Risk Chance % = <strong>(effectiveIntensity × currentSpeed) / 10</strong>, where <code>effectiveIntensity = max(0, intensity − knowledge − (√Tech + √Exp)/2 − √ShipExp − speedReduction)</code>. Traveling slower than maximum speed (e.g. 1/2 or 1/4 speed) reduces effective intensity by the speed difference, greatly lowering risk!</li>
               <li><strong>Knowledge:</strong> Increases when cruisers with 🔬 Laboratories are within scanning range of a hazard (+1 per lab per 2 minutes). Directly reduces effective intensity.</li>
               <li><strong>Speed &amp; Entry:</strong> Ships traveling faster than base speed (warp) take 3× entry damage from storms/minefields. Slow ships get Saving Rolls.</li>
               <li><strong>Amoeba Immunity:</strong> Amoebas are immune to Ion Storm entry damage (but not minefields).</li>
@@ -545,9 +548,9 @@
             <ul>
               <li><strong>Giant Space Amoebas 🧬:</strong> Alien creatures belonging to the "Monsters" faction. They wander the map attacking ships and bombarding planets.</li>
               <li><strong>Amoeba Hive:</strong> The Monsters' homeworld. Spawns a new Amoeba every <strong>2 minutes</strong>. Initial Amoebas also spawn scattered across the map at game start (1 per 10 planets).</li>
-              <li><strong>Stats:</strong> Speed = 4d6 (varies per Amoeba). Health = 1–3 (random). Attack range = 50px. Rendered at double standard graphic size with organic green plasma spray animations.</li>
+              <li><strong>Stats:</strong> Speed = 4d6 (varies per Amoeba). Health = <strong>4–7</strong> (random 3d2+1). Attack range = 50px. Rendered at double standard graphic size with organic green plasma spray animations.</li>
               <li><strong>Regeneration &amp; Armor:</strong> Amoebas heal 1 HP per minute. Deflection chance = <strong>50% + 1% per maxHealth + 1% per Tech/Exp modifier</strong> (capped at <strong>95%</strong>). When shrugging damage, a green ripple animation plays. At 0 health with maxHealth &gt; 0, they lose 1 maxHealth but fully regenerate — shrinking each time.</li>
-              <li><strong>Growth &amp; Splitting:</strong> Killing a ship or bombarding a planet grants +1 maxHealth and +1 health (30-second cooldown). At their splitting threshold, 50% chance to split into two smaller Amoebas. Splitting feeds the Monster faction's tech and exp scores!</li>
+              <li><strong>Growth &amp; Splitting:</strong> Killing a ship or bombarding a planet grants +1 maxHealth and +1 health, subject to a cooldown of <strong>(10 × Amoeba Count × mapScale) seconds</strong>. At their splitting threshold (max(4, √Tech)), 50% chance to split into two smaller Amoebas. Splitting feeds the Monster faction's tech and exp scores!</li>
               <li><strong>Bomb Sacs:</strong> Carry bombs equal to maxHealth. Regenerate 1 per 60 seconds without needing a gravity well.</li>
               <li><strong>Combat Value:</strong> Killing an Amoeba awards <strong>10 × maxHealth Exp</strong> — valuable targets!</li>
               <li><strong>Wandering AI:</strong> Amoebas roam toward planets, attacking non-Monster ships in range and bombarding unowned/enemy planets.</li>
@@ -571,7 +574,7 @@
               <li><strong>Overpopulation:</strong> AI planets with <strong>&gt;160 ships</strong> have a <strong>10% chance/10s</strong> to auto-attack the weakest enemy.</li>
               <li><strong>Dominant Player Targeting 🎯:</strong> AIs gang up on players exceeding <strong>4,500 capacity</strong>, leading tech by <strong>200+</strong>, or holding <strong>2× capacity</strong> of 2nd place.</li>
               <li><strong>Homeworld Priority:</strong> AIs fiercely retake their lost homeworld (<strong>75% chance</strong> to immediately attack if in top targets).</li>
-              <li><strong>Rampage Events:</strong> Every <strong>~15 minutes</strong> (accelerating to min 6 min). A dormant AI awakens on a neutral planet:
+              <li><strong>Rampage Events:</strong> Starts at <strong>30 minutes</strong> (on normal 1600px maps, scaling shorter on larger maps) and accelerates by decaying 6 minutes each time down to a <strong>12-minute minimum</strong>. Selects a neutral planet to undergo a <strong>3-minute incubation phase</strong> before awakening:
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
                   <li><strong>Garrison:</strong> +300% of max capacity instantly.</li>
                   <li><strong>Production:</strong> 3× rate.</li>
@@ -586,9 +589,9 @@
           <div id="help-topic-other" class="help-page hidden">
             <ul>
               <li><strong>Fog of War:</strong> Optional. You can only see within your gravity wells and ship radar. Previously discovered planets appear as silhouettes with cached info.</li>
-              <li><strong>AFK Protection:</strong> After 3 minutes of inactivity, a warning appears. If you don't respond, your empire is handed to an AI.</li>
+              <li><strong>AFK Protection:</strong> The game automatically pauses after <strong>5 minutes</strong> of global inactivity (no human player actions). Any player command/action will resume the game.</li>
               <li><strong>Timed Games:</strong> Configurable game clock (30 min to unlimited). When time expires, victory is awarded by combined score: √Tech + √Exp + Capacity%.</li>
-              <li><strong>Map Layout:</strong> Default 50 planets (scales with map size). Sizes: Mega-Super (300 cap), Super (250), Large (150–180), Medium (120–150), Small (75–115), Tiny (53–74).</li>
+              <li><strong>Map Layout:</strong> Default 50 planets (scales with map size). Normal sizes are determined by a size class of 60–150 weighted toward the middle. Homeworlds start at size 120 (480 capacity), while Super Planets/Mega-Supers can reach 200–300 capacity.</li>
               <li><strong>Configurable Settings:</strong>
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
                   <li><strong>AI Count:</strong> 0–50 AI players (default 5). Auto-scales with planet count.</li>

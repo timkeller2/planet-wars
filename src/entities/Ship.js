@@ -766,26 +766,31 @@ export class Ship {
         }
 
         // A. Enemy Proximity Evasion (fleeing if enemy within 200px)
-        let enemyClose = false;
+        let closestEnemyUnit = null;
+        let closestEnemyDistSq = Infinity;
         if (allShips) {
-          const queryRange = 200;
-          const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function')
-            ? allShips.getShipsInRadiusSq(this.x, this.y, queryRange * queryRange)
-            : allShips;
+          const candidateShips = allShips;
           for (const other of candidateShips) {
             if (other.active && other.id !== this.id) {
               const isEnemy = (other.owner && other.owner.id !== this.owner.id && !other.isMaterializing) || other.isAmoeba;
               if (isEnemy) {
+                let isVisible = true;
+                if (game && typeof game.isShipVisibleTo === 'function') {
+                  isVisible = game.isShipVisibleTo(other, this.owner);
+                }
+                if (!isVisible) continue;
                 const edx = other.x - this.x;
                 const edy = other.y - this.y;
-                if (edx * edx + edy * edy <= queryRange * queryRange) {
-                  enemyClose = true;
-                  break;
+                const distSq = edx * edx + edy * edy;
+                if (distSq < closestEnemyDistSq) {
+                  closestEnemyDistSq = distSq;
+                  closestEnemyUnit = other;
                 }
               }
             }
           }
         }
+        const enemyClose = closestEnemyUnit && (closestEnemyDistSq <= 200 * 200);
 
         if (enemyClose) {
           // Force recalculating retreat target
@@ -918,13 +923,27 @@ export class Ship {
           
           let selected = null;
           if (safeCandidates.length > 0) {
-            const closeCandidates = safeCandidates.filter(c => c.dist <= 400);
+            let candidatesToUse = safeCandidates;
+            if (closestEnemyUnit) {
+              const edx = closestEnemyUnit.x - this.x;
+              const edy = closestEnemyUnit.y - this.y;
+              const oppositeCandidates = safeCandidates.filter(c => {
+                const cdx = c.x - this.x;
+                const cdy = c.y - this.y;
+                return (cdx * edx + cdy * edy) < 0;
+              });
+              if (oppositeCandidates.length > 0) {
+                candidatesToUse = oppositeCandidates;
+              }
+            }
+
+            const closeCandidates = candidatesToUse.filter(c => c.dist <= 400);
             if (closeCandidates.length > 0) {
               closeCandidates.sort((a, b) => a.dist - b.dist);
               selected = closeCandidates[0];
             } else {
-              safeCandidates.sort((a, b) => a.dist - b.dist);
-              selected = safeCandidates[0];
+              candidatesToUse.sort((a, b) => a.dist - b.dist);
+              selected = candidatesToUse[0];
             }
           }
           
@@ -1225,7 +1244,7 @@ export class Ship {
         
         if (this.owner) {
           const localXp = this.expScore || 0;
-          const gainedExp = this.maxHealth * localXp;
+          const gainedExp = this.maxHealth * localXp * 0.70;
           this.owner.crewExperience = (this.owner.crewExperience || 0) + gainedExp;
           console.log(`[Cruiser Dismantled] Ship ${this.id} dismantled. Owner gained ${gainedExp} crew experience. Total: ${this.owner.crewExperience}`);
         }
@@ -1857,6 +1876,7 @@ export class Ship {
           const minHitChance = (this.maxHealth > 0 && !this.isAmoeba) ? 0.10 : 0.01;
           finalHitChance = Math.min(1.0, Math.max(minHitChance, finalHitChance + friendlyPlanetBoost - defenderPlanetPenalty - hazardPenalty));
           
+          const isHit = Math.random() < finalHitChance;
           if (isFirstVolleyShot) {
             if (game && game.accuracyEvents) {
               game.accuracyEvents.push({
@@ -1865,12 +1885,14 @@ export class Ship {
                 accuracy: Math.round(finalHitChance * 100),
                 isCruiser: true,
                 attackerOwnerId: this.owner ? this.owner.id : null,
-                targetOwnerId: enemyShip.owner ? enemyShip.owner.id : null
+                targetOwnerId: enemyShip.owner ? enemyShip.owner.id : null,
+                isBombAttack: usedBomb,
+                hit: isHit
               });
             }
           }
 
-          if (Math.random() < finalHitChance) {
+          if (isHit) {
             const damageDealt = enemyShip.takeDamage(explosions, this, false, targetType);
             if (damageDealt) {
               const isAttackerCruiser = this.maxHealth > 0 && !this.isAmoeba;
@@ -2547,6 +2569,30 @@ export class Ship {
           let bestCandidate = null;
 
           if (friendlyPlanets.length > 0) {
+            let closestEnemyUnit = null;
+            let closestEnemyDistSq = Infinity;
+            if (allShips) {
+              for (const other of allShips) {
+                if (other.active && other.id !== this.id) {
+                  const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                  if (isEnemy) {
+                    let isVisible = true;
+                    if (game && typeof game.isShipVisibleTo === 'function') {
+                      isVisible = game.isShipVisibleTo(other, this.owner);
+                    }
+                    if (!isVisible) continue;
+                    const edx = other.x - this.x;
+                    const edy = other.y - this.y;
+                    const distSq = edx * edx + edy * edy;
+                    if (distSq < closestEnemyDistSq) {
+                      closestEnemyDistSq = distSq;
+                      closestEnemyUnit = other;
+                    }
+                  }
+                }
+              }
+            }
+
             const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
               const candidates = [];
               for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
@@ -2589,6 +2635,19 @@ export class Ship {
               }
               
               if (candidates.length > 0) {
+                if (closestEnemyUnit) {
+                  const edx = closestEnemyUnit.x - this.x;
+                  const edy = closestEnemyUnit.y - this.y;
+                  const oppositeCandidates = candidates.filter(c => {
+                    const cdx = c.x - this.x;
+                    const cdy = c.y - this.y;
+                    return (cdx * edx + cdy * edy) < 0;
+                  });
+                  if (oppositeCandidates.length > 0) {
+                    oppositeCandidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
+                    return oppositeCandidates[0];
+                  }
+                }
                 candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
                 return candidates[0];
               }
@@ -3302,6 +3361,30 @@ export class Ship {
           const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
           let bestCandidate = null;
           if (friendlyPlanets.length > 0) {
+            let closestEnemyUnit = null;
+            let closestEnemyDistSq = Infinity;
+            if (allShips) {
+              for (const other of allShips) {
+                if (other.active && other.id !== this.id) {
+                  const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                  if (isEnemy) {
+                    let isVisible = true;
+                    if (game && typeof game.isShipVisibleTo === 'function') {
+                      isVisible = game.isShipVisibleTo(other, this.owner);
+                    }
+                    if (!isVisible) continue;
+                    const edx = other.x - this.x;
+                    const edy = other.y - this.y;
+                    const distSq = edx * edx + edy * edy;
+                    if (distSq < closestEnemyDistSq) {
+                      closestEnemyDistSq = distSq;
+                      closestEnemyUnit = other;
+                    }
+                  }
+                }
+              }
+            }
+
             const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
               const candidates = [];
               for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
@@ -3339,6 +3422,19 @@ export class Ship {
               }
               
               if (candidates.length > 0) {
+                if (closestEnemyUnit) {
+                  const edx = closestEnemyUnit.x - this.x;
+                  const edy = closestEnemyUnit.y - this.y;
+                  const oppositeCandidates = candidates.filter(c => {
+                    const cdx = c.x - this.x;
+                    const cdy = c.y - this.y;
+                    return (cdx * edx + cdy * edy) < 0;
+                  });
+                  if (oppositeCandidates.length > 0) {
+                    oppositeCandidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
+                    return oppositeCandidates[0];
+                  }
+                }
                 candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
                 return candidates[0];
               }

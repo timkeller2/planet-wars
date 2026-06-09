@@ -1184,6 +1184,7 @@ function getHabName(habitability) {
   let lastPlanetAssignments = {};
   let lastPlanetRampages = {};
   let lastPlanetIncubations = {};
+  let lastPlanetRevoltAttempts = {};
   let megalovaniaPlayed = false;
   let lastPlanetStands = {};
   let lastPlanetHomeworlds = {};
@@ -1208,6 +1209,15 @@ function getHabName(habitability) {
     const clone = sounds[type].cloneNode();
     clone.volume = sounds[type].volume;
     clone.play().catch(e => { }); // Ignore autoplay errors
+  }
+
+  function playBattleSound() {
+    playSound('laser');
+    setTimeout(() => playSound('explosion'), 100);
+    setTimeout(() => playSound('laser'), 250);
+    setTimeout(() => playSound('explosion'), 350);
+    setTimeout(() => playSound('laser'), 500);
+    setTimeout(() => playSound('explosion'), 600);
   }
 
   let audioCtx = null;
@@ -1574,6 +1584,20 @@ function getHabName(habitability) {
           });
           playSound('explosion');
         }
+        if (!p.inFog && p.revoltAttemptEvent && !lastPlanetRevoltAttempts[p.id]) {
+          lastPlanetRevoltAttempts[p.id] = true;
+          floatingAnimations.push({
+            x: p.x,
+            y: p.y - 30,
+            text: '✊ REVOLT ATTEMPT! ✊',
+            type: 'revolt',
+            age: 0,
+            duration: 4.0
+          });
+          playBattleSound();
+        } else if (!p.revoltAttemptEvent) {
+          lastPlanetRevoltAttempts[p.id] = false;
+        }
         if (!p.inFog && p.lastStandEvent && !lastPlanetStands[p.id]) {
           const pOwner = state.players.find(pl => pl.id === p.ownerId);
           if (pOwner) {
@@ -1835,15 +1859,21 @@ function getHabName(habitability) {
 
     if (state.accuracyEvents && state.accuracyEvents.length > 0) {
       for (const ev of state.accuracyEvents) {
+        let text = `🎯${ev.accuracy}%`;
+        if (ev.isBombAttack) {
+          const outcome = ev.hit ? 'Hit!' : 'Miss!';
+          text = `🎯 ${outcome} (${ev.accuracy}%)`;
+        }
         floatingAnimations.push({
           x: ev.x,
           y: ev.y,
-          text: `🎯${ev.accuracy}%`,
+          text: text,
           type: 'accuracyIndicator',
           age: 0,
           duration: 3.0,
           attackerOwnerId: ev.attackerOwnerId,
-          targetOwnerId: ev.targetOwnerId
+          targetOwnerId: ev.targetOwnerId,
+          isBombAttack: ev.isBombAttack
         });
       }
     }
@@ -2054,7 +2084,7 @@ function getHabName(habitability) {
           totalStockpile += (myPlayer.resources[res] || 0);
         }
       }
-      const stockpileCapacity = myPlayer.stockpileCapacity || 3;
+      const stockpileCapacity = myPlayer.stockpileCapacity || 1;
       stockpileCapacityDisplay.style.display = 'block';
       stockpileCapacityDisplay.textContent = `📦: ${Math.floor(totalStockpile)}/${stockpileCapacity}`;
 
@@ -4523,7 +4553,7 @@ function getHabName(habitability) {
         tooltipPanel.innerHTML = `
           <div style="font-weight: bold; font-size: 0.85rem; color: #e91e63; border-bottom: 1px solid rgba(233, 30, 99, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Stockpile Capacity</div>
           <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.3;">
-            Resource Stockpile Capacity = (Command Capacity + Trade Capacity) * 3.<br><br>
+            Resource Stockpile Capacity = Command Capacity + Trade Capacity.<br><br>
             If exceeded, a Resource Storage Fee is charged every second:<br>
             <span style="color: #ff5252; font-weight: bold;">Fee = (excess resources / capacity) rounded up</span>,<br>
             deducted from credits first. If out of credits, resources are deducted starting with the highest stockpiles first.
@@ -5608,13 +5638,14 @@ function getHabName(habitability) {
           }
         }
 
-        // Revolt immunity cooldown red ring
+        // Revolt immunity cooldown red ring (shrinking arc)
         if (p.revoltCooldown && p.revoltCooldown > 0) {
           ctx.save();
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.radius + 6, 0, Math.PI * 2);
+          const progress = Math.min(1.0, p.revoltCooldown / 300000);
+          ctx.arc(p.x, p.y, p.radius + 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
           ctx.strokeStyle = 'rgba(255, 50, 50, 0.85)';
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 2.5;
           ctx.stroke();
           ctx.restore();
         }
@@ -5954,7 +5985,17 @@ function getHabName(habitability) {
               ctx.restore();
             }
 
-            ctx.fillStyle = isLastKnown ? '#666' : '#000';
+            let textColor = '#000';
+            if (isLastKnown) {
+              textColor = '#666';
+            } else {
+              const techBonus = displayOwner ? (displayOwner.techScore || 0) : 0;
+              const threshold = p.sizeClass * ((p.habitability + techBonus) / 100);
+              if (displayMaxShips >= threshold) {
+                textColor = '#008800'; // green instead of normal black
+              }
+            }
+            ctx.fillStyle = textColor;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.font = `bold 12px Orbitron`;
@@ -6948,6 +6989,14 @@ function getHabName(habitability) {
               const sign = netMapBonus > 0 ? '+' : '';
               const color = netMapBonus > 0 ? '#4f4' : '#f66';
               lines.push({ label: 'Map Bonus', value: `${sign}${Math.round(netMapBonus)}%`, color: color });
+            }
+            
+            // speed modifier
+            const sm = hs.speedModifier || 1.0;
+            if (sm < 1.0) {
+              const speedLabel = sm === 0.25 ? '1/4 speed' : sm === 0.50 ? '1/2 speed' : `${Math.round(sm * 100)}% speed`;
+              const saveChance = sm === 0.25 ? 90 : sm === 0.50 ? 75 : 0;
+              lines.push({ label: speedLabel, value: saveChance > 0 ? `${saveChance}% save` : '', color: '#aaf' });
             }
             
             lines.push({ label: 'Volley Size', value: volleySize, color: '#ffa' });
@@ -8878,7 +8927,7 @@ function getHabName(habitability) {
         } else if (anim.type === 'accuracyIndicator') {
           xOffset = 0;
           const isPlayerAttacker = (localPlayer && anim.attackerOwnerId === localPlayer.id);
-          if (isPlayerAttacker) {
+          if (isPlayerAttacker || anim.isBombAttack) {
             ctx.fillStyle = `rgba(60, 255, 60, ${alpha})`; // green
             ctx.shadowColor = `rgba(0, 255, 0, ${alpha})`; // green glow
           } else {
@@ -8910,18 +8959,17 @@ function getHabName(habitability) {
         ctx.shadowBlur = 0;
       }
 
-      if (serverState.isPaused) {
-        const mapWidth = serverState ? (serverState.width || 1920) : 1920;
-        const mapHeight = serverState ? (serverState.height || 1620) : 1620;
+    } finally {
+      ctx.restore();
+      if (serverState && serverState.isPaused) {
+        ctx.save();
         ctx.fillStyle = '#fff';
         ctx.font = '40px Orbitron';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('PAUSED', mapWidth / 2, mapHeight / 2);
+        ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+        ctx.restore();
       }
-
-    } finally {
-      ctx.restore();
       updateButtonHighlights();
     }
   }

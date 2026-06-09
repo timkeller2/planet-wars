@@ -611,7 +611,7 @@ async function bootstrap() {
 
             ship.orderQueue = [];
             const isAttackingAndInjured = ship.isPatrolling && (ship.combatCooldown > 0) && (ship.health < ship.maxHealth);
-            if (ship.isPatrolling && targetType !== 'ship' && !isAttackingAndInjured) {
+            if (ship.isPatrolling && targetType !== 'ship' && targetType !== 'planet' && !isAttackingAndInjured) {
               ship.patrolStationX = tx;
               ship.patrolStationY = ty;
               ship.targetX = tx;
@@ -1553,6 +1553,9 @@ async function bootstrap() {
         const hwEvent = p.homeworldEvent;
         p.homeworldEvent = false;
 
+        const rAttemptEvent = p.revoltAttemptEvent || false;
+        p.revoltAttemptEvent = false;
+
         // Calculate final production rate with soft-cap
         let finalRate = 0;
         if (p.owner) {
@@ -1608,6 +1611,8 @@ async function bootstrap() {
           sympathy: p.sympathy || null,
           disposition: p.disposition || null,
           revoltCooldown: p.revoltCooldown || 0,
+          maxRevoltCooldown: p.maxRevoltCooldown || 0,
+          revoltAttemptEvent: rAttemptEvent,
           focusTransition: p.focusTransition ? {
             targetMode: p.focusTransition.targetMode,
             progress: Math.min(1.0, p.focusTransition.elapsed / 15000)
