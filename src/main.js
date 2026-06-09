@@ -4891,6 +4891,17 @@ function getHabName(habitability) {
           focusModeActive = false;
           return;
         }
+        if (key === 't' && planet.focusMode !== 'terraforming') {
+          const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+          const techBonus = Math.floor(Math.sqrt((myPlayer ? myPlayer.techScore : 0) || 0));
+          const limit = Math.ceil(planet.habitability / 5);
+          if (techBonus > limit) {
+            event.preventDefault();
+            socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'terraforming' });
+            focusModeActive = false;
+            return;
+          }
+        }
         if (key === 'o' || event.key === 'Escape') {
           event.preventDefault();
           focusModeActive = false;
@@ -5481,6 +5492,7 @@ function getHabName(habitability) {
   registerFocusBtn('btn-focus-garrison', 'garrison');
   registerFocusBtn('btn-focus-commerce', 'commerce');
   registerFocusBtn('btn-focus-mining', 'mining');
+  registerFocusBtn('btn-focus-terraforming', 'terraforming');
 
   // Bind Sci-Fi Planetary Resources UI window actions & bank sell button
 
@@ -5950,7 +5962,8 @@ function getHabName(habitability) {
       'btn-focus-research': 'research',
       'btn-focus-garrison': 'garrison',
       'btn-focus-commerce': 'commerce',
-      'btn-focus-mining': 'mining'
+      'btn-focus-mining': 'mining',
+      'btn-focus-terraforming': 'terraforming'
     };
     const selectedPlanetFocus = getSelectedPlanetForFocus();
     if (!selectedPlanetFocus) {
@@ -6008,6 +6021,13 @@ function getHabName(habitability) {
           if (mode === 'mining') {
             const hasRes = selectedPlanetFocus.resources && selectedPlanetFocus.resources.length > 0;
             if (!hasRes) {
+              shouldShow = false;
+            }
+          }
+          if (mode === 'terraforming') {
+            const techBonus = Math.floor(Math.sqrt((myPlayer ? myPlayer.techScore : 0) || 0));
+            const limit = Math.ceil(selectedPlanetFocus.habitability / 5);
+            if (techBonus <= limit) {
               shouldShow = false;
             }
           }

@@ -1,3 +1,18 @@
+function getHabName(habitability) {
+  const hab = habitability || 0;
+  if (hab < 20) return 'Toxic';
+  if (hab < 30) return 'Radiated';
+  if (hab < 40) return 'Barren';
+  if (hab < 50) return 'Desert';
+  if (hab < 60) return 'Tundra';
+  if (hab < 70) return 'Swamp';
+  if (hab < 80) return 'Jungle';
+  if (hab < 90) return 'Ocean';
+  if (hab < 100) return 'Arid';
+  if (hab < 120) return 'Terran';
+  return 'Gaia';
+}
+
 function randomWeightedMiddle(min, max, iterations = 3) {
   let sum = 0;
   for (let i = 0; i < iterations; i++) {
@@ -5,6 +20,7 @@ function randomWeightedMiddle(min, max, iterations = 3) {
   }
   return Math.round(min + (sum / iterations) * (max - min));
 }
+
 
 export class Planet {
   constructor(id, x, y, radius, owner, initialShips, mapWidth = 1920, mapHeight = 1620) {
@@ -104,6 +120,18 @@ export class Planet {
       this.preferredResourceWantedEvent = true;
       this.preferredResourceWantedChatQueued = false;
     }
+
+    if (this.owner && this.focusMode === 'economy') {
+      const currentThreshold = this.sizeClass * ((this.habitability + (this.owner.techScore || 0)) / 100);
+      if (this.maxShips >= currentThreshold) {
+        if (this.maxShips > 119) {
+          this.focusMode = 'commerce';
+        } else {
+          this.focusMode = 'research';
+        }
+        this.focusTransition = null;
+      }
+    }
   }
 
   decreaseMaxShips(amount = 1) {
@@ -114,6 +142,14 @@ export class Planet {
 
   update(deltaTime, allPlanets, settings, game) {
     this.prorateSympathiesIfNeeded();
+
+    if (this.owner && this.focusMode === 'terraforming') {
+      const techBonus = Math.floor(Math.sqrt(this.owner.techScore || 0));
+      if (this.habitability > 6 * techBonus) {
+        this.focusMode = 'economy';
+        this.focusTransition = null;
+      }
+    }
     // Handle focus mode transition
     if (this.focusTransition) {
       if (!this.owner || this.owner.id !== this.focusTransition.playerId) {
@@ -233,7 +269,7 @@ export class Planet {
     // Increase max capacity, tech score, or maintain garrison mode if full
     const isFull = this.owner && (this.ships >= (isHuman && focus === 'garrison' ? this.maxShips * 2 : this.maxShips));
     if (isFull || (this.owner && this.owner.isAI && this.ships >= this.maxShips)) {
-      const timeToIncrease = this.maxShips / 10;
+      const timeToIncrease = focus === 'terraforming' ? (this.maxShips / 10) * 3 : this.maxShips / 10;
       this.capacityProgress += (deltaTime / 1000);
       if (this.capacityProgress >= timeToIncrease) {
         if (isHuman) {
@@ -295,6 +331,26 @@ export class Planet {
             if (this.ships > limit && !this.retainedShips) {
               this.ships = limit;
             }
+          } else if (focus === 'terraforming') {
+            const oldHab = this.habitability;
+            this.habitability += 1;
+            
+            const oldName = getHabName(oldHab);
+            const newName = getHabName(this.habitability);
+            
+            if (oldName === 'Jungle' && newName === 'Ocean') {
+              this.habitability = 100; // Terran
+            } else if (oldName === 'Desert' && newName === 'Tundra') {
+              this.habitability = 90; // Arid
+            } else if (oldName === 'Ocean' && newName === 'Arid') {
+              this.habitability = 100; // Terran
+            }
+
+            // Decay ships back to maxShips
+            const limit = this.maxShips;
+            if (this.ships > limit && !this.retainedShips) {
+              this.ships = limit;
+            }
           }
         } else {
           // AI controlled planets continue to operate as they have before
@@ -302,30 +358,46 @@ export class Planet {
             this.decreaseMaxShips(1);
             if (this.maxShips < 55) this.dead = true;
           } else {
-            const increaseAmount = this.homeworldOf ? 2 : 1;
-            this.increaseMaxShips(increaseAmount);
-            if (this.owner && allPlanets) {
-              let galacticCapacity = 0;
-              for (const p of allPlanets) {
-                galacticCapacity += p.maxShips;
-              }
-              const capacityPercent = galacticCapacity > 0 ? ((this.owner.totalCapacity || 0) / galacticCapacity) * 100 : 0;
-              const failChance = capacityPercent * 2;
+            if (focus === 'terraforming') {
+              const oldHab = this.habitability;
+              this.habitability += 1;
               
-              // Always deduct 2 ships on any tech increase attempt
-              this.ships = Math.max(0, this.ships - 2);
+              const oldName = getHabName(oldHab);
+              const newName = getHabName(this.habitability);
+              
+              if (oldName === 'Jungle' && newName === 'Ocean') {
+                this.habitability = 100; // Terran
+              } else if (oldName === 'Desert' && newName === 'Tundra') {
+                this.habitability = 90; // Arid
+              } else if (oldName === 'Ocean' && newName === 'Arid') {
+                this.habitability = 100; // Terran
+              }
+            } else {
+              const increaseAmount = this.homeworldOf ? 2 : 1;
+              this.increaseMaxShips(increaseAmount);
+              if (this.owner && allPlanets) {
+                let galacticCapacity = 0;
+                for (const p of allPlanets) {
+                  galacticCapacity += p.maxShips;
+                }
+                const capacityPercent = galacticCapacity > 0 ? ((this.owner.totalCapacity || 0) / galacticCapacity) * 100 : 0;
+                const failChance = capacityPercent * 2;
+                
+                // Always deduct 2 ships on any tech increase attempt
+                this.ships = Math.max(0, this.ships - 2);
 
-              if (Math.random() * 100 >= failChance) {
-                const increaseAmount = this.isResearch ? 2 : 1;
-                this.owner.techScore = (this.owner.techScore || 0) + increaseAmount;
-                if (this.isResearch) {
-                  this.techDoubleIncreaseEvent = true;
-                } else {
+                if (Math.random() * 100 >= failChance) {
+                  const increaseAmount = this.isResearch ? 2 : 1;
+                  this.owner.techScore = (this.owner.techScore || 0) + increaseAmount;
+                  if (this.isResearch) {
+                    this.techDoubleIncreaseEvent = true;
+                  } else {
+                    this.techIncreaseEvent = true;
+                  }
+                } else if (this.isResearch) {
+                  this.owner.techScore = (this.owner.techScore || 0) + 1;
                   this.techIncreaseEvent = true;
                 }
-              } else if (this.isResearch) {
-                this.owner.techScore = (this.owner.techScore || 0) + 1;
-                this.techIncreaseEvent = true;
               }
             }
           }

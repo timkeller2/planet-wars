@@ -1178,9 +1178,14 @@ async function bootstrap() {
       if (!planet || !planet.owner || planet.owner.id !== player.id) return;
       if (planet.inRevolt) return;
 
-      const validModes = ['economy', 'research', 'garrison', 'commerce', 'mining'];
+      const validModes = ['economy', 'research', 'garrison', 'commerce', 'mining', 'terraforming'];
       if (!validModes.includes(data.focusMode)) return;
       if (data.focusMode === 'commerce' && planet.maxShips <= 100) return;
+      if (data.focusMode === 'terraforming') {
+        const techBonus = Math.floor(Math.sqrt(player.techScore || 0));
+        const limit = Math.ceil(planet.habitability / 5);
+        if (techBonus <= limit) return;
+      }
 
       if (planet.focusTransition) return; // Prevent concurrent focus shifts on same planet
       const cost = Math.floor(planet.maxShips / 2);
