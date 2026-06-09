@@ -1949,7 +1949,7 @@ function getHabName(habitability) {
   if (planetCountInput && aiCountInput) {
     planetCountInput.addEventListener('input', () => {
       const planets = parseInt(planetCountInput.value, 10) || 0;
-      const suggestedAI = Math.max(0, Math.floor(planets / 10) - 1);
+      const suggestedAI = Math.min(11, Math.max(0, Math.floor(planets / 10) - 1));
       aiCountInput.value = suggestedAI;
       lastSuggestedAI = suggestedAI;
     });
