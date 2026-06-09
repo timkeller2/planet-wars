@@ -973,7 +973,7 @@ function getHabName(habitability) {
       const owner = p.ownerId ? serverState.players.find(pl => pl.id === p.ownerId) : null;
       const ownerColor = owner ? owner.color : '#888';
 
-      const sizeClassText = p.maxShips <= 79 ? 'Very Small' : p.maxShips <= 99 ? 'Small' : p.maxShips <= 129 ? 'Normal' : p.maxShips <= 159 ? 'Large' : p.maxShips <= 189 ? 'Very Large' : 'Super Planet';
+      const sizeClassText = p.sizeClass <= 79 ? 'Tiny' : p.sizeClass <= 99 ? 'Small' : p.sizeClass <= 129 ? 'Standard' : p.sizeClass <= 159 ? 'Large' : p.sizeClass <= 189 ? 'Very Large' : 'Super Planet';
       const habName = getHabName(p.habitability);
       const raceName = p.racialAffinity || '';
       const focusName = p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy';
@@ -1018,11 +1018,12 @@ function getHabName(habitability) {
         const targetPlayer = serverState.players.find(pl => pl.id === pId);
         const pName = targetPlayer ? targetPlayer.name : pId;
         const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
-        const dispVal = p.disposition?.[pId] ?? 0;
+        const dispVal = p.disposition?.[pId];
         const symVal = p.sympathy?.[pId] ?? 0;
         if (dispVal !== 0 || symVal !== 0) {
+          const dispStr = dispVal === undefined ? 'Unknown' : Math.round(dispVal);
           lines.push({
-            label: `🎭 Disp (${pName}): ${Math.round(dispVal)}`,
+            label: `🎭 Disp (${pName}): ${dispStr}`,
             value: `💖 Sym: ${Math.round(symVal)}`,
             color: pColor
           });
@@ -8808,7 +8809,7 @@ function getHabName(habitability) {
             ctx.beginPath();
             
             // Draw cyan sensor range circle (outline only, no fill!)
-            let baseCruiserRadar = 50 + s.maxHealth * 2;
+            let baseCruiserRadar = 25 + s.maxHealth * 2;
             let sensorRange = baseCruiserRadar + 10 * (s.sensorarrays || 0);
             sensorRange *= (1 + 0.25 * (s.sensorarrays || 0));
             if (s.isWarp) sensorRange *= 0.25;
