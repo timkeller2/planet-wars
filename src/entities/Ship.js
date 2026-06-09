@@ -137,6 +137,25 @@ export class Ship {
     this.formation = 'arrow';
   }
 
+  gainXp(amount, game, customX = null, customY = null) {
+    if (amount <= 0) return;
+    this.expScore = (this.expScore || 0) + amount;
+    if (this.isCruiser && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
+      if (game) {
+        if (!game.pendingExplorationEvents) game.pendingExplorationEvents = [];
+        const startX = customX !== null ? customX : this.x;
+        const startY = customY !== null ? customY : this.y;
+        game.pendingExplorationEvents.push({
+          playerId: this.owner.id,
+          x: startX,
+          y: startY,
+          shipId: this.id,
+          xp: Math.round(amount * 100) / 100 // keep XP decimal formatting nice
+        });
+      }
+    }
+  }
+
   get cruiserStyle() {
     return this._cruiserStyle || null;
   }
@@ -1037,7 +1056,7 @@ export class Ship {
               game.exploredGrid[key] = now;
               if (this.isCruiser) {
                 const xpGain = alreadyExploredByAnyone ? 1 : 2;
-                this.expScore = (this.expScore || 0) + xpGain;
+                this.gainXp(xpGain, game, cx * 100 + 50, cy * 100 + 50);
               }
             } else {
               game.exploredGrid[key] = now;
@@ -1651,7 +1670,7 @@ export class Ship {
               if (this.sourceShipId && allShips) {
                 const launcher = allShips.find(sh => sh.id === this.sourceShipId && sh.active);
                 if (launcher) {
-                  launcher.expScore = (launcher.expScore || 0) + 1;
+                  launcher.gainXp(1, game);
                 }
               }
             }
@@ -1900,7 +1919,7 @@ export class Ship {
                 const isTargetCruiserOrAmoeba = enemyShip.maxHealth > 0;
                 const killedShip = !isTargetCruiserOrAmoeba || !enemyShip.active;
                 if (killedShip) {
-                  this.expScore = (this.expScore || 0) + 0.05;
+                  this.gainXp(0.05, game);
                 }
               }
 
@@ -1911,7 +1930,7 @@ export class Ship {
                   if (this.sourceShipId && allShips) {
                     const launcher = allShips.find(sh => sh.id === this.sourceShipId && sh.active);
                     if (launcher) {
-                      launcher.expScore = (launcher.expScore || 0) + enemyShip.maxHealth / 2;
+                      launcher.gainXp(enemyShip.maxHealth / 2, game);
                     }
                   }
                 } else if (enemyShip.maxHealth > 0 && !enemyShip.isAmoeba) {
@@ -1919,7 +1938,7 @@ export class Ship {
                   if (this.sourceShipId && allShips) {
                     const launcher = allShips.find(sh => sh.id === this.sourceShipId && sh.active);
                     if (launcher) {
-                      launcher.expScore = (launcher.expScore || 0) + enemyShip.maxHealth / 2;
+                      launcher.gainXp(enemyShip.maxHealth / 2, game);
                     }
                   }
                 }
@@ -1940,7 +1959,7 @@ export class Ship {
             // Defender XP when cruiser is attacked (hit or shrug)
             if (enemyShip.maxHealth > 0 && !enemyShip.isAmoeba && enemyShip.owner) {
               enemyShip.owner.addExperience(0.25);
-              enemyShip.expScore = (enemyShip.expScore || 0) + 0.25;
+              enemyShip.gainXp(0.25, game);
             }
             if (!enemyShip.active) {
               if (this.owner) {
@@ -1948,7 +1967,7 @@ export class Ship {
                 if (this.sourceShipId && allShips) {
                   const launcher = allShips.find(sh => sh.id === this.sourceShipId && sh.active);
                   if (launcher) {
-                    launcher.expScore = (launcher.expScore || 0) + 1;
+                    launcher.gainXp(1, game);
                   }
                 }
               } else if (this.isAmoeba) {

@@ -1403,6 +1403,23 @@ async function bootstrap() {
         }
         game.pendingChatMessages = [];
       }
+
+      // Process pending exploration events
+      if (game.pendingExplorationEvents && game.pendingExplorationEvents.length > 0) {
+        for (const ev of game.pendingExplorationEvents) {
+          for (const [socketId, player] of connectedClients.entries()) {
+            if (player.id === ev.playerId) {
+              io.to(socketId).emit('tileExplored', {
+                x: ev.x,
+                y: ev.y,
+                shipId: ev.shipId,
+                xp: ev.xp
+              });
+            }
+          }
+        }
+        game.pendingExplorationEvents = [];
+      }
     } else if (game.isRunning && game.isPaused) {
       // Pause logic is not needed for AFK since AFK is removed
     }

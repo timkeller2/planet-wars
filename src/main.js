@@ -777,6 +777,889 @@ function getHabName(habitability) {
   let starfieldEnabled = true;
   let hoveredPlanet = null;
   let hoveredShip = null;
+  let activeInfoPanel = null;
+
+  const infoPanelModal = document.getElementById('info-panel-modal');
+  const infoPanelTitle = document.getElementById('info-panel-title');
+  const infoPanelBody = document.getElementById('info-panel-body');
+  const infoPanelCloseBtn = document.querySelector('.info-panel-close-btn');
+  const infoPanelBackdrop = document.querySelector('.info-panel-backdrop');
+  const infoPanelImagePlaceholder = document.querySelector('.info-panel-image-placeholder');
+  const infoPanelImageHologram = document.querySelector('.info-panel-image-hologram');
+
+  function openInfoPanel(type, id) {
+    activeInfoPanel = { type, id };
+    if (infoPanelModal) {
+      infoPanelModal.classList.remove('hidden');
+    }
+    updateInfoPanelContent();
+  }
+
+  function closeInfoPanel() {
+    activeInfoPanel = null;
+    if (infoPanelModal) {
+      infoPanelModal.classList.add('hidden');
+    }
+  }
+
+  if (infoPanelCloseBtn) {
+    infoPanelCloseBtn.addEventListener('click', closeInfoPanel);
+  }
+  if (infoPanelBackdrop) {
+    infoPanelBackdrop.addEventListener('click', closeInfoPanel);
+  }
+
+  function updateInfoPanelContent() {
+    if (!activeInfoPanel || !serverState || !infoPanelTitle || !infoPanelBody) {
+      if (infoPanelModal && !infoPanelModal.classList.contains('hidden')) {
+        closeInfoPanel();
+      }
+      return;
+    }
+
+    const { type, id } = activeInfoPanel;
+
+    if (infoPanelImagePlaceholder && infoPanelImageHologram) {
+      if (type === 'fleet') {
+        infoPanelImagePlaceholder.style.backgroundImage = "url('/Art/transports.jpg')";
+        infoPanelImagePlaceholder.style.backgroundSize = "contain";
+        infoPanelImagePlaceholder.style.backgroundRepeat = "no-repeat";
+        infoPanelImagePlaceholder.style.backgroundPosition = "center center";
+        infoPanelImageHologram.style.display = "none";
+      } else if (type === 'planet') {
+        let p = serverState.planets.find(pp => pp.id === id);
+        const isLastKnown = p && p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id];
+        if (isLastKnown) {
+          p = lastKnownPlanets[p.id];
+        }
+        if (p && (!p.inFog || isLastKnown)) {
+          const habName = getHabName(p.habitability).toLowerCase();
+          infoPanelImagePlaceholder.style.backgroundImage = `url('/Art/${habName}.jpg')`;
+          infoPanelImagePlaceholder.style.backgroundSize = "cover";
+          infoPanelImagePlaceholder.style.backgroundRepeat = "no-repeat";
+          infoPanelImagePlaceholder.style.backgroundPosition = "center center";
+          infoPanelImageHologram.style.display = "none";
+        } else {
+          infoPanelImagePlaceholder.style.backgroundImage = "";
+          infoPanelImagePlaceholder.style.backgroundRepeat = "";
+          infoPanelImageHologram.style.display = "flex";
+        }
+      } else if (type === 'ship') {
+        const hs = serverState.ships.find(ss => ss.id === id);
+        const hsOwner = hs && hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
+        const raceStyle = hs ? (hs.cruiserStyle || (hsOwner ? hsOwner.cruiserStyle : null)) : null;
+
+        if (raceStyle && ['Federation', 'Romulan', 'Gorn'].includes(raceStyle)) {
+          const imgName = raceStyle.toLowerCase();
+          infoPanelImagePlaceholder.style.backgroundImage = `url('/Art/${imgName}.jpg')`;
+          infoPanelImagePlaceholder.style.backgroundSize = "cover";
+          infoPanelImagePlaceholder.style.backgroundRepeat = "no-repeat";
+          infoPanelImagePlaceholder.style.backgroundPosition = "center center";
+          infoPanelImageHologram.style.display = "none";
+        } else {
+          infoPanelImagePlaceholder.style.backgroundImage = "";
+          infoPanelImagePlaceholder.style.backgroundRepeat = "";
+          infoPanelImageHologram.style.display = "flex";
+        }
+      } else {
+        infoPanelImagePlaceholder.style.backgroundImage = "";
+        infoPanelImagePlaceholder.style.backgroundRepeat = "";
+        infoPanelImageHologram.style.display = "flex";
+      }
+    }
+
+    let titleHTML = '';
+    let bodyHTML = '';
+
+    if (type === 'planet') {
+      let p = serverState.planets.find(pp => pp.id === id);
+      const isLastKnown = p && p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id];
+      if (isLastKnown) {
+        p = lastKnownPlanets[p.id];
+      }
+      if (!p || (p.inFog && !isLastKnown)) {
+        closeInfoPanel();
+        return;
+      }
+      const owner = p.ownerId ? serverState.players.find(pl => pl.id === p.ownerId) : null;
+      const ownerColor = owner ? owner.color : '#888';
+
+      const sizeClassText = p.maxShips <= 79 ? 'Very Small' : p.maxShips <= 99 ? 'Small' : p.maxShips <= 129 ? 'Normal' : p.maxShips <= 159 ? 'Large' : p.maxShips <= 189 ? 'Very Large' : 'Super Planet';
+      const habName = getHabName(p.habitability);
+      const raceName = p.racialAffinity || '';
+      const focusName = p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy';
+
+      titleHTML = `<span style="color: ${ownerColor}">${p.name} - ${sizeClassText} ${habName} ${raceName} ${focusName} World${isLastKnown ? ' <span style="font-size:0.75rem;color:#aaa;">(Last Known)</span>' : ''}</span>`;
+
+      const lines = [];
+
+      const resourceEmojis = {
+        dilithium: '💎',
+        merculite: '☄️',
+        duranium: '🔲',
+        tritanium: '🔩',
+        antimatter: '🌀',
+        deuterium: '💧',
+        latinum: '🏺'
+      };
+
+      const producedIcons = p.resources ? p.resources.map(r => resourceEmojis[r] || '').filter(Boolean).join(' ') : '';
+      const wantedResourceName = p.preferredResource ? p.preferredResource.charAt(0).toUpperCase() + p.preferredResource.slice(1) : 'None';
+      const wantedStr = p.preferredResource ? `${resourceEmojis[p.preferredResource] || ''} ${wantedResourceName}` : 'None';
+
+      lines.push({ label: `Produces: ${producedIcons}`, value: `Wants: ${wantedStr}`, color: '#fff' });
+
+      if (owner) {
+        let capacityMultiplier = 1.0;
+        if (p.isMilitary) capacityMultiplier = 0.8;
+        if (p.focusMode === 'garrison') capacityMultiplier = 2.0;
+
+        const maxPop = Math.round(p.maxShips * capacityMultiplier);
+
+        lines.push({ label: 'Garrison', value: `${Math.floor(p.ships)} / ${maxPop}`, color: '#fff' });
+        lines.push({ label: 'Owner Tech 🧪', value: `${owner.techScore} (√Tech: +${Math.round(Math.sqrt(owner.techScore))})`, color: '#00e5ff' });
+        lines.push({ label: 'Owner Exp 🎯', value: `${owner.expScore} (√Exp: +${Math.round(Math.sqrt(owner.expScore))})`, color: '#ffeb3b' });
+      } else {
+        lines.push({ label: 'Garrison', value: `${Math.floor(p.ships)} / ${Math.round(p.maxShips)}`, color: '#fff' });
+      }
+
+      let totalDefense = 0;
+      const hpOwner = owner || { techScore: 0, expScore: 0, id: 'neutral' };
+
+      // Gravity Well Support calculation helper
+      const getGravityRadiusClient = (pl) => {
+        let baseRadius = pl.maxShips * 1.5;
+        if (pl.isMilitary && pl.ships >= pl.maxShips) {
+          baseRadius *= 1.5;
+        }
+        const plOwner = pl.ownerId ? serverState.players.find(o => o.id === pl.ownerId) : null;
+        const isHuman = plOwner && !plOwner.isAI;
+        if (isHuman && pl.focusMode === 'garrison' && pl.ships >= pl.maxShips) {
+          baseRadius += (pl.ships / 2);
+        }
+        const tb = 0.01 * Math.sqrt(plOwner ? (plOwner.techScore || 0) : 0);
+        const eb = 0.01 * Math.sqrt(plOwner ? (plOwner.expScore || 0) : 0);
+        return baseRadius * (1 + tb + eb);
+      };
+
+      let gravityWellBonusTotal = 0;
+      if (p.ownerId) {
+        for (const planet of serverState.planets) {
+          if (planet.id !== p.id && planet.ownerId === p.ownerId) {
+            const pdx = planet.x - p.x;
+            const pdy = planet.y - p.y;
+            const pDistSq = pdx * pdx + pdy * pdy;
+            const gr = getGravityRadiusClient(planet);
+            if (pDistSq < gr * gr) {
+              let mult = 0.002;
+              if (planet.isMilitary || planet.focusMode === 'garrison') {
+                if (planet.ships >= planet.maxShips * 2 - 10) {
+                  mult = 0.0045;
+                } else if (planet.ships >= planet.maxShips) {
+                  mult = 0.003;
+                }
+              }
+              const contribution = mult * Math.floor(planet.ships / 10) * 100;
+              gravityWellBonusTotal += contribution;
+            }
+          }
+        }
+      }
+      
+      if (gravityWellBonusTotal > 0) {
+        totalDefense += gravityWellBonusTotal;
+        lines.push({ label: 'Gravity Well Support', value: `${Math.round(gravityWellBonusTotal)}%`, color: '#00e676' });
+      }
+
+      // Garrison defense bonus
+      const garrisonBonus = Math.floor(p.ships / 5);
+      if (garrisonBonus > 0) {
+        totalDefense += garrisonBonus;
+        lines.push({ label: 'Garrison Shielding', value: `${garrisonBonus}%`, color: '#4caf50' });
+      }
+
+      // Tech defense bonus
+      const techBonus = Math.round(Math.sqrt(hpOwner.techScore || 0));
+      if (techBonus > 0) {
+        totalDefense += techBonus;
+        lines.push({ label: 'Owner Tech Defense', value: `${techBonus}%`, color: '#00e5ff' });
+      }
+
+      // Owner Experience defense bonus
+      const expBonus = Math.round(Math.sqrt(hpOwner.expScore || 0));
+      if (expBonus > 0) {
+        totalDefense += expBonus;
+        lines.push({ label: 'Owner Exp Defense', value: `${expBonus}%`, color: '#ffeb3b' });
+      }
+
+      // Planet Local Experience defense bonus
+      const planetExpBonus = Math.round(Math.sqrt(p.expScore || 0));
+      if (planetExpBonus > 0) {
+        totalDefense += planetExpBonus;
+        lines.push({ label: 'Planet Exp Defense', value: `${planetExpBonus}%`, color: '#ffea00' });
+      }
+
+      if (p.isMilitary) {
+        totalDefense += 15;
+        lines.push({ label: 'Military Base', value: `15%`, color: '#ff5722' });
+      }
+      
+      const envLabel = p.preferredResource === 'deuterium' ? 'Frozen' : p.preferredResource === 'antimatter' ? 'Volcanic' : p.preferredResource === 'latinum' ? 'Oceanic' : 'Desert';
+      const hasEnvDefense = (p.preferredResource === 'deuterium' || p.preferredResource === 'antimatter' || p.preferredResource === 'latinum');
+      if (p.ownerId) {
+        if (hasEnvDefense) {
+          totalDefense += 15;
+          lines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
+        }
+        if (hpOwner.id === p.homeworldOf) {
+          totalDefense += 15;
+          lines.push({ label: 'Homeworld', value: `15%`, color: '#ff0' });
+        }
+        if (hpOwner.planetCount === 1) {
+          totalDefense += 15;
+          lines.push({ label: 'Last stand', value: `15%`, color: '#ff0' });
+        }
+        if (localPlayer && !localPlayer.isAI && !hpOwner.isAI) {
+          const aiOwners = new Set();
+          for (const plPlanet of serverState.planets) {
+            if (plPlanet.ownerId) {
+              const plOwner = serverState.players.find(pl => pl.id === plPlanet.ownerId);
+              if (plOwner && plOwner.isAI) aiOwners.add(plPlanet.ownerId);
+            }
+          }
+          const hvhBonus = aiOwners.size * 2;
+          if (hvhBonus > 0) {
+            totalDefense += hvhBonus;
+            lines.push({ label: 'PvP Defense', value: `${hvhBonus}%`, color: '#ff0' });
+          }
+        }
+      } else {
+        if (hasEnvDefense) {
+          totalDefense += 15;
+          lines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
+        } else {
+          lines.push({ label: 'Neutral', value: 'No defense bonuses', color: '#888' });
+        }
+      }
+
+      if (serverState.storms) {
+        const defenseOwner = owner || { techScore: 0, expScore: 0, id: 'neutral' };
+        for (const storm of serverState.storms) {
+          if (storm.type === 'minefield') continue;
+          const sdx = p.x - storm.x;
+          const sdy = p.y - storm.y;
+          if (sdx * sdx + sdy * sdy <= storm.radius * storm.radius) {
+            const knowledge = (storm.knowledge && typeof storm.knowledge === 'object') ? (storm.knowledge[defenseOwner.id] || 0) : (storm.knowledge || 0);
+            const tRed = Math.sqrt(defenseOwner.techScore || 0);
+            const eRed = Math.sqrt(defenseOwner.expScore || 0);
+            const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2);
+            if (eff > 0) {
+              totalDefense += eff;
+              const label = storm.type === 'nebula' ? 'Nebula Shielding' : 'Ion Interference';
+              lines.push({ label: label, value: `${Math.round(eff)}%`, color: storm.type === 'nebula' ? '#ff4444' : '#ffff44' });
+            }
+          }
+        }
+      }
+      lines.unshift({ label: 'Total Defense Modifier', value: totalDefense > 0 ? `🛡️ ${Math.round(totalDefense)}%` : '0%', color: '#fff', isHeader: true });
+
+      const techScoreVal = hpOwner ? (hpOwner.techScore || 0) : 0;
+      const softCap = Math.round(p.sizeClass * ((p.habitability + techScoreVal) / 100));
+      lines.push({ label: `Improvement Rate: ${p.habitability}`, value: `Potential: ${softCap}`, color: '#ffb74d' });
+
+
+      if (p.sympathy) {
+        for (const [pId, symVal] of Object.entries(p.sympathy)) {
+          if (symVal > 0) {
+            const targetPlayer = serverState.players.find(pl => pl.id === pId);
+            const pName = targetPlayer ? targetPlayer.name : pId;
+            const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
+            lines.push({ label: `💖 Sympathy (${pName})`, value: `${Math.round(symVal)}`, color: pColor });
+          }
+        }
+      }
+
+      if (p.disposition) {
+        for (const [pId, dispVal] of Object.entries(p.disposition)) {
+          if (dispVal !== undefined && dispVal !== null) {
+            const targetPlayer = serverState.players.find(pl => pl.id === pId);
+            const pName = targetPlayer ? targetPlayer.name : pId;
+            const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
+            lines.push({ label: `🎭 Disposition (${pName})`, value: `${Math.round(dispVal)}`, color: pColor });
+          }
+        }
+      }
+
+      const isNeutralOrEnemy = !p.ownerId || p.ownerId !== localPlayer.id;
+      if (isNeutralOrEnemy) {
+        const currentSym = p.sympathy?.[localPlayer.id] || 0;
+        const expBonus = Math.sqrt(localPlayer.expScore || 0);
+        const selectedCruiser = getSelectedCruiser();
+        const shipExpBonus = selectedCruiser ? Math.sqrt(selectedCruiser.expScore || 0) : 0;
+        const bonusSum = expBonus + shipExpBonus;
+        const disposition = p.disposition?.[localPlayer.id] ?? 0;
+        
+        let racialBonus = 0;
+        if (selectedCruiser && (selectedCruiser.cruiserStyle === p.racialAffinity || (selectedCruiser.owner && selectedCruiser.owner.cruiserStyle === p.racialAffinity))) {
+          racialBonus = 20;
+        }
+
+        const chanceBase = 30 + disposition + currentSym + bonusSum + racialBonus;
+        const chancePref = 30 + disposition + currentSym + (bonusSum * 3) + 10 + racialBonus;
+        
+        const basePercent = Math.max(0, Math.min(100, Math.round(chanceBase)));
+        const prefPercent = Math.max(0, Math.min(100, Math.round(chancePref)));
+        
+        const emojis = {
+          dilithium: '💎',
+          merculite: '☄️',
+          duranium: '🔲',
+          tritanium: '🔩',
+          antimatter: '🌀',
+          deuterium: '💧',
+          latinum: '🏺'
+        };
+        if (p.preferredResource) {
+          const prefEmoji = emojis[p.preferredResource] || '💎';
+          lines.push({ 
+            label: '🤝 Diplomacy Chance', 
+            value: `${basePercent}%, w/ ${prefEmoji}: ${prefPercent}%`, 
+            color: '#4caf50' 
+          });
+        } else {
+          lines.push({ 
+            label: '🤝 Diplomacy Chance', 
+            value: `${basePercent}%`, 
+            color: '#4caf50' 
+          });
+        }
+      }
+
+      if (serverState.storms) {
+        for (const storm of serverState.storms) {
+          if (storm.type === 'minefield') continue;
+          const dx = p.x - storm.x, dy = p.y - storm.y;
+          if (dx * dx + dy * dy <= storm.radius * storm.radius) {
+            const typeLabel = storm.type === 'nebula' ? 'Nebula' : 'Ion Storm';
+            const typeColor = storm.type === 'nebula' ? '#f66' : '#ff0';
+            lines.push({ label: `⚠️ ${typeLabel}`, value: `Int: ${storm.intensity}`, color: typeColor });
+          }
+        }
+      }
+
+      for (const line of lines) {
+        const displayLabel = formatTooltipString(line.label);
+        const displayValue = formatTooltipString(line.value);
+        if (line.isHeader) {
+          bodyHTML += `<div class="info-panel-row header-row" style="color: ${line.color}">
+            <div class="info-panel-label">${displayLabel}</div>
+            <div class="info-panel-value">${displayValue || ''}</div>
+          </div>`;
+        } else {
+          bodyHTML += `<div class="info-panel-row" style="color: ${line.color || '#fff'}">
+            <div class="info-panel-label">${displayLabel}</div>
+            <div class="info-panel-value">${displayValue}</div>
+          </div>`;
+        }
+      }
+    } else if (type === 'ship' || type === 'fleet') {
+      const hs = serverState.ships.find(ss => ss.id === id);
+      if (!hs || !hs.active) {
+        closeInfoPanel();
+        return;
+      }
+      const hsOwner = hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
+      const lines = [];
+
+      if (hs.isAmoeba) {
+        titleHTML = `<span style="color: #0f0">Giant Space Amoeba</span>`;
+
+        const currentTotalHealth = Math.floor(hs.health) + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
+        const maxTotalHealth = hs.maxHealth + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
+        lines.push({ label: 'Health', value: currentTotalHealth + ' / ' + maxTotalHealth, color: '#fff' });
+        lines.push({ label: 'Bomb Sacs', value: Math.floor(hs.bombs || 0) + ' / ' + hs.maxHealth, color: '#ff0' });
+        if (hs.isHungry) {
+          lines.push({ label: 'Status', value: 'Hungry (will grow)', color: '#f66' });
+        } else {
+          lines.push({ label: 'Status', value: 'Digesting', color: '#4f4' });
+        }
+        lines.push({ label: 'Attack Range', value: (50 + (hs.bombs ? hs.bombs * 5 : 0)) + 'px', color: '#f88' });
+        const techBonus = hsOwner ? Math.sqrt(hsOwner.techScore || 0) : 0;
+        const expBonus = hsOwner ? Math.sqrt(hsOwner.expScore || 0) : 0;
+        const shipExpBonus = Math.sqrt(hs.expScore || 0);
+        const bombBonus = (hs.bombs && hs.bombs > 0) ? (hs.bombs * 3) : 0;
+        const amoebaHitChance = Math.round(Math.min(100, 10 + techBonus + expBonus + shipExpBonus + hs.maxHealth * 5 + bombBonus)) + '%';
+        lines.push({ label: 'Accuracy', value: amoebaHitChance, color: '#f88' });
+        const shrugChance = Math.min(95, Math.floor(50 + hs.maxHealth * 1 + (techBonus + expBonus + shipExpBonus) * 1));
+        lines.push({ label: 'Deflection', value: shrugChance + '%', color: '#ccc' });
+      } else if (hs.isCruiser) {
+        let shipClass = "Mammoth";
+        if (hs.classType && SHIP_CLASSES[hs.classType]) {
+          shipClass = SHIP_CLASSES[hs.classType].name;
+        } else {
+          if (hs.maxHealth <= 19) shipClass = "Scout Ship";
+          else if (hs.maxHealth <= 24) shipClass = "Frigate";
+          else if (hs.maxHealth <= 29) shipClass = "Destroyer";
+          else if (hs.maxHealth <= 34) shipClass = "Cruiser";
+          else if (hs.maxHealth <= 39) shipClass = "Battlecruiser";
+          else if (hs.maxHealth <= 44) shipClass = "Battleship";
+          else if (hs.maxHealth <= 49) shipClass = "Titan";
+        }
+
+        const raceStyle = hs.cruiserStyle || (hsOwner ? hsOwner.cruiserStyle : null);
+        let raceStr = '';
+        if (raceStyle) {
+          const raceIcons = {
+            'Federation': '🖖',
+            'Romulan': '🦅',
+            'Klingon': '⚔️',
+            'Gorn': '🦎',
+            'Tholian': '🕸️',
+            'Lyran': '🐶'
+          };
+          const icon = raceIcons[raceStyle] || '';
+          raceStr = (icon ? icon + ' ' : '') + raceStyle;
+        }
+
+        titleHTML = `<span style="color: ${hsOwner ? hsOwner.color : '#0ff'}">${(hsOwner ? hsOwner.name : 'Unknown')}'s ${hs.name || shipClass}</span>`;
+        lines.push({ label: 'Class / Race', value: `${shipClass} ${raceStr ? `(${raceStr})` : ''}`, color: '#fff', isHeader: true });
+        lines.push({ label: 'Hull Integrity', value: `${Math.floor(hs.health)} / ${hs.maxHealth}`, color: '#fff' });
+
+        let fuelLabel = hs.engine > 0 ? `Fuel (${hs.engine})` : 'Fuel';
+        if (hs.specialfuel && hs.specialfuel > 0) {
+          fuelLabel += '*';
+        }
+        const fuelVal = Math.floor(hs.fuel || 0) + ' / ' + Math.floor(getMaxFuel(hs));
+        const speedVal = (hs.currentSpeed || 0).toFixed(1) + ' / ' + (hs.speed || 30).toFixed(1);
+        lines.push({ label: `⛽ ${fuelLabel}`, value: `${fuelVal}  |  Speed: ${speedVal}`, color: (hs.fuel <= 0 ? '#f00' : '#ffa500'), isSpeedBar: true, currentSpeed: hs.currentSpeed || 0, maxSpeed: hs.speed || 30 });
+
+        if (hs.maxArmor && hs.maxArmor > 0) {
+          let armorLabel = `Cruiser Armor (${hs.armor})`;
+          if (hs.specialduranium && hs.specialduranium > 0) {
+            armorLabel += '*';
+          }
+          lines.push({ label: armorLabel, value: Math.floor(hs.armorPoints) + ' / ' + Math.floor(hs.maxArmor), color: '#b0bec5' });
+        }
+        if (hs.sensorarrays > 0) lines.push({ label: `Sensor Array (${hs.sensorarrays})`, value: `📡 Active`, color: '#ffb300' });
+        if (hs.labs > 0) lines.push({ label: `Laboratories (${hs.labs})`, value: `🔬 Active`, color: '#00e5ff' });
+        if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
+        if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ Active`, color: '#ffa500' });
+        if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
+
+        let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(2 * hs.health)}`;
+        if (hs.marines > 0) {
+          crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${hs.marines * hs.maxHealth}`;
+        }
+        lines.push({ label: 'Crew / Marines', value: crewVal, color: '#81d4fa' });
+
+        const rawTech = hsOwner ? (hsOwner.techScore || 0) : 0;
+        const rawExp = hsOwner ? (hsOwner.expScore || 0) : 0;
+        const shipExp = hs.expScore || 0;
+
+        const techBonus = Math.sqrt(rawTech);
+        const expBonus = Math.sqrt(rawExp);
+        const shipExpBonus = Math.sqrt(shipExp);
+
+        const baseDeflection = hs.maxHealth + (techBonus + expBonus + shipExpBonus);
+        const deflectionRem = 100 - baseDeflection;
+        const shieldDeflectionBonus = (hs.shields || 0) * (deflectionRem / 5);
+        let shrugChance = Math.floor(baseDeflection + shieldDeflectionBonus);
+        if ((hs.bombs || 0) < 1) {
+          shrugChance = Math.floor(shrugChance / 2);
+        }
+        if (hs.specialduranium && hs.specialduranium > 0) {
+          shrugChance += 10;
+        }
+        shrugChance = Math.min(90, shrugChance);
+        let deflectionLabel = hs.shields > 0 ? `Deflection (${hs.shields})` : 'Deflection';
+        if (hs.specialduranium && hs.specialduranium > 0) {
+          deflectionLabel += '*';
+        }
+
+        const maxBombs = getMaxBombs(hs);
+        let munitionsDisplay = Math.floor(hs.bombs || 0) + ' / ' + maxBombs;
+        let munitionsLabel = hs.munitions > 0 ? `Munitions (${hs.munitions})` : 'Munitions';
+        if (hs.specialbombs && hs.specialbombs > 0) {
+          munitionsLabel += '*';
+        }
+        lines.push({ label: `💣 ${munitionsLabel}`, value: `${munitionsDisplay}  |  🛡️ ${deflectionLabel}: ${shrugChance}%`, color: '#ffa' });
+        if (hs.munitions > 0) {
+          lines.push({ label: 'Splash Damage', value: `+${hs.munitions}`, color: '#ffd740' });
+        }
+
+        if (hs.maxsupplies > 0) {
+          lines.push({ label: 'Supplies', value: `📦 ${Math.floor(hs.supplies || 0)} / ${hs.maxsupplies}`, color: '#ffcc80' });
+        }
+
+        const laserTechBonus = Math.floor(techBonus) * 0.01;
+        const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+        const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+        const targetingBonus = (hs.targeting || 0) * 5;
+        const targetingRangeBonus = (hs.targeting || 0) * 0.05;
+
+        let effectiveRange = baseDogfightRange * 1.10;
+        if (hs.bombs > 0) {
+          effectiveRange += baseDogfightRange * 0.10;
+        }
+        effectiveRange = Math.floor(effectiveRange * (1 + targetingRangeBonus));
+        if (hs.fuel_tanker && hs.fuel_tanker > 0) {
+          effectiveRange = Math.max(5, effectiveRange - hs.fuel_tanker * 5);
+        }
+        if (hs.specialbombs && hs.specialbombs > 0) {
+          effectiveRange += 10;
+        }
+        if (hs.package === 'brute') {
+          effectiveRange *= 0.5;
+        } else if (hs.package === 'sniper') {
+          effectiveRange *= 1.5;
+        }
+        effectiveRange = Math.floor(effectiveRange);
+
+        let bombAccuracyBonus = 0;
+        if (hs.bombs > 0) {
+          bombAccuracyBonus = 10;
+          let effTactics = hs.tactics;
+          if (!effTactics) {
+            if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Lyran') {
+              effTactics = 'patient';
+            } else if (hs.cruiserStyle === 'Romulan') {
+              effTactics = 'frenzied';
+            } else {
+              effTactics = 'normal';
+            }
+          }
+          if (effTactics === 'patient') {
+            bombAccuracyBonus = 7;
+          } else if (effTactics === 'frenzied') {
+            bombAccuracyBonus = 20;
+          }
+        }
+
+        let hitChanceValue = 10 + targetingBonus + bombAccuracyBonus;
+        hitChanceValue += techBonus + expBonus + shipExpBonus;
+        if (hs.fuel_tanker && hs.fuel_tanker > 0) {
+          hitChanceValue -= hs.fuel_tanker * 5;
+        }
+        if (hs.specialbombs && hs.specialbombs > 0) {
+          hitChanceValue += 10;
+        }
+        
+        let friendlyGrav = 0;
+        let enemyGrav = 0;
+        if (serverState.planets) {
+          for (const gp of serverState.planets) {
+            if (!gp.ownerId) continue;
+            const gpOwner = serverState.players.find(pl => pl.id === gp.ownerId);
+            if (!gpOwner) continue;
+            const tb = 0.01 * Math.sqrt(gpOwner.techScore || 0);
+            const eb = 0.01 * Math.sqrt(gpOwner.expScore || 0);
+            let baseRadius = gp.maxShips * 1.5;
+            if (gp.isMilitary && gp.ships >= gp.maxShips) {
+              baseRadius *= 1.5;
+            }
+            const isGpHuman = gpOwner && !gpOwner.isAI;
+            if (isGpHuman && gp.focusMode === 'garrison' && gp.ships >= gp.maxShips) {
+              baseRadius += (gp.ships / 2);
+            }
+            const gr = baseRadius * (1 + tb + eb);
+            const pdx = gp.x - hs.x, pdy = gp.y - hs.y;
+            if (pdx * pdx + pdy * pdy <= gr * gr) {
+              let mult = 0.2;
+              if (gp.isMilitary || gp.focusMode === 'garrison') {
+                if (gp.ships >= gp.maxShips * 2 - 10) {
+                  mult = 0.45;
+                } else if (gp.ships >= gp.maxShips) {
+                  mult = 0.3;
+                }
+              }
+              const strength = mult * Math.floor(gp.ships / 10);
+              if (gp.ownerId === hs.ownerId) {
+                friendlyGrav += strength;
+              } else {
+                enemyGrav += strength;
+              }
+            }
+          }
+        }
+        
+        let hazardPenalty = 0;
+        if (serverState.storms) {
+          for (const storm of serverState.storms) {
+            if (storm.type === 'minefield') continue;
+            const sdx = hs.x - storm.x;
+            const sdy = hs.y - storm.y;
+            if (sdx * sdx + sdy * sdy <= storm.radius * storm.radius) {
+              const knowledge = typeof storm.knowledge === 'object' ? ((storm.knowledge && hsOwner && storm.knowledge[hsOwner.id]) || 0) : (storm.knowledge || 0);
+              const tRed = hsOwner ? Math.sqrt(hsOwner.techScore || 0) : 0;
+              const eRed = hsOwner ? Math.sqrt(hsOwner.expScore || 0) : 0;
+              const sRed = Math.sqrt(hs.expScore || 0);
+              const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+              hazardPenalty += eff;
+            }
+          }
+        }
+
+        const hitChance = Math.round(Math.min(100, Math.max(10.0, hitChanceValue + friendlyGrav - enemyGrav - hazardPenalty))) + '%';
+        const volleySize = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
+        let rangeLabel = 'Range';
+        if (hs.specialbombs && hs.specialbombs > 0) {
+          rangeLabel += '*';
+        }
+        let accuracyLabel = hs.targeting > 0 ? `Accuracy (${hs.targeting})` : 'Accuracy';
+        if (hs.specialbombs && hs.specialbombs > 0) {
+          accuracyLabel += '*';
+        }
+        lines.push({ label: `🎯 ${accuracyLabel}`, value: `${hitChance}  |  📏 ${rangeLabel}: ${effectiveRange}px`, color: '#f88' });
+        
+        const netMapBonus = friendlyGrav - enemyGrav - hazardPenalty;
+        if (netMapBonus !== 0) {
+          const sign = netMapBonus > 0 ? '+' : '';
+          const color = netMapBonus > 0 ? '#4f4' : '#f66';
+          lines.push({ label: 'Map Bonus', value: `${sign}${Math.round(netMapBonus)}%`, color: color });
+        }
+        
+        const sm = hs.speedModifier || 1.0;
+        if (sm < 1.0) {
+          const speedLabel = sm === 0.25 ? '1/4 speed' : sm === 0.50 ? '1/2 speed' : `${Math.round(sm * 100)}% speed`;
+          const saveChance = sm === 0.25 ? 90 : sm === 0.50 ? 75 : 0;
+          lines.push({ label: speedLabel, value: saveChance > 0 ? `${saveChance}% save` : '', color: '#aaf' });
+        }
+        
+        lines.push({ label: 'Volley Size', value: volleySize, color: '#ffa' });
+        lines.push({ label: 'XP', value: `${Math.round(shipExp)} (√ShipExp: +${Math.round(shipExpBonus)})`, color: '#00d5ff' });
+      } else {
+        const swarmRange = 100;
+        const swarmRangesq = swarmRange * swarmRange;
+        let nearbyCount = 0;
+        let bomberCount = 0;
+        let maxShipExp = hs.expScore || 0;
+        let avgFlightTime = hs.flightTime || 0;
+        let flightTimeCount = 1;
+        for (const ship of serverState.ships) {
+          if (ship.id === hs.id || ship.ownerId !== hs.ownerId || !ship.active) continue;
+          const sdx = ship.x - hs.x;
+          const sdy = ship.y - hs.y;
+          if (sdx * sdx + sdy * sdy <= swarmRangesq) {
+            nearbyCount += (ship.count || 1);
+            if (ship.isBomber) bomberCount += (ship.count || 1);
+            if ((ship.expScore || 0) > maxShipExp) maxShipExp = ship.expScore || 0;
+            avgFlightTime += (ship.flightTime || 0) * (ship.count || 1);
+            flightTimeCount += (ship.count || 1);
+          }
+        }
+        avgFlightTime /= flightTimeCount;
+        const totalShips = nearbyCount + (hs.count || 1);
+
+        titleHTML = `<span style="color: ${hsOwner ? hsOwner.color : '#0ff'}">${(hsOwner ? hsOwner.name : 'Unknown')}'s Fleet</span>`;
+
+        const bomberLabel = bomberCount > 0 ? ` (${bomberCount + (hs.isBomber ? 1 : 0)} bombers)` : '';
+        lines.push({ label: 'ships in range', value: `${totalShips}${bomberLabel}`, color: '#ccc' });
+        const raceStyle = hs.cruiserStyle || (hsOwner ? hsOwner.cruiserStyle : null);
+        if (raceStyle) {
+          const raceIcons = {
+            'Federation': '🖖',
+            'Romulan': '🦅',
+            'Klingon': '⚔️',
+            'Gorn': '🦎',
+            'Tholian': '🕸️',
+            'Lyran': '🐶'
+          };
+          const icon = raceIcons[raceStyle] || '';
+          lines.push({ label: 'Race', value: `${icon} ${raceStyle}`, color: '#e040fb' });
+        }
+        lines.push({ label: 'Base Speed', value: (hs.speed || 30).toFixed(1), color: '#ccc' });
+        lines.push({ label: 'Effective Speed', value: (hs.currentSpeed || 0).toFixed(1), color: '#4f4' });
+
+        let totalAttackMod = 0;
+        const swarmBonus = Math.floor(nearbyCount / 10);
+        if (swarmBonus > 0) {
+          totalAttackMod += swarmBonus;
+          lines.push({ label: 'swarm Bonus', value: `${swarmBonus}%`, color: '#4f4' });
+        }
+
+        const techAtk = hsOwner ? Math.round(Math.sqrt(hsOwner.techScore || 0)) : 0;
+        if (techAtk > 0) {
+           totalAttackMod += techAtk;
+           lines.push({ label: 'Tech Attack', value: `${techAtk}%`, color: '#4f4' });
+        }
+
+        const expAtk = hsOwner ? Math.round(Math.sqrt(hsOwner.expScore || 0)) : 0;
+        if (expAtk > 0) {
+           totalAttackMod += expAtk;
+           lines.push({ label: 'Exp Attack', value: `${expAtk}%`, color: '#4f4' });
+        }
+
+        const shipExp = Math.round(Math.sqrt(maxShipExp || 0));
+        if (shipExp > 0) {
+          totalAttackMod += shipExp;
+          lines.push({ label: 'ship Exp', value: `${shipExp}%`, color: '#4f4' });
+        }
+
+        let friendlyGrav = 0;
+        let enemyGrav = 0;
+        if (serverState.planets) {
+          for (const gp of serverState.planets) {
+            if (!gp.ownerId) continue;
+            const gpOwner = serverState.players.find(pl => pl.id === gp.ownerId);
+            if (!gpOwner) continue;
+            const tb = 0.01 * Math.sqrt(gpOwner.techScore || 0);
+            const eb = 0.01 * Math.sqrt(gpOwner.expScore || 0);
+            let baseRadius = gp.maxShips * 1.5;
+            if (gp.isMilitary && gp.ships >= gp.maxShips) {
+              baseRadius *= 1.5;
+            }
+            const isGpHuman = gpOwner && !gpOwner.isAI;
+            if (isGpHuman && gp.focusMode === 'garrison' && gp.ships >= gp.maxShips) {
+              baseRadius += (gp.ships / 2);
+            }
+            const gr = baseRadius * (1 + tb + eb);
+            const pdx = gp.x - hs.x, pdy = gp.y - hs.y;
+            if (pdx * pdx + pdy * pdy <= gr * gr) {
+              let mult = 0.2;
+              if (gp.isMilitary || gp.focusMode === 'garrison') {
+                if (gp.ships >= gp.maxShips * 2 - 10) {
+                  mult = 0.45;
+                } else if (gp.ships >= gp.maxShips) {
+                  mult = 0.3;
+                }
+              }
+              const strength = mult * Math.floor(gp.ships / 10);
+              if (gp.ownerId === hs.ownerId) {
+                friendlyGrav += strength;
+              } else {
+                enemyGrav += strength;
+              }
+            }
+          }
+        }
+        let hazardPenalty = 0;
+        if (serverState.storms) {
+          for (const storm of serverState.storms) {
+            if (storm.type === 'minefield') continue;
+            const sdx = hs.x - storm.x;
+            const sdy = hs.y - storm.y;
+            if (sdx * sdx + sdy * sdy <= storm.radius * storm.radius) {
+              const knowledge = typeof storm.knowledge === 'object' ? ((storm.knowledge && hsOwner && storm.knowledge[hsOwner.id]) || 0) : (storm.knowledge || 0);
+              const tRed = hsOwner ? Math.sqrt(hsOwner.techScore || 0) : 0;
+              const eRed = hsOwner ? Math.sqrt(hsOwner.expScore || 0) : 0;
+              const sRed = Math.sqrt(maxShipExp || 0);
+              const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+              hazardPenalty += eff;
+            }
+          }
+        }
+
+        if (friendlyGrav > 0) totalAttackMod += friendlyGrav;
+        if (enemyGrav > 0) totalAttackMod -= enemyGrav;
+        if (hazardPenalty > 0) totalAttackMod -= hazardPenalty;
+
+        const netMapBonus = friendlyGrav - enemyGrav - hazardPenalty;
+        if (netMapBonus !== 0) {
+          const sign = netMapBonus > 0 ? '+' : '';
+          const color = netMapBonus > 0 ? '#4f4' : '#f66';
+          lines.push({ label: 'Map Bonus', value: `${sign}${Math.round(netMapBonus)}%`, color: color });
+        }
+
+        const sm = hs.speedModifier || 1.0;
+        if (sm < 1.0) {
+          const speedLabel = sm === 0.25 ? '1/4 speed' : sm === 0.50 ? '1/2 speed' : `${Math.round(sm * 100)}% speed`;
+          const saveChance = sm === 0.25 ? 90 : sm === 0.50 ? 75 : 0;
+          lines.push({ label: speedLabel, value: saveChance > 0 ? `${saveChance}% save` : '', color: '#aaf' });
+        }
+
+        lines.push({ label: 'Dogfight Hit%', value: `${Math.round(Math.max(1, 10 + totalAttackMod))}%`, color: '#fff' });
+
+        const techSafe = hsOwner ? Math.sqrt(hsOwner.techScore || 0) : 0;
+        const expSafe = hsOwner ? Math.sqrt(hsOwner.expScore || 0) : 0;
+        const safeTime = techSafe + expSafe;
+
+        if (avgFlightTime > 0) {
+          lines.push({ label: 'Flight Time', value: `${Math.round(avgFlightTime)}s`, color: '#aaa' });
+        }
+        if (safeTime > 0) {
+          lines.push({ label: 'safe Time', value: `${Math.round(safeTime)}s`, color: avgFlightTime >= safeTime ? '#f66' : '#4f4' });
+        }
+
+        if (avgFlightTime >= safeTime) {
+          const timeExposed = avgFlightTime - safeTime;
+          let attritionRate = 1 + Math.floor(timeExposed / 4);
+          let attritionLabel = `${attritionRate}%/s`;
+
+          let inFriendlyWell = false;
+          if (serverState.planets) {
+            for (const planet of serverState.planets) {
+              if (planet.ownerId !== hs.ownerId) continue;
+              const pOwner = serverState.players.find(pl => pl.id === planet.ownerId);
+              if (!pOwner) continue;
+              const tb = 0.01 * Math.sqrt(pOwner.techScore || 0);
+              const eb = 0.01 * Math.sqrt(pOwner.expScore || 0);
+              let baseRadius = planet.maxShips * 1.5;
+              if (planet.isMilitary && planet.ships >= planet.maxShips) {
+                baseRadius *= 1.5;
+              }
+              const isPlanetHuman = pOwner && !pOwner.isAI;
+              if (isPlanetHuman && planet.focusMode === 'garrison' && planet.ships >= planet.maxShips) {
+                baseRadius += (planet.ships / 2);
+              }
+              const gr = baseRadius * (1 + tb + eb);
+              const pdx = hs.x - planet.x, pdy = hs.y - planet.y;
+              if (pdx * pdx + pdy * pdy < gr * gr) {
+                inFriendlyWell = true;
+                break;
+              }
+            }
+          }
+          if (inFriendlyWell) attritionLabel += ' (÷3 friendly well)';
+          if (hs.isBomber) attritionLabel += ' (÷2 bomber)';
+          lines.push({ label: 'Attrition', value: attritionLabel, color: '#f66' });
+        } else {
+          lines.push({ label: 'Attrition', value: 'safe', color: '#4f4' });
+        }
+      }
+
+      if (serverState.storms) {
+        for (const storm of serverState.storms) {
+          const dx = hs.x - storm.x, dy = hs.y - storm.y;
+          if (dx * dx + dy * dy <= storm.radius * storm.radius) {
+            const typeLabel = storm.type === 'minefield' ? 'Minefield' : storm.type === 'nebula' ? 'Nebula' : 'Ion Storm';
+            const typeColor = storm.type === 'minefield' ? '#66f' : storm.type === 'nebula' ? '#f66' : '#ff0';
+            lines.push({ label: `⚠️ ${typeLabel}`, value: `Int: ${storm.intensity}`, color: typeColor });
+          }
+        }
+      }
+
+      for (const line of lines) {
+        const displayLabel = formatTooltipString(line.label);
+        const displayValue = formatTooltipString(line.value);
+        if (line.isHeader) {
+          bodyHTML += `<div class="info-panel-row header-row" style="color: ${line.color}">
+            <div class="info-panel-label">${displayLabel}</div>
+            <div class="info-panel-value">${displayValue || ''}</div>
+          </div>`;
+        } else if (line.isSpeedBar) {
+          const fillPct = Math.min(1.0, Math.max(0, line.currentSpeed / Math.max(1, line.maxSpeed)));
+          bodyHTML += `<div class="info-panel-row" style="color: ${line.color || '#fff'}">
+            <div class="info-panel-label">${displayLabel}</div>
+            <div class="info-panel-speedbar-container">
+              <span style="font-size: 0.8rem; color: #ccc; margin-right: 4px;">${displayValue.split('|')[1]?.trim() || ''}</span>
+              <div class="info-panel-speedbar-track">
+                <div class="info-panel-speedbar-fill" style="width: ${fillPct * 100}%"></div>
+              </div>
+              <span style="font-size: 0.8rem; color: #ffa500; font-weight: bold; margin-left: 4px;">${displayValue.split('|')[0]?.trim() || ''}</span>
+            </div>
+          </div>`;
+        } else {
+          bodyHTML += `<div class="info-panel-row" style="color: ${line.color || '#fff'}">
+            <div class="info-panel-label">${displayLabel}</div>
+            <div class="info-panel-value">${displayValue}</div>
+          </div>`;
+        }
+      }
+    }
+
+    infoPanelTitle.innerHTML = titleHTML;
+    infoPanelBody.innerHTML = bodyHTML;
+  }
 
   // UI Elements
   const startScreen = document.getElementById('start-screen');
@@ -1171,6 +2054,18 @@ function getHabName(habitability) {
 
   socket.on('afkConverted', () => {
     afkWarningOverlay.classList.add('hidden');
+  });
+
+  socket.on('tileExplored', (data) => {
+    floatingAnimations.push({
+      x: data.x,
+      y: data.y,
+      shipId: data.shipId,
+      text: `${data.xp}`,
+      type: 'exploration_xp',
+      age: 0,
+      duration: 1.5
+    });
   });
 
   if (resetAfkBtn) {
@@ -3162,19 +4057,6 @@ function getHabName(habitability) {
     if (isTouchInput) {
       hoveredPlanet = null;
       hoveredShip = null;
-      if (touchTooltipEntity) {
-        if (touchTooltipEntity.type === 'planet') {
-          const targetPlanet = serverState && serverState.planets ? serverState.planets.find(pp => pp.id === touchTooltipEntity.id) : null;
-          if (targetPlanet) {
-            hoveredPlanet = targetPlanet;
-          }
-        } else if (touchTooltipEntity.type === 'ship') {
-          const targetShip = serverState && serverState.ships ? serverState.ships.find(ss => ss.id === touchTooltipEntity.id && ss.active) : null;
-          if (targetShip) {
-            hoveredShip = targetShip;
-          }
-        }
-      }
       return;
     }
 
@@ -3247,6 +4129,39 @@ function getHabName(habitability) {
       }
     }
   }
+
+  canvas.addEventListener('dblclick', (event) => {
+    if (!serverState) return;
+    const cPos = getCanvasPos(event.clientX, event.clientY);
+    const serverPos = getMouseServerPos(cPos.x, cPos.y);
+
+    // check clicked planet first
+    const clickedPlanet = getPlanetAt(cPos.x, cPos.y);
+    let clickedShip = null;
+    
+    if (serverState && serverState.ships) {
+      for (const ship of serverState.ships) {
+        if (!ship.active) continue;
+        const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
+        const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
+        const sdx = ship.x - serverPos.x;
+        const sdy = ship.y - serverPos.y;
+        if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
+          if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
+            clickedShip = ship;
+          }
+        }
+      }
+    }
+
+    if (clickedShip && clickedShip.isCruiser) {
+      openInfoPanel('ship', clickedShip.id);
+    } else if (clickedPlanet) {
+      openInfoPanel('planet', clickedPlanet.id);
+    } else if (clickedShip) {
+      openInfoPanel('fleet', clickedShip.id);
+    }
+  });
 
   let mouseTimeout = null;
   let mouseDownStartX = 0;
@@ -3443,7 +4358,7 @@ function getHabName(habitability) {
             const sdx = ship.x - serverPos.x;
             const sdy = ship.y - serverPos.y;
             if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
-              if (!clickedShip || (clickedShip.isCruiser && !ship.isCruiser)) {
+              if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
                 clickedShip = ship;
               }
             }
@@ -3451,14 +4366,12 @@ function getHabName(habitability) {
         }
         
         if (clickedShip && clickedShip.isCruiser) {
-          touchTooltipEntity = { type: 'ship', id: clickedShip.id };
+          openInfoPanel('ship', clickedShip.id);
         } else if (clickedPlanet) {
-          touchTooltipEntity = { type: 'planet', id: clickedPlanet.id };
-        } else {
-          touchTooltipEntity = null;
+          openInfoPanel('planet', clickedPlanet.id);
+        } else if (clickedShip) {
+          openInfoPanel('fleet', clickedShip.id);
         }
-      } else {
-        touchTooltipEntity = null;
       }
 
       // Update hover tooltip immediately on touch down!
@@ -5643,7 +6556,7 @@ function getHabName(habitability) {
           ctx.save();
           ctx.beginPath();
           const progress = Math.min(1.0, p.revoltCooldown / 300000);
-          ctx.arc(p.x, p.y, p.radius + 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+          ctx.arc(p.x, p.y, p.radius + 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
           ctx.strokeStyle = 'rgba(255, 50, 50, 0.85)';
           ctx.lineWidth = 2.5;
           ctx.stroke();
@@ -5877,7 +6790,7 @@ function getHabName(habitability) {
               'Klingon': '⚔️',
               'Gorn': '🦎',
               'Tholian': '🕸️',
-              'Lyran': '🐯'
+              'Lyran': '🐶'
             };
             raceIcon = raceIcons[affinity] || null;
           }
@@ -6286,7 +7199,7 @@ function getHabName(habitability) {
       }
 
       // Defense tooltip on hovered planet
-      if (hoveredPlanet && serverState.planets) {
+      if (false && hoveredPlanet && serverState.planets) {
         let hp = serverState.planets.find(pp => pp.id === hoveredPlanet.id);
         if (!hp) {
           hoveredPlanet = null;
@@ -6365,7 +7278,7 @@ function getHabName(habitability) {
               'Klingon': '⚔️',
               'Gorn': '🦎',
               'Tholian': '🕸️',
-              'Lyran': '🐯'
+              'Lyran': '🐶'
             };
             const icon = raceIcons[hp.racialAffinity] || '';
             lines.push({ label: 'Planetary Environment', value: `${icon} ${hp.racialAffinity}`, color: '#e040fb' });
@@ -6733,7 +7646,7 @@ function getHabName(habitability) {
       }
 
       // Fleet tooltip on hovered ship
-      if (hoveredShip && !hoveredPlanet && serverState && serverState.ships) {
+      if (false && hoveredShip && !hoveredPlanet && serverState && serverState.ships) {
         const hs = serverState.ships.find(ss => ss.id === hoveredShip.id);
         if (!hs) {
           hoveredShip = null;
@@ -6786,7 +7699,7 @@ function getHabName(habitability) {
                 'Klingon': '⚔️',
                 'Gorn': '🦎',
                 'Tholian': '🕸️',
-                'Lyran': '🐯'
+                'Lyran': '🐶'
               };
               const icon = raceIcons[raceStyle] || '';
               raceStr = (icon ? icon + ' ' : '') + raceStyle;
@@ -7040,7 +7953,7 @@ function getHabName(habitability) {
                 'Klingon': '⚔️',
                 'Gorn': '🦎',
                 'Tholian': '🕸️',
-                'Lyran': '🐯'
+                'Lyran': '🐶'
               };
               const icon = raceIcons[raceStyle] || '';
               lines.push({ label: 'Race', value: `${icon} ${raceStyle}`, color: '#e040fb' });
@@ -8796,6 +9709,60 @@ function getHabName(habitability) {
         }
 
         const progress = anim.age / anim.duration;
+
+        let drawX = anim.x;
+        let drawY = anim.y;
+        if (anim.shipId && serverState && serverState.ships) {
+          const ship = serverState.ships.find(s => s.id === anim.shipId);
+          if (ship) {
+            drawX = ship.x;
+            drawY = ship.y;
+            anim.x = ship.x;
+            anim.y = ship.y;
+          }
+        }
+
+        if (anim.type === 'exploration_xp') {
+          // Draw a bright, very small starburst
+          const radius = 5 * Math.sin(progress * Math.PI); // very small starburst (max radius 5px)
+          const alpha = Math.max(0, 1 - progress);
+          
+          ctx.save();
+          // Draw central glow
+          ctx.beginPath();
+          ctx.arc(drawX, drawY, radius * 0.4, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.95})`;
+          ctx.shadowColor = '#ffd700'; // gold glow
+          ctx.shadowBlur = 4;
+          ctx.fill();
+          
+          // Draw starburst rays
+          ctx.strokeStyle = `rgba(255, 235, 59, ${alpha})`; // bright yellow
+          ctx.lineWidth = 1.0;
+          const rayCount = 8;
+          for (let r = 0; r < rayCount; r++) {
+            const angle = (r / rayCount) * Math.PI * 2 + (progress * 0.6); // rotates as it expands
+            const startLen = radius * 0.3;
+            const endLen = radius;
+            ctx.beginPath();
+            ctx.moveTo(drawX + Math.cos(angle) * startLen, drawY + Math.sin(angle) * startLen);
+            ctx.lineTo(drawX + Math.cos(angle) * endLen, drawY + Math.sin(angle) * endLen);
+            ctx.stroke();
+          }
+          
+          // Float the XP text above
+          ctx.font = 'bold 9px Orbitron';
+          ctx.fillStyle = `rgba(0, 229, 255, ${alpha})`; // bright cyan
+          ctx.shadowColor = `rgba(0, 229, 255, ${alpha * 0.5})`;
+          ctx.shadowBlur = 3;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          const textYOffset = progress * 16;
+          ctx.fillText(`+${anim.text} XP`, drawX, drawY - 6 - textYOffset);
+          
+          ctx.restore();
+          continue;
+        }
         // Hold opacity then fade out sharply at the end to "pop"
         const alpha = progress < 0.8 ? 1 : 1 - ((progress - 0.8) * 5);
 
@@ -8856,7 +9823,7 @@ function getHabName(habitability) {
         } else if (anim.type === 'accuracyIndicator') {
           fontsize = 4; // constant small font size (20% bigger than 10 / 3)
         } else if (anim.type === 'resource_wanted') {
-          fontsize = 11 + (progress * 9); // grows from 11px to 20px
+           fontsize = 11 + (progress * 9); // grows from 11px to 20px
         }
 
         ctx.font = `bold ${fontsize}px Orbitron`; // growing font
@@ -8949,8 +9916,6 @@ function getHabName(habitability) {
         }
 
         ctx.shadowBlur = 10;
-        let drawX = anim.x;
-        let drawY = anim.y;
         if (anim.type === 'pref_resource_diplomacy') {
           drawX = anim.startX + (anim.endX - anim.startX) * progress;
           drawY = anim.startY + (anim.endY - anim.startY) * progress;
@@ -8979,6 +9944,7 @@ function getHabName(habitability) {
   function renderLoop() {
     try {
       draw();
+      updateInfoPanelContent();
     } catch (e) {
       console.error('[PlanetWars] draw() error:', e);
     }

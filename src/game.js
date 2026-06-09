@@ -765,6 +765,7 @@ export class Game {
     this.ionStorms = [];
     this.sellOrders = [];
     this.fulfillOrders = [];
+    this.exploredGrid = {};
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
     this.ionStormsCreated = 0;
@@ -787,6 +788,7 @@ export class Game {
       player.techScore = 0;
       player.expScore = 0;
       player.expProgress = 0;
+      player.crewExperience = 0;
       player.cruiserStyle = null;
       player.prevTechBonus = 0;
       player.credits = this.settings && this.settings.startingCredits !== undefined ? this.settings.startingCredits : 250;
@@ -2081,6 +2083,10 @@ export class Game {
         const maxRoll = Math.floor(planet.ships + ownerSym);
         const rollVal = Math.floor(Math.random() * (maxRoll + 1));
         competitors.push({ id: planet.owner.id, roll: rollVal, maxRoll, isOwner: true, name: planet.owner.name });
+      } else {
+        const maxRoll = Math.floor(planet.ships);
+        const rollVal = Math.floor(Math.random() * (maxRoll + 1));
+        competitors.push({ id: 'neutral', roll: rollVal, maxRoll, isOwner: true, name: 'Neutral' });
       }
 
       for (const competitor of eligibleNonOwners) {
@@ -2189,8 +2195,7 @@ export class Game {
           const odds = oddsMap[c.id] || '0%';
           return `${c.name} (Odds: ${odds}, Rolled ${c.roll}/${c.maxRoll})`;
         }).join(', ');
-        const ownerPlayer = this.allPlayers.find(p => p.id === winner.id);
-        const ownerName = ownerPlayer ? ownerPlayer.name : winner.id;
+        const ownerName = winner.name;
         reportText += `${details}. Winner: ${ownerName}.`;
 
         this.pendingChatMessages = this.pendingChatMessages || [];
@@ -3086,7 +3091,7 @@ export class Game {
           if (victim.sourceShipId) {
             const launcher = this.ships.find(sh => sh.id === victim.sourceShipId && sh.active);
             if (launcher) {
-              launcher.expScore = (launcher.expScore || 0) + 1;
+              launcher.gainXp(1, this);
             }
           }
         }
@@ -3184,7 +3189,7 @@ export class Game {
             if (laser.sourceShipId !== undefined) {
               const sourceShip = this.ships.find(sh => sh.id === laser.sourceShipId);
               if (sourceShip && sourceShip.active) {
-                sourceShip.expScore = (sourceShip.expScore || 0) + 0.05;
+                sourceShip.gainXp(0.05, this);
               }
             }
             this.explosions.push({
@@ -3823,7 +3828,7 @@ export class Game {
             const roll = Math.floor(Math.random() * 100) + 1;
 
             // Give cruiser 1 XP score for the attempt
-            ship.expScore = (ship.expScore || 0) + 1;
+            ship.gainXp(1, this);
 
             if (roll <= chancePercent) {
               // Award 1 XP score to player
@@ -3867,7 +3872,7 @@ export class Game {
               let successXP = Math.floor(1 + actualIncrease / 2);
 
               // Give ship the success XP score
-              ship.expScore = (ship.expScore || 0) + successXP;
+              ship.gainXp(successXP, this);
               
               ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + actualIncrease;
             } else {
