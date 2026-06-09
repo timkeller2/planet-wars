@@ -798,8 +798,21 @@ export class Ship {
             const hasExcessFuel = (targetShip.fuel || 0) > 4;
             const hasSupplies = (targetShip.supplies || 0) > 0;
             if (hasExcessFuel || hasSupplies) {
-              this.targetX = targetShip.x;
-              this.targetY = targetShip.y;
+              const dx = this.x - targetShip.x;
+              const dy = this.y - targetShip.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              const stopDistance = 25;
+              if (dist > stopDistance) {
+                this.targetX = targetShip.x + (dx / dist) * stopDistance;
+                this.targetY = targetShip.y + (dy / dist) * stopDistance;
+              } else if (dist > 0.01) {
+                this.targetX = targetShip.x + (dx / dist) * stopDistance;
+                this.targetY = targetShip.y + (dy / dist) * stopDistance;
+              } else {
+                const angle = Math.random() * Math.PI * 2;
+                this.targetX = targetShip.x + Math.cos(angle) * stopDistance;
+                this.targetY = targetShip.y + Math.sin(angle) * stopDistance;
+              }
             } else {
               this.retreatTargetShipId = null;
               this.targetX = null;
@@ -996,8 +1009,26 @@ export class Ship {
           
           if (selected) {
             this.targetPlanet = null;
-            this.targetX = selected.x;
-            this.targetY = selected.y;
+            if (selected.ship) {
+              const dx = this.x - selected.ship.x;
+              const dy = this.y - selected.ship.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              const stopDistance = 25;
+              if (dist > stopDistance) {
+                this.targetX = selected.ship.x + (dx / dist) * stopDistance;
+                this.targetY = selected.ship.y + (dy / dist) * stopDistance;
+              } else if (dist > 0.01) {
+                this.targetX = selected.ship.x + (dx / dist) * stopDistance;
+                this.targetY = selected.ship.y + (dy / dist) * stopDistance;
+              } else {
+                const angle = Math.random() * Math.PI * 2;
+                this.targetX = selected.ship.x + Math.cos(angle) * stopDistance;
+                this.targetY = selected.ship.y + Math.sin(angle) * stopDistance;
+              }
+            } else {
+              this.targetX = selected.x;
+              this.targetY = selected.y;
+            }
             if (selected.p) {
               this.retreatTargetPlanetId = selected.p.id;
               this.retreatTargetShipId = null;

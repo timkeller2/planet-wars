@@ -4058,8 +4058,8 @@ export class Game {
         const targetPlanet = closestPlanet;
         if (targetPlanet) {
           ship.diplomatTargetPlanetId = targetPlanet.id;
-          ship.diplomatTimer = (ship.diplomatTimer || 0) + dt;
           const attemptInterval = 6;
+          ship.diplomatTimer = Math.min(attemptInterval, (ship.diplomatTimer || 0) + dt);
           if (ship.diplomatTimer >= attemptInterval && (ship.parley || 0) > 0.99) {
             ship.diplomatTimer -= attemptInterval;
             ship.parley = Math.max(0, ship.parley - 1);
