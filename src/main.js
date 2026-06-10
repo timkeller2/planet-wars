@@ -5718,28 +5718,6 @@ function getPlanetTradeIncomePerMin(planet) {
         const anyNotDiplomacy = selectedCruisers.some(c => !c.isDiplomacy);
         const nextState = anyNotDiplomacy;
         for (const ship of selectedCruisers) {
-          if (nextState) {
-            if (ship.isScouting) continue;
-            let isMoving = false;
-            if (ship.orderQueue && ship.orderQueue.length > 0) {
-              isMoving = true;
-            } else if (ship.targetPlanet) {
-              const dx = ship.targetPlanet.x - ship.x;
-              const dy = ship.targetPlanet.y - ship.y;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-              if (dist >= (ship.targetPlanet.radius || 0) + 45) {
-                isMoving = true;
-              }
-            } else if (ship.targetX !== null && ship.targetX !== undefined && ship.targetY !== null && ship.targetY !== undefined) {
-              const dx = ship.targetX - ship.x;
-              const dy = ship.targetY - ship.y;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-              if (dist >= 15) {
-                isMoving = true;
-              }
-            }
-            if (isMoving) continue;
-          }
           ship.isDiplomacy = nextState;
           ship.isResearching = false;
           ship.isScouting = false;

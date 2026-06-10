@@ -4245,7 +4245,7 @@ export class Game {
     // A mapping from diplomat ship ID to the ship object for quick lookup
     const diplomatShipsMap = new Map();
     for (const ship of cruisers) {
-      if ((ship.diplomat || 0) > 0 && ship.isDiplomacy && !ship.isScouting && !ship.isCruiserMoving()) {
+      if ((ship.diplomat || 0) > 0 && ship.isDiplomacy) {
         diplomatShipsMap.set(ship.id, ship);
       }
     }
@@ -4418,7 +4418,7 @@ export class Game {
       // 4. Diplomats sympathy generation
       if ((ship.diplomat || 0) > 0) {
         ship.parley = Math.min((ship.diplomat || 0) * 3, (ship.parley || 0) + ((ship.diplomat || 0) / 60) * dt);
-        if (ship.isDiplomacy && !ship.isScouting && !ship.isCruiserMoving()) {
+        if (ship.isDiplomacy) {
           ship.diplomatTargetPlanetId = null;
           // Find all qualifying planets (neutral, enemy, or friendly) within sensor range that are not at max empathy/sympathy
           const qualifyingPlanets = [];

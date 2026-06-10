@@ -64,7 +64,7 @@ console.log("Starting verification tests...");
   cruiser.targetPlanet = targetPlanet;
   cruiser.handlePlayerMoveOrder({ planet: targetPlanet, x: targetPlanet.x, y: targetPlanet.y }, game);
   assert(cruiser.isCruiserMoving() === true, "Cruiser should be moving now");
-  assert(cruiser.isDiplomacy === false, "Cruiser diplomacy mode should be disabled on manual move order");
+  assert(cruiser.isDiplomacy === true, "Cruiser diplomacy mode should NOT be disabled on manual move order");
 
   // Manually enable diplomacy mode and move it very close to target planet
   cruiser.isDiplomacy = true;
@@ -113,27 +113,38 @@ console.log("Starting verification tests...");
   game.updateCustomCruiserSystems(0.1);
   assert(p1.activeDiplomatId === cruiser.id, "Cruiser should claim the planet for diplomacy");
 
-  // Now, make the cruiser move and lower its parley to 1
-  cruiser.targetX = 500;
+  // Now, make the cruiser move far away and lower its parley to 1
+  cruiser.x = 500;
+  cruiser.y = 500;
+  cruiser.targetX = 800;
   cruiser.targetY = 500;
   cruiser.parley = 1;
   assert(cruiser.isCruiserMoving() === true, "Cruiser should be moving");
 
-  // Tick the game update again. The moving diplomat should be invalidated, claim released, but parley increases!
+  // Tick the game update again. The diplomat is out of range, so claim is released and parley increases.
   game.updateCustomCruiserSystems(10.0);
-  assert(p1.activeDiplomatId === null, "Claim should be released when diplomat is moving");
+  assert(p1.activeDiplomatId === null, "Claim should be released when out of range");
   assert(cruiser.parley > 1, "Parley should increase while moving. Got: " + cruiser.parley);
 
-  // Put it back close
-  cruiser.targetX = 100;
+  // Put it back close, still moving (different target) and scouting
+  cruiser.x = 100;
+  cruiser.y = 100;
+  cruiser.targetX = 500;
   cruiser.targetY = 100;
-  assert(cruiser.isCruiserMoving() === false, "Cruiser is no longer moving");
-
-  // Enter scout mode and lower parley to 1
   cruiser.isScouting = true;
+  cruiser.isDiplomacy = true;
+
+  game.updateCustomCruiserSystems(0.1);
+  assert(p1.activeDiplomatId === cruiser.id, "Claim should be active even when moving and scouting if in range");
+
+  // Move far away again in scout mode to test parley replenishment
+  cruiser.x = 500;
+  cruiser.y = 500;
+  cruiser.targetX = 800;
+  cruiser.targetY = 500;
   cruiser.parley = 1;
   game.updateCustomCruiserSystems(10.0);
-  assert(p1.activeDiplomatId === null, "Claim should be released when diplomat is in scout mode");
+  assert(p1.activeDiplomatId === null, "Claim should be released when out of range");
   assert(cruiser.parley > 1, "Parley should increase while scouting. Got: " + cruiser.parley);
 
   console.log("Pass: Diplomat sympathy generation checks.");

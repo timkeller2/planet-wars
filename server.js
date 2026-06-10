@@ -931,10 +931,6 @@ async function bootstrap() {
       const ship = game.ships.find(s => s.id === shipId);
       if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.diplomat > 0) {
         const nextState = !!enabled;
-        if (nextState) {
-          if (ship.isScouting) return;
-          if (ship.isCruiserMoving()) return;
-        }
         ship.isDiplomacy = nextState;
         ship.diplomacyFuelRetreating = false;
         ship.isRetreating = false;
