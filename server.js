@@ -5,9 +5,16 @@ import { Game } from './src/game.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import readline from 'readline';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const GAME_VERSION = "1.0.0";
+const savesDir = path.join(__dirname, 'saves');
+if (!fs.existsSync(savesDir)) {
+  fs.mkdirSync(savesDir, { recursive: true });
+}
 
 async function bootstrap() {
   const app = express();
@@ -370,11 +377,17 @@ async function bootstrap() {
 
           const cost = game.getUpgradeCost(ship, data.type);
 
+          let minAllowedCredits = 0;
+          const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
+          if (ownsHomeworld) {
+            minAllowedCredits = -(1000 + (player.totalShips || 0));
+          }
+
           let closestPlanet = null;
           let closestDistSq = Infinity;
 
           for (const p of game.planets) {
-            const creditsAvailable = player.useCredits !== false ? (player.credits || 0) : 0;
+            const creditsAvailable = player.useCredits !== false ? (player.credits - minAllowedCredits) : 0;
             if (p.owner && p.owner.id === player.id && (p.ships + creditsAvailable) >= cost) {
               const gravityRadius = p.getGravityRadius();
               
@@ -517,6 +530,113 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (player && text && typeof text === 'string' && text.trim().length > 0) {
         const cleanText = text.trim();
+        
+        if (cleanText.startsWith('-save')) {
+          const parts = cleanText.split(/\s+/);
+          const saveName = parts.slice(1).join(' ').trim();
+          if (!saveName) {
+            socket.emit('chatMessage', {
+              sender: 'System',
+              color: '#ff3333',
+              text: 'Usage: -save <name>'
+            });
+            return;
+          }
+          const sanitized = saveName.replace(/[^a-zA-Z0-9_\-]/g, '');
+          if (!sanitized || sanitized !== saveName) {
+            socket.emit('chatMessage', {
+              sender: 'System',
+              color: '#ff3333',
+              text: 'Save name must contain only letters, numbers, underscores, and hyphens.'
+            });
+            return;
+          }
+          try {
+            const state = game.saveState();
+            const filePath = path.join(savesDir, `${sanitized}.json`);
+            fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf-8');
+            socket.emit('chatMessage', {
+              sender: 'System',
+              color: '#00ff00',
+              text: `Game successfully saved as '${sanitized}'.`
+            });
+            console.log(`[Save Game] Game successfully saved as '${sanitized}' by player ${player.name} (${player.id})`);
+          } catch (err) {
+            console.error('[Save Game Error]', err);
+            socket.emit('chatMessage', {
+              sender: 'System',
+              color: '#ff3333',
+              text: `Failed to save game: ${err.message}`
+            });
+          }
+          return;
+        }
+
+        if (cleanText.startsWith('-load')) {
+          const parts = cleanText.split(/\s+/);
+          const saveName = parts.slice(1).join(' ').trim();
+          if (!saveName) {
+            socket.emit('chatMessage', {
+              sender: 'System',
+              color: '#ff3333',
+              text: 'Usage: -load <name>'
+            });
+            return;
+          }
+          const sanitized = saveName.replace(/[^a-zA-Z0-9_\-]/g, '');
+          const filePath = path.join(savesDir, `${sanitized}.json`);
+          if (!fs.existsSync(filePath)) {
+            socket.emit('chatMessage', {
+              sender: 'System',
+              color: '#ff3333',
+              text: `Save game '${sanitized}' not found.`
+            });
+            return;
+          }
+          try {
+            const fileData = fs.readFileSync(filePath, 'utf-8');
+            const state = JSON.parse(fileData);
+            
+            if (!state.version || state.version !== GAME_VERSION) {
+              socket.emit('chatMessage', {
+                sender: 'System',
+                color: '#ff3333',
+                text: `Save game is incompatible with this version of Amoeba Wars (save version: ${state.version || 'unknown'}, current: ${GAME_VERSION}).`
+              });
+              return;
+            }
+
+            game.loadState(state);
+
+            for (const [socketId, oldPlayer] of connectedClients.entries()) {
+              const newPlayer = game.allPlayers.find(p => p.id === oldPlayer.id);
+              if (newPlayer) {
+                newPlayer.clientPlayerId = oldPlayer.clientPlayerId;
+                connectedClients.set(socketId, newPlayer);
+              }
+            }
+
+            for (const [socketId, activePlayer] of connectedClients.entries()) {
+              io.to(socketId).emit('assignedPlayer', activePlayer);
+            }
+
+            io.emit('chatMessage', {
+              sender: 'System',
+              color: '#00ff00',
+              text: `Game state '${sanitized}' loaded successfully.`
+            });
+            console.log(`[Load Game] Game successfully loaded '${sanitized}' by player ${player.name} (${player.id})`);
+          } catch (err) {
+            console.error('[Load Game Error]', err);
+            socket.emit('chatMessage', {
+              sender: 'System',
+              color: '#ff3333',
+              text: `Failed to load game: ${err.message}`
+            });
+          }
+          return;
+        }
+
         if (cleanText.startsWith('/')) {
           const feedback = executeCommand(cleanText, player, socket, io, game);
           socket.emit('chatMessage', {
@@ -937,16 +1057,21 @@ async function bootstrap() {
 
         // Allow sale if they have at least 1 trade option
         if (L > 0 && player.tradeOptions >= 1) {
-          const sellPrice = Math.ceil((L * L) / 2) + 1;
+          const sellPrice = Math.ceil((L * L) / 2) + 2;
           for (const item of eligible) {
             player.resources[item.name] = (player.resources[item.name] || 0) - item.count;
           }
-          player.credits = (player.credits || 0) + sellPrice * L;
+          let totalGain = sellPrice * L;
+          if (latinumSold >= 1) {
+            totalGain = Math.round(totalGain * (1 + 0.25 * latinumSold));
+          }
+          player.credits = (player.credits || 0) + totalGain;
           
-          // Deduct options count (cost), can go negative
-          player.tradeOptions = (player.tradeOptions || 0) - L;
+          // Deduct options count (cost), can go negative: 1 + 1/2 resources rounded up
+          const optionsExpended = Math.ceil(1 + L / 2);
+          player.tradeOptions = (player.tradeOptions || 0) - optionsExpended;
 
-          console.log(`[Bank Direct Sale] Player ${player.id} sold ${L} resources for ${sellPrice * L} credits. Remaining options: ${player.tradeOptions}`);
+          console.log(`[Bank Direct Sale] Player ${player.id} sold ${L} resources for ${totalGain} credits. Remaining options: ${player.tradeOptions}`);
         }
       }
     });
@@ -1105,8 +1230,14 @@ async function bootstrap() {
         const idx = game.sellOrders.findIndex(o => o.id === data.orderId);
         if (idx !== -1) {
           const order = game.sellOrders[idx];
+          let minAllowedCredits = 0;
+          const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
+          if (ownsHomeworld) {
+            minAllowedCredits = -(1000 + (player.totalShips || 0));
+          }
+          const buyerCredits = player.credits || 0;
           // Buyer must have >= 1 option and enough credits
-          if (order.ownerId !== player.id && player.tradeOptions >= 1 && (player.credits || 0) >= order.price) {
+          if (order.ownerId !== player.id && player.tradeOptions >= 1 && (buyerCredits - minAllowedCredits) >= order.price) {
             player.tradeOptions -= 1;
             player.credits -= order.price;
             player.resources[order.resource] = (player.resources[order.resource] || 0) + 1.0;
@@ -1631,12 +1762,13 @@ async function bootstrap() {
           isResearch: p.isResearch,
           isMilitary: p.isMilitary,
           isSpeedPlanet: p.isSpeedPlanet,
+          isSuperPlanet: p.isSuperPlanet,
           focusMode: p.focusMode || 'economy',
           focusChanges: p.focusChanges || 0,
           sympathy: p.sympathy || null,
           disposition: p.disposition || null,
-          revoltCooldown: p.revoltCooldown || 0,
-          maxRevoltCooldown: p.maxRevoltCooldown || 0,
+          revoltWarmup: p.revoltWarmup || 0,
+          revoltWarmupMax: p.revoltWarmupMax || 1,
           revoltAttemptEvent: rAttemptEvent,
           inRevolt: p.inRevolt || false,
           revoltTimer: p.revoltTimer || 0,
@@ -1650,7 +1782,9 @@ async function bootstrap() {
           racialAffinity: p.racialAffinity || null,
           preferredResourceWantedEvent: prwEvent,
           sizeClass: p.sizeClass || 0,
-          habitability: p.habitability || 0
+          habitability: p.habitability || 0,
+          diplomacyWarmupTimer: p.diplomacyWarmupTimer || 0,
+          activeDiplomatId: p.activeDiplomatId || null
       };
     });
 
@@ -1759,6 +1893,8 @@ async function bootstrap() {
           scoutTargetUnexplored: (s.isScouting && s.scoutTargetX !== null && s.scoutTargetY !== null && s.owner && game.exploredGrid) ?
             ((game.exploredGrid[`${s.owner.id}_${Math.floor(s.scoutTargetX / 100)}_${Math.floor(s.scoutTargetY / 100)}`] || 0) === 0) : false,
           isResearching: s.isResearching || false,
+          isActivelyResearching: s.isActivelyResearching || false,
+          accumulatedTech: s.accumulatedTech || 0,
           isDiplomacy: s.isDiplomacy || false,
           scoutAttackEnabled: s.scoutAttackEnabled || false,
           isMaterializing: s.isMaterializing || false,
@@ -2007,6 +2143,7 @@ async function bootstrap() {
               inFog: true,
               spyRootedOutEvent: spyRooted,
               isSpeedPlanet: p.isSpeedPlanet,
+              isSuperPlanet: p.isSuperPlanet,
               isResearch: p.isResearch,
               isMilitary: p.isMilitary,
               rampageEvent: p.rampageEvent || false,

@@ -40,9 +40,8 @@ export class Planet {
     this.sympathy = {};
     this.disposition = {};
     this.retainedShips = false;
-    this.revoltCooldown = 0;
-    this.maxRevoltCooldown = 0;
-    this.revoltCheckTimer = Math.random() * 60000;
+    this.revoltWarmup = 0;
+    this.revoltWarmupMax = 1;
     const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
     this.preferredResource = (Math.random() < 1/3) ? resourcesList[Math.floor(Math.random() * resourcesList.length)] : null;
     this.preferredResourceWantedEvent = false;
@@ -51,6 +50,8 @@ export class Planet {
     this.name = this.generatePlanetName();
     this.expScore = 0;
     this.expProgress = 0;
+    this.diplomacyWarmupTimer = 0;
+    this.activeDiplomatId = null;
 
     this.sizeClass = randomWeightedMiddle(60, 150);
     this.habitability = randomWeightedMiddle(15, 150);
@@ -199,22 +200,7 @@ export class Planet {
     const isHuman = this.owner && !this.owner.isAI;
     const focus = this.focusMode || 'economy';
 
-    if (this.owner && focus === 'commerce' && this.ships >= this.maxShips) {
-      const shipsOver100 = Math.max(0, this.ships - 100);
-      const tradingBonus = this.owner.tradingBonus || 0;
-      const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
-      let generatedCredits = (shipsOver100 / 100) * (deltaTime / 1000) * (1 + tradingBonus) * (1 + techBonus);
-      if (this.preferredResource && this.owner.resources && this.maxShips >= 150) {
-        const qty = this.owner.resources[this.preferredResource] || 0;
-        if (qty > 0) {
-          generatedCredits *= (1 + (Math.sqrt(qty) * 3) / 100);
-        }
-      }
-      if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
-        generatedCredits *= 1.30;
-      }
-      this.owner.credits = (this.owner.credits || 0) + generatedCredits;
-    }
+
 
     if (this.owner) {
       const growthLimit = (isHuman && focus === 'garrison') ? this.maxShips * 2 : this.maxShips;
@@ -224,9 +210,6 @@ export class Planet {
         const effectiveMaxShips = this.rampageBoost ? this.maxShips * 3 : this.maxShips;
         const prodDivisor = 100 / (settings?.productionMultiple || 1.0);
         let effectiveRate = (Math.max(10, effectiveMaxShips - this.ships) / prodDivisor) * (1 + techBonus) * lowPopMultiplier;
-        if (this.homeworldOf === this.owner.id) {
-          effectiveRate *= 2;
-        }
         if (!this.owner.isAI) {
           if (effectiveRate > 1.0) {
             effectiveRate = 1.0 + ((effectiveRate - 1.0) / 3);
@@ -310,7 +293,7 @@ export class Planet {
               this.decreaseMaxShips(1);
               if (this.maxShips < 55) this.dead = true;
             } else {
-              const increaseAmount = this.homeworldOf ? 2 : 1;
+              const increaseAmount = 1;
               this.increaseMaxShips(increaseAmount);
             }
             // Decay ships back to maxShips (or twice maxShips if Garrison)
@@ -373,7 +356,7 @@ export class Planet {
                 this.habitability = 100; // Terran
               }
             } else {
-              const increaseAmount = this.homeworldOf ? 2 : 1;
+              const increaseAmount = 1;
               this.increaseMaxShips(increaseAmount);
               if (this.owner && allPlanets) {
                 let galacticCapacity = 0;
@@ -408,19 +391,32 @@ export class Planet {
       this.capacityProgress = 0;
     }
 
-    if (this.revoltCooldown > 0) {
-      this.revoltCooldown = Math.max(0, this.revoltCooldown - deltaTime);
-      if (this.revoltCooldown <= 0) {
-        this.maxRevoltCooldown = 0;
+    if (!this.inRevolt && !(typeof this.isBeingInvaded === 'function' && this.isBeingInvaded(game))) {
+      let sympathyForeign = 0;
+      if (this.sympathy) {
+        for (const [pId, symVal] of Object.entries(this.sympathy)) {
+          if (!this.owner || pId !== this.owner.id) {
+            sympathyForeign += symVal;
+          }
+        }
       }
-    }
+      const sympathyOwner = (this.owner && this.sympathy) ? (this.sympathy[this.owner.id] || 0) : 0;
+      const ships = this.ships;
+      const ratePerMinute = sympathyForeign - (ships / 3) - sympathyOwner;
+      const maxRatePerMinute = ships;
+      const clampedRatePerMinute = Math.max(0, Math.min(ratePerMinute, maxRatePerMinute));
+      const increment = clampedRatePerMinute * (deltaTime / 60000);
+      this.revoltWarmup = (this.revoltWarmup || 0) + increment;
+      this.revoltWarmupMax = Math.max(1, ships);
 
-    this.revoltCheckTimer = (this.revoltCheckTimer || 0) + deltaTime;
-    if (this.revoltCheckTimer >= 60000) {
-      this.revoltCheckTimer -= 60000;
-      if (game && typeof game.checkSinglePlanetSympathyRevolt === 'function') {
-        game.checkSinglePlanetSympathyRevolt(this);
+      if (this.revoltWarmup >= this.revoltWarmupMax) {
+        this.revoltWarmup = 0;
+        if (game && typeof game.checkSinglePlanetSympathyRevolt === 'function') {
+          game.checkSinglePlanetSympathyRevolt(this);
+        }
       }
+    } else {
+      this.revoltWarmupMax = Math.max(1, this.ships);
     }
 
     if (this.justAssigned) {

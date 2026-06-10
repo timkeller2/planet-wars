@@ -290,6 +290,7 @@ export class Ship {
 
   handlePlayerMoveOrder(destination, game) {
     if (!this.isCruiser) return;
+    this.flightTime = 0;
 
     // Determine target coordinates and planet
     let tx = this.x;
@@ -1206,12 +1207,20 @@ export class Ship {
 
     if (this.isCruiser && this.isUpgrading) {
       const planet = allPlanets ? allPlanets.find(p => p.id === this.upgradePlanetId) : null;
-      const creditsAvailable = (this.owner && this.owner.useCredits !== false && this.owner.credits !== undefined) ? this.owner.credits : 0;
+      let minAllowedCredits = 0;
+      if (this.owner && game && game.planets) {
+        const ownsHomeworld = game.planets.some(p => p.homeworldOf === this.owner.id && p.owner && p.owner.id === this.owner.id);
+        if (ownsHomeworld) {
+          minAllowedCredits = -(1000 + (this.owner.totalShips || 0));
+        }
+      }
+      const creditsAvailable = (this.owner && this.owner.useCredits !== false && this.owner.credits !== undefined) ? (this.owner.credits - minAllowedCredits) : 0;
       if (planet && planet.owner && this.owner && planet.owner.id === this.owner.id && (planet.ships >= 1 || creditsAvailable >= 1)) {
         this.upgradeAccumulator += deltaTime / 1000;
         while (this.upgradeAccumulator >= 0.2 && this.upgradeTimer > 0) {
-          const currentCredits = (this.owner.useCredits !== false) ? (this.owner.credits || 0) : 0;
-          if (currentCredits >= 1) {
+          const currentCredits = (this.owner && this.owner.useCredits !== false) ? (this.owner.credits || 0) : 0;
+          const currentCreditsAvailable = currentCredits - minAllowedCredits;
+          if (currentCreditsAvailable >= 1) {
             this.owner.credits -= 1;
             this.upgradeShipsPaid += 1;
             this.upgradeTimer = Math.max(0, this.upgradeTimer - 0.2);

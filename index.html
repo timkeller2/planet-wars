@@ -14,7 +14,7 @@
         <input type="text" id="player-name-input" class="cyber-input" placeholder="Enter your name" maxlength="16" />
         <div id="setup-options-container" class="options" style="margin-top: 15px; text-align: left; color: #0ff; font-family: 'Orbitron', sans-serif; display: none; flex-direction: column; gap: 10px;">
           <label style="cursor: pointer; display: flex; align-items: center;">
-            <input type="number" id="ai-count-input" value="4" min="0" max="50" style="width: 50px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            <input type="number" id="ai-count-input" value="2" min="0" max="50" style="width: 50px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
             AI Players
           </label>
           <label style="cursor: pointer;"><input type="checkbox" id="fog-of-war-checkbox" style="margin-right: 10px;" checked /> Enable Fog of War</label>
@@ -56,13 +56,13 @@
           </label>
           <label style="cursor: pointer; display: flex; align-items: center;">
             <select id="map-size-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
-              <option value="800">Very Small: 800</option>
-              <option value="1200">Small: 1200</option>
-              <option value="1600">Normal: 1600</option>
-              <option value="2000" selected>Large: 2000</option>
-              <option value="2400">Very Large: 2400</option>
-              <option value="3200">Huge: 3200</option>
-              <option value="6400">Epic: 6400</option>
+              <option value="1000">Very Small: 1000</option>
+              <option value="1500">Small: 1500</option>
+              <option value="2000" selected>Normal: 2000</option>
+              <option value="2500">Large: 2500</option>
+              <option value="3000">Very Large: 3000</option>
+              <option value="4000">Huge: 4000</option>
+              <option value="6000">Epic: 6000</option>
               <option value="10000">Galactic: 10000</option>
               <option value="custom">Custom</option>
             </select>
@@ -73,7 +73,7 @@
             Custom Map Size (XY)
           </label>
           <label style="cursor: pointer; display: flex; align-items: center;">
-            <input type="number" id="planet-count-input" value="50" min="10" max="1000" style="width: 60px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            <input type="number" id="planet-count-input" value="30" min="10" max="1000" style="width: 60px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
             Planet Count
           </label>
           <label style="cursor: pointer; display: flex; align-items: center;">

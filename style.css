@@ -354,7 +354,11 @@ canvas {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  pointer-events: auto;
+  pointer-events: none !important;
+}
+
+#chat-container.chat-active {
+  pointer-events: auto !important;
 }
 
 #chat-messages {
@@ -371,6 +375,11 @@ canvas {
 
 #chat-messages::-webkit-scrollbar {
   width: 5px;
+  display: none;
+}
+
+#chat-container.chat-active #chat-messages::-webkit-scrollbar {
+  display: block;
 }
 
 #chat-messages::-webkit-scrollbar-thumb {
@@ -385,20 +394,27 @@ canvas {
   margin-bottom: 0;
   background: rgba(10, 10, 20, 0.7);
   transition: opacity 0.3s ease;
+  pointer-events: auto !important;
 }
 
 #chat-input.hidden {
   display: none;
 }
 
-@keyframes chatFadeOut {
-  0% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { opacity: 0; display: none; }
+.chat-msg {
+  opacity: 1;
+  transition: opacity 0.5s ease;
+  pointer-events: auto;
 }
 
-.chat-msg {
-  animation: chatFadeOut 90s forwards;
+.chat-msg.faded {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#chat-container.chat-active .chat-msg {
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 .action-btn-active {

@@ -621,11 +621,12 @@ export class Game {
       if (hwSizeSetting !== 'natural') {
         const parsedVal = parseInt(hwSizeSetting, 10);
         if (!isNaN(parsedVal) && parsedVal > 0) {
-          targetPlanet.maxShips = parsedVal;
+          targetPlanet.sizeClass = parsedVal;
         }
       }
+      targetPlanet.maxShips = Math.max(60, targetPlanet.sizeClass - 20);
       targetPlanet.ships = targetPlanet.maxShips;
-      targetPlanet.sizeClass = Math.round(targetPlanet.maxShips * 1.5);
+      targetPlanet.radius = Math.min(targetPlanet.sizeClass, targetPlanet.maxShips) / 4;
       targetPlanet.habitability = 100;
       targetPlanet.justAssigned = true;
       targetPlanet.justAssignedTimer = 0;
@@ -755,6 +756,262 @@ export class Game {
       }
     }
     console.log(`[Rarities] Recalculated. Average: ${average.toFixed(2)}, Counts:`, counts, `Rarities:`, this.resourceRarities);
+  }
+
+  saveState() {
+    const state = {
+      version: "1.0.0",
+      width: this.width,
+      height: this.height,
+      gameTime: this.gameTime,
+      timeRemaining: this.timeRemaining,
+      nextShipId: this.nextShipId,
+      rampageInterval: this.rampageInterval,
+      nextRampageTime: this.nextRampageTime,
+      nextRampageSelectionTime: this.nextRampageSelectionTime,
+      incubatingPlanetId: this.incubatingPlanet ? this.incubatingPlanet.id : null,
+      rampageIncubationTimeRemaining: this.rampageIncubationTimeRemaining,
+      settings: this.settings,
+      globalUpgradeModifiers: this.globalUpgradeModifiers,
+      resourceRarities: this.resourceRarities,
+      sellOrders: this.sellOrders,
+      fulfillOrders: this.fulfillOrders,
+      exploredGrid: this.exploredGrid,
+      ionStorms: this.ionStorms.map(storm => ({
+        id: storm.id,
+        name: storm.name,
+        x: storm.x,
+        y: storm.y,
+        radius: storm.radius,
+        intensity: storm.intensity,
+        speed: storm.speed,
+        heading: storm.heading,
+        knowledge: storm.knowledge,
+        mines: storm.mines,
+        type: storm.type || 'storm'
+      })),
+      players: this.allPlayers.map(p => ({
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        isAI: p.isAI,
+        techScore: p.techScore,
+        expScore: p.expScore,
+        expProgress: p.expProgress,
+        crewExperience: p.crewExperience,
+        credits: p.credits,
+        tradingBonus: p.tradingBonus,
+        useCredits: p.useCredits,
+        atWarWith: p.atWarWith ? { ...p.atWarWith } : {},
+        builtClasses: p.builtClasses ? { ...p.builtClasses } : {},
+        buildCounts: p.buildCounts,
+        autoBuyOrders: p.autoBuyOrders,
+        clientPlayerId: p.clientPlayerId,
+        lastCommandTime: p.lastCommandTime,
+        isAFK: p.isAFK,
+        afkTimer: p.afkTimer,
+        totalCapacity: p.totalCapacity,
+        prevTechBonus: p.prevTechBonus,
+        cruiserStyle: p.cruiserStyle,
+        afkWarningSent: p.afkWarningSent,
+        storageFeeAccumulator: p.storageFeeAccumulator,
+        tradeOptions: p.tradeOptions,
+        tradeRegenAccumulator: p.tradeRegenAccumulator
+      })),
+      planets: this.planets.map(p => ({
+        id: p.id,
+        x: p.x,
+        y: p.y,
+        radius: p.radius,
+        sizeClass: p.sizeClass,
+        maxShips: p.maxShips,
+        ships: p.ships,
+        ownerId: p.owner ? p.owner.id : null,
+        focusMode: p.focusMode,
+        habitability: p.habitability,
+        isResearch: p.isResearch,
+        isMilitary: p.isMilitary,
+        isSpeedPlanet: p.isSpeedPlanet,
+        isSuperPlanet: p.isSuperPlanet,
+        isCapitalShipyard: p.isCapitalShipyard,
+        preferredResource: p.preferredResource,
+        resources: p.resources,
+        sympathy: p.sympathy,
+        garrisonFocusTriggered: p.garrisonFocusTriggered,
+        retainedShips: p.retainedShips,
+        garrisonMaxShipsDouble: p.garrisonMaxShipsDouble,
+        hasCapitalShipyard: p.hasCapitalShipyard,
+        capitalShipProgress: p.capitalShipProgress,
+        dead: p.dead,
+        homeworldOf: p.homeworldOf,
+        racialAffinity: p.racialAffinity,
+        inRevolt: p.inRevolt,
+        revoltTimer: p.revoltTimer,
+        revoltCompetitors: p.revoltCompetitors,
+        revoltWarmup: p.revoltWarmup,
+        revoltWarmupMax: p.revoltWarmupMax,
+        diplomacyWarmupTimer: p.diplomacyWarmupTimer,
+        activeDiplomatId: p.activeDiplomatId
+      })),
+      ships: this.ships.map(s => {
+        const sData = {};
+        for (const [k, v] of Object.entries(s)) {
+          if (k === 'targetPlanet') {
+            sData.targetPlanetId = v ? v.id : null;
+          } else if (k === 'owner') {
+            sData.ownerId = v ? v.id : null;
+          } else if (typeof v !== 'function') {
+            sData[k] = v;
+          }
+        }
+        return sData;
+      })
+    };
+    return state;
+  }
+
+  loadState(state) {
+    this.width = state.width;
+    this.height = state.height;
+    this.gameTime = state.gameTime;
+    this.timeRemaining = state.timeRemaining;
+    this.nextShipId = state.nextShipId;
+    this.rampageInterval = state.rampageInterval;
+    this.nextRampageTime = state.nextRampageTime;
+    this.nextRampageSelectionTime = state.nextRampageSelectionTime;
+    this.rampageIncubationTimeRemaining = state.rampageIncubationTimeRemaining;
+    this.settings = state.settings;
+    this.globalUpgradeModifiers = state.globalUpgradeModifiers;
+    this.resourceRarities = state.resourceRarities;
+    this.sellOrders = state.sellOrders;
+    this.fulfillOrders = state.fulfillOrders;
+    this.exploredGrid = state.exploredGrid;
+
+    // Restore players
+    const playersMap = new Map();
+    this.allPlayers = state.players.map(pData => {
+      const p = new Player(pData.id, pData.color, pData.isAI);
+      p.name = pData.name;
+      p.techScore = pData.techScore;
+      p.expScore = pData.expScore;
+      p.expProgress = pData.expProgress;
+      p.crewExperience = pData.crewExperience;
+      p.credits = pData.credits;
+      p.tradingBonus = pData.tradingBonus;
+      p.useCredits = pData.useCredits;
+      p.atWarWith = pData.atWarWith || {};
+      p.builtClasses = pData.builtClasses || {};
+      p.buildCounts = pData.buildCounts || p.buildCounts;
+      p.autoBuyOrders = pData.autoBuyOrders || p.autoBuyOrders;
+      p.clientPlayerId = pData.clientPlayerId;
+      p.lastCommandTime = pData.lastCommandTime;
+      p.isAFK = pData.isAFK;
+      p.afkTimer = pData.afkTimer;
+      p.totalCapacity = pData.totalCapacity;
+      p.prevTechBonus = pData.prevTechBonus;
+      p.cruiserStyle = pData.cruiserStyle;
+      p.afkWarningSent = pData.afkWarningSent;
+      p.storageFeeAccumulator = pData.storageFeeAccumulator;
+      p.tradeOptions = pData.tradeOptions;
+      p.tradeRegenAccumulator = pData.tradeRegenAccumulator;
+
+      if (p.id === 'p1') this.humanPlayer = p;
+      if (p.id === 'monsters') this.monsterPlayer = p;
+
+      playersMap.set(p.id, p);
+      return p;
+    });
+    this.aiPlayers = this.allPlayers.filter(p => p.isAI && p.id !== 'monsters');
+
+    // Restore planets
+    const planetsMap = new Map();
+    this.planets = state.planets.map(pData => {
+      const owner = pData.ownerId ? playersMap.get(pData.ownerId) : null;
+      const p = new Planet(pData.id, pData.x, pData.y, pData.radius, owner, pData.ships, this.width, this.height);
+      
+      p.sizeClass = pData.sizeClass;
+      p.maxShips = pData.maxShips;
+      p.focusMode = pData.focusMode;
+      p.habitability = pData.habitability;
+      p.isResearch = pData.isResearch;
+      p.isMilitary = pData.isMilitary;
+      p.isSpeedPlanet = pData.isSpeedPlanet;
+      p.isSuperPlanet = pData.isSuperPlanet;
+      p.radius = pData.radius; // Restore the radius because the constructor overwrote it!
+      p.isCapitalShipyard = pData.isCapitalShipyard;
+      p.preferredResource = pData.preferredResource;
+      p.resources = pData.resources || [];
+      p.sympathy = pData.sympathy || {};
+      p.garrisonFocusTriggered = pData.garrisonFocusTriggered;
+      p.retainedShips = pData.retainedShips;
+      p.garrisonMaxShipsDouble = pData.garrisonMaxShipsDouble;
+      p.hasCapitalShipyard = pData.hasCapitalShipyard;
+      p.capitalShipProgress = pData.capitalShipProgress;
+      p.dead = pData.dead;
+      p.homeworldOf = pData.homeworldOf;
+      p.racialAffinity = pData.racialAffinity;
+      p.inRevolt = pData.inRevolt;
+      p.revoltTimer = pData.revoltTimer;
+      p.revoltCompetitors = pData.revoltCompetitors || {};
+      p.revoltWarmup = pData.revoltWarmup || 0;
+      p.revoltWarmupMax = pData.revoltWarmupMax || 1;
+      p.diplomacyWarmupTimer = pData.diplomacyWarmupTimer || 0;
+      p.activeDiplomatId = pData.activeDiplomatId || null;
+
+      planetsMap.set(p.id, p);
+      return p;
+    });
+
+    this.incubatingPlanet = state.incubatingPlanetId ? planetsMap.get(state.incubatingPlanetId) : null;
+
+    // Restore ships
+    this.ships = new SpatialGridArray();
+    if (state.ships) {
+      for (const sData of state.ships) {
+        const owner = sData.ownerId ? playersMap.get(sData.ownerId) : null;
+        const targetPlanet = sData.targetPlanetId ? planetsMap.get(sData.targetPlanetId) : null;
+        const s = new Ship(sData.id, sData.x, sData.y, targetPlanet, owner, sData.targetX, sData.targetY);
+
+        for (const [k, v] of Object.entries(sData)) {
+          if (k !== 'targetPlanetId' && k !== 'ownerId') {
+            s[k] = v;
+          }
+        }
+        s.owner = owner;
+        s.targetPlanet = targetPlanet;
+        this.ships.push(s);
+      }
+    }
+    this.ships.updateGrid();
+
+    // Rebuild active AI controllers list
+    this.aiControllers = this.allPlayers
+      .filter(p => p !== this.monsterPlayer && p.isAI)
+      .map(p => new AIController(this, p));
+
+    // Restore ion storms
+    this.ionStorms = [];
+    if (state.ionStorms) {
+      for (const stormData of state.ionStorms) {
+        this.ionStorms.push({
+          id: stormData.id,
+          name: stormData.name,
+          x: stormData.x,
+          y: stormData.y,
+          radius: stormData.radius,
+          intensity: stormData.intensity,
+          speed: stormData.speed,
+          heading: stormData.heading,
+          knowledge: stormData.knowledge || {},
+          mines: stormData.mines || 0,
+          type: stormData.type || 'storm'
+        });
+      }
+    }
+
+    // Clear lasers and explosions
+    this.lasers.clear();
+    this.explosions.clear();
   }
 
   initMap() {
@@ -959,6 +1216,8 @@ export class Game {
           newPlanet.isSuperPlanet = true;
           newPlanet.sizeClass = 200;
           newPlanet.habitability = 150;
+          newPlanet.maxShips = spec.maxShips;
+          newPlanet.radius = Math.min(newPlanet.sizeClass, newPlanet.maxShips) / 4;
         }
         return newPlanet;
       };
@@ -1170,11 +1429,13 @@ export class Game {
 
           let initialShips = Math.floor(expectedShips + (Math.random() * 2 - 1) * variance);
           initialShips = Math.max(1, initialShips);
-          const newPlanet = new Planet(i, x, y, radius, null, initialShips, this.width, this.height);
+           const newPlanet = new Planet(i, x, y, radius, null, initialShips, this.width, this.height);
           if (i < countMegaSuper + countSuper) {
             newPlanet.isSuperPlanet = true;
             newPlanet.sizeClass = 200;
             newPlanet.habitability = 150;
+            newPlanet.maxShips = radius * 4;
+            newPlanet.radius = Math.min(newPlanet.sizeClass, newPlanet.maxShips) / 4;
           }
           this.planets.push(newPlanet);
         }
@@ -2259,25 +2520,20 @@ export class Game {
   }
 
   checkSinglePlanetSympathyRevolt(planet) {
-    if ((planet.revoltCooldown || 0) > 0) return;
     if (planet.inRevolt) return;
     if (!planet.sympathy) return;
 
     if (typeof planet.isBeingInvaded === 'function' && planet.isBeingInvaded(this)) return;
 
-    const threshold = planet.ships / 3;
-
     const eligibleNonOwners = [];
     for (const [pId, symVal] of Object.entries(planet.sympathy)) {
       const isNotOwner = !planet.owner || pId !== planet.owner.id;
-      if (isNotOwner && symVal > threshold) {
+      if (isNotOwner && symVal > 0) {
         eligibleNonOwners.push({ id: pId, sympathy: symVal });
       }
     }
 
     if (eligibleNonOwners.length > 0) {
-      if ((this.globalRevoltCooldown || 0) > 0) return;
-
       const competitors = [];
 
       if (planet.owner) {
@@ -2361,12 +2617,15 @@ export class Game {
 
         planet.owner = winnerPlayer;
 
-        planet.revoltCooldown = 180000;
-        planet.maxRevoltCooldown = 180000;
+        planet.revoltWarmup = 0;
+        planet.ships = Math.max(1, Math.floor(planet.ships / 2));
+        if (planet.sympathy) {
+          for (const pId in planet.sympathy) {
+            planet.sympathy[pId] /= 2;
+          }
+        }
         planet.justAssigned = true;
         planet.focusTransition = null;
-
-        this.globalRevoltCooldown = 60000;
 
         if (!originalOwner) {
           if (oldShips > planet.maxShips) {
@@ -2412,8 +2671,7 @@ export class Game {
       const rollDiff = Math.max(0, ownerRoll - highestChallengerRoll);
       const cooldownSeconds = 60 + rollDiff * 3;
 
-      planet.revoltCooldown = cooldownSeconds * 1000;
-      planet.maxRevoltCooldown = cooldownSeconds * 1000;
+      planet.revoltWarmup = 0;
 
       const ownerName = winner.name;
       const controlText = `${planet.name} Revolt! ${ownerName} retains control!`;
@@ -2442,7 +2700,6 @@ export class Game {
 
   update(deltaTime) {
     this.ships.updateGrid();
-    this.globalRevoltCooldown = Math.max(0, (this.globalRevoltCooldown || 0) - deltaTime);
 
     this.gameTime += deltaTime;
 
@@ -2699,6 +2956,12 @@ export class Game {
       return reduction;
     };
 
+    for (const ship of this.ships) {
+      if (ship.isCruiser) {
+        ship.isActivelyResearching = false;
+      }
+    }
+
     // Ion Storm knowledge accumulation (ships with labs are the primary method of gaining knowledge now)
     for (const storm of this.ionStorms) {
       for (const player of this.allPlayers) {
@@ -2724,6 +2987,7 @@ export class Game {
                 const knowledgeGained = (ship.labs * deltaTime) / 120000;
                 player.techScore = (player.techScore || 0) + knowledgeGained;
                 ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
+                ship.isActivelyResearching = true;
                 if (ship.accumulatedTech >= 1.0) {
                   const beakerCount = Math.floor(ship.accumulatedTech);
                   ship.accumulatedTech -= beakerCount;
@@ -3014,6 +3278,11 @@ export class Game {
 
     // Dynamic calculations for player limits and trade options
     for (const player of this.allPlayers) {
+      if ((player.credits || 0) < 0) {
+        player.credits += player.credits * (0.01 / 60000) * deltaTime;
+      } else if ((player.credits || 0) > 0) {
+        player.credits += player.credits * (0.005 / 60000) * deltaTime;
+      }
       let garrisonWorlds = 0;
       let fullGarrisonWorlds = 0;
       let commerceWorlds = 0;
@@ -3107,16 +3376,20 @@ export class Game {
         player.tradeOptions = Math.min(player.tradeCapacity, (player.tradeOptions || 0) + 1);
       }
 
-      // Passive trading income of 1/10000 credits per ship per second of all ships on planets not at war with the player and visible to the player including the player's own planets, capped at the lower of ( 3 * number of ships the player has on all his planets ) or ( the sum of all other friendly planetary ships, not counting the player's ships )
+      // Passive trading income based on effective ships of all friendly/neutral planets, capped based on player's own effective ships
       if (player !== this.monsterPlayer) {
         let playerEffectiveShips = 0;
         
-        // 1. Calculate player's own effective ships (doubled if commerce focus)
+        // 1. Calculate player's own effective ships (doubled if commerce focus, quadrupled if commerce focus and at full ships)
         for (const planet of this.planets) {
           if (planet.dead) continue;
           const isOwn = (planet.owner && planet.owner.id === player.id);
           if (isOwn) {
-            const eff = planet.ships + (planet.focusMode === 'commerce' ? planet.ships : 0);
+            let eff = planet.ships;
+            if (planet.focusMode === 'commerce') {
+              const isFull = planet.ships >= planet.maxShips;
+              eff = isFull ? planet.ships * 4 : planet.ships * 2;
+            }
             playerEffectiveShips += eff;
           }
         }
@@ -3139,7 +3412,18 @@ export class Game {
           if (!isOwn && isNotAtWar) {
             const isVisibleOrOnceKnown = this.isPlanetVisibleTo(planet, player) || (player.discoveredPlanets && player.discoveredPlanets.has(planet.id));
             if (isVisibleOrOnceKnown) {
-              const eff = planet.ships + (planet.focusMode === 'commerce' ? planet.ships : 0);
+              let baseShips = planet.ships;
+              if (!planet.owner) {
+                // Neutral planet: cap counted ships to sympathy on that planet toward the player * 10
+                const sympathyVal = planet.sympathy?.[player.id] || 0;
+                baseShips = Math.min(baseShips, sympathyVal * 10);
+              }
+
+              let eff = baseShips;
+              if (planet.focusMode === 'commerce') {
+                const isFull = planet.ships >= planet.maxShips;
+                eff = isFull ? baseShips * 4 : baseShips * 2;
+              }
               otherEffectiveShips += eff;
               
               if (planet.owner) {
@@ -3174,7 +3458,7 @@ export class Game {
           qualifyingShipsSum += visiblePartnerShips[key];
         }
 
-        const tradingIncomeRate = qualifyingShipsSum > 0 ? (Math.sqrt(qualifyingShipsSum) / 600) : 0; // credits per second
+        const tradingIncomeRate = qualifyingShipsSum > 0 ? (qualifyingShipsSum / 6000) : 0; // credits per second
         const tradingIncome = tradingIncomeRate * (deltaTime / 1000);
         player.credits = (player.credits || 0) + tradingIncome;
         player.passiveIncomeRate = tradingIncomeRate; // Store for client UI display!
@@ -3817,6 +4101,12 @@ export class Game {
           player.tradeOptions = player.tradeCapacity || 5;
         }
 
+        let minAllowedCredits = 0;
+        const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
+        if (ownsHomeworld) {
+          minAllowedCredits = -(1000 + (player.totalShips || 0));
+        }
+
         let purchasedAny = true;
         while (purchasedAny && player.tradeOptions >= 1 && this.sellOrders.length > 0) {
           purchasedAny = false;
@@ -3829,7 +4119,8 @@ export class Game {
             for (let i = 0; i < this.sellOrders.length; i++) {
               const order = this.sellOrders[i];
               if (order.ownerId !== player.id && order.resource === abo.resource && order.price <= abo.price) {
-                if (order.price < lowestPrice && (player.credits || 0) >= order.price) {
+                const buyerCredits = player.credits || 0;
+                if (order.price < lowestPrice && (buyerCredits - minAllowedCredits) >= order.price) {
                   lowestPrice = order.price;
                   bestOrderIdx = i;
                 }
@@ -3867,12 +4158,148 @@ export class Game {
     }
   }
 
+  triggerDiplomacyEvent(ship, targetPlanet) {
+    const expBonus = Math.sqrt(ship.owner.expScore || 0);
+    const shipExpBonus = Math.sqrt(ship.expScore || 0);
+    const MathSquareBase = expBonus + shipExpBonus;
+    const currentSym = targetPlanet.sympathy ? (targetPlanet.sympathy[ship.owner.id] || 0) : 0;
+    const disposition = targetPlanet.disposition ? (targetPlanet.disposition[ship.owner.id] ?? 0) : 0;
+
+    const prefRes = targetPlanet.preferredResource;
+    const initialQty = prefRes ? (ship.owner.resources?.[prefRes] || 0) : 0;
+
+    if (prefRes && initialQty >= 0.1) {
+      ship.owner.resources[prefRes] = Math.max(0, ship.owner.resources[prefRes] - 0.1);
+      ship.diplomatPrefResourceEvent = (ship.diplomatPrefResourceEvent || 0) + 1;
+    }
+
+    const hasPref = prefRes && initialQty >= 0.1;
+
+    const chanceBase = 30 + disposition + currentSym + MathSquareBase;
+    const chancePref = 30 + disposition + currentSym + (MathSquareBase * 3) + 10;
+    
+    let rawChance = hasPref ? chancePref : chanceBase;
+    if (ship.cruiserStyle === targetPlanet.racialAffinity || (ship.owner && ship.owner.cruiserStyle === targetPlanet.racialAffinity)) {
+      rawChance += 20;
+    }
+    const chancePercent = Math.max(0, Math.round(rawChance));
+    
+    const roll = Math.floor(Math.random() * 100) + 1;
+
+    ship.gainXp(1, this);
+
+    if (roll <= chancePercent) {
+      ship.owner.expScore = (ship.owner.expScore || 0) + 1;
+
+      targetPlanet.sympathy = targetPlanet.sympathy || {};
+      targetPlanet.disposition = targetPlanet.disposition || {};
+
+      if (targetPlanet.disposition[ship.owner.id] === undefined) {
+        let rollSum = 0;
+        for (let i = 0; i < 10; i++) {
+          rollSum += Math.floor(Math.random() * 10) + 1;
+        }
+        let dispositionVal = rollSum - 60;
+
+        if (initialQty >= 0.1) {
+          dispositionVal += (expBonus + shipExpBonus) * 3;
+        }
+        if (initialQty >= 0.1) {
+          dispositionVal += 10;
+        }
+        dispositionVal += 0.5 * currentSym;
+
+        targetPlanet.disposition[ship.owner.id] = Math.max(-100, Math.min(100, Math.floor(dispositionVal)));
+      }
+
+      const baseIncreaseAmt = Math.floor(1 + (chancePercent - roll) / 25);
+      let increaseAmt = baseIncreaseAmt;
+
+      const isTargetFriendly = targetPlanet.owner && targetPlanet.owner.id === ship.owner.id;
+      if (isTargetFriendly) {
+        increaseAmt = Math.ceil(increaseAmt / 2);
+      }
+
+      const actualIncrease = targetPlanet.addSympathy(ship.owner.id, increaseAmt);
+
+      let successXP = Math.floor(1 + actualIncrease / 2);
+
+      ship.gainXp(successXP, this);
+      
+      ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + actualIncrease;
+    } else {
+      ship.diplomatFailureEvent = (ship.diplomatFailureEvent || 0) + 1;
+      ship.diplomatFailureChance = Math.round(chancePercent);
+    }
+  }
+
   updateCustomCruiserSystems(dt) {
     if (!this.isRunning || this.isPaused) return;
 
-    // 1. Update Boarding Pods, Return Pods, and active Cruisers
     const cruisers = this.ships.filter(s => s.active && s.isCruiser);
     const pods = this.ships.filter(s => s.active && (s.isBoardingFleet || s.isReturnPod));
+
+    // A mapping from diplomat ship ID to the ship object for quick lookup
+    const diplomatShipsMap = new Map();
+    for (const ship of cruisers) {
+      if ((ship.diplomat || 0) > 0) {
+        diplomatShipsMap.set(ship.id, ship);
+      }
+    }
+
+    // Validate activeDiplomatId for each planet
+    for (const p of this.planets) {
+      if (p.activeDiplomatId) {
+        const diplomat = diplomatShipsMap.get(p.activeDiplomatId);
+        let isValid = false;
+        if (diplomat && diplomat.active && !p.dead && (diplomat.parley || 0) > 0) {
+          // Check sensor range
+          let baseCruiserRadar = 25 + diplomat.maxHealth * 2;
+          let radar = baseCruiserRadar + 10 * (diplomat.sensorarrays || 0);
+          radar *= (1 + 0.25 * (diplomat.sensorarrays || 0));
+          if (diplomat.isWarp) radar *= 0.25;
+          if (diplomat.owner) {
+            const techBonus = 0.01 * Math.sqrt(diplomat.owner.techScore || 0);
+            radar *= (1 + techBonus);
+          }
+          const dx = p.x - diplomat.x;
+          const dy = p.y - diplomat.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist <= radar) {
+            isValid = true;
+          }
+        }
+        if (!isValid) {
+          p.activeDiplomatId = null;
+        }
+      }
+    }
+
+    // Update diplomacy timers and parley consumption for each planet
+    for (const p of this.planets) {
+      if (p.activeDiplomatId) {
+        const diplomat = diplomatShipsMap.get(p.activeDiplomatId);
+        if (diplomat) {
+          // Continuous warmup progression
+          p.diplomacyWarmupTimer = Math.min(30, (p.diplomacyWarmupTimer || 0) + dt);
+          // Continuous parley consumption
+          if ((diplomat.parley || 0) > 0) {
+            const parleyToConsume = Math.min(diplomat.parley, (1 / 30) * dt);
+            diplomat.parley -= parleyToConsume;
+          }
+          // Check completion
+          if (p.diplomacyWarmupTimer >= 30) {
+            p.diplomacyWarmupTimer = 0;
+            this.triggerDiplomacyEvent(diplomat, p);
+          }
+        }
+      } else {
+        // Cooldown/decay at the same rate
+        if (p.diplomacyWarmupTimer && p.diplomacyWarmupTimer > 0) {
+          p.diplomacyWarmupTimer = Math.max(0, p.diplomacyWarmupTimer - dt);
+        }
+      }
+    }
 
     // Handle Pods tracking and collision/impact
     for (const pod of pods) {
@@ -3992,6 +4419,11 @@ export class Game {
         const qualifyingPlanets = [];
         const isParleyFull = (ship.parley || 0) >= (ship.diplomat || 0) * 3 - 0.01;
         for (const p of this.planets) {
+          // Only one diplomat may attempt diplomacy on a planet at a time.
+          if (p.activeDiplomatId && p.activeDiplomatId !== ship.id) {
+            continue;
+          }
+
           const dx = p.x - ship.x;
           const dy = p.y - ship.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
@@ -4057,93 +4489,30 @@ export class Game {
 
         const targetPlanet = closestPlanet;
         if (targetPlanet) {
-          ship.diplomatTargetPlanetId = targetPlanet.id;
-          const attemptInterval = 6;
-          ship.diplomatTimer = Math.min(attemptInterval, (ship.diplomatTimer || 0) + dt);
-          if (ship.diplomatTimer >= attemptInterval && (ship.parley || 0) > 0.99) {
-            ship.diplomatTimer -= attemptInterval;
-            ship.parley = Math.max(0, ship.parley - 1);
-
-            // Standard sympathy attempt logic using tooltip formula:
-            const expBonus = Math.sqrt(ship.owner.expScore || 0);
-            const shipExpBonus = Math.sqrt(ship.expScore || 0);
-            const MathSquareBase = expBonus + shipExpBonus;
-            const currentSym = targetPlanet.sympathy ? (targetPlanet.sympathy[ship.owner.id] || 0) : 0;
-            const disposition = targetPlanet.disposition ? (targetPlanet.disposition[ship.owner.id] ?? 0) : 0;
-
-            const prefRes = targetPlanet.preferredResource;
-            const initialQty = prefRes ? (ship.owner.resources?.[prefRes] || 0) : 0;
-
-            // If the player has >= 0.1 of the preferred resource of a planet during a diplomacy event, consume 0.1 of that resource.
-            if (prefRes && initialQty >= 0.1) {
-              ship.owner.resources[prefRes] = Math.max(0, ship.owner.resources[prefRes] - 0.1);
-              ship.diplomatPrefResourceEvent = (ship.diplomatPrefResourceEvent || 0) + 1;
-            }
-
-            const hasPref = prefRes && initialQty >= 0.1;
-
-            const chanceBase = 30 + disposition + currentSym + MathSquareBase;
-            const chancePref = 30 + disposition + currentSym + (MathSquareBase * 3) + 10;
-            
-            let rawChance = hasPref ? chancePref : chanceBase;
-            if (ship.cruiserStyle === targetPlanet.racialAffinity || (ship.owner && ship.owner.cruiserStyle === targetPlanet.racialAffinity)) {
-              rawChance += 20;
-            }
-            const chancePercent = Math.max(0, Math.round(rawChance));
-            
-            const roll = Math.floor(Math.random() * 100) + 1;
-
-            // Give cruiser 1 XP score for the attempt
-            ship.gainXp(1, this);
-
-            if (roll <= chancePercent) {
-              // Award 1 XP score to player
-              ship.owner.expScore = (ship.owner.expScore || 0) + 1;
-
-              targetPlanet.sympathy = targetPlanet.sympathy || {};
-              targetPlanet.disposition = targetPlanet.disposition || {};
-
-              // Roll disposition if not yet set
-              if (targetPlanet.disposition[ship.owner.id] === undefined) {
-                let rollSum = 0;
-                for (let i = 0; i < 10; i++) {
-                  rollSum += Math.floor(Math.random() * 10) + 1;
-                }
-                let dispositionVal = rollSum - 60;
-
-                if (initialQty >= 0.1) {
-                  dispositionVal += (expBonus + shipExpBonus) * 3;
-                }
-                if (initialQty >= 0.1) {
-                  dispositionVal += 10;
-                }
-                dispositionVal += 0.5 * currentSym;
-
-                targetPlanet.disposition[ship.owner.id] = Math.max(-100, Math.min(100, Math.floor(dispositionVal)));
+          const isContinuing = targetPlanet.activeDiplomatId === ship.id;
+          if (isContinuing || (ship.parley || 0) > 1) {
+            ship.diplomatTargetPlanetId = targetPlanet.id;
+            // Claim this planet and release any other planets previously claimed by this ship
+            for (const pl of this.planets) {
+              if (pl.activeDiplomatId === ship.id && pl.id !== targetPlanet.id) {
+                pl.activeDiplomatId = null;
               }
-
-              const baseIncreaseAmt = Math.floor(1 + (chancePercent - roll) / 25);
-              let increaseAmt = baseIncreaseAmt;
-              const isResourceDoubled = prefRes && initialQty >= 0.1;
-
-              // If targeting a friendly planet, they gain half the normal sympathy increase rounded up.
-              const isTargetFriendly = targetPlanet.owner && targetPlanet.owner.id === ship.owner.id;
-              if (isTargetFriendly) {
-                increaseAmt = Math.ceil(increaseAmt / 2);
+            }
+            targetPlanet.activeDiplomatId = ship.id;
+          } else {
+            // Cannot start diplomacy on targetPlanet since parley <= 1 and we were not already active on it.
+            ship.diplomatTargetPlanetId = null;
+            for (const pl of this.planets) {
+              if (pl.activeDiplomatId === ship.id) {
+                pl.activeDiplomatId = null;
               }
-
-              const actualIncrease = targetPlanet.addSympathy(ship.owner.id, increaseAmt);
-
-              // Success XP = 1 + 1/2 of actual sympathy created, rounded down
-              let successXP = Math.floor(1 + actualIncrease / 2);
-
-              // Give ship the success XP score
-              ship.gainXp(successXP, this);
-              
-              ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + actualIncrease;
-            } else {
-              ship.diplomatFailureEvent = (ship.diplomatFailureEvent || 0) + 1;
-              ship.diplomatFailureChance = Math.round(chancePercent);
+            }
+          }
+        } else {
+          // No target, release any previous claims by this ship
+          for (const pl of this.planets) {
+            if (pl.activeDiplomatId === ship.id) {
+              pl.activeDiplomatId = null;
             }
           }
         }

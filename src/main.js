@@ -901,8 +901,8 @@ function getHabName(habitability) {
         infoPanelImageHologram.style.display = "none";
       } else if (type === 'planet') {
         let p = serverState.planets.find(pp => pp.id === id);
-        const isLastKnown = p && p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id];
-        if (isLastKnown) {
+        const isLastKnown = p && p.inFog && (p.permanentlyTracked || !!lastKnownPlanets[p.id]);
+        if (isLastKnown && !p.permanentlyTracked && lastKnownPlanets[p.id]) {
           p = lastKnownPlanets[p.id];
         }
         if (p && (!p.inFog || isLastKnown)) {
@@ -962,8 +962,8 @@ function getHabName(habitability) {
 
     if (type === 'planet') {
       let p = serverState.planets.find(pp => pp.id === id);
-      const isLastKnown = p && p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id];
-      if (isLastKnown) {
+      const isLastKnown = p && p.inFog && (p.permanentlyTracked || !!lastKnownPlanets[p.id]);
+      if (isLastKnown && !p.permanentlyTracked && lastKnownPlanets[p.id]) {
         p = lastKnownPlanets[p.id];
       }
       if (!p || (p.inFog && !isLastKnown)) {
@@ -973,7 +973,7 @@ function getHabName(habitability) {
       const owner = p.ownerId ? serverState.players.find(pl => pl.id === p.ownerId) : null;
       const ownerColor = owner ? owner.color : '#888';
 
-      const sizeClassText = p.sizeClass <= 79 ? 'Tiny' : p.sizeClass <= 99 ? 'Small' : p.sizeClass <= 129 ? 'Standard' : p.sizeClass <= 159 ? 'Large' : p.sizeClass <= 189 ? 'Very Large' : 'Super Planet';
+      const sizeClassText = p.sizeClass < 70 ? 'Tiny' : p.sizeClass < 90 ? 'Small' : p.sizeClass < 110 ? 'Standard' : p.sizeClass < 140 ? 'Large' : p.sizeClass < 180 ? 'Huge' : 'Super Planet';
       const habName = getHabName(p.habitability);
       const raceName = p.racialAffinity || '';
       const focusName = p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy';
@@ -1013,8 +1013,11 @@ function getHabName(habitability) {
         const disposition = p.disposition?.[localPlayer.id] ?? 0;
         
         let racialBonus = 0;
-        if (selectedCruiser && (selectedCruiser.cruiserStyle === p.racialAffinity || (selectedCruiser.owner && selectedCruiser.owner.cruiserStyle === p.racialAffinity))) {
-          racialBonus = 20;
+        if (selectedCruiser) {
+          const shipOwner = serverState.players.find(pl => pl.id === selectedCruiser.ownerId);
+          if (selectedCruiser.cruiserStyle === p.racialAffinity || (shipOwner && shipOwner.cruiserStyle === p.racialAffinity)) {
+            racialBonus = 20;
+          }
         }
 
         const chanceBase = 30 + disposition + currentSym + bonusSum + racialBonus;
@@ -1761,8 +1764,8 @@ function getHabName(habitability) {
 
     if (type === 'planet') {
       let p = serverState.planets.find(pp => pp.id === id);
-      const isLastKnown = p && p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id];
-      if (isLastKnown) {
+      const isLastKnown = p && p.inFog && (p.permanentlyTracked || !!lastKnownPlanets[p.id]);
+      if (isLastKnown && !p.permanentlyTracked && lastKnownPlanets[p.id]) {
         p = lastKnownPlanets[p.id];
       }
       if (p) {
@@ -1944,13 +1947,13 @@ function getHabName(habitability) {
     });
   }
 
-  let lastSuggestedPlanets = 50;
-  let lastSuggestedAI = 4;
+  let lastSuggestedPlanets = 30;
+  let lastSuggestedAI = 2;
 
   if (planetCountInput && aiCountInput) {
     planetCountInput.addEventListener('input', () => {
       const planets = parseInt(planetCountInput.value, 10) || 0;
-      const suggestedAI = Math.min(11, Math.max(0, Math.floor(planets / 10) - 1));
+      const suggestedAI = Math.min(11, Math.max(1, Math.floor(planets / 10) - 1));
       aiCountInput.value = suggestedAI;
       lastSuggestedAI = suggestedAI;
     });
@@ -1965,7 +1968,7 @@ function getHabName(habitability) {
         customMapsizeContainer.style.display = 'none';
         const newSize = parseInt(val, 10);
         mapSizeInput.value = newSize; // Keep custom sync'd
-        const suggestedPlanets = Math.round(newSize / 40);
+        const suggestedPlanets = Math.max(1, Math.round(15 + 0.015 * (newSize - 1000)));
         if (parseInt(planetCountInput.value, 10) === lastSuggestedPlanets) {
           planetCountInput.value = suggestedPlanets;
           planetCountInput.dispatchEvent(new Event('input'));
@@ -1979,7 +1982,7 @@ function getHabName(habitability) {
     mapSizeInput.addEventListener('input', () => {
       if (mapSizeselect && mapSizeselect.value === 'custom') {
         const newSize = parseInt(mapSizeInput.value, 10) || 1600;
-        const suggestedPlanets = Math.round(newSize / 40);
+        const suggestedPlanets = Math.max(1, Math.round(15 + 0.015 * (newSize - 1000)));
         if (parseInt(planetCountInput.value, 10) === lastSuggestedPlanets) {
           planetCountInput.value = suggestedPlanets;
           planetCountInput.dispatchEvent(new Event('input'));
@@ -2087,6 +2090,31 @@ function getHabName(habitability) {
 
   const chatInput = document.getElementById('chat-input');
   const chatMessages = document.getElementById('chat-messages');
+  const chatContainer = document.getElementById('chat-container');
+  let chatInteracted = false;
+
+  if (chatMessages) {
+    chatMessages.addEventListener('mousedown', () => {
+      chatInteracted = true;
+    });
+    chatMessages.addEventListener('wheel', () => {
+      chatInteracted = true;
+    });
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (chatContainer && chatContainer.classList.contains('chat-active')) {
+      if (e.key === 'PageUp' || e.key === 'PageDown') {
+        chatInteracted = true;
+        if (e.key === 'PageUp') {
+          chatMessages.scrollTop = Math.max(0, chatMessages.scrollTop - 100);
+        } else {
+          chatMessages.scrollTop = Math.min(chatMessages.scrollHeight, chatMessages.scrollTop + 100);
+        }
+        e.preventDefault();
+      }
+    }
+  });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
@@ -2113,13 +2141,25 @@ function getHabName(habitability) {
             } else {
               socket.emit('chatMessage', text);
             }
+
+            if (chatInteracted) {
+              chatInput.value = '';
+              setTimeout(() => {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+              }, 50);
+              return;
+            }
           }
           chatInput.value = '';
           chatInput.classList.add('hidden');
           chatInput.blur();
+          if (chatContainer) chatContainer.classList.remove('chat-active');
+          chatInteracted = false;
         } else {
           chatInput.classList.remove('hidden');
           chatInput.focus();
+          if (chatContainer) chatContainer.classList.add('chat-active');
+          chatInteracted = false;
         }
       }
     }
@@ -2132,7 +2172,10 @@ function getHabName(habitability) {
       div.style.color = msg.color || '#fff';
       div.innerHTML = `<span style="opacity: 0.7">[${msg.sender}]</span> ${msg.text}`;
       chatMessages.appendChild(div);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
+      
+      if (!chatInteracted) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
 
       // Play chime sound
       playChatNotificationSound();
@@ -2159,12 +2202,15 @@ function getHabName(habitability) {
         }
       }
 
-      // Remove element after 90 seconds to clean up DOM
+      // Limit children to 200 elements to avoid DOM bloat
+      while (chatMessages.children.length > 200) {
+        chatMessages.removeChild(chatMessages.firstChild);
+      }
+
+      // Set class faded after 90 seconds
       setTimeout(() => {
-        if (div.parentNode === chatMessages) {
-          chatMessages.removeChild(div);
-        }
-      }, 93000);
+        div.classList.add('faded');
+      }, 90000);
     }
   });
 
@@ -3029,6 +3075,26 @@ function getHabName(habitability) {
       // Render custom tooltip panel HTML (Task 101 Overhaul)
       const tooltipPanel = document.getElementById('credits-tooltip-panel');
       if (tooltipPanel && tooltipPanel.style.display === 'block' && tooltipPanel.dataset.source === 'credits') {
+        let limitHtml = "";
+        const ownsHw = serverState.planets.some(p => p.homeworldOf === localPlayer.id && p.ownerId === localPlayer.id);
+        if (ownsHw) {
+          const limitVal = 1000 + (myPlayer.totalShips || 0);
+          limitHtml = `
+            <div style="font-size: 0.75rem; color: #ff3333; margin-top: 8px; text-align: center; border-top: 1px dashed rgba(255, 51, 51, 0.2); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
+              Debt Limit: -${limitVal} credits (1000 + total ships)<br>
+              Debt incurs 1%/min interest.<br>
+              <span style="color: #4caf50;">Positive balance earns 0.5%/min interest.</span>
+            </div>
+          `;
+        } else {
+          limitHtml = `
+            <div style="font-size: 0.75rem; color: #88a; margin-top: 8px; text-align: center; border-top: 1px dashed rgba(255, 255, 255, 0.1); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
+              Control your Homeworld to access negative credit financing.<br>
+              <span style="color: #4caf50;">Positive balance earns 0.5%/min interest.</span>
+            </div>
+          `;
+        }
+
         if (myPlayer.tradingPartners && myPlayer.tradingPartners.length > 0) {
           let rowsHtml = "";
           let totalRate = 0;
@@ -3077,6 +3143,10 @@ function getHabName(habitability) {
                 </tr>
               </tfoot>
             </table>
+            <div style="font-size: 0.75rem; color: #88a; margin-top: 8px; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
+              Formula: (Trade Ships / 100) credits per minute
+            </div>
+            ${limitHtml}
           `;
         } else {
           tooltipPanel.innerHTML = `
@@ -3085,6 +3155,10 @@ function getHabName(habitability) {
               No active trading lines<br>
               <span style="font-size: 0.75rem; color: #668;">(Requires visible friendly/neutral planets & own ships)</span>
             </div>
+            <div style="font-size: 0.75rem; color: #88a; margin-top: 8px; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
+              Formula: (Trade Ships / 100) credits per minute
+            </div>
+            ${limitHtml}
           `;
         }
       }
@@ -3093,7 +3167,13 @@ function getHabName(habitability) {
       creditsDisplay.textContent = `💲 ${Math.floor(creditsVal)}`;
       creditsDisplay.removeAttribute('title');
 
-      if (myPlayer.useCredits !== false) {
+      if (creditsVal < 0) {
+        creditsDisplay.style.color = '#ff3333';
+        creditsDisplay.style.textShadow = '0 0 5px #ff3333';
+        creditsDisplay.style.background = 'rgba(255, 51, 51, 0.15)';
+        creditsDisplay.style.borderColor = '#ff3333';
+        creditsDisplay.style.textDecoration = 'none';
+      } else if (myPlayer.useCredits !== false) {
         creditsDisplay.style.color = '#ffeb3b';
         creditsDisplay.style.textShadow = '0 0 5px #ffeb3b';
         creditsDisplay.style.background = 'rgba(255, 235, 59, 0.15)';
@@ -3161,7 +3241,6 @@ function getHabName(habitability) {
 
     const resHud = document.getElementById('resources-hud');
     if (resHud) {
-      console.log('[DEBUG HUD] State resourceRarities:', serverState.resourceRarities);
       resHud.style.display = 'flex';
       
       const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
@@ -3249,8 +3328,13 @@ function getHabName(habitability) {
         L += item.count;
       }
       
-      const sellPrice = Math.ceil((L * L) / 2) + 1;
-      const totalGain = sellPrice * L;
+      const sellPrice = Math.ceil((L * L) / 2) + 2;
+      let totalGain = sellPrice * L;
+      const latinumItem = eligible.find(item => item.name === 'latinum');
+      const latinumCount = latinumItem ? latinumItem.count : 0;
+      if (latinumCount > 0) {
+        totalGain = Math.round(totalGain * (1 + 0.25 * latinumCount));
+      }
       
       const sellBtn = document.getElementById('btn-sell-resources');
       if (sellBtn) {
@@ -3290,12 +3374,7 @@ function getHabName(habitability) {
           sellBtn.style.pointerEvents = 'auto';
         }
         
-        const latinumQty = myPlayer.resources?.latinum || 0;
-        if (latinumQty < 1.0) {
-          sellBtn.style.display = 'none';
-        } else {
-          sellBtn.style.display = 'flex';
-        }
+        sellBtn.style.display = 'flex';
       }
 
       // Populate and render Sell Orders HUD
@@ -3448,7 +3527,12 @@ function getHabName(habitability) {
             // Disable / gray out orders if optionless or creditless (except for own orders)
             if (!isMine) {
               const hasOptions = myTradeOptions >= 1;
-              const hasCredits = myCredits >= order.price;
+              let minAllowedCredits = 0;
+              const ownsHomeworld = serverState.planets.some(p => p.homeworldOf === localPlayer.id && p.ownerId === localPlayer.id);
+              if (ownsHomeworld) {
+                minAllowedCredits = -(1000 + (myPlayer.totalShips || 0));
+              }
+              const hasCredits = (myCredits - minAllowedCredits) >= order.price;
               if (!hasOptions || !hasCredits) {
                 card.style.opacity = '0.35';
                 card.style.pointerEvents = 'none';
@@ -6761,14 +6845,26 @@ function getHabName(habitability) {
           }
         }
 
-        // Revolt immunity cooldown red ring (shrinking arc)
-        if (p.revoltCooldown && p.revoltCooldown > 0) {
+        // Revolt warmup counter red ring
+        if (p.revoltWarmup && p.revoltWarmup > 0 && p.revoltWarmupMax) {
           ctx.save();
           ctx.beginPath();
-          const progress = Math.min(1.0, p.revoltCooldown / 300000);
+          const progress = Math.min(1.0, p.revoltWarmup / p.revoltWarmupMax);
           ctx.arc(p.x, p.y, p.radius + 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
           ctx.strokeStyle = 'rgba(255, 50, 50, 0.85)';
           ctx.lineWidth = 2.5;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Diplomacy warmup timer yellow ring (progress encircling the planet)
+        if (p.diplomacyWarmupTimer && p.diplomacyWarmupTimer > 0) {
+          ctx.save();
+          ctx.beginPath();
+          const progress = Math.min(1.0, p.diplomacyWarmupTimer / 30);
+          ctx.arc(p.x, p.y, p.radius + 10, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+          ctx.strokeStyle = 'rgba(255, 255, 0, 0.85)';
+          ctx.lineWidth = 1.5;
           ctx.stroke();
           ctx.restore();
         }
@@ -6970,10 +7066,17 @@ function getHabName(habitability) {
             ctx.font = 'bold 11px Orbitron'; // Restore font
           }
 
-          const eligibleForRevolt = !isLastKnown && (p.revoltCooldown || 0) <= 0 && p.sympathy && Object.entries(p.sympathy).some(([pId, symVal]) => {
-            const isNotOwner = !p.ownerId || pId !== p.ownerId;
-            return isNotOwner && symVal > p.ships / 3;
-          });
+          let sympathyForeign = 0;
+          if (p.sympathy) {
+            for (const [pId, symVal] of Object.entries(p.sympathy)) {
+              if (!p.ownerId || pId !== p.ownerId) {
+                sympathyForeign += symVal;
+              }
+            }
+          }
+          const sympathyOwner = (p.ownerId && p.sympathy) ? (p.sympathy[p.ownerId] || 0) : 0;
+          const ratePerMinute = sympathyForeign - (p.ships / 3) - sympathyOwner;
+          const eligibleForRevolt = !isLastKnown && ratePerMinute > 0;
 
           if (eligibleForRevolt) {
             ctx.save();
@@ -7410,10 +7513,17 @@ function getHabName(habitability) {
             badgeOffset += 18;
           }
           
-          const eligibleForRevolt = !isLastKnown && (p.revoltCooldown || 0) <= 0 && p.sympathy && Object.entries(p.sympathy).some(([pId, symVal]) => {
-            const isNotOwner = !p.ownerId || pId !== p.ownerId;
-            return isNotOwner && symVal > p.ships / 3;
-          });
+          let sympathyForeign = 0;
+          if (p.sympathy) {
+            for (const [pId, symVal] of Object.entries(p.sympathy)) {
+              if (!p.ownerId || pId !== p.ownerId) {
+                sympathyForeign += symVal;
+              }
+            }
+          }
+          const sympathyOwner = (p.ownerId && p.sympathy) ? (p.sympathy[p.ownerId] || 0) : 0;
+          const ratePerMinute = sympathyForeign - (p.ships / 3) - sympathyOwner;
+          const eligibleForRevolt = !isLastKnown && ratePerMinute > 0;
           if (eligibleForRevolt) {
             badgeOffset += 18;
           }
@@ -8777,7 +8887,7 @@ function getHabName(habitability) {
         }
 
         // Draw scout destination markers if scouting
-        if (s.isScouting && s.scoutTargetX !== null && s.scoutTargetX !== undefined && s.scoutTargetY !== null && s.scoutTargetY !== undefined && owner && localPlayer && owner.id === localPlayer.id) {
+        if (s.flightTime > 0.5 && s.isScouting && s.scoutTargetX !== null && s.scoutTargetX !== undefined && s.scoutTargetY !== null && s.scoutTargetY !== undefined && owner && localPlayer && owner.id === localPlayer.id) {
           ctx.save();
           // Dotted line from scout to target
           ctx.strokeStyle = isSelected ? 'rgba(0, 255, 200, 0.65)' : 'rgba(0, 255, 200, 0.35)';
@@ -8846,6 +8956,53 @@ function getHabName(habitability) {
             ctx.stroke();
             ctx.shadowBlur = 0;
             ctx.beginPath();
+
+            // Draw thin path line representing currently scheduled movement and all queued orders
+            if (s.flightTime > 0.5) {
+              ctx.save();
+              ctx.strokeStyle = 'rgba(0, 255, 200, 0.65)';
+              ctx.lineWidth = 1.2;
+              ctx.setLineDash([3, 4]);
+              ctx.beginPath();
+              ctx.moveTo(s.x, s.y);
+
+              let lastX = s.x;
+              let lastY = s.y;
+              let hasPath = false;
+
+              if (s.targetX !== null && s.targetX !== undefined && s.targetY !== null && s.targetY !== undefined) {
+                ctx.lineTo(s.targetX, s.targetY);
+                lastX = s.targetX;
+                lastY = s.targetY;
+                hasPath = true;
+              }
+
+              if (s.orderQueue && s.orderQueue.length > 0) {
+                for (const o of s.orderQueue) {
+                  if (o.type === 'moveSpace') {
+                    ctx.lineTo(o.targetX, o.targetY);
+                    lastX = o.targetX;
+                    lastY = o.targetY;
+                    hasPath = true;
+                  } else if (o.type === 'movePlanet') {
+                    const targetPlanet = serverState.planets.find(p => p.id === o.targetId);
+                    if (targetPlanet) {
+                      const tX = targetPlanet.x + (o.offsetX || 0);
+                      const tY = targetPlanet.y + (o.offsetY || 0);
+                      ctx.lineTo(tX, tY);
+                      lastX = tX;
+                      lastY = tY;
+                      hasPath = true;
+                    }
+                  }
+                }
+              }
+
+              if (hasPath) {
+                ctx.stroke();
+              }
+              ctx.restore();
+            }
             
             // Draw cyan sensor range circle (outline only, no fill!)
             let baseCruiserRadar = 25 + s.maxHealth * 2;
@@ -8913,7 +9070,7 @@ function getHabName(habitability) {
             }
 
             // Draw dotted lines for the orders in the queue
-            if (s.orderQueue && s.orderQueue.length > 0) {
+            if (s.flightTime > 0.5 && s.orderQueue && s.orderQueue.length > 0) {
               ctx.save();
               ctx.strokeStyle = 'rgba(0, 255, 255, 0.40)'; // Cyan dotted line
               ctx.lineWidth = 1.5;
@@ -9225,6 +9382,17 @@ function getHabName(habitability) {
             ctx.fill();
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+          
+          // Draw research warmup indicator around the ship
+          if (s.isActivelyResearching && s.accumulatedTech !== undefined) {
+            ctx.save();
+            ctx.beginPath();
+            const progress = Math.max(0.0, Math.min(1.0, s.accumulatedTech));
+            ctx.arc(s.x, s.y, size + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+            ctx.strokeStyle = 'rgba(0, 229, 255, 0.85)';
+            ctx.lineWidth = 1.5;
             ctx.stroke();
             ctx.restore();
           }
