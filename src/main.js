@@ -34,6 +34,46 @@ function getHabName(habitability) {
   return 'Gaia';
 }
 
+let playedIntroTracks = [];
+let musicIntervalId = null;
+
+function playRandomIntroTrack() {
+  const musicCheckbox = document.getElementById('music-checkbox');
+  const bgMusic = document.getElementById('bg-music');
+  if (!musicCheckbox || !musicCheckbox.checked || !bgMusic) return;
+
+  const introTracks = [
+    'A little loud, but pretty good.mp3',
+    'Deep Space Ambience.wav',
+    'Intense option.mp3',
+    'Pretty and Steady.mp3',
+    'Solid option.mp3'
+  ];
+
+  let availableTracks = introTracks.filter(track => !playedIntroTracks.includes(track));
+  if (availableTracks.length === 0) {
+    playedIntroTracks = [];
+    availableTracks = [...introTracks];
+  }
+
+  const randomTrack = availableTracks[Math.floor(Math.random() * availableTracks.length)];
+  playedIntroTracks.push(randomTrack);
+
+  bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
+  bgMusic.loop = false;
+  bgMusic.volume = 0.4;
+  bgMusic.play().catch(e => console.warn('Music play blocked:', e));
+}
+
+function startMusicInterval() {
+  if (musicIntervalId) {
+    clearInterval(musicIntervalId);
+  }
+  musicIntervalId = setInterval(() => {
+    playRandomIntroTrack();
+  }, 5 * 60 * 1000);
+}
+
 function getPlanetTradeIncomePerMin(planet) {
   const myPlayer = localPlayer;
   if (!myPlayer || planet.dead) return 0;
@@ -2186,21 +2226,11 @@ function getPlanetTradeIncomePerMin(planet) {
       localStorage.setItem('planetWarsPlayerName', nameInput.value.trim());
     }
 
-     const musicCheckbox = document.getElementById('music-checkbox');
+    const musicCheckbox = document.getElementById('music-checkbox');
     const bgMusic = document.getElementById('bg-music');
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
-      const introTracks = [
-        'A little loud, but pretty good.mp3',
-        'Deep Space Ambience.wav',
-        'Intense option.mp3',
-        'Pretty and Steady.mp3',
-        'Solid option.mp3'
-      ];
-      const randomTrack = introTracks[Math.floor(Math.random() * introTracks.length)];
-      bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
-      bgMusic.loop = false;
-      bgMusic.volume = 0.4;
-      bgMusic.play().catch(e => console.warn('Music play blocked:', e));
+      playRandomIntroTrack();
+      startMusicInterval();
     } else if (bgMusic) {
       bgMusic.pause();
     }
@@ -6151,22 +6181,11 @@ function getPlanetTradeIncomePerMin(planet) {
     gameUI.classList.remove('hidden');
     if (serverState) serverState.isRunning = true;
     megalovaniaPlayed = false;
-
     const musicCheckbox = document.getElementById('music-checkbox');
     const bgMusic = document.getElementById('bg-music');
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
-      const introTracks = [
-        'A little loud, but pretty good.mp3',
-        'Deep Space Ambience.wav',
-        'Intense option.mp3',
-        'Pretty and Steady.mp3',
-        'Solid option.mp3'
-      ];
-      const randomTrack = introTracks[Math.floor(Math.random() * introTracks.length)];
-      bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
-      bgMusic.loop = false;
-      bgMusic.volume = 0.4;
-      bgMusic.play().catch(e => console.warn('Music play blocked:', e));
+      playRandomIntroTrack();
+      startMusicInterval();
     } else if (bgMusic) {
       bgMusic.pause();
     }
