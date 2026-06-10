@@ -1117,7 +1117,19 @@ function getPlanetTradeIncomePerMin(planet) {
       const raceName = p.racialAffinity || '';
       const focusName = p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy';
 
-      titleHTML = `<span style="color: ${ownerColor}">${p.name} - ${sizeClassText} ${habName} ${raceName} ${focusName} World${isLastKnown ? ' <span style="font-size:0.75rem;color:#aaa;">(Last Known)</span>' : ''}</span>`;
+      let prefBonusStr = '';
+      if (p.preferredResource) {
+        let bonusVal = 0;
+        if (owner && owner.resources && p.maxShips >= 150) {
+          const qty = owner.resources[p.preferredResource] || 0;
+          if (qty > 0) {
+            bonusVal = Math.sqrt(qty) * 3;
+          }
+        }
+        prefBonusStr = ` (+${bonusVal.toFixed(1)}%)`;
+      }
+
+      titleHTML = `<span style="color: ${ownerColor}">${p.name}${prefBonusStr} - ${sizeClassText} ${habName} ${raceName} ${focusName} World${isLastKnown ? ' <span style="font-size:0.75rem;color:#aaa;">(Last Known)</span>' : ''}</span>`;
 
       const lines = [];
 
