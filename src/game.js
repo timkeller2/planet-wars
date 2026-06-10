@@ -2615,10 +2615,23 @@ export class Game {
         const oldShips = planet.ships;
         const originalOwner = planet.owner;
 
+        let totalSubvertingSympathy = 0;
+        if (planet.sympathy) {
+          for (const [pId, symVal] of Object.entries(planet.sympathy)) {
+            if (!originalOwner || pId !== originalOwner.id) {
+              totalSubvertingSympathy += symVal;
+            }
+          }
+        }
+
         planet.owner = winnerPlayer;
 
         planet.revoltWarmup = 0;
-        planet.ships = Math.max(1, Math.floor(planet.ships / 2));
+        
+        const baseShips = Math.floor(planet.ships / 2);
+        const maxExtraDestroyed = Math.floor(totalSubvertingSympathy / 5);
+        const extraDestroyed = Math.floor(Math.random() * (maxExtraDestroyed + 1));
+        planet.ships = Math.max(1, baseShips - extraDestroyed);
         if (planet.sympathy) {
           for (const pId in planet.sympathy) {
             planet.sympathy[pId] /= 2;

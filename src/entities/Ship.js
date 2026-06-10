@@ -4147,6 +4147,17 @@ export class Ship {
           const amountHealed = this.health - oldHealth;
           if (amountHealed > 0 && owner && !owner.isMonster && owner.id !== 'monsters') {
             if (supplyShip && (supplyShip.supplies || 0) > 0) {
+              if (lasers && supplyShip !== this && Math.random() < 0.1) {
+                lasers.push({
+                  startX: supplyShip.x,
+                  startY: supplyShip.y,
+                  endX: this.x,
+                  endY: this.y,
+                  color: 'resupply-beam',
+                  age: 0,
+                  duration: 0.3
+                });
+              }
               const suppliesUsed = amountHealed;
               if (supplyShip.supplies >= suppliesUsed) {
                 supplyShip.supplies -= suppliesUsed;
@@ -4192,7 +4203,19 @@ export class Ship {
         }
       }
 
-      const supplyShipForFuel = this.findNearbySupplyShip(allShips);
+      let supplyShipForFuel = this.findNearbySupplyShip(allShips);
+      if (supplyShipForFuel === this) {
+        if ((this.fuel || 0) <= this.getMaxFuel() - 2) {
+          this.isSelfRefueling = true;
+        } else if ((this.fuel || 0) >= this.getMaxFuel()) {
+          this.isSelfRefueling = false;
+        }
+        if (!this.isSelfRefueling) {
+          supplyShipForFuel = null;
+        }
+      } else {
+        this.isSelfRefueling = false;
+      }
       let fuelSourceShip = null;
       if (allShips && this.owner) {
         let closestSource = null;
@@ -4246,6 +4269,29 @@ export class Ship {
             this.fuel = Math.min(this.getMaxFuel(), oldFuel + fuelToGain);
             const amountRefueled = (this.fuel || 0) - oldFuel;
             if (amountRefueled > 0 && owner && !owner.isMonster && owner.id !== 'monsters') {
+              if (lasers && Math.random() < 0.1) {
+                if (supplyShipForFuel && supplyShipForFuel !== this) {
+                  lasers.push({
+                    startX: supplyShipForFuel.x,
+                    startY: supplyShipForFuel.y,
+                    endX: this.x,
+                    endY: this.y,
+                    color: 'refuel-beam',
+                    age: 0,
+                    duration: 0.3
+                  });
+                } else if (fuelSourceShip) {
+                  lasers.push({
+                    startX: fuelSourceShip.x,
+                    startY: fuelSourceShip.y,
+                    endX: this.x,
+                    endY: this.y,
+                    color: 'refuel-beam',
+                    age: 0,
+                    duration: 0.3
+                  });
+                }
+              }
               let costMultiplier = 1.0;
               if (this.fuel_tanker && this.fuel_tanker > 0) {
                 costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.fuel_tanker));
@@ -4323,6 +4369,17 @@ export class Ship {
                 this.bombs++;
                 if (owner && !owner.isMonster && owner.id !== 'monsters') {
                   if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
+                    if (lasers && supplyShipForBombs !== this) {
+                      lasers.push({
+                        startX: supplyShipForBombs.x,
+                        startY: supplyShipForBombs.y,
+                        endX: this.x,
+                        endY: this.y,
+                        color: 'resupply-beam',
+                        age: 0,
+                        duration: 0.6
+                      });
+                    }
                     supplyShipForBombs.supplies -= 1.0;
                   } else if (hasExcessResource && resourceSellPrice < 12) {
                     const consumed = 1/12;

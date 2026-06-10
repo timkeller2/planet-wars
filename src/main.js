@@ -72,7 +72,7 @@ function checkMusicRotation() {
   const bgMusic = document.getElementById('bg-music');
   if (!musicCheckbox || !musicCheckbox.checked || !bgMusic) return;
 
-  if (Date.now() - lastMusicChangeTime >= 5 * 60 * 1000) {
+  if (Date.now() - lastMusicChangeTime >= 10 * 60 * 1000) {
     playRandomIntroTrack();
   }
 }
@@ -10133,6 +10133,46 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.lineWidth = 0.4;
             ctx.fill();
             ctx.stroke();
+          } else if (laser.color === 'refuel-beam') {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(laser.startX, laser.startY);
+            ctx.lineTo(laser.endX, laser.endY);
+            ctx.strokeStyle = `rgba(0, 255, 255, ${(0.4 + Math.random() * 0.4) * (1.0 - progress)})`;
+            ctx.lineWidth = 1.5;
+            ctx.shadowColor = '#00ffff';
+            ctx.shadowBlur = 8;
+            ctx.stroke();
+
+            // Energy spark traveling down the beam
+            const pulseX = laser.startX + (laser.endX - laser.startX) * progress;
+            const pulseY = laser.startY + (laser.endY - laser.startY) * progress;
+            ctx.beginPath();
+            ctx.arc(pulseX, pulseY, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#00ffff';
+            ctx.shadowBlur = 10;
+            ctx.fill();
+            ctx.restore();
+          } else if (laser.color === 'resupply-beam') {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(laser.startX, laser.startY);
+            ctx.lineTo(laser.endX, laser.endY);
+            ctx.strokeStyle = `rgba(0, 255, 128, ${(0.4 + Math.random() * 0.4) * (1.0 - progress)})`;
+            ctx.lineWidth = 1.5;
+            ctx.shadowColor = '#00ff80';
+            ctx.shadowBlur = 8;
+            ctx.stroke();
+
+            // Supply package/spark traveling down the beam
+            const pulseX = laser.startX + (laser.endX - laser.startX) * progress;
+            const pulseY = laser.startY + (laser.endY - laser.startY) * progress;
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#00ff80';
+            ctx.shadowBlur = 10;
+            ctx.fillRect(pulseX - 2.5, pulseY - 2.5, 5, 5);
+            ctx.restore();
           } else {
             // Cinematic staggered normal lasers
             const totalDuration = laser.duration || 0.8;

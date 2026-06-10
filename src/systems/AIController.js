@@ -23,7 +23,8 @@ export class AIController {
     const expAttrBonus = 0.5 * Math.sqrt(this.aiPlayer.expScore || 0);
     const safeDistance = (techAttrBonus + expAttrBonus) * 20;
 
-    let score = target.ships + (dist * distWeight);
+    let targetShips = target.isCruiser ? (target.health || 10) : target.ships;
+    let score = targetShips + (dist * distWeight);
     
     if (dist > safeDistance) {
       score += (dist - safeDistance) * 5; // Heavy penalty for exceeding safe range
@@ -92,6 +93,14 @@ export class AIController {
       for (const sourcePlanet of overpopulated) {
         if (Math.random() < 0.10) {
           const enemies = this.game.planets.filter(p => p.owner !== this.aiPlayer && p.owner !== null);
+          const enemyCruisers = this.game.ships.filter(s => s.active && s.isCruiser && s.owner && s.owner !== this.aiPlayer);
+          for (const ec of enemyCruisers) {
+            const dx = ec.x - sourcePlanet.x;
+            const dy = ec.y - sourcePlanet.y;
+            if (dx * dx + dy * dy <= 400 * 400) {
+              enemies.push(ec);
+            }
+          }
           if (enemies.length > 0) {
             enemies.sort((a, b) => this.getTargetScore(sourcePlanet, a) - this.getTargetScore(sourcePlanet, b));
             const aiTechBonus = Math.floor(Math.sqrt(this.aiPlayer.techScore || 0));
@@ -166,8 +175,16 @@ export class AIController {
     if (validSources.length === 0) return;
     const sourcePlanet = validSources[Math.floor(Math.random() * validSources.length)];
 
-    // Find targets (neutral or enemy)
+    // Find targets (neutral or enemy planets)
     const targets = this.game.planets.filter(p => p.owner !== this.aiPlayer);
+    const enemyCruisers = this.game.ships.filter(s => s.active && s.isCruiser && s.owner && s.owner !== this.aiPlayer);
+    for (const ec of enemyCruisers) {
+      const dx = ec.x - sourcePlanet.x;
+      const dy = ec.y - sourcePlanet.y;
+      if (dx * dx + dy * dy <= 400 * 400) {
+        targets.push(ec);
+      }
+    }
     if (targets.length === 0) return;
 
     targets.sort((a, b) => this.getTargetScore(sourcePlanet, a) - this.getTargetScore(sourcePlanet, b));
@@ -195,7 +212,8 @@ export class AIController {
     }
 
     // Added check to make sure launch is worth it
-    if (sourcePlanet.ships > targetPlanet.ships + 10) {
+    const targetShips = targetPlanet.isCruiser ? (targetPlanet.health || 10) : targetPlanet.ships;
+    if (sourcePlanet.ships > targetShips + 10) {
       const aiTechBonus = Math.floor(Math.sqrt(this.aiPlayer.techScore || 0));
       const aiSpeedMod = aiTechBonus >= 7 ? 1.0 : 0.5;
       this.game.sendShips(sourcePlanet, targetPlanet, false, aiSpeedMod);
