@@ -5,7 +5,7 @@ import { InputHandler } from './systems/InputHandler.js';
 import { AIController } from './systems/AIController.js';
 
 const SHIP_CLASSES = {
-  scout: { name: 'Scout Ship', key: 's', hp: 15, costShips: 50, costCap: 2 },
+  corvette: { name: 'Corvette', key: 's', hp: 15, costShips: 50, costCap: 2 },
   frigate: { name: 'Frigate', key: 'f', hp: 20, costShips: 75, costCap: 3 },
   destroyer: { name: 'Destroyer', key: 'd', hp: 25, costShips: 100, costCap: 4 },
   cruiser: { name: 'Cruiser', key: 'c', hp: 30, costShips: 150, costCap: 6 },
@@ -1054,7 +1054,7 @@ export class Game {
       player.atWarWith = {};
       player.builtClasses = {};
       player.buildCounts = {
-        scout: 0,
+        corvette: 0,
         frigate: 0,
         destroyer: 0,
         cruiser: 0,
@@ -2038,10 +2038,10 @@ export class Game {
         owner.builtClasses = owner.builtClasses || {};
       }
 
-      // Check unlock requirement: except for scouts, previous class must be built
-      const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+      // Check unlock requirement: except for corvettes, previous class must be built
+      const keys = ['corvette', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
       const idx = keys.indexOf(classType);
-      if (idx > 0 && classType !== 'scout') {
+      if (idx > 0 && classType !== 'corvette') {
         const prevClass = keys[idx - 1];
         const builtClasses = owner ? (owner.builtClasses || {}) : {};
         if (!builtClasses[prevClass]) {
@@ -2053,7 +2053,7 @@ export class Game {
       let costMult = 1;
       if (isFirst) {
         const baseMultipliers = {
-          scout: 1,
+          corvette: 1,
           frigate: 1.5,
           destroyer: 1.75,
           cruiser: 2,
@@ -2065,7 +2065,7 @@ export class Game {
         const baseMult = baseMultipliers[classType] || 1;
         costMult = baseMult;
         if (owner) {
-          const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+          const keys = ['corvette', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
           const idx = keys.indexOf(classType);
           if (idx > 0) {
             const prevClass = keys[idx - 1];

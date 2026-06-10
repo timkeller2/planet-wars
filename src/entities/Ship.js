@@ -1,5 +1,5 @@
 const SHIP_CLASSES = {
-  scout: { name: 'Scout Ship', key: 's', hp: 15, costShips: 50, costCap: 2 },
+  corvette: { name: 'Corvette', key: 's', hp: 15, costShips: 50, costCap: 2 },
   frigate: { name: 'Frigate', key: 'f', hp: 20, costShips: 75, costCap: 3 },
   destroyer: { name: 'Destroyer', key: 'd', hp: 25, costShips: 100, costCap: 4 },
   cruiser: { name: 'Cruiser', key: 'c', hp: 30, costShips: 150, costCap: 6 },

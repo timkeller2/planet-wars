@@ -237,7 +237,7 @@ function getPlanetTradeIncomePerMin(planet) {
   };
 
   const CLASS_MAPPING = {
-    'scout': { y: 20, h: 84 },
+    'corvette': { y: 20, h: 84 },
     'frigate': { y: 120, h: 78 },
     'destroyer': { y: 213, h: 114 },
     'cruiser': { y: 338, h: 152 },
@@ -860,7 +860,7 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   };
   const SHIP_CLASSES = {
-    scout: { name: 'Scout Ship', key: 's', hp: 15, costShips: 50, costCap: 2, btnId: 'btn-build-scout' },
+    corvette: { name: 'Corvette', key: 's', hp: 15, costShips: 50, costCap: 2, btnId: 'btn-build-corvette' },
     frigate: { name: 'Frigate', key: 'f', hp: 20, costShips: 75, costCap: 3, btnId: 'btn-build-frigate' },
     destroyer: { name: 'Destroyer', key: 'd', hp: 25, costShips: 100, costCap: 4, btnId: 'btn-build-destroyer' },
     cruiser: { name: 'Cruiser', key: 'c', hp: 30, costShips: 150, costCap: 6, btnId: 'btn-build-cruiser' },
@@ -1417,7 +1417,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (hs.classType && SHIP_CLASSES[hs.classType]) {
           shipClass = SHIP_CLASSES[hs.classType].name;
         } else {
-          if (hs.maxHealth <= 19) shipClass = "Scout Ship";
+          if (hs.maxHealth <= 19) shipClass = "Corvette";
           else if (hs.maxHealth <= 24) shipClass = "Frigate";
           else if (hs.maxHealth <= 29) shipClass = "Destroyer";
           else if (hs.maxHealth <= 34) shipClass = "Cruiser";
@@ -5051,11 +5051,11 @@ function getPlanetTradeIncomePerMin(planet) {
           const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
           
-          // Check unlock requirement: except for scouts, previous class must be built
-          const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+          // Check unlock requirement: except for corvettes, previous class must be built
+          const keys = ['corvette', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
           const idx = keys.indexOf(typeToBuild);
           let isUnlocked = true;
-          if (idx > 0 && typeToBuild !== 'scout') {
+          if (idx > 0 && typeToBuild !== 'corvette') {
             const prevClass = keys[idx - 1];
             if (!builtClasses[prevClass]) {
               isUnlocked = false;
@@ -5067,7 +5067,7 @@ function getPlanetTradeIncomePerMin(planet) {
             let costMult = 1;
             if (isFirst) {
               const baseMultipliers = {
-                scout: 1,
+                corvette: 1,
                 frigate: 1.5,
                 destroyer: 1.75,
                 cruiser: 2,
@@ -5519,7 +5519,7 @@ function getPlanetTradeIncomePerMin(planet) {
       });
     }
   };
-  bindBuildButton('btn-build-scout', 'scout');
+  bindBuildButton('btn-build-corvette', 'corvette');
   bindBuildButton('btn-build-frigate', 'frigate');
   bindBuildButton('btn-build-destroyer', 'destroyer');
   bindBuildButton('btn-build-cruiser', 'cruiser');
@@ -6441,12 +6441,12 @@ function getPlanetTradeIncomePerMin(planet) {
         if (el) {
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
           
-          // Check unlock requirement: except for scouts, previous class must be built
-          const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+          // Check unlock requirement: except for corvettes, previous class must be built
+          const keys = ['corvette', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
           const idx = keys.indexOf(classType);
           let isUnlocked = true;
           let lockReason = '';
-          if (idx > 0 && classType !== 'scout') {
+          if (idx > 0 && classType !== 'corvette') {
             const prevClass = keys[idx - 1];
             if (!builtClasses[prevClass]) {
               isUnlocked = false;
@@ -6459,7 +6459,7 @@ function getPlanetTradeIncomePerMin(planet) {
           let costMult = 1;
           if (isFirst) {
             const baseMultipliers = {
-              scout: 1,
+              corvette: 1,
               frigate: 1.5,
               destroyer: 1.75,
               cruiser: 2,
@@ -6471,7 +6471,7 @@ function getPlanetTradeIncomePerMin(planet) {
             const baseMult = baseMultipliers[classType] || 1;
             costMult = baseMult;
             if (myPlayer) {
-              const keys = ['scout', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+              const keys = ['corvette', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
               const idx = keys.indexOf(classType);
               if (idx > 0) {
                 const prevClass = keys[idx - 1];
@@ -8242,7 +8242,7 @@ function getPlanetTradeIncomePerMin(planet) {
             if (hs.classType && SHIP_CLASSES[hs.classType]) {
               shipClass = SHIP_CLASSES[hs.classType].name;
             } else {
-              if (hs.maxHealth <= 19) shipClass = "Scout Ship";
+              if (hs.maxHealth <= 19) shipClass = "Corvette";
               else if (hs.maxHealth <= 24) shipClass = "Frigate";
               else if (hs.maxHealth <= 29) shipClass = "Destroyer";
               else if (hs.maxHealth <= 34) shipClass = "Cruiser";
@@ -9563,10 +9563,10 @@ function getPlanetTradeIncomePerMin(planet) {
               normalizedStyle = 'Klingon';
             }
             const faction = FACTION_MAPPING[normalizedStyle];
-            const classRow = CLASS_MAPPING[s.classType || 'scout'];
+            const classRow = CLASS_MAPPING[s.classType || 'corvette'];
             if (faction && classRow) {
               let scale = (6 + (s.maxHealth || 0)) / 240;
-              if (s.classType === 'scout') {
+              if (s.classType === 'corvette') {
                 scale *= 1.6;
               } else if (s.classType === 'frigate') {
                 scale *= 1.4;
