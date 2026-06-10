@@ -218,10 +218,14 @@ export class Planet {
             effectiveRate = 1.0 + ((effectiveRate - 1.0) / 3);
           }
         }
-        if (this.preferredResource && this.owner.resources && this.maxShips >= 150) {
+        if (this.preferredResource && this.owner.resources) {
           const qty = this.owner.resources[this.preferredResource] || 0;
           if (qty > 0) {
-            effectiveRate *= (1 + (Math.sqrt(qty) * 3) / 100);
+            let mult = 1;
+            if (this.maxShips >= 150) mult = 4;
+            else if (this.maxShips >= 120) mult = 3;
+            else if (this.maxShips >= 100) mult = 2;
+            effectiveRate *= (1 + (Math.sqrt(qty) * mult) / 100);
           }
         }
         if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
@@ -452,9 +456,13 @@ export class Planet {
       const perMs = rate / 60000;
       for (const res of this.resources) {
         let resRate = perMs;
-        // Preferred resource bonus: sqrt(qty) * 3 percent
-        if (res === this.preferredResource && this.owner.resources[res] > 0 && this.maxShips >= 150) {
-          resRate *= (1 + (Math.sqrt(this.owner.resources[res]) * 3) / 100);
+        // Preferred resource bonus
+        if (res === this.preferredResource && this.owner.resources[res] > 0) {
+          let mult = 1;
+          if (this.maxShips >= 150) mult = 4;
+          else if (this.maxShips >= 120) mult = 3;
+          else if (this.maxShips >= 100) mult = 2;
+          resRate *= (1 + (Math.sqrt(this.owner.resources[res]) * mult) / 100);
         }
         if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
           resRate *= 1.30;

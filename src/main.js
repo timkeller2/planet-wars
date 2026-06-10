@@ -1120,10 +1120,14 @@ function getPlanetTradeIncomePerMin(planet) {
       let prefBonusStr = '';
       if (p.preferredResource) {
         let bonusVal = 0;
-        if (owner && owner.resources && p.maxShips >= 150) {
+        if (owner && owner.resources) {
           const qty = owner.resources[p.preferredResource] || 0;
           if (qty > 0) {
-            bonusVal = Math.sqrt(qty) * 3;
+            let mult = 1;
+            if (p.maxShips >= 150) mult = 4;
+            else if (p.maxShips >= 120) mult = 3;
+            else if (p.maxShips >= 100) mult = 2;
+            bonusVal = Math.sqrt(qty) * mult;
           }
         }
         prefBonusStr = ` (+${bonusVal.toFixed(1)}%)`;
@@ -7852,10 +7856,14 @@ function getPlanetTradeIncomePerMin(planet) {
               if (hp.maxShips >= 150) {
                 valueStr += ' ⭐';
               }
-              if (hpOwner && hp.maxShips >= 150) {
+              if (hpOwner) {
                 const qty = hpOwner.resources?.[hp.preferredResource] || 0;
                 if (qty >= 0.1) {
-                  const bonus = Math.sqrt(qty) * 3;
+                  let mult = 1;
+                  if (hp.maxShips >= 150) mult = 4;
+                  else if (hp.maxShips >= 120) mult = 3;
+                  else if (hp.maxShips >= 100) mult = 2;
+                  const bonus = Math.sqrt(qty) * mult;
                   valueStr += ` (+${bonus.toFixed(1)}%)`;
                 }
               }
