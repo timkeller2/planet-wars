@@ -3075,6 +3075,17 @@ function getHabName(habitability) {
       // Render custom tooltip panel HTML (Task 101 Overhaul)
       const tooltipPanel = document.getElementById('credits-tooltip-panel');
       if (tooltipPanel && tooltipPanel.style.display === 'block' && tooltipPanel.dataset.source === 'credits') {
+        const interestRatePerMin = creditsVal < 0 ? (creditsVal * 0.01) : (creditsVal * 0.005);
+        let interestColor = '#aaa';
+        let interestText = '0.00';
+        if (interestRatePerMin > 0) {
+          interestColor = '#4caf50';
+          interestText = `+${interestRatePerMin.toFixed(2)}`;
+        } else if (interestRatePerMin < 0) {
+          interestColor = '#ff3333';
+          interestText = `${interestRatePerMin.toFixed(2)}`;
+        }
+
         let limitHtml = "";
         const ownsHw = serverState.planets.some(p => p.homeworldOf === localPlayer.id && p.ownerId === localPlayer.id);
         if (ownsHw) {
@@ -3141,6 +3152,11 @@ function getHabName(habitability) {
                   <td style="padding: 6px 0;"></td>
                   <td style="padding: 6px 0; text-align: right; color: #ffeb3b;">+${totalRatePerMin.toFixed(2)}/m</td>
                 </tr>
+                <tr style="border-top: 1px dashed rgba(255, 255, 255, 0.15); font-weight: bold;">
+                  <td style="padding: 6px 0; color: #aaa; text-align: left;">Interest Accrual</td>
+                  <td style="padding: 6px 0;"></td>
+                  <td style="padding: 6px 0; text-align: right; color: ${interestColor};">${interestText}/m</td>
+                </tr>
               </tfoot>
             </table>
             <div style="font-size: 0.75rem; color: #88a; margin-top: 8px; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
@@ -3154,6 +3170,10 @@ function getHabName(habitability) {
             <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; text-align: center; padding: 10px 0; line-height: 1.3;">
               No active trading lines<br>
               <span style="font-size: 0.75rem; color: #668;">(Requires visible friendly/neutral planets & own ships)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-weight: bold; font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; border-top: 1px dashed rgba(255, 255, 255, 0.15); padding-top: 6px; margin-top: 6px;">
+              <span style="color: #aaa;">Interest Accrual</span>
+              <span style="color: ${interestColor};">${interestText}/m</span>
             </div>
             <div style="font-size: 0.75rem; color: #88a; margin-top: 8px; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
               Formula: (Trade Ships / 100) credits per minute
