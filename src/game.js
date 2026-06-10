@@ -4284,10 +4284,11 @@ export class Game {
         const diplomat = diplomatShipsMap.get(p.activeDiplomatId);
         if (diplomat) {
           // Continuous warmup progression
-          p.diplomacyWarmupTimer = Math.min(30, (p.diplomacyWarmupTimer || 0) + dt);
+          const diplomatsCount = diplomat.diplomat || 1;
+          p.diplomacyWarmupTimer = Math.min(30, (p.diplomacyWarmupTimer || 0) + dt * diplomatsCount);
           // Continuous parley consumption
           if ((diplomat.parley || 0) > 0) {
-            const parleyToConsume = Math.min(diplomat.parley, (1 / 30) * dt);
+            const parleyToConsume = Math.min(diplomat.parley, (1 / 30) * dt * diplomatsCount);
             diplomat.parley -= parleyToConsume;
           }
           // Check completion
