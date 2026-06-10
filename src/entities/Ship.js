@@ -220,7 +220,7 @@ export class Ship {
     if (!allShips || !this.owner) return null;
     let closestSupplyShip = null;
     let closestDistSq = Infinity;
-    const radarRange = this.cruiserRadarRange();
+    const radarRange = (this.isCruiser && typeof this.cruiserRadarRange === 'function') ? this.cruiserRadarRange() : 150;
     const radarRangeSq = radarRange * radarRange;
 
     for (const other of allShips) {
@@ -4419,13 +4419,18 @@ export class Ship {
         finalHealRate = 6 * (0.20 * (this.damagecontrol || 0));
       }
 
-      if (this.health < this.maxHealth && finalHealRate > 0) {
+      if (this.health < this.maxHealth) {
         const owner = this.owner;
         const hasExcessDuranium = owner && owner.resources && (owner.resources.duranium || 0) >= 0.1;
         const duraniumSellPrice = owner ? (owner.offerPrice?.duranium ?? 3) : 3;
 
         // Check for nearby supply ship first!
         const supplyShip = this.findNearbySupplyShip(allShips);
+
+        // If there is a supply ship and not in combat, allow healing at the full rate even in deep space!
+        if (supplyShip && !inCombat) {
+          finalHealRate = Math.max(finalHealRate, 6 * (1 + 0.50 * (this.damagecontrol || 0)));
+        }
 
         let canAffordHeal = false;
         if (supplyShip && (supplyShip.supplies || 0) > 0) {
@@ -4438,7 +4443,7 @@ export class Ship {
           canAffordHeal = true;
         }
 
-        if (canAffordHeal) {
+        if (finalHealRate > 0 && canAffordHeal) {
           let healAmount = (deltaTime / 60000) * finalHealRate;
           const oldHealth = this.health || 0;
           this.health = Math.min(this.maxHealth, this.health + healAmount);

@@ -1646,7 +1646,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (hs.sensorarrays > 0) lines.push({ label: `Sensor Array (${hs.sensorarrays})`, value: `📡 Active`, color: '#ffb300' });
         if (hs.labs > 0) lines.push({ label: `Laboratories (${hs.labs})`, value: `🔬 Active`, color: '#00e5ff' });
         if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
-        if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ Active`, color: '#ffa500' });
+        if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ ${hs.fuel_tanker * 10}% Savings`, color: '#ffa500' });
         if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
       } else {
         const swarmRange = 100;
@@ -8290,7 +8290,7 @@ function getPlanetTradeIncomePerMin(planet) {
             if (hs.sensorarrays > 0) lines.push({ label: `Sensor Array (${hs.sensorarrays})`, value: `📡 Active`, color: '#ffb300' });
             if (hs.labs > 0) lines.push({ label: `Laboratories (${hs.labs})`, value: `🔬 Active`, color: '#00e5ff' });
             if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
-            if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ Active`, color: '#ffa500' });
+            if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ ${hs.fuel_tanker * 10}% Savings`, color: '#ffa500' });
             if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
 
             let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(2 * hs.health)}`;
@@ -9610,7 +9610,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.beginPath();
             const progress = Math.max(0.0, Math.min(1.0, s.accumulatedTech));
             ctx.arc(s.x, s.y, size + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
-            ctx.strokeStyle = 'rgba(0, 229, 255, 0.85)';
+            ctx.strokeStyle = 'rgba(0, 76, 255, 0.95)';
             ctx.lineWidth = 1.5;
             ctx.stroke();
             ctx.restore();
@@ -9858,7 +9858,7 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.fillStyle = '#1a3344';
               ctx.fillRect(s.x - barW / 2, currentY, barW, barH);
               ctx.fillStyle = '#00d5ff';
-              ctx.fillRect(s.x - barW / 2, currentY, barW * Math.min(1.0, shipExpBonus / 10), barH);
+              ctx.fillRect(s.x - barW / 2, currentY, barW * Math.min(1.0, shipExpBonus / 20), barH);
               currentY -= 1;
             }
             
