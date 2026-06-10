@@ -8659,20 +8659,21 @@ function getHabName(habitability) {
       for (const s of serverState.ships) {
         if (!s.active) continue;
 
-        s.rawServerX = s.x;
-        s.rawServerY = s.y;
+        if (s.rawServerX === undefined) s.rawServerX = s.x;
+        if (s.rawServerY === undefined) s.rawServerY = s.y;
+        if (s.rawServerAngle === undefined) s.rawServerAngle = s.angle;
 
         let vis = visualShips.get(s.id);
         if (!vis) {
-          vis = { x: s.x, y: s.y, angle: s.angle };
+          vis = { x: s.rawServerX, y: s.rawServerY, angle: s.rawServerAngle };
           visualShips.set(s.id, vis);
         } else {
           // smooth lerp
           const lerpFactor = 0.25; // Adjust for smoothness/latency balance
-          vis.x += (s.x - vis.x) * lerpFactor;
-          vis.y += (s.y - vis.y) * lerpFactor;
+          vis.x += (s.rawServerX - vis.x) * lerpFactor;
+          vis.y += (s.rawServerY - vis.y) * lerpFactor;
           
-          let diff = s.angle - vis.angle;
+          let diff = s.rawServerAngle - vis.angle;
           while (diff < -Math.PI) diff += Math.PI * 2;
           while (diff > Math.PI) diff -= Math.PI * 2;
           vis.angle += diff * lerpFactor;
