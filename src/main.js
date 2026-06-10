@@ -998,8 +998,8 @@ function getHabName(habitability) {
       lines.push({ label: `Improvement Rate: ${p.habitability}`, value: `Potential: ${softCap}`, color: '#ffb74d' });
 
       const producedIcons = p.resources ? p.resources.map(r => resourceEmojis[r] || '').filter(Boolean).join(' ') : '';
-      const wantedResourceName = p.preferredResource ? p.preferredResource.charAt(0).toUpperCase() + p.preferredResource.slice(1) : 'None';
-      const wantedStr = p.preferredResource ? `${resourceEmojis[p.preferredResource] || ''} ${wantedResourceName}` : 'None';
+      const wantedResourceName = p.preferredResource ? p.preferredResource.charAt(0).toUpperCase() + p.preferredResource.slice(1) : 'Nothing';
+      const wantedStr = p.preferredResource ? `${resourceEmojis[p.preferredResource] || ''} ${wantedResourceName}` : 'Nothing';
 
       lines.push({ label: `Produces: ${producedIcons}`, value: `Wants: ${wantedStr}`, color: '#fff' });
 
@@ -3106,9 +3106,11 @@ function getHabName(habitability) {
           `;
         }
 
+        const stockpileMaintenanceRatePerMin = myPlayer.storageFeeRate || 0;
+
+        let totalTradeRatePerMin = 0;
+        let rowsHtml = "";
         if (myPlayer.tradingPartners && myPlayer.tradingPartners.length > 0) {
-          let rowsHtml = "";
-          let totalRate = 0;
           for (const partner of myPlayer.tradingPartners) {
             const partnerName = partner.name;
             const ratePerMin = partner.rate * 60;
@@ -3130,57 +3132,73 @@ function getHabName(habitability) {
                 <td style="padding: 6px 0; text-align: right; color: ${partnerColor}; font-weight: bold;">+${ratePerMin.toFixed(2)}/m</td>
               </tr>
             `;
-            totalRate += partner.rate;
+            totalTradeRatePerMin += ratePerMin;
           }
-          const totalRatePerMin = totalRate * 60;
-          tooltipPanel.innerHTML = `
-            <div style="font-weight: bold; font-size: 0.85rem; color: #ffeb3b; border-bottom: 1px solid rgba(255, 235, 59, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Trading Partners</div>
-            <table style="width: 100%; border-collapse: collapse; font-family: 'Rajdhani', sans-serif; font-size: 0.9rem;">
-              <thead>
-                <tr style="color: #0ff; font-family: 'Orbitron', sans-serif; font-size: 0.7rem; border-bottom: 1px dashed rgba(0, 229, 255, 0.2); text-align: left;">
-                  <th style="padding: 4px 0; text-align: left;">Partner</th>
-                  <th style="padding: 4px 0; text-align: center;">Ships</th>
-                  <th style="padding: 4px 0; text-align: right;">Income</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rowsHtml}
-              </tbody>
-              <tfoot>
-                <tr style="border-top: 1px solid rgba(255, 235, 59, 0.3); font-weight: bold;">
-                  <td style="padding: 6px 0; color: #ffeb3b; text-align: left;">Total Income</td>
-                  <td style="padding: 6px 0;"></td>
-                  <td style="padding: 6px 0; text-align: right; color: #ffeb3b;">+${totalRatePerMin.toFixed(2)}/m</td>
-                </tr>
-                <tr style="border-top: 1px dashed rgba(255, 255, 255, 0.15); font-weight: bold;">
-                  <td style="padding: 6px 0; color: #aaa; text-align: left;">Interest Accrual</td>
-                  <td style="padding: 6px 0;"></td>
-                  <td style="padding: 6px 0; text-align: right; color: ${interestColor};">${interestText}/m</td>
-                </tr>
-              </tfoot>
-            </table>
-            <div style="font-size: 0.75rem; color: #88a; margin-top: 8px; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
-              Formula: (Trade Ships / 100) credits per minute
-            </div>
-            ${limitHtml}
-          `;
         } else {
-          tooltipPanel.innerHTML = `
-            <div style="font-weight: bold; font-size: 0.85rem; color: #ffeb3b; border-bottom: 1px solid rgba(255, 235, 59, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Trading Partners</div>
-            <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; text-align: center; padding: 10px 0; line-height: 1.3;">
-              No active trading lines<br>
-              <span style="font-size: 0.75rem; color: #668;">(Requires visible friendly/neutral planets & own ships)</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-weight: bold; font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; border-top: 1px dashed rgba(255, 255, 255, 0.15); padding-top: 6px; margin-top: 6px;">
-              <span style="color: #aaa;">Interest Accrual</span>
-              <span style="color: ${interestColor};">${interestText}/m</span>
-            </div>
-            <div style="font-size: 0.75rem; color: #88a; margin-top: 8px; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
-              Formula: (Trade Ships / 100) credits per minute
-            </div>
-            ${limitHtml}
+          rowsHtml = `
+            <tr style="color: #88a; font-style: italic;">
+              <td colspan="3" style="padding: 10px 0; text-align: center;">
+                No active trading lines<br>
+                <span style="font-size: 0.7rem; color: #668; font-style: normal;">(Requires visible friendly/neutral planets & own ships)</span>
+              </td>
+            </tr>
           `;
         }
+
+        const netIncome = totalTradeRatePerMin - stockpileMaintenanceRatePerMin + interestRatePerMin;
+        let totalIncomeColor = '#aaa';
+        let totalIncomeText = '0.00';
+        if (netIncome > 0) {
+          totalIncomeColor = '#4caf50';
+          totalIncomeText = `+${netIncome.toFixed(2)}`;
+        } else if (netIncome < 0) {
+          totalIncomeColor = '#ff3333';
+          totalIncomeText = `${netIncome.toFixed(2)}`;
+        }
+
+        let stockpileRowHtml = "";
+        if (stockpileMaintenanceRatePerMin > 0) {
+          stockpileRowHtml = `
+            <tr style="border-top: 1px dashed rgba(255, 255, 255, 0.15);">
+              <td style="padding: 6px 0; color: #aaa; text-align: left;">Stockpile Maintenance</td>
+              <td style="padding: 6px 0;"></td>
+              <td style="padding: 6px 0; text-align: right; color: #ff3333; font-weight: bold;">-${stockpileMaintenanceRatePerMin.toFixed(2)}/m</td>
+            </tr>
+          `;
+        }
+
+        tooltipPanel.innerHTML = `
+          <div style="font-weight: bold; font-size: 0.85rem; color: #ffeb3b; border-bottom: 1px solid rgba(255, 235, 59, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Income Summary</div>
+          <table style="width: 100%; border-collapse: collapse; font-family: 'Rajdhani', sans-serif; font-size: 0.9rem;">
+            <thead>
+              <tr style="color: #0ff; font-family: 'Orbitron', sans-serif; font-size: 0.7rem; border-bottom: 1px dashed rgba(0, 229, 255, 0.2); text-align: left;">
+                <th style="padding: 4px 0; text-align: left;">Category / Partner</th>
+                <th style="padding: 4px 0; text-align: center;">Ships</th>
+                <th style="padding: 4px 0; text-align: right;">Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+            <tfoot>
+              ${stockpileRowHtml}
+              <tr style="border-top: 1px dashed rgba(255, 255, 255, 0.15);">
+                <td style="padding: 6px 0; color: #aaa; text-align: left;">Interest Accrual</td>
+                <td style="padding: 6px 0;"></td>
+                <td style="padding: 6px 0; text-align: right; color: ${interestColor}; font-weight: bold;">${interestText}/m</td>
+              </tr>
+              <tr style="border-top: 1px solid rgba(255, 235, 59, 0.3); font-weight: bold; font-size: 0.95rem;">
+                <td style="padding: 6px 0; color: #ffeb3b; text-align: left;">Total Income</td>
+                <td style="padding: 6px 0;"></td>
+                <td style="padding: 6px 0; text-align: right; color: ${totalIncomeColor};">${totalIncomeText}/m</td>
+              </tr>
+            </tfoot>
+          </table>
+          <div style="font-size: 0.75rem; color: #88a; margin-top: 8px; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
+            Formula: (Trade Ships / 100) credits per minute
+          </div>
+          ${limitHtml}
+        `;
       }
 
       creditsDisplay.style.display = 'block';
@@ -5528,6 +5546,28 @@ function getHabName(habitability) {
         const anyNotDiplomacy = selectedCruisers.some(c => !c.isDiplomacy);
         const nextState = anyNotDiplomacy;
         for (const ship of selectedCruisers) {
+          if (nextState) {
+            if (ship.isScouting) continue;
+            let isMoving = false;
+            if (ship.orderQueue && ship.orderQueue.length > 0) {
+              isMoving = true;
+            } else if (ship.targetPlanet) {
+              const dx = ship.targetPlanet.x - ship.x;
+              const dy = ship.targetPlanet.y - ship.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist >= (ship.targetPlanet.radius || 0) + 45) {
+                isMoving = true;
+              }
+            } else if (ship.targetX !== null && ship.targetX !== undefined && ship.targetY !== null && ship.targetY !== undefined) {
+              const dx = ship.targetX - ship.x;
+              const dy = ship.targetY - ship.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist >= 15) {
+                isMoving = true;
+              }
+            }
+            if (isMoving) continue;
+          }
           ship.isDiplomacy = nextState;
           ship.isResearching = false;
           ship.isScouting = false;
@@ -7900,7 +7940,14 @@ function getHabName(habitability) {
                 const targetPlayer = serverState.players.find(pl => pl.id === pId);
                 const pName = targetPlayer ? targetPlayer.name : pId;
                 const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
-                lines.push({ label: `🎭 Disposition (${pName})`, value: `${Math.round(dispVal)}`, color: pColor });
+                const dVal = Math.round(dispVal);
+                let emoji = '';
+                if (dVal < -30) emoji = '😠';
+                else if (dVal < -10) emoji = '😢';
+                else if (dVal < 10) emoji = '😐';
+                else if (dVal < 30) emoji = '🙂';
+                else emoji = '😍';
+                lines.push({ label: `🎭 Disposition (${pName})`, value: `${dVal} ${emoji}`, color: pColor });
               }
             }
           }
@@ -9404,6 +9451,7 @@ function getHabName(habitability) {
             ctx.strokeStyle = '#000';
             ctx.lineWidth = 1;
             ctx.stroke();
+            ctx.restore();
           }
           
           // Draw research warmup indicator around the ship

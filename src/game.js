@@ -3331,6 +3331,7 @@ export class Game {
         if (totalStockpile > stockpileCapacity) {
           const excess = totalStockpile - stockpileCapacity;
           const storageFee = excess / (stockpileCapacity * 4);
+          player.storageFeeRate = storageFee * 60;
 
           if ((player.credits || 0) >= storageFee) {
             player.credits -= storageFee;
@@ -3358,6 +3359,8 @@ export class Game {
               remainingFee -= deductAmt;
             }
           }
+        } else {
+          player.storageFeeRate = 0;
         }
       }
 
