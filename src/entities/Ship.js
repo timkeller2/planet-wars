@@ -935,7 +935,8 @@ export class Ship {
                       }
                     }
                   }
-                  if (safeFromEnemies) {
+                  const isSupplyShip = hasSupplies;
+                  if (safeFromEnemies || isSupplyShip) {
                     const cdx = other.x - this.x;
                     const cdy = other.y - this.y;
                     const distToCruiser = Math.sqrt(cdx * cdx + cdy * cdy);

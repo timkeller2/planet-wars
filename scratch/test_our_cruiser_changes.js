@@ -139,4 +139,50 @@ console.log("Starting verification tests...");
   console.log("Pass: Diplomat sympathy generation checks.");
 }
 
+// 4. Verify retreating cruiser does not exclude supply ships in danger
+{
+  const player = new Player('player1', '#0ff', false);
+  player.id = 'player1';
+  const enemy = new Player('player2', '#f00', false);
+  enemy.id = 'player2';
+
+  const game = new Game({ width: 2000, height: 2000 });
+  game.allPlayers = [player, enemy];
+
+  // A friendly planet far away
+  const farPlanet = new Planet('p1', 1000, 1000, 25, player, 100);
+  game.planets = [farPlanet];
+
+  // A friendly cruiser needing repairs
+  const cruiser = new Ship('c1', 100, 100, null, player);
+  cruiser.isCruiser = true;
+  cruiser.active = true;
+  cruiser.maxHealth = 100;
+  cruiser.health = 40; // Needs repairs!
+  cruiser.fuel = 10;
+  cruiser.bombs = 0;
+  cruiser.isPatrolling = true;
+  cruiser.isRetreating = true; // Force retreating mode
+
+  // A friendly supply ship at (300, 300)
+  const supplyShip = new Ship('c2', 300, 300, null, player);
+  supplyShip.isCruiser = true;
+  supplyShip.active = true;
+  supplyShip.supplies = 50;
+  supplyShip.maxHealth = 100;
+  supplyShip.health = 100;
+
+  // An enemy ship close to the supply ship at (350, 300) -> 50px away (within danger zone of 300px)
+  const enemyShip = new Ship('e1', 350, 300, null, enemy);
+  enemyShip.active = true;
+
+  const allShips = [cruiser, supplyShip, enemyShip];
+
+  // Tick the update
+  cruiser.update(100, allShips, [], game.planets, [], [], 2000, game);
+
+  assert(cruiser.retreatTargetShipId === supplyShip.id, "Cruiser should retreat to the supply ship despite the enemy nearby");
+  console.log("Pass: Retreating cruiser does not exclude supply ships because of danger.");
+}
+
 console.log("All verification tests passed successfully!");
