@@ -4379,7 +4379,7 @@ export class Ship {
         while (this.supplyLoadAccumulator >= 5000 && this.supplies < this.maxsupplies) {
           const owner = this.owner;
           if (owner) {
-            const discount = 0.10 * (this.fuel_tanker || 0);
+            const discount = (this.fuel_tanker || 0) > 0 ? (0.25 + 0.10 * this.fuel_tanker) : 0;
             const costMultiplier = Math.max(0, 1.0 - discount);
             let loaded = false;
 
