@@ -4245,7 +4245,7 @@ export class Game {
     // A mapping from diplomat ship ID to the ship object for quick lookup
     const diplomatShipsMap = new Map();
     for (const ship of cruisers) {
-      if ((ship.diplomat || 0) > 0) {
+      if ((ship.diplomat || 0) > 0 && ship.isDiplomacy && !ship.isScouting && !ship.isCruiserMoving()) {
         diplomatShipsMap.set(ship.id, ship);
       }
     }
@@ -4417,95 +4417,104 @@ export class Game {
 
       // 4. Diplomats sympathy generation
       if ((ship.diplomat || 0) > 0) {
-        ship.parley = Math.min((ship.diplomat || 0) * 3, (ship.parley || 0) + ((ship.diplomat || 0) / 60) * dt);
-        ship.diplomatTargetPlanetId = null;
-        // Find all qualifying planets (neutral, enemy, or friendly) within sensor range that are not at max empathy/sympathy
-        const qualifyingPlanets = [];
-        const isParleyFull = (ship.parley || 0) >= (ship.diplomat || 0) * 3 - 0.01;
-        for (const p of this.planets) {
-          // Only one diplomat may attempt diplomacy on a planet at a time.
-          if (p.activeDiplomatId && p.activeDiplomatId !== ship.id) {
-            continue;
+        if (ship.isDiplomacy && !ship.isScouting && !ship.isCruiserMoving()) {
+          ship.parley = Math.min((ship.diplomat || 0) * 3, (ship.parley || 0) + ((ship.diplomat || 0) / 60) * dt);
+          ship.diplomatTargetPlanetId = null;
+          // Find all qualifying planets (neutral, enemy, or friendly) within sensor range that are not at max empathy/sympathy
+          const qualifyingPlanets = [];
+          const isParleyFull = (ship.parley || 0) >= (ship.diplomat || 0) * 3 - 0.01;
+          for (const p of this.planets) {
+            // Only one diplomat may attempt diplomacy on a planet at a time.
+            if (p.activeDiplomatId && p.activeDiplomatId !== ship.id) {
+              continue;
+            }
+
+            const dx = p.x - ship.x;
+            const dy = p.y - ship.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist <= radar) {
+              const currentSym = p.sympathy ? (p.sympathy[ship.owner.id] || 0) : 0;
+              const isMaxEmpathy = currentSym >= p.maxShips;
+              if (!isMaxEmpathy && !p.dead) {
+                const isFriendly = p.owner && p.owner.id === ship.owner.id;
+                if (isFriendly) {
+                  const isTargeted = (ship.targetPlanet && ship.targetPlanet.id === p.id) || 
+                                     (ship.cruiserTargetType === 'planet' && ship.cruiserTargetId === p.id);
+                  if (!isParleyFull && !isTargeted) {
+                    // Don't use parleys on a friendly world unless parley capacity is full or targeted
+                    continue;
+                  }
+                }
+                qualifyingPlanets.push({ planet: p, dist: dist });
+              }
+            }
           }
 
-          const dx = p.x - ship.x;
-          const dy = p.y - ship.y;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          if (dist <= radar) {
-            const currentSym = p.sympathy ? (p.sympathy[ship.owner.id] || 0) : 0;
-            const isMaxEmpathy = currentSym >= p.maxShips;
-            if (!isMaxEmpathy && !p.dead) {
-              const isFriendly = p.owner && p.owner.id === ship.owner.id;
-              if (isFriendly) {
-                const isTargeted = (ship.targetPlanet && ship.targetPlanet.id === p.id) || 
-                                   (ship.cruiserTargetType === 'planet' && ship.cruiserTargetId === p.id);
-                if (!isParleyFull && !isTargeted) {
-                  // Don't use parleys on a friendly world unless parley capacity is full or targeted
-                  continue;
+          let closestPlanet = null;
+          if (qualifyingPlanets.length > 0) {
+            const closeQualifying = qualifyingPlanets.filter(qp => qp.dist <= 25);
+            if (closeQualifying.length > 0) {
+              // Exception: select the closest qualifying planet within 25px
+              let minDist = Infinity;
+              for (const qp of closeQualifying) {
+                if (qp.dist < minDist) {
+                  minDist = qp.dist;
+                  closestPlanet = qp.planet;
                 }
               }
-              qualifyingPlanets.push({ planet: p, dist: dist });
+            } else {
+              // General Rule: sort based on the sympathy tiers and disposition (ties broken by closer distance)
+              qualifyingPlanets.sort((a, b) => {
+                const isFriendlyA = a.planet.owner && a.planet.owner.id === ship.owner.id;
+                const isFriendlyB = b.planet.owner && b.planet.owner.id === ship.owner.id;
+
+                const symA = a.planet.sympathy ? (a.planet.sympathy[ship.owner.id] || 0) : 0;
+                const symB = b.planet.sympathy ? (b.planet.sympathy[ship.owner.id] || 0) : 0;
+
+                // Friendly planets are low priority (Tier 0)
+                const tierA = isFriendlyA ? 0 : ((symA === 0) ? 3 : ((symA > a.planet.ships) ? 1 : 2));
+                const tierB = isFriendlyB ? 0 : ((symB === 0) ? 3 : ((symB > b.planet.ships) ? 1 : 2));
+
+                if (tierA !== tierB) {
+                  return tierB - tierA; // Higher tier first
+                }
+
+                const dispA = a.planet.disposition ? (a.planet.disposition[ship.owner.id] || 0) : 0;
+                const dispB = b.planet.disposition ? (b.planet.disposition[ship.owner.id] || 0) : 0;
+
+                if (dispA !== dispB) {
+                  return dispB - dispA; // Higher disposition first
+                }
+
+                return a.dist - b.dist; // Closer first
+              });
+              closestPlanet = qualifyingPlanets[0].planet;
             }
           }
-        }
 
-        let closestPlanet = null;
-        if (qualifyingPlanets.length > 0) {
-          const closeQualifying = qualifyingPlanets.filter(qp => qp.dist <= 25);
-          if (closeQualifying.length > 0) {
-            // Exception: select the closest qualifying planet within 25px
-            let minDist = Infinity;
-            for (const qp of closeQualifying) {
-              if (qp.dist < minDist) {
-                minDist = qp.dist;
-                closestPlanet = qp.planet;
+          const targetPlanet = closestPlanet;
+          if (targetPlanet) {
+            const isContinuing = targetPlanet.activeDiplomatId === ship.id;
+            if (isContinuing || (ship.parley || 0) > 1) {
+              ship.diplomatTargetPlanetId = targetPlanet.id;
+              // Claim this planet and release any other planets previously claimed by this ship
+              for (const pl of this.planets) {
+                if (pl.activeDiplomatId === ship.id && pl.id !== targetPlanet.id) {
+                  pl.activeDiplomatId = null;
+                }
+              }
+              targetPlanet.activeDiplomatId = ship.id;
+            } else {
+              // Cannot start diplomacy on targetPlanet since parley <= 1 and we were not already active on it.
+              ship.diplomatTargetPlanetId = null;
+              for (const pl of this.planets) {
+                if (pl.activeDiplomatId === ship.id) {
+                  pl.activeDiplomatId = null;
+                }
               }
             }
           } else {
-            // General Rule: sort based on the sympathy tiers and disposition (ties broken by closer distance)
-            qualifyingPlanets.sort((a, b) => {
-              const isFriendlyA = a.planet.owner && a.planet.owner.id === ship.owner.id;
-              const isFriendlyB = b.planet.owner && b.planet.owner.id === ship.owner.id;
-
-              const symA = a.planet.sympathy ? (a.planet.sympathy[ship.owner.id] || 0) : 0;
-              const symB = b.planet.sympathy ? (b.planet.sympathy[ship.owner.id] || 0) : 0;
-
-              // Friendly planets are low priority (Tier 0)
-              const tierA = isFriendlyA ? 0 : ((symA === 0) ? 3 : ((symA > a.planet.ships) ? 1 : 2));
-              const tierB = isFriendlyB ? 0 : ((symB === 0) ? 3 : ((symB > b.planet.ships) ? 1 : 2));
-
-              if (tierA !== tierB) {
-                return tierB - tierA; // Higher tier first
-              }
-
-              const dispA = a.planet.disposition ? (a.planet.disposition[ship.owner.id] || 0) : 0;
-              const dispB = b.planet.disposition ? (b.planet.disposition[ship.owner.id] || 0) : 0;
-
-              if (dispA !== dispB) {
-                return dispB - dispA; // Higher disposition first
-              }
-
-              return a.dist - b.dist; // Closer first
-            });
-            closestPlanet = qualifyingPlanets[0].planet;
-          }
-        }
-
-        const targetPlanet = closestPlanet;
-        if (targetPlanet) {
-          const isContinuing = targetPlanet.activeDiplomatId === ship.id;
-          if (isContinuing || (ship.parley || 0) > 1) {
-            ship.diplomatTargetPlanetId = targetPlanet.id;
-            // Claim this planet and release any other planets previously claimed by this ship
-            for (const pl of this.planets) {
-              if (pl.activeDiplomatId === ship.id && pl.id !== targetPlanet.id) {
-                pl.activeDiplomatId = null;
-              }
-            }
-            targetPlanet.activeDiplomatId = ship.id;
-          } else {
-            // Cannot start diplomacy on targetPlanet since parley <= 1 and we were not already active on it.
-            ship.diplomatTargetPlanetId = null;
+            // No target, release any previous claims by this ship
             for (const pl of this.planets) {
               if (pl.activeDiplomatId === ship.id) {
                 pl.activeDiplomatId = null;
@@ -4513,7 +4522,7 @@ export class Game {
             }
           }
         } else {
-          // No target, release any previous claims by this ship
+          ship.diplomatTargetPlanetId = null;
           for (const pl of this.planets) {
             if (pl.activeDiplomatId === ship.id) {
               pl.activeDiplomatId = null;

@@ -191,6 +191,28 @@ export class Ship {
     }
   }
 
+  isCruiserMoving() {
+    if (this.orderQueue && this.orderQueue.length > 0) {
+      return true;
+    }
+    if (this.targetPlanet) {
+      const dx = this.targetPlanet.x - this.x;
+      const dy = this.targetPlanet.y - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist >= (this.targetPlanet.radius || 0) + 45) {
+        return true;
+      }
+    } else if (this.targetX !== null && this.targetX !== undefined && this.targetY !== null && this.targetY !== undefined) {
+      const dx = this.targetX - this.x;
+      const dy = this.targetY - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist >= 15) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   getLaserStartPoint() {
     let startX = this.x;
     let startY = this.y;
@@ -290,6 +312,7 @@ export class Ship {
 
   handlePlayerMoveOrder(destination, game) {
     if (!this.isCruiser) return;
+    this.isDiplomacy = false;
     this.flightTime = 0;
 
     // Determine target coordinates and planet

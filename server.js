@@ -933,25 +933,7 @@ async function bootstrap() {
         const nextState = !!enabled;
         if (nextState) {
           if (ship.isScouting) return;
-          let isMoving = false;
-          if (ship.orderQueue && ship.orderQueue.length > 0) {
-            isMoving = true;
-          } else if (ship.targetPlanet) {
-            const dx = ship.targetPlanet.x - ship.x;
-            const dy = ship.targetPlanet.y - ship.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist >= ship.targetPlanet.radius + 45) {
-              isMoving = true;
-            }
-          } else if (ship.targetX !== null && ship.targetY !== null) {
-            const dx = ship.targetX - ship.x;
-            const dy = ship.targetY - ship.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist >= 15) {
-              isMoving = true;
-            }
-          }
-          if (isMoving) return;
+          if (ship.isCruiserMoving()) return;
         }
         ship.isDiplomacy = nextState;
         ship.diplomacyFuelRetreating = false;

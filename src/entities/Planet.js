@@ -296,7 +296,7 @@ export class Planet {
               this.decreaseMaxShips(1);
               if (this.maxShips < 55) this.dead = true;
             } else {
-              const increaseAmount = 1;
+              const increaseAmount = this.homeworldOf ? 2 : 1;
               this.increaseMaxShips(increaseAmount);
             }
             // Decay ships back to maxShips (or twice maxShips if Garrison)
@@ -359,7 +359,7 @@ export class Planet {
                 this.habitability = 100; // Terran
               }
             } else {
-              const increaseAmount = 1;
+              const increaseAmount = this.homeworldOf ? 2 : 1;
               this.increaseMaxShips(increaseAmount);
               if (this.owner && allPlanets) {
                 let galacticCapacity = 0;
