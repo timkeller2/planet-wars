@@ -4273,42 +4273,44 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      // 3.5 Cruiser Build Icon check (Homeworld / Military world)
+      // 3.5 Cruiser Build Icon check
       for (const p of serverState.planets) {
-        if (p.ownerId === localPlayer.id && !p.inFog) {
+        if (p.ownerId === localPlayer.id && !p.inFog && !p.isSpeedPlanet) {
           const displayHomeworldOf = p.homeworldOf;
           const displayIsMilitary = p.isMilitary;
 
-          if (displayHomeworldOf || displayIsMilitary) {
-            // Icon/label is rendered at p.x, p.y - p.radius - 8
-            const iconX = p.x;
-            const iconY = p.y - p.radius - 8;
+          // Icon/label is rendered at p.x, p.y - p.radius - 8
+          const iconX = p.x;
+          const iconY = p.y - p.radius - 8;
 
-            const dx = iconX - pos.x;
-            const dy = iconY - pos.y;
+          const dx = iconX - pos.x;
+          const dy = iconY - pos.y;
 
-            let isHit = false;
-            if (displayHomeworldOf) {
-              const hwOwner = serverState.players.find(pl => pl.id === displayHomeworldOf);
-              const nameStr = hwOwner ? (hwOwner.name || "") : "";
-              const halfWidth = Math.max(25, (nameStr.length + 3) * 4);
-              isHit = Math.abs(dx) <= halfWidth && Math.abs(dy) <= 15;
+          let isHit = false;
+          if (displayHomeworldOf) {
+            const hwOwner = serverState.players.find(pl => pl.id === displayHomeworldOf);
+            const nameStr = hwOwner ? (hwOwner.name || "") : "";
+            const halfWidth = Math.max(25, (nameStr.length + 3) * 4);
+            isHit = Math.abs(dx) <= halfWidth && Math.abs(dy) <= 15;
+          } else if (displayIsMilitary) {
+            const hitRadius = 18;
+            isHit = (dx * dx + dy * dy <= hitRadius * hitRadius);
+          } else {
+            // For other buildable planets, clicking the name area (which is drawn at nameY = p.y - p.radius - 12) also opens build mode
+            const halfWidth = Math.max(25, (p.name ? p.name.length : 10) * 4);
+            isHit = Math.abs(dx) <= halfWidth && Math.abs(dy) <= 15;
+          }
+
+          if (isHit) {
+            const isCurrentlySelected = selectedPlanets.length === 1 && selectedPlanets[0].id === p.id;
+            if (isCurrentlySelected) {
+              cruiserBuildModeActive = !cruiserBuildModeActive;
             } else {
-              const hitRadius = 18;
-              isHit = (dx * dx + dy * dy <= hitRadius * hitRadius);
+              selectedPlanets = [p];
+              selectedShips = [];
+              cruiserBuildModeActive = true;
             }
-
-            if (isHit) {
-              const isCurrentlySelected = selectedPlanets.length === 1 && selectedPlanets[0].id === p.id;
-              if (isCurrentlySelected) {
-                cruiserBuildModeActive = !cruiserBuildModeActive;
-              } else {
-                selectedPlanets = [p];
-                selectedShips = [];
-                cruiserBuildModeActive = true;
-              }
-              return;
-            }
+            return;
           }
         }
       }
@@ -5095,7 +5097,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (cruiserBuildModeActive) {
       const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
-      if (selectedPlanetBuild && (selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
+      if (selectedPlanetBuild && selectedPlanetBuild.ownerId === localPlayer.id && !selectedPlanetBuild.isSpeedPlanet) {
         const key = event.key.toLowerCase();
         if (key === 'e' || key === 'escape') {
           event.preventDefault();
@@ -5152,7 +5154,10 @@ function getPlanetTradeIncomePerMin(planet) {
                 }
               }
             }
-            const costShips = cfg.costShips * costMult;
+            let costShips = cfg.costShips * costMult;
+            if (!(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
+              costShips *= 2;
+            }
 
             const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
             const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
@@ -5520,7 +5525,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
     if (event.key.toLowerCase() === 'c') {
-      const hasCruiserBase = selectedPlanets.some(p => (p.isMilitary || p.homeworldOf) && p.ships >= 50 && p.maxShips >= 57);
+      const hasCruiserBase = selectedPlanets.some(p => p.ownerId === localPlayer.id && !p.isSpeedPlanet && p.ships >= 50 && p.maxShips >= 57);
       if (hasCruiserBase) {
         event.preventDefault();
         cruiserBuildModeActive = !cruiserBuildModeActive;
@@ -6270,7 +6275,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
     const focusQual = getSelectedPlanetFocusQualifiers();
     const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
-    if (!selectedPlanetBuild || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
+    if (!selectedPlanetBuild || selectedPlanetBuild.isSpeedPlanet || selectedPlanetBuild.ownerId !== localPlayer.id) {
       cruiserBuildModeActive = false;
     }
 
@@ -6511,7 +6516,10 @@ function getPlanetTradeIncomePerMin(planet) {
               }
             }
           }
-          const costShips = cfg.costShips * costMult;
+          let costShips = cfg.costShips * costMult;
+          if (selectedPlanetBuild && !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
+            costShips *= 2;
+          }
 
           if (costMult > 1) {
             el.style.borderColor = '#ffeb3b';
@@ -6588,7 +6596,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (elFocusCancel) elFocusCancel.style.display = 'none';
 
       const hasMilitary = selectedPlanets.some(p => p.isMilitary);
-      const hasCruiserBase = selectedPlanets.some(p => (p.isMilitary || p.homeworldOf) && p.ships >= 50 && p.maxShips >= 57);
+      const hasCruiserBase = selectedPlanets.some(p => p.ownerId === localPlayer.id && !p.isSpeedPlanet && p.ships >= 50 && p.maxShips >= 57);
       if (!hasCruiserBase) {
         cruiserBuildModeActive = false;
       }

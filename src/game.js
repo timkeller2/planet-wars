@@ -2032,7 +2032,7 @@ export class Game {
     const cfg = SHIP_CLASSES[classType];
     if (!cfg) return;
 
-    if (source.isMilitary || source.homeworldOf) {
+    if (source.owner && !source.isSpeedPlanet) {
       const owner = source.owner;
       if (owner) {
         owner.builtClasses = owner.builtClasses || {};
@@ -2075,7 +2075,10 @@ export class Game {
           }
         }
       }
-      const costShips = cfg.costShips * costMult;
+      let costShips = cfg.costShips * costMult;
+      if (!(source.isMilitary || source.homeworldOf)) {
+        costShips *= 2;
+      }
       const costCap = cfg.costCap;
       const maxHealth = cfg.hp;
 
