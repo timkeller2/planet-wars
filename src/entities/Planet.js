@@ -403,11 +403,19 @@ export class Planet {
       const sympathyOwner = (this.owner && this.sympathy) ? (this.sympathy[this.owner.id] || 0) : 0;
       const ships = this.ships;
       const ratePerMinute = sympathyForeign - (ships / 3) - sympathyOwner;
-      const maxRatePerMinute = ships;
-      const clampedRatePerMinute = Math.max(0, Math.min(ratePerMinute, maxRatePerMinute));
-      const increment = clampedRatePerMinute * (deltaTime / 60000);
-      this.revoltWarmup = (this.revoltWarmup || 0) + increment;
-      this.revoltWarmupMax = Math.max(1, ships);
+      const maxRatePerMinute = Math.max(30, ships);
+      
+      if (ratePerMinute > 0) {
+        const clampedRatePerMinute = Math.min(ratePerMinute, maxRatePerMinute);
+        const increment = clampedRatePerMinute * (deltaTime / 60000);
+        this.revoltWarmup = (this.revoltWarmup || 0) + increment;
+      } else {
+        // Cooldown/decay when suppressed (minimum of 5 units per minute decay so it is visible and cleans up)
+        const decayRate = Math.max(5, Math.abs(ratePerMinute));
+        const decrement = decayRate * (deltaTime / 60000);
+        this.revoltWarmup = Math.max(0, (this.revoltWarmup || 0) - decrement);
+      }
+      this.revoltWarmupMax = Math.max(30, ships);
 
       if (this.revoltWarmup >= this.revoltWarmupMax) {
         this.revoltWarmup = 0;
@@ -416,7 +424,7 @@ export class Planet {
         }
       }
     } else {
-      this.revoltWarmupMax = Math.max(1, this.ships);
+      this.revoltWarmupMax = Math.max(30, this.ships);
     }
 
     if (this.justAssigned) {
@@ -571,6 +579,7 @@ export class Planet {
     
     for (const ship of game.ships) {
       if (!ship.active) continue;
+      if (ship.isScouting || ship.isDiplomacy) continue;
       
       let isHostile = false;
       if (this.owner) {
