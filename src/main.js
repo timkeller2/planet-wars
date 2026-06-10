@@ -111,7 +111,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const isFull = (planet.ships || 0) >= (planet.maxShips || 0);
       eff = isFull ? eff * 4 : eff * 2;
     }
-    return eff / 100;
+    return eff / 50;
   } else if (isNotAtWar) {
     let baseShips = planet.ships || 0;
     if (!planet.ownerId) {
@@ -123,7 +123,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const isFull = (planet.ships || 0) >= (planet.maxShips || 0);
       eff = isFull ? baseShips * 4 : baseShips * 2;
     }
-    return (eff * scale) / 100;
+    return (eff * scale) / 50;
   }
 
   return 0;
@@ -3319,7 +3319,7 @@ function getPlanetTradeIncomePerMin(planet) {
             </tfoot>
           </table>
           <div style="font-size: 0.75rem; color: #88a; margin-top: 8px; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
-            Formula: (Trade Ships / 100) credits per minute
+            Formula: (Trade Ships / 50) credits per minute
           </div>
           ${limitHtml}
         `;
