@@ -35,7 +35,7 @@ function getHabName(habitability) {
 }
 
 let playedIntroTracks = [];
-let musicIntervalId = null;
+let lastMusicChangeTime = 0;
 
 function playRandomIntroTrack() {
   const musicCheckbox = document.getElementById('music-checkbox');
@@ -60,18 +60,21 @@ function playRandomIntroTrack() {
   playedIntroTracks.push(randomTrack);
 
   bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
-  bgMusic.loop = false;
+  bgMusic.loop = true; // Loop so it doesn't go silent and trigger browser autoplay blocks
   bgMusic.volume = 0.4;
   bgMusic.play().catch(e => console.warn('Music play blocked:', e));
+
+  lastMusicChangeTime = Date.now();
 }
 
-function startMusicInterval() {
-  if (musicIntervalId) {
-    clearInterval(musicIntervalId);
-  }
-  musicIntervalId = setInterval(() => {
+function checkMusicRotation() {
+  const musicCheckbox = document.getElementById('music-checkbox');
+  const bgMusic = document.getElementById('bg-music');
+  if (!musicCheckbox || !musicCheckbox.checked || !bgMusic) return;
+
+  if (Date.now() - lastMusicChangeTime >= 5 * 60 * 1000) {
     playRandomIntroTrack();
-  }, 5 * 60 * 1000);
+  }
 }
 
 function getPlanetTradeIncomePerMin(planet) {
@@ -2217,6 +2220,22 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   }
 
+  const musicCheckboxEl = document.getElementById('music-checkbox');
+  if (musicCheckboxEl) {
+    musicCheckboxEl.addEventListener('change', () => {
+      const bgMusic = document.getElementById('bg-music');
+      if (musicCheckboxEl.checked) {
+        if (bgMusic && bgMusic.paused) {
+          playRandomIntroTrack();
+        }
+      } else {
+        if (bgMusic) {
+          bgMusic.pause();
+        }
+      }
+    });
+  }
+
   startBtn.addEventListener('click', () => {
     console.log('startBtn clicked!');
     megalovaniaPlayed = false;
@@ -2230,7 +2249,6 @@ function getPlanetTradeIncomePerMin(planet) {
     const bgMusic = document.getElementById('bg-music');
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
       playRandomIntroTrack();
-      startMusicInterval();
     } else if (bgMusic) {
       bgMusic.pause();
     }
@@ -6185,7 +6203,6 @@ function getPlanetTradeIncomePerMin(planet) {
     const bgMusic = document.getElementById('bg-music');
     if (musicCheckbox && musicCheckbox.checked && bgMusic) {
       playRandomIntroTrack();
-      startMusicInterval();
     } else if (bgMusic) {
       bgMusic.pause();
     }
@@ -10633,6 +10650,7 @@ function getPlanetTradeIncomePerMin(planet) {
     try {
       draw();
       updateInfoPanelContent();
+      checkMusicRotation();
     } catch (e) {
       console.error('[PlanetWars] draw() error:', e);
     }
