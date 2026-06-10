@@ -876,13 +876,25 @@ export class Ship {
           let globalBestFallback = null;
           let maxSafetyDistSq = -1;
 
-          // 1. Look for friendly cruisers with supplies or excess fuel to refuel
-          if (allShips && this.owner && this.fuel < this.getMaxFuel() * 0.97) {
+          // 1. Look for friendly cruisers with supplies or excess fuel to refuel, or supplies for repair/rearm
+          const needsFuelForCruiser = this.fuel < maxFuel * 0.97;
+          const needsRepairsForCruiser = this.health < this.maxHealth;
+          const needsRearmForCruiser = maxBombs > 0 && this.bombs < maxBombs;
+
+          if (allShips && this.owner && (needsFuelForCruiser || needsRepairsForCruiser || needsRearmForCruiser)) {
             for (const other of allShips) {
               if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id) {
                 const hasExcessFuel = (other.fuel || 0) > 4;
                 const hasSupplies = (other.supplies || 0) > 0;
-                if (hasExcessFuel || hasSupplies) {
+                
+                let matchesRequirement = false;
+                if (needsRepairsForCruiser || needsRearmForCruiser) {
+                  if (hasSupplies) matchesRequirement = true;
+                } else if (needsFuelForCruiser) {
+                  if (hasExcessFuel || hasSupplies) matchesRequirement = true;
+                }
+
+                if (matchesRequirement) {
                   // Ensure this destination cruiser doesn't have active enemies close to it
                   let safeFromEnemies = true;
                   if (allShips) {

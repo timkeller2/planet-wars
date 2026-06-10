@@ -34,6 +34,102 @@ function getHabName(habitability) {
   return 'Gaia';
 }
 
+function getPlanetTradeIncomePerMin(planet) {
+  const myPlayer = localPlayer;
+  if (!myPlayer || planet.dead) return 0;
+
+  // 1. Calculate player's own effective ships
+  let playerEffectiveShips = 0;
+  if (serverState && serverState.planets) {
+    for (const pl of serverState.planets) {
+      if (pl.dead) continue;
+      if (pl.ownerId === myPlayer.id) {
+        let eff = pl.ships || 0;
+        if (pl.focusMode === 'commerce') {
+          const isFull = (pl.ships || 0) >= (pl.maxShips || 0);
+          eff = isFull ? eff * 4 : eff * 2;
+        }
+        playerEffectiveShips += eff;
+      }
+    }
+  }
+
+  // 2. Calculate other effective ships
+  let otherEffectiveShips = 0;
+  if (serverState && serverState.planets) {
+    for (const pl of serverState.planets) {
+      if (pl.dead) continue;
+      const isOwn = (pl.ownerId === myPlayer.id);
+      
+      let isNotAtWar = true;
+      if (pl.ownerId) {
+        if (pl.ownerId === 'monsters') {
+          isNotAtWar = false;
+        } else {
+          const isAtWar = !!(myPlayer.atWarWith && myPlayer.atWarWith[pl.ownerId] && Date.now() < myPlayer.atWarWith[pl.ownerId]);
+          if (isAtWar) isNotAtWar = false;
+        }
+      }
+      
+      if (!isOwn && isNotAtWar) {
+        let baseShips = pl.ships || 0;
+        if (!pl.ownerId) {
+          const sympathyVal = pl.sympathy?.[myPlayer.id] || 0;
+          baseShips = Math.min(baseShips, sympathyVal * 10);
+        }
+        let eff = baseShips;
+        if (pl.focusMode === 'commerce') {
+          const isFull = (pl.ships || 0) >= (pl.maxShips || 0);
+          eff = isFull ? baseShips * 4 : baseShips * 2;
+        }
+        otherEffectiveShips += eff;
+      }
+    }
+  }
+
+  // 3. Scale factor
+  let scale = 1.0;
+  if (otherEffectiveShips > playerEffectiveShips) {
+    scale = playerEffectiveShips / otherEffectiveShips;
+  }
+
+  // 4. Calculate for the given planet
+  const isOwn = (planet.ownerId === myPlayer.id);
+  let isNotAtWar = true;
+  if (planet.ownerId) {
+    if (planet.ownerId === 'monsters') {
+      isNotAtWar = false;
+    } else {
+      const isAtWar = !!(myPlayer.atWarWith && myPlayer.atWarWith[planet.ownerId] && Date.now() < myPlayer.atWarWith[planet.ownerId]);
+      if (isAtWar) isNotAtWar = false;
+    }
+  }
+
+  if (isOwn) {
+    let eff = planet.ships || 0;
+    if (planet.focusMode === 'commerce') {
+      const isFull = (planet.ships || 0) >= (planet.maxShips || 0);
+      eff = isFull ? eff * 4 : eff * 2;
+    }
+    return eff / 100;
+  } else if (isNotAtWar) {
+    let baseShips = planet.ships || 0;
+    if (!planet.ownerId) {
+      const sympathyVal = planet.sympathy?.[myPlayer.id] || 0;
+      baseShips = Math.min(baseShips, sympathyVal * 10);
+    }
+    let eff = baseShips;
+    if (planet.focusMode === 'commerce') {
+      const isFull = (planet.ships || 0) >= (planet.maxShips || 0);
+      eff = isFull ? baseShips * 4 : baseShips * 2;
+    }
+    return (eff * scale) / 100;
+  }
+
+  return 0;
+}
+
+
 
 // Run initialization immediately as an ES Module
   console.log('[PlanetWars] Code version: RAF-loop-v1');
@@ -1059,8 +1155,25 @@ function getHabName(habitability) {
         const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
         const dispVal = p.disposition?.[pId];
         const symVal = p.sympathy?.[pId] ?? 0;
-        if (dispVal !== 0 || symVal !== 0) {
-          const dispStr = dispVal === undefined ? 'Unknown' : Math.round(dispVal);
+        if (dispVal !== undefined || symVal !== 0) {
+          let dispStr = 'Unknown';
+          if (dispVal !== undefined) {
+            const dVal = Math.round(dispVal);
+            let emoji = '';
+            if (dVal < -30) emoji = '😠';
+            else if (dVal < -10) emoji = '😢';
+            else if (dVal < 10) emoji = '😐';
+            else if (dVal < 30) emoji = '🙂';
+            else emoji = '😍';
+
+            let scoreColor = '#ff3333';
+            if (dVal > 0) {
+              scoreColor = '#4caf50';
+            } else if (dVal > -25) {
+              scoreColor = '#ffeb3b';
+            }
+            dispStr = `<span style="color: ${scoreColor}; font-weight: bold;">${dVal}</span> ${emoji}`;
+          }
           lines.push({
             label: `🎭 Disp (${pName}): ${dispStr}`,
             value: `💖 Sym: ${Math.round(symVal)}`,
@@ -1068,6 +1181,17 @@ function getHabName(habitability) {
           });
         }
       }
+
+      // Show Trade Income below the disposition rows
+      const planetTradeRatePerMin = getPlanetTradeIncomePerMin(p);
+      if (planetTradeRatePerMin > 0) {
+        lines.push({
+          label: '💰 Trade Income',
+          value: `+${planetTradeRatePerMin.toFixed(2)}/m`,
+          color: '#ffd54f'
+        });
+      }
+
 
       if (owner) {
         let capacityMultiplier = 1.0;
@@ -7947,9 +8071,32 @@ function getHabName(habitability) {
                 else if (dVal < 10) emoji = '😐';
                 else if (dVal < 30) emoji = '🙂';
                 else emoji = '😍';
-                lines.push({ label: `🎭 Disposition (${pName})`, value: `${dVal} ${emoji}`, color: pColor });
+
+                let scoreColor = '#ff3333';
+                if (dVal > 0) {
+                  scoreColor = '#4caf50';
+                } else if (dVal > -25) {
+                  scoreColor = '#ffeb3b';
+                }
+
+                lines.push({ 
+                  label: `🎭 Disposition (${pName})`, 
+                  value: `${dVal} ${emoji}`, 
+                  color: pColor,
+                  valueColor: scoreColor
+                });
               }
             }
+          }
+
+          // Show Trade Income below the disposition rows on canvas planet tooltip
+          const planetTradeRatePerMin = getPlanetTradeIncomePerMin(hp);
+          if (planetTradeRatePerMin > 0) {
+            lines.push({
+              label: '💰 Trade Income',
+              value: `+${planetTradeRatePerMin.toFixed(2)}/m`,
+              color: '#ffd54f'
+            });
           }
 
 
@@ -8047,6 +8194,9 @@ function getHabName(habitability) {
               ctx.fillText(line.label || '', tooltipX + padding, curY);
               if (line.value) {
                 ctx.textAlign = 'right';
+                if (line.valueColor) {
+                  ctx.fillStyle = line.valueColor;
+                }
                 ctx.fillText(line.value, tooltipX + tooltipW - padding, curY);
               }
             }
