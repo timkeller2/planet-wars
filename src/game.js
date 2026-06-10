@@ -3461,7 +3461,7 @@ export class Game {
           qualifyingShipsSum += visiblePartnerShips[key];
         }
 
-        const tradingIncomeRate = qualifyingShipsSum > 0 ? (qualifyingShipsSum / 3000) : 0; // credits per second
+        const tradingIncomeRate = qualifyingShipsSum > 0 ? (qualifyingShipsSum / 1500) : 0; // credits per second
         const tradingIncome = tradingIncomeRate * (deltaTime / 1000);
         player.credits = (player.credits || 0) + tradingIncome;
         player.passiveIncomeRate = tradingIncomeRate; // Store for client UI display!

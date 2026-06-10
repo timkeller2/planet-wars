@@ -210,6 +210,9 @@ export class Planet {
         const effectiveMaxShips = this.rampageBoost ? this.maxShips * 3 : this.maxShips;
         const prodDivisor = 100 / (settings?.productionMultiple || 1.0);
         let effectiveRate = (Math.max(10, effectiveMaxShips - this.ships) / prodDivisor) * (1 + techBonus) * lowPopMultiplier;
+        if (this.homeworldOf === this.owner.id) {
+          effectiveRate *= 2;
+        }
         if (!this.owner.isAI) {
           if (effectiveRate > 1.0) {
             effectiveRate = 1.0 + ((effectiveRate - 1.0) / 3);
