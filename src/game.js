@@ -799,6 +799,7 @@ export class Game {
         expScore: p.expScore,
         expProgress: p.expProgress,
         crewExperience: p.crewExperience,
+        storedXpBonus: p.storedXpBonus,
         credits: p.credits,
         tradingBonus: p.tradingBonus,
         useCredits: p.useCredits,
@@ -896,6 +897,7 @@ export class Game {
       p.expScore = pData.expScore;
       p.expProgress = pData.expProgress;
       p.crewExperience = pData.crewExperience;
+      p.storedXpBonus = pData.storedXpBonus || 0;
       p.credits = pData.credits;
       p.tradingBonus = pData.tradingBonus;
       p.useCredits = pData.useCredits;
@@ -1046,6 +1048,7 @@ export class Game {
       player.expScore = 0;
       player.expProgress = 0;
       player.crewExperience = 0;
+      player.storedXpBonus = 0;
       player.cruiserStyle = null;
       player.prevTechBonus = 0;
       player.credits = this.settings && this.settings.startingCredits !== undefined ? this.settings.startingCredits : 250;
@@ -2119,22 +2122,29 @@ export class Game {
         }
         ship.speedModifier = 1.0;
         
-        const cap = owner ? (owner.expScore || 0) : 0;
-        let baseStartingExp = source.expScore || 0;
-        if (source.focusMode === 'garrison') {
-          baseStartingExp += (source.maxShips || 0) / 10;
+        let startingXp = 0;
+        if (source.homeworldOf) {
+          startingXp += source.ships / 10;
         }
-        let finalStartingExp = Math.min(baseStartingExp, cap);
+        if (source.isMilitary) {
+          startingXp += source.ships / 10;
+        }
+        if (source.focusMode === 'garrison') {
+          startingXp += source.ships / 10;
+        }
+        startingXp += (source.expScore || 0);
+        startingXp += (owner ? (owner.expScore || 0) : 0);
 
         let crewExpXp = 0;
-        if (owner && owner.crewExperience && finalStartingExp < cap) {
-          const diff = cap - finalStartingExp;
-          const neededCrewExp = diff * finalMaxHealth;
+        const storedXp = owner ? (owner.storedXpBonus || 0) : 0;
+        if (owner && owner.crewExperience && startingXp < storedXp) {
+          const diff = storedXp - startingXp;
+          const neededCrewExp = diff * finalMaxHealth * 0.70;
           const crewExpToUse = Math.min(owner.crewExperience, neededCrewExp);
           owner.crewExperience -= crewExpToUse;
-          crewExpXp = crewExpToUse / finalMaxHealth;
+          crewExpXp = crewExpToUse / (finalMaxHealth * 0.70);
         }
-        ship.expScore = finalStartingExp + crewExpXp;
+        ship.expScore = startingXp + crewExpXp;
 
         ship.cruiserStyle = source.racialAffinity;
         ship.isCruiser = true;
