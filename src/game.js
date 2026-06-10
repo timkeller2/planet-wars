@@ -4417,8 +4417,8 @@ export class Game {
 
       // 4. Diplomats sympathy generation
       if ((ship.diplomat || 0) > 0) {
+        ship.parley = Math.min((ship.diplomat || 0) * 3, (ship.parley || 0) + ((ship.diplomat || 0) / 60) * dt);
         if (ship.isDiplomacy && !ship.isScouting && !ship.isCruiserMoving()) {
-          ship.parley = Math.min((ship.diplomat || 0) * 3, (ship.parley || 0) + ((ship.diplomat || 0) / 60) * dt);
           ship.diplomatTargetPlanetId = null;
           // Find all qualifying planets (neutral, enemy, or friendly) within sensor range that are not at max empathy/sympathy
           const qualifyingPlanets = [];

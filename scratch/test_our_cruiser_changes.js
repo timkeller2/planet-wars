@@ -113,24 +113,28 @@ console.log("Starting verification tests...");
   game.updateCustomCruiserSystems(0.1);
   assert(p1.activeDiplomatId === cruiser.id, "Cruiser should claim the planet for diplomacy");
 
-  // Now, make the cruiser move
+  // Now, make the cruiser move and lower its parley to 1
   cruiser.targetX = 500;
   cruiser.targetY = 500;
+  cruiser.parley = 1;
   assert(cruiser.isCruiserMoving() === true, "Cruiser should be moving");
 
-  // Tick the game update again. The moving diplomat should be invalidated and the claim released!
-  game.updateCustomCruiserSystems(0.1);
+  // Tick the game update again. The moving diplomat should be invalidated, claim released, but parley increases!
+  game.updateCustomCruiserSystems(10.0);
   assert(p1.activeDiplomatId === null, "Claim should be released when diplomat is moving");
+  assert(cruiser.parley > 1, "Parley should increase while moving. Got: " + cruiser.parley);
 
   // Put it back close
   cruiser.targetX = 100;
   cruiser.targetY = 100;
   assert(cruiser.isCruiserMoving() === false, "Cruiser is no longer moving");
 
-  // Enter scout mode
+  // Enter scout mode and lower parley to 1
   cruiser.isScouting = true;
-  game.updateCustomCruiserSystems(0.1);
+  cruiser.parley = 1;
+  game.updateCustomCruiserSystems(10.0);
   assert(p1.activeDiplomatId === null, "Claim should be released when diplomat is in scout mode");
+  assert(cruiser.parley > 1, "Parley should increase while scouting. Got: " + cruiser.parley);
 
   console.log("Pass: Diplomat sympathy generation checks.");
 }
