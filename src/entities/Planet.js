@@ -572,28 +572,17 @@ export class Planet {
 
   isBeingInvaded(game) {
     if (!game || !game.ships) return false;
-    
-    const gravityRadius = this.getGravityRadius ? this.getGravityRadius() : (this.maxShips * 1.5);
-    const range = Math.max(200, gravityRadius);
-    const rangeSq = range * range;
+    if (!this.owner) return false;
     
     for (const ship of game.ships) {
       if (!ship.active) continue;
       if (ship.isScouting || ship.isDiplomacy) continue;
       
       let isHostile = false;
-      if (this.owner) {
-        if (ship.owner && ship.owner.id !== this.owner.id) {
-          isHostile = true;
-        } else if (ship.isAmoeba) {
-          isHostile = true;
-        }
-      } else {
-        if (ship.owner) {
-          isHostile = true;
-        } else if (ship.isAmoeba) {
-          isHostile = true;
-        }
+      if (ship.owner && ship.owner.id !== this.owner.id) {
+        isHostile = true;
+      } else if (ship.isAmoeba) {
+        isHostile = true;
       }
       
       if (isHostile) {
@@ -602,7 +591,9 @@ export class Planet {
         }
         const dx = ship.x - this.x;
         const dy = ship.y - this.y;
-        if (dx * dx + dy * dy <= rangeSq) {
+        const distSq = dx * dx + dy * dy;
+        const activeRange = this.radius + 50;
+        if (distSq <= activeRange * activeRange) {
           return true;
         }
       }
