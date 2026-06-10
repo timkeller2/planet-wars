@@ -147,6 +147,29 @@ console.log("Starting verification tests...");
   assert(p1.activeDiplomatId === null, "Claim should be released when out of range");
   assert(cruiser.parley > 1, "Parley should increase while scouting. Got: " + cruiser.parley);
 
+  // 3b. Verify parley is deducted on event trigger, not during warmup
+  cruiser.x = 100;
+  cruiser.y = 100;
+  cruiser.targetX = 100;
+  cruiser.targetY = 100;
+  cruiser.isScouting = false;
+  cruiser.isDiplomacy = true;
+  cruiser.parley = 1.0;
+  p1.activeDiplomatId = cruiser.id;
+  p1.diplomacyWarmupTimer = 0;
+
+  // Advance by 10 seconds. Since it's warming up (and not yet at 30 seconds), parley should not decrease.
+  game.updateCustomCruiserSystems(10.0);
+  assert(p1.diplomacyWarmupTimer === 10.0, "Warmup timer should be 10. Got: " + p1.diplomacyWarmupTimer);
+  assert(cruiser.parley > 1.0, "Parley should NOT have decreased during warmup. Got: " + cruiser.parley);
+
+  // Now advance by 20 more seconds so it hits 30 seconds and triggers the event.
+  const parleyBeforeEvent = cruiser.parley;
+  game.updateCustomCruiserSystems(20.0);
+  assert(p1.diplomacyWarmupTimer === 0, "Warmup timer should reset to 0 after event");
+  const expectedParley = parleyBeforeEvent + (1 / 60) * 20.0 - 1.0;
+  assert(Math.abs(cruiser.parley - expectedParley) < 0.001, "Parley should be deducted by 1.0 on event trigger. Got: " + cruiser.parley);
+
   console.log("Pass: Diplomat sympathy generation checks.");
 }
 

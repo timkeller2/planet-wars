@@ -4286,14 +4286,10 @@ export class Game {
           // Continuous warmup progression
           const diplomatsCount = diplomat.diplomat || 1;
           p.diplomacyWarmupTimer = Math.min(30, (p.diplomacyWarmupTimer || 0) + dt * diplomatsCount);
-          // Continuous parley consumption
-          if ((diplomat.parley || 0) > 0) {
-            const parleyToConsume = Math.min(diplomat.parley, (1 / 30) * dt * diplomatsCount);
-            diplomat.parley -= parleyToConsume;
-          }
           // Check completion
           if (p.diplomacyWarmupTimer >= 30) {
             p.diplomacyWarmupTimer = 0;
+            diplomat.parley = Math.max(0, (diplomat.parley || 0) - 1);
             this.triggerDiplomacyEvent(diplomat, p);
           }
         }
