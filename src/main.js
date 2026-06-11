@@ -73,14 +73,14 @@ function checkMusicRotation() {
 
 function getEffectiveSympathyClient(pl, playerId) {
   let sympathyVal = pl.sympathy?.[playerId] || 0;
-  if (serverState && serverState.ships && (!pl.ownerId || pl.ownerId !== playerId)) {
+  if (serverState && serverState.ships && (!pl.ownerId || pl.ownerId === 'neutral' || pl.ownerId !== playerId)) {
     let isKnown = false;
     if (!serverState.settings || !serverState.settings.fogOfWar) {
       isKnown = true;
     } else {
       const resolvedPlayer = serverState.players ? serverState.players.find(p => p.id === playerId) : null;
       if (resolvedPlayer) {
-        if (resolvedPlayer.discoveredPlanetsArray && resolvedPlayer.discoveredPlanetsArray.includes(pl.id)) {
+        if (resolvedPlayer.discoveredPlanetsArray && (resolvedPlayer.discoveredPlanetsArray.includes(pl.id) || resolvedPlayer.discoveredPlanetsArray.includes(Number(pl.id)) || resolvedPlayer.discoveredPlanetsArray.includes(String(pl.id)))) {
           isKnown = true;
         } else {
           // Check if any of the player's ships currently has the planet in its radar range
@@ -112,7 +112,7 @@ function getEffectiveSympathyClient(pl, playerId) {
       if (pl.isMilitary && (pl.ships || 0) >= (pl.maxShips || 0)) {
         baseRadius *= 1.5;
       }
-      const plOwner = pl.ownerId ? serverState.players.find(o => o.id === pl.ownerId) : null;
+      const plOwner = pl.ownerId && pl.ownerId !== 'neutral' ? serverState.players.find(o => o.id === pl.ownerId) : null;
       const isHuman = plOwner && !plOwner.isAI;
       if (isHuman && pl.focusMode === 'garrison' && (pl.ships || 0) >= (pl.maxShips || 0)) {
         baseRadius += ((pl.ships || 0) / 2);
@@ -120,7 +120,7 @@ function getEffectiveSympathyClient(pl, playerId) {
       const tb = 0.01 * Math.sqrt(plOwner ? (plOwner.techScore || 0) : 0);
       const eb = 0.01 * Math.sqrt(plOwner ? (plOwner.expScore || 0) : 0);
       let gr = baseRadius * (1 + tb + eb);
-      if (!pl.ownerId) {
+      if (!pl.ownerId || pl.ownerId === 'neutral') {
         gr *= 0.5;
       }
       const maxDist = gr;
@@ -141,7 +141,7 @@ function getEffectiveSympathyClient(pl, playerId) {
 }
 
 function getPlanetTradeIncomePerMin(planet) {
-  const myPlayer = localPlayer;
+  const myPlayer = (serverState && serverState.players && localPlayer) ? (serverState.players.find(p => p.id === localPlayer.id) || localPlayer) : localPlayer;
   if (!myPlayer || planet.dead) return 0;
 
   // 1. Calculate player's own effective ships
@@ -278,6 +278,19 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastSelectedCruiserId = null;
   let selectedPlanets = [];
   let selectedShips = [];
+  window.getLocalPlayer = () => localPlayer;
+  window.getServerState = () => serverState;
+  window.getSelectedShips = () => selectedShips;
+  window.setSelectedShips = (val) => { selectedShips = val; };
+  window.getSelectedPlanets = () => selectedPlanets;
+  window.setSelectedPlanets = (val) => { selectedPlanets = val; };
+  window.getCameraZoom = () => cameraZoom;
+  window.setCameraZoom = (val) => { cameraZoom = val; };
+  window.getCameraPanX = () => cameraPanX;
+  window.setCameraPanX = (val) => { cameraPanX = val; };
+  window.getCameraPanY = () => cameraPanY;
+  window.setCameraPanY = (val) => { cameraPanY = val; };
+  window.getFloatingAnimations = () => floatingAnimations;
   let warpOrderNext = false;
   let controlGroups = {}; // RTS control groups for fleets/cruisers
   let lastKnownPlanets = {}; // Cache of last-known states for planets under Fog of War
@@ -1221,6 +1234,7 @@ function getPlanetTradeIncomePerMin(planet) {
       return;
     }
 
+    const myPlayer = (serverState && serverState.players && localPlayer) ? (serverState.players.find(p => p.id === localPlayer.id) || localPlayer) : localPlayer;
     const { type, id } = activeInfoPanel;
 
     if (infoPanelImagePlaceholder && infoPanelImageHologram) {
@@ -1362,14 +1376,14 @@ function getPlanetTradeIncomePerMin(planet) {
 
       lines.push({ label: `Produces: ${producedIcons}`, value: `Wants: ${wantedStr}`, color: '#fff' });
 
-      const isNeutralOrEnemy = !p.ownerId || p.ownerId !== localPlayer.id;
+      const isNeutralOrEnemy = !p.ownerId || p.ownerId !== myPlayer.id;
       if (isNeutralOrEnemy) {
-        const currentSym = getEffectiveSympathyClient(p, localPlayer.id);
-        const expBonus = Math.sqrt(localPlayer.expScore || 0);
+        const currentSym = getEffectiveSympathyClient(p, myPlayer.id);
+        const expBonus = Math.sqrt(myPlayer.expScore || 0);
         const selectedCruiser = getSelectedCruiser();
         const shipExpBonus = selectedCruiser ? Math.sqrt(selectedCruiser.expScore || 0) : 0;
         const bonusSum = expBonus + shipExpBonus;
-        const disposition = p.disposition?.[localPlayer.id] ?? 0;
+        const disposition = p.disposition?.[myPlayer.id] ?? 0;
         
         let racialBonus = 0;
         if (selectedCruiser) {
@@ -1578,7 +1592,7 @@ function getPlanetTradeIncomePerMin(planet) {
           totalDefense += 15;
           defenseLines.push({ label: 'Last stand', value: `15%`, color: '#ff0' });
         }
-        if (localPlayer && !localPlayer.isAI && !hpOwner.isAI) {
+        if (myPlayer && !myPlayer.isAI && !hpOwner.isAI) {
           const aiOwners = new Set();
           for (const plPlanet of serverState.planets) {
             if (plPlanet.ownerId) {
@@ -2736,6 +2750,9 @@ function getPlanetTradeIncomePerMin(planet) {
   sounds.rampage.volume = 0.8;
 
   function playSound(type) {
+    if (window.onPlaySound) {
+      window.onPlaySound(type);
+    }
     if (!sounds[type]) return;
     const clone = sounds[type].cloneNode();
     clone.volume = sounds[type].volume;
@@ -3423,15 +3440,27 @@ function getPlanetTradeIncomePerMin(planet) {
     if (state.explosions) {
       let playNormalExplosion = false;
       let playThud = false;
+      const currentExplosionKeys = new Set();
+      if (!window.playedExplosionKeys) {
+        window.playedExplosionKeys = new Set();
+      }
+
       for (const e of state.explosions) {
-        if (e.age === 0) {
-          if (e.color === 'amoeba-shrug') {
-            playThud = true;
-          } else {
-            playNormalExplosion = true;
+        const key = `${e.x.toFixed(1)},${e.y.toFixed(1)},${e.color || ''}`;
+        currentExplosionKeys.add(key);
+
+        if (!window.playedExplosionKeys.has(key)) {
+          if (e.age <= 0.15) {
+            if (e.color === 'amoeba-shrug') {
+              playThud = true;
+            } else {
+              playNormalExplosion = true;
+            }
           }
         }
       }
+      window.playedExplosionKeys = currentExplosionKeys;
+
       if (playThud) {
         playThudSound();
       }
@@ -3521,6 +3550,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
       const interestRatePerMin = creditsVal < 0 ? (creditsVal * 0.01) : (creditsVal * 0.005);
       const stockpileMaintenanceRatePerMin = myPlayer.storageFeeRate || 0;
+      const fleetCostRatePerMin = myPlayer.fleetCostRate || 0;
       let totalTradeRatePerMin = 0;
       let rowsHtml = "";
       if (myPlayer.tradingPartners && myPlayer.tradingPartners.length > 0) {
@@ -3560,7 +3590,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
       const pirateActivityRatePerMin = (myPlayer.pirateActivity || 0) / 25;
       const pirateIncomeRatePerMin = (myPlayer.pirateIncome || 0) / 25;
-      const netIncome = totalTradeRatePerMin - stockpileMaintenanceRatePerMin + interestRatePerMin - pirateActivityRatePerMin + pirateIncomeRatePerMin;
+      const netIncome = totalTradeRatePerMin - stockpileMaintenanceRatePerMin - fleetCostRatePerMin + interestRatePerMin - pirateActivityRatePerMin + pirateIncomeRatePerMin;
       const incomeInt = Math.round(netIncome);
 
       // Render custom tooltip panel HTML (Task 101 Overhaul)
@@ -3617,6 +3647,17 @@ function getPlanetTradeIncomePerMin(planet) {
           `;
         }
 
+        let fleetCostRowHtml = "";
+        if (fleetCostRatePerMin > 0) {
+          fleetCostRowHtml = `
+            <tr style="border-top: 1px dashed rgba(255, 255, 255, 0.15);">
+              <td style="padding: 6px 0; color: #aaa; text-align: left;">Fleet Costs</td>
+              <td style="padding: 6px 0;"></td>
+              <td style="padding: 6px 0; text-align: right; color: #ff3333; font-weight: bold;">-${fleetCostRatePerMin.toFixed(2)}/m</td>
+            </tr>
+          `;
+        }
+
         let pirateActivityRowHtml = "";
         if (pirateActivityRatePerMin > 0) {
           pirateActivityRowHtml = `
@@ -3654,6 +3695,7 @@ function getPlanetTradeIncomePerMin(planet) {
             </tbody>
             <tfoot>
               ${stockpileRowHtml}
+              ${fleetCostRowHtml}
               ${pirateActivityRowHtml}
               ${pirateIncomeRowHtml}
               <tr style="border-top: 1px dashed rgba(255, 255, 255, 0.15);">

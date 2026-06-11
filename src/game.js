@@ -3208,77 +3208,77 @@ export class Game {
                       if (volleySize > cap) volleySize = cap;
                       if (ship.health <= 2) volleySize = 0;
 
-                      const hitChance = Math.min(1.0, Math.max(0.0, ship.getAccuracy() + 0.10 * ship.labs));
-                      let minesDestroyed = 0;
-
-                      for (let v = 0; v < volleySize; v++) {
-                        let tx = storm.x;
-                        let ty = storm.y;
-                        for (let attempt = 0; attempt < 30; attempt++) {
-                          const angle = Math.random() * Math.PI * 2;
-                          const r = Math.random() * storm.radius;
-                          const px = storm.x + Math.cos(angle) * r;
-                          const py = storm.y + Math.sin(angle) * r;
-                          const sDx = px - ship.x;
-                          const sDy = py - ship.y;
-                          if (sDx * sDx + sDy * sDy <= effRadar * effRadar) {
-                            tx = px;
-                            ty = py;
-                            break;
-                          }
-                        }
-
-                        const isHit = (storm.mines > 0) && (Math.random() < hitChance);
-                        if (isHit) {
-                          storm.mines -= 1;
-                          minesDestroyed += 1;
-                        }
-
-                        const delayMs = Math.random() * 2000;
-                        const shipId = ship.id;
-                        const finalTx = tx;
-                        const finalTy = ty;
-
-                        this.scheduledEvents.push({
-                          delay: delayMs,
-                          action: () => {
-                            const currentShip = this.ships.find(s => s.id === shipId);
-                            if (currentShip && currentShip.active) {
-                              this.lasers.push({
-                                startX: currentShip.x,
-                                startY: currentShip.y,
-                                endX: finalTx,
-                                endY: finalTy,
-                                color: '#44f',
-                                age: 0,
-                                duration: 0.4
-                              });
-                            }
-                            if (isHit) {
-                              this.explosions.push({
-                                x: finalTx,
-                                y: finalTy,
-                                color: '#44f',
-                                age: 0
-                              });
-                            }
-                          }
-                        });
-                      }
-
-                      if (minesDestroyed > 0) {
-                        player.credits = (player.credits || 0) + minesDestroyed;
-                        ship.creditsGainedEvent = (ship.creditsGainedEvent || 0) + minesDestroyed;
-
-                        this.explosions.push({
-                          x: ship.x,
-                          y: ship.y,
-                          isDollarSign: true,
-                          amount: minesDestroyed,
-                          remainingMines: storm.mines,
-                          age: 0
-                        });
-                      }
+                       const hitChance = Math.min(1.0, Math.max(0.0, ship.getAccuracy() + 0.10 * ship.labs));
+                       let minesDestroyed = 0;
+                       const rangeOfFire = ship.getWeaponRange();
+ 
+                       for (let v = 0; v < volleySize; v++) {
+                         let tx = storm.x;
+                         let ty = storm.y;
+                         for (let attempt = 0; attempt < 30; attempt++) {
+                           const angle = Math.random() * Math.PI * 2;
+                           const r = Math.random() * storm.radius;
+                           const px = storm.x + Math.cos(angle) * r;
+                           const py = storm.y + Math.sin(angle) * r;
+                           const sDx = px - ship.x;
+                           const sDy = py - ship.y;
+                           if (sDx * sDx + sDy * sDy <= rangeOfFire * rangeOfFire) {
+                             tx = px;
+                             ty = py;
+                             break;
+                           }
+                         }
+ 
+                         const isHit = (storm.mines > 0) && (Math.random() < hitChance);
+                         if (isHit) {
+                           storm.mines -= 1;
+                           minesDestroyed += 1;
+                         }
+ 
+                         const delayMs = Math.random() * 2000;
+                         const shipId = ship.id;
+                         const finalTx = tx;
+                         const finalTy = ty;
+ 
+                         this.scheduledEvents.push({
+                           delay: delayMs,
+                           action: () => {
+                             const currentShip = this.ships.find(s => s.id === shipId);
+                             if (currentShip && currentShip.active) {
+                               this.lasers.push({
+                                 startX: currentShip.x,
+                                 startY: currentShip.y,
+                                 endX: finalTx,
+                                 endY: finalTy,
+                                 color: '#44f',
+                                 age: 0,
+                                 duration: 0.4
+                               });
+                             }
+                             if (isHit) {
+                               this.explosions.push({
+                                 x: finalTx,
+                                 y: finalTy,
+                                 color: '#44f',
+                                 age: 0
+                               });
+                               this.explosions.push({
+                                 x: finalTx,
+                                 y: finalTy,
+                                 isDollarSign: true,
+                                 amount: 1,
+                                 remainingMines: storm.mines,
+                                 age: 0
+                               });
+                             }
+                           }
+                         });
+                       }
+ 
+                       if (minesDestroyed > 0) {
+                         player.credits = (player.credits || 0) + minesDestroyed;
+                         ship.creditsGainedEvent = (ship.creditsGainedEvent || 0) + minesDestroyed;
+                       }
                     }
                   } else {
                     // Pure research: trigger beaker animation
@@ -3710,7 +3710,7 @@ export class Game {
 
       player.commandLimit = 1 + Math.ceil((player.planetCount || 0) / 3) + garrisonWorlds + fullGarrisonWorlds + controlledHomeworlds + (controlsOwnHomeworld ? 1 : 0);
       player.tradeCapacity = Math.ceil((player.planetCount || 0) / 5) + commerceWorlds;
-      player.stockpileCapacity = (player.commandLimit || 0) + (player.tradeCapacity || 0);
+      player.stockpileCapacity = ((player.commandLimit || 0) + (player.tradeCapacity || 0)) * 2;
 
       player.storageFeeAccumulator = (player.storageFeeAccumulator || 0) + deltaTime;
       while (player.storageFeeAccumulator >= 1000) {
@@ -3761,6 +3761,44 @@ export class Game {
           }
         } else {
           player.storageFeeRate = 0;
+        }
+
+        // Fleet cost overages
+        const commandLimit = player.commandLimit || 1;
+        const cruiserCount = player.cruiserCount || 0;
+        if (cruiserCount > commandLimit) {
+          const excessCruisers = cruiserCount - commandLimit;
+          const fleetCost = (excessCruisers * 5) / (commandLimit * 8);
+          player.fleetCostRate = fleetCost * 60;
+
+          if ((player.credits || 0) >= fleetCost) {
+            player.credits -= fleetCost;
+          } else {
+            let remainingFee = fleetCost - (player.credits || 0);
+            player.credits = 0;
+
+            while (remainingFee > 0) {
+              let highestRes = null;
+              let highestQty = 0;
+              for (const res of resourcesList) {
+                const qty = player.resources[res] || 0;
+                if (qty > highestQty) {
+                  highestQty = qty;
+                  highestRes = res;
+                }
+              }
+
+              if (highestQty <= 0 || !highestRes) {
+                break;
+              }
+
+              const deductAmt = Math.min(remainingFee, highestQty);
+              player.resources[highestRes] -= deductAmt;
+              remainingFee -= deductAmt;
+            }
+          }
+        } else {
+          player.fleetCostRate = 0;
         }
       }
 

@@ -29,13 +29,13 @@ if (game.explosions.length !== 1 || !game.explosions[0].isDollarSign) {
   process.exit(1);
 }
 
-// Tick by another 2.0 seconds (deltaTime = 2000)
-game.update(2000);
+// Tick by another 4.0 seconds (deltaTime = 4000)
+game.update(4000);
 
-console.log("After another 2.0 seconds, remaining count:", game.explosions.length);
+console.log("After another 4.0 seconds, remaining count:", game.explosions.length);
 if (game.explosions.length !== 0) {
   console.error("FAILED: All explosions should be removed.");
   process.exit(1);
 }
 
-console.log("PASSED: Dollar sign max age (3.0s) and normal max age (1.0s) verified successfully.");
+console.log("PASSED: Dollar sign max age (5.0s) and normal max age (1.0s) verified successfully.");

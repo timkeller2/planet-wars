@@ -60,8 +60,10 @@ const startMines = minefield.mines;
 
 cruiser.accumulatedTech = 1.0;
 game.update(1000); // Trigger 1 second update
-
 const minesDiff = startMines - minefield.mines;
+cruiser.isResearching = false; // Disable research so second update doesn't sweep more mines
+game.update(1000); // Trigger second update to process scheduled events (laser/explosion animations)
+
 const creditsDiff = (human.credits || 0) - startCredits;
 
 console.log(`Mines destroyed by research: ${minesDiff}`);
@@ -74,10 +76,14 @@ if (Math.round(creditsDiff) !== minesDiff) {
   console.error(`-> FAILED: Expected credits gained to equal mines destroyed (${minesDiff}), got ${creditsDiff}`);
   process.exit(1);
 }
-// Verify dollar sign explosion was pushed
-const dollarExplosion = game.explosions.find(e => e.isDollarSign);
-if (!dollarExplosion || dollarExplosion.amount !== minesDiff) {
-  console.error(`-> FAILED: Expected a dollar sign explosion with amount ${minesDiff}, got:`, dollarExplosion);
+// Verify dollar sign explosions were pushed
+const dollarExplosions = game.explosions.filter(e => e.isDollarSign);
+if (dollarExplosions.length !== minesDiff) {
+  console.error(`-> FAILED: Expected ${minesDiff} dollar sign explosions, got ${dollarExplosions.length}`);
+  process.exit(1);
+}
+if (dollarExplosions.some(e => e.amount !== 1)) {
+  console.error(`-> FAILED: Expected all dollar sign explosions to have amount 1`);
   process.exit(1);
 }
 console.log("-> PASSED: Lab research mining correctly destroys mines, awards credits, and triggers animations.");

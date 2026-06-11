@@ -674,6 +674,40 @@ export class Ship {
     }
   }
 
+  getWeaponRange() {
+    const playerTechBonus = this.owner ? Math.floor(Math.sqrt(this.owner.techScore || 0)) : 0;
+    const laserTechBonus = 0.01 * playerTechBonus;
+    const shipExpBonus = this.getLocalXpBonus();
+    const expBonus = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
+    
+    let effectiveRange = 40 * (1 + laserTechBonus);
+    if (this.isAmoeba) {
+      effectiveRange = 50;
+    } else if (this.maxHealth > 0) {
+      const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+      const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+      effectiveRange = baseDogfightRange * 1.10;
+      if (this.bombs > 0) {
+        effectiveRange += baseDogfightRange * 0.10;
+      }
+      const targetingRangeBonus = (this.targeting || 0) * 0.05;
+      effectiveRange *= (1 + targetingRangeBonus);
+      if (this.fuel_tanker && this.fuel_tanker > 0) {
+        effectiveRange = Math.max(5, effectiveRange - this.fuel_tanker * 5);
+      }
+      if (this.specialbombs && this.specialbombs > 0) {
+        effectiveRange += 10;
+      }
+      if (this.package === 'brute') {
+        effectiveRange *= 0.5;
+      } else if (this.package === 'sniper') {
+        effectiveRange *= 1.5;
+      }
+      effectiveRange = Math.floor(effectiveRange);
+    }
+    return effectiveRange;
+  }
+
   getHazardAccuracyReduction(allStorms) {
     if (this.isAmoeba) return 0;
     if (!allStorms || !this.owner) return 0;
