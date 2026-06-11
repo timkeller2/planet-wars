@@ -2139,10 +2139,10 @@ export class Game {
         const storedXp = owner ? (owner.storedXpBonus || 0) : 0;
         if (owner && owner.crewExperience && startingXp < storedXp) {
           const diff = storedXp - startingXp;
-          const neededCrewExp = diff * finalMaxHealth * 0.70;
+          const neededCrewExp = diff * finalMaxHealth;
           const crewExpToUse = Math.min(owner.crewExperience, neededCrewExp);
           owner.crewExperience -= crewExpToUse;
-          crewExpXp = crewExpToUse / (finalMaxHealth * 0.70);
+          crewExpXp = crewExpToUse / finalMaxHealth;
         }
         ship.expScore = startingXp + crewExpXp;
 
