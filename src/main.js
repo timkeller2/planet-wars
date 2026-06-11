@@ -73,7 +73,7 @@ function checkMusicRotation() {
 
 function getEffectiveSympathyClient(pl, playerId) {
   let sympathyVal = pl.sympathy?.[playerId] || 0;
-  if (!pl.ownerId && serverState && serverState.ships) {
+  if (serverState && serverState.ships && (!pl.ownerId || pl.ownerId !== playerId)) {
     let isKnown = false;
     if (!serverState.settings || !serverState.settings.fogOfWar) {
       isKnown = true;
@@ -112,7 +112,17 @@ function getEffectiveSympathyClient(pl, playerId) {
       if (pl.isMilitary && (pl.ships || 0) >= (pl.maxShips || 0)) {
         baseRadius *= 1.5;
       }
-      const gr = baseRadius * 0.5;
+      const plOwner = pl.ownerId ? serverState.players.find(o => o.id === pl.ownerId) : null;
+      const isHuman = plOwner && !plOwner.isAI;
+      if (isHuman && pl.focusMode === 'garrison' && (pl.ships || 0) >= (pl.maxShips || 0)) {
+        baseRadius += ((pl.ships || 0) / 2);
+      }
+      const tb = 0.01 * Math.sqrt(plOwner ? (plOwner.techScore || 0) : 0);
+      const eb = 0.01 * Math.sqrt(plOwner ? (plOwner.expScore || 0) : 0);
+      let gr = baseRadius * (1 + tb + eb);
+      if (!pl.ownerId) {
+        gr *= 0.5;
+      }
       const maxDist = gr;
       const maxDistSq = maxDist * maxDist;
       for (const ship of serverState.ships) {
@@ -408,7 +418,35 @@ function getPlanetTradeIncomePerMin(planet) {
   function drawRacialShipHull(ctx, style, cohort, size) {
     ctx.beginPath();
     if (style === 'Federation') {
-      if (cohort === 'cruiser_group') {
+      if (cohort === 'destroyer_group') {
+        // Federation Destroyer (disk/saucer with side engines staggered back)
+        ctx.moveTo(0, -size);
+        ctx.lineTo(size * 0.35, -size * 0.9);
+        ctx.lineTo(size * 0.5, -size * 0.6);
+        ctx.lineTo(size * 0.35, -size * 0.3);
+        ctx.lineTo(size * 0.15, -size * 0.2);
+        ctx.lineTo(size * 0.65, -size * 0.2);
+        ctx.lineTo(size * 0.65, -size * 0.7);
+        ctx.lineTo(size * 0.75, -size * 0.7);
+        ctx.lineTo(size * 0.75, size * 0.1);
+        ctx.lineTo(size * 0.65, size * 0.1);
+        ctx.lineTo(size * 0.65, -size * 0.15);
+        ctx.lineTo(size * 0.12, -size * 0.15);
+        ctx.lineTo(size * 0.12, size * 0.6);
+        ctx.lineTo(0, size * 0.7);
+        ctx.lineTo(-size * 0.12, size * 0.6);
+        ctx.lineTo(-size * 0.12, -size * 0.15);
+        ctx.lineTo(-size * 0.65, -size * 0.15);
+        ctx.lineTo(-size * 0.65, size * 0.1);
+        ctx.lineTo(-size * 0.75, size * 0.1);
+        ctx.lineTo(-size * 0.75, -size * 0.7);
+        ctx.lineTo(-size * 0.65, -size * 0.7);
+        ctx.lineTo(-size * 0.65, -size * 0.2);
+        ctx.lineTo(-size * 0.15, -size * 0.2);
+        ctx.lineTo(-size * 0.35, -size * 0.3);
+        ctx.lineTo(-size * 0.5, -size * 0.6);
+        ctx.lineTo(-size * 0.35, -size * 0.9);
+      } else if (cohort === 'cruiser_group') {
         // Cruiser uses the Scout design
         ctx.moveTo(0, -size);
         ctx.lineTo(size * 0.5, -size * 0.8);
@@ -520,7 +558,21 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.lineTo(-size * 0.6, -size * 0.7);
       }
     } else if (style === 'Romulan') {
-      if (cohort === 'cruiser_group') {
+      if (cohort === 'destroyer_group') {
+        // Romulan Destroyer (sleeker bird-of-prey style)
+        ctx.moveTo(0, -size * 0.9);
+        ctx.lineTo(size * 0.15, -size * 0.75);
+        ctx.lineTo(size * 0.25, -size * 0.4);
+        ctx.lineTo(size * 0.7, -size * 0.1);
+        ctx.lineTo(size * 0.3, size * 0.2);
+        ctx.lineTo(size * 0.2, size * 0.5);
+        ctx.lineTo(0, size * 0.7);
+        ctx.lineTo(-size * 0.2, size * 0.5);
+        ctx.lineTo(-size * 0.3, size * 0.2);
+        ctx.lineTo(-size * 0.7, -size * 0.1);
+        ctx.lineTo(-size * 0.25, -size * 0.4);
+        ctx.lineTo(-size * 0.15, -size * 0.75);
+      } else if (cohort === 'cruiser_group') {
         ctx.moveTo(0, -size * 0.6);
         ctx.lineTo(size * 0.2, -size * 0.55);
         ctx.lineTo(size * 0.35, -size * 0.4);
@@ -608,7 +660,25 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.lineTo(-size * 0.3, -size * 0.4);
       }
     } else if (style === 'Gorn') {
-      if (cohort === 'cruiser_group') {
+      if (cohort === 'destroyer_group') {
+        // Gorn Destroyer (heavy angular spearhead with double nose-gun pods)
+        ctx.moveTo(0, -size * 0.85);
+        ctx.lineTo(size * 0.2, -size * 0.75);
+        ctx.lineTo(size * 0.2, -size * 0.5);
+        ctx.lineTo(size * 0.5, -size * 0.8);
+        ctx.lineTo(size * 0.6, -size * 0.8);
+        ctx.lineTo(size * 0.6, size * 0.3);
+        ctx.lineTo(size * 0.35, size * 0.5);
+        ctx.lineTo(size * 0.25, size * 0.75);
+        ctx.lineTo(0, size * 0.85);
+        ctx.lineTo(-size * 0.25, size * 0.75);
+        ctx.lineTo(-size * 0.35, size * 0.5);
+        ctx.lineTo(-size * 0.6, size * 0.3);
+        ctx.lineTo(-size * 0.6, -size * 0.8);
+        ctx.lineTo(-size * 0.5, -size * 0.8);
+        ctx.lineTo(-size * 0.2, -size * 0.5);
+        ctx.lineTo(-size * 0.2, -size * 0.75);
+      } else if (cohort === 'cruiser_group') {
         ctx.moveTo(-size * 0.4, -size * 0.8);
         ctx.lineTo(size * 0.4, -size * 0.8);
         ctx.lineTo(size * 0.4, -size * 0.5);
@@ -674,7 +744,19 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.lineTo(-size * 0.34, -size * 0.28);
       }
     } else if (style === 'Tholian') {
-      if (cohort === 'cruiser_group') {
+      if (cohort === 'destroyer_group') {
+        // Tholian Destroyer (crystalline facet shard)
+        ctx.moveTo(0, -size * 1.1);
+        ctx.lineTo(size * 0.35, -size * 0.4);
+        ctx.lineTo(size * 0.75, -size * 0.1);
+        ctx.lineTo(size * 0.45, size * 0.35);
+        ctx.lineTo(size * 0.15, size * 0.15);
+        ctx.lineTo(0, size * 0.8);
+        ctx.lineTo(-size * 0.15, size * 0.15);
+        ctx.lineTo(-size * 0.45, size * 0.35);
+        ctx.lineTo(-size * 0.75, -size * 0.1);
+        ctx.lineTo(-size * 0.35, -size * 0.4);
+      } else if (cohort === 'cruiser_group') {
         ctx.moveTo(0, -size * 1.2);
         ctx.lineTo(size * 0.3, -size * 0.65);
         ctx.lineTo(size * 0.8, -size * 0.65);
@@ -736,7 +818,23 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.lineTo(size * 0.2, 0);
       }
     } else if (style === 'Lyran') {
-      if (cohort === 'cruiser_group') {
+      if (cohort === 'destroyer_group') {
+        // Lyran Destroyer (twin-hull catamaran connected by a wing bridge)
+        ctx.moveTo(0, -size * 0.2);
+        ctx.lineTo(size * 0.4, -size * 0.2);
+        ctx.lineTo(size * 0.5, -size * 0.95);
+        ctx.lineTo(size * 0.75, -size * 0.95);
+        ctx.lineTo(size * 0.75, size * 0.8);
+        ctx.lineTo(size * 0.5, size * 0.8);
+        ctx.lineTo(size * 0.4, size * 0.4);
+        ctx.lineTo(0, size * 0.4);
+        ctx.lineTo(-size * 0.4, size * 0.4);
+        ctx.lineTo(-size * 0.5, size * 0.8);
+        ctx.lineTo(-size * 0.75, size * 0.8);
+        ctx.lineTo(-size * 0.75, -size * 0.95);
+        ctx.lineTo(-size * 0.5, -size * 0.95);
+        ctx.lineTo(-size * 0.4, -size * 0.2);
+      } else if (cohort === 'cruiser_group') {
         ctx.moveTo(-size * 0.7, -size * 0.9);
         ctx.lineTo(-size * 0.3, -size * 0.9);
         ctx.lineTo(-size * 0.3, size * 0.2);
@@ -822,7 +920,25 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.lineTo(-size * 0.2, -size * 0.4);
       }
     } else {
-      if (cohort === 'cruiser_group' || cohort === 'battleship_group' || cohort === 'mammoth_group') {
+      if (cohort === 'destroyer_group') {
+        // Klingon Destroyer (bulbous head, short neck, angled engine pods)
+        ctx.moveTo(0, -size);
+        ctx.lineTo(size * 0.35, -size * 0.8);
+        ctx.lineTo(size * 0.2, -size * 0.6);
+        ctx.lineTo(size * 0.12, -size * 0.3);
+        ctx.lineTo(size * 0.25, -size * 0.2);
+        ctx.lineTo(size * 0.55, size * 0.1);
+        ctx.lineTo(size * 0.55, size * 0.5);
+        ctx.lineTo(size * 0.45, size * 0.5);
+        ctx.lineTo(0, size * 0.6);
+        ctx.lineTo(-size * 0.45, size * 0.5);
+        ctx.lineTo(-size * 0.55, size * 0.5);
+        ctx.lineTo(-size * 0.55, size * 0.1);
+        ctx.lineTo(-size * 0.25, -size * 0.2);
+        ctx.lineTo(-size * 0.12, -size * 0.3);
+        ctx.lineTo(-size * 0.2, -size * 0.6);
+        ctx.lineTo(-size * 0.35, -size * 0.8);
+      } else if (cohort === 'cruiser_group' || cohort === 'battleship_group' || cohort === 'mammoth_group') {
         ctx.moveTo(0, -size);
         ctx.lineTo(size / 6, -size * 0.85);
         ctx.lineTo(size / 8, -size * 0.75);
@@ -911,7 +1027,9 @@ function getPlanetTradeIncomePerMin(planet) {
         ctxBtn.translate(canvas.width / 2, canvas.height / 2);
         
         let cohort = 'scout_group';
-        if (classType === 'cruiser' || classType === 'battlecruiser') {
+        if (classType === 'destroyer') {
+          cohort = 'destroyer_group';
+        } else if (classType === 'cruiser' || classType === 'battlecruiser') {
           cohort = 'cruiser_group';
         } else if (classType === 'battleship' || classType === 'titan') {
           cohort = 'battleship_group';
@@ -1588,6 +1706,25 @@ function getPlanetTradeIncomePerMin(planet) {
 
         titleHTML = `<span style="color: ${hsOwner ? hsOwner.color : '#0ff'}">${(hsOwner ? hsOwner.name : 'Unknown')}'s ${raceStr ? raceStr + ' ' : ''}${hs.name || shipClass}</span>`;
         lines.push({ label: 'Hull Integrity', value: `${Math.floor(hs.health)} / ${hs.maxHealth}`, color: '#fff' });
+        if (hs.isCruiser) {
+          const totalUpgrades = (hs.sensorarrays || 0) +
+                                (hs.labs || 0) +
+                                (hs.armor || 0) +
+                                (hs.shields || 0) +
+                                (hs.engine || 0) +
+                                (hs.munitions || 0) +
+                                (hs.targeting || 0) +
+                                (hs.damagecontrol || 0) +
+                                (hs.fuel_tanker || 0) +
+                                (hs.diplomat || 0) +
+                                (hs.marines || 0) +
+                                (hs.command || 0);
+          const maxTotalUpgrades = Math.floor((hs.maxHealth || 0) / 5);
+          const upgradesRemaining = maxTotalUpgrades - totalUpgrades;
+          if (upgradesRemaining > 0) {
+            lines.push({ label: 'Upgrades Remaining', value: `${upgradesRemaining}`, color: '#00e5ff' });
+          }
+        }
 
         let fuelLabel = hs.engine > 0 ? `Fuel (${hs.engine})` : 'Fuel';
         if (hs.specialfuel && hs.specialfuel > 0) {
@@ -8435,6 +8572,25 @@ function getPlanetTradeIncomePerMin(planet) {
             lines.push({ label: headerLabel, value: '', color: hsOwner.color || '#0ff', isHeader: true });
 
             lines.push({ label: 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });
+            if (hs.isCruiser) {
+              const totalUpgrades = (hs.sensorarrays || 0) +
+                                    (hs.labs || 0) +
+                                    (hs.armor || 0) +
+                                    (hs.shields || 0) +
+                                    (hs.engine || 0) +
+                                    (hs.munitions || 0) +
+                                    (hs.targeting || 0) +
+                                    (hs.damagecontrol || 0) +
+                                    (hs.fuel_tanker || 0) +
+                                    (hs.diplomat || 0) +
+                                    (hs.marines || 0) +
+                                    (hs.command || 0);
+              const maxTotalUpgrades = Math.floor((hs.maxHealth || 0) / 5);
+              const upgradesRemaining = maxTotalUpgrades - totalUpgrades;
+              if (upgradesRemaining > 0) {
+                lines.push({ label: 'Upgrades Remaining', value: '' + upgradesRemaining, color: '#00e5ff' });
+              }
+            }
 
             let fuelLabel = hs.engine > 0 ? `Fuel (${hs.engine})` : 'Fuel';
             if (hs.specialfuel && hs.specialfuel > 0) {
@@ -9714,7 +9870,9 @@ function getPlanetTradeIncomePerMin(planet) {
           let style = s.cruiserStyle || (ownerPlayer ? ownerPlayer.cruiserStyle : 'Klingon');
 
           let cohort = 'scout_group';
-          if (s.classType === 'cruiser' || s.classType === 'battlecruiser') {
+          if (s.classType === 'destroyer') {
+            cohort = 'destroyer_group';
+          } else if (s.classType === 'cruiser' || s.classType === 'battlecruiser') {
             cohort = 'cruiser_group';
           } else if (s.classType === 'battleship' || s.classType === 'titan') {
             cohort = 'battleship_group';

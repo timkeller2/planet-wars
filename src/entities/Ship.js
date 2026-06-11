@@ -327,6 +327,36 @@ export class Ship {
     return range;
   }
 
+  getEffectiveSpeedForOrder(isWarp, speedModifier, game = null) {
+    const speedTechBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
+    let effectiveSpeed = this.speed * (1 + speedTechBonus);
+    let engineBonus = (this.engine || 0) * 3;
+    effectiveSpeed += engineBonus;
+    effectiveSpeed += (this.commandPoints || 0) * 0.5;
+    if (isWarp) {
+      effectiveSpeed += this.warpBonus || 0;
+    }
+    if (this.fuel_tanker && this.fuel_tanker > 0) {
+      effectiveSpeed = Math.max(5, effectiveSpeed - this.fuel_tanker * 3);
+    }
+    if (this.specialfuel && this.specialfuel > 0) {
+      effectiveSpeed += 10;
+    }
+    const finalSpeedModifier = speedModifier !== null ? speedModifier : this.speedModifier;
+    if (finalSpeedModifier) {
+      effectiveSpeed *= finalSpeedModifier;
+    }
+    if (this.owner && (this.owner.isMonster || this.owner.id === 'monsters')) {
+      if (this.isCruiser) {
+        effectiveSpeed *= 0.5;
+      }
+    }
+    if (this.maxHealth > 0 && this.fuel <= 0) {
+      effectiveSpeed *= 0.25;
+    }
+    return effectiveSpeed;
+  }
+
   handlePlayerMoveOrder(destination, game) {
     if (!this.isCruiser) return;
     this.flightTime = 0;
@@ -4953,6 +4983,10 @@ export class Ship {
     }
     if (this.maxHealth > 0 && this.fuel <= 0) {
       effectiveSpeed *= 0.25;
+    }
+
+    if (this.groupSpeedLimit !== undefined && this.groupSpeedLimit !== null) {
+      effectiveSpeed = Math.min(effectiveSpeed, this.groupSpeedLimit);
     }
 
     if (this.targetPlanet && distance < this.targetPlanet.radius && this.maxHealth === 0) {

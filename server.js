@@ -703,6 +703,7 @@ async function bootstrap() {
       for (const id of shipIds) {
         const ship = game.ships.find(s => s.id === id);
         if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+          ship.groupSpeedLimit = null;
           if (isShift) {
             if (!ship.orderQueue) ship.orderQueue = [];
             ship.orderQueue.push({

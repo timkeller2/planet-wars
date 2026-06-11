@@ -6,7 +6,7 @@ import { AIController } from './systems/AIController.js';
 
 export function getEffectiveSympathy(planet, playerId, allShips, player = null, game = null) {
   let sympathyVal = planet.sympathy ? (planet.sympathy[playerId] || 0) : 0;
-  if (!planet.owner && allShips) {
+  if (allShips && (!planet.owner || planet.owner.id !== playerId)) {
     let isKnown = false;
     if (game && (!game.settings || !game.settings.fogOfWar)) {
       isKnown = true;
@@ -2217,6 +2217,10 @@ export class Game {
     const cruisers = validShips.filter(s => s.isCruiser);
     const numCruisers = cruisers.length;
 
+    for (const ship of cruisers) {
+      ship.groupSpeedLimit = null;
+    }
+
     let anchor = null;
     if (numCruisers > 0) {
       let minDist = Infinity;
@@ -2243,6 +2247,17 @@ export class Game {
           }
         }
         if (dispersedSpace) break;
+      }
+    }
+
+    if (numCruisers > 1 && !dispersedSpace) {
+      let slowestSpeed = Infinity;
+      for (const ship of cruisers) {
+        const speed = ship.getEffectiveSpeedForOrder ? ship.getEffectiveSpeedForOrder(isWarp, speedModifier, this) : ship.speed;
+        if (speed < slowestSpeed) slowestSpeed = speed;
+      }
+      for (const ship of cruisers) {
+        ship.groupSpeedLimit = slowestSpeed;
       }
     }
 
@@ -2387,6 +2402,10 @@ export class Game {
     const cruisers = validShips.filter(s => s.isCruiser);
     const numCruisers = cruisers.length;
 
+    for (const ship of cruisers) {
+      ship.groupSpeedLimit = null;
+    }
+
     let anchor = null;
     if (numCruisers > 0) {
       let minDist = Infinity;
@@ -2413,6 +2432,17 @@ export class Game {
           }
         }
         if (dispersedPlanet) break;
+      }
+    }
+
+    if (numCruisers > 1 && !dispersedPlanet) {
+      let slowestSpeed = Infinity;
+      for (const ship of cruisers) {
+        const speed = ship.getEffectiveSpeedForOrder ? ship.getEffectiveSpeedForOrder(isWarp, speedModifier, this) : ship.speed;
+        if (speed < slowestSpeed) slowestSpeed = speed;
+      }
+      for (const ship of cruisers) {
+        ship.groupSpeedLimit = slowestSpeed;
       }
     }
 

@@ -553,11 +553,24 @@
             <span>Scout / Corvette</span>
             <span class="group-tag">Default Class</span>
           </div>
-          <p style="font-size: 11.5px; color: #8892b0; line-height: 1.4;">Light reconnaissance vessels, interceptors, and destroyers. Compact and fast silhouettes.</p>
+          <p style="font-size: 11.5px; color: #8892b0; line-height: 1.4;">Light reconnaissance vessels, interceptors, and corvettes. Compact and fast silhouettes.</p>
           <div class="spec-grid">
-            <div class="spec-item"><span class="spec-label">Hull HP</span><span class="spec-value">15 - 25</span></div>
-            <div class="spec-item"><span class="spec-label">Metal Cost</span><span class="spec-value">50 - 100</span></div>
-            <div class="spec-item"><span class="spec-label">CP Load</span><span class="spec-value">2 - 4</span></div>
+            <div class="spec-item"><span class="spec-label">Hull HP</span><span class="spec-value">15</span></div>
+            <div class="spec-item"><span class="spec-label">Metal Cost</span><span class="spec-value">50</span></div>
+            <div class="spec-item"><span class="spec-label">CP Load</span><span class="spec-value">2</span></div>
+          </div>
+        </div>
+
+        <div class="ship-class-card" data-class="destroyer">
+          <div class="card-title">
+            <span>Destroyer</span>
+            <span class="group-tag">Destroyer Class</span>
+          </div>
+          <p style="font-size: 11.5px; color: #8892b0; line-height: 1.4;">Medium screen vessels, optimized for local space defense and fleet shielding. Agile vector geometry.</p>
+          <div class="spec-grid">
+            <div class="spec-item"><span class="spec-label">Hull HP</span><span class="spec-value">25</span></div>
+            <div class="spec-item"><span class="spec-label">Metal Cost</span><span class="spec-value">100</span></div>
+            <div class="spec-item"><span class="spec-label">CP Load</span><span class="spec-value">4</span></div>
           </div>
         </div>
 
@@ -710,6 +723,68 @@ ctx.closePath();`,
             ctx.lineTo(-size * 0.15, -size * 0.2);
             ctx.lineTo(-size * 0.6, -size * 0.3);
             ctx.lineTo(-size * 0.6, -size * 0.7);
+            ctx.closePath();
+          }
+        },
+        destroyer: {
+          vertexCount: 28,
+          snippet: `// Federation Destroyer Class
+ctx.beginPath();
+ctx.moveTo(0, -size);
+ctx.lineTo(size * 0.35, -size * 0.9);
+ctx.lineTo(size * 0.5, -size * 0.6);
+ctx.lineTo(size * 0.35, -size * 0.3);
+ctx.lineTo(size * 0.15, -size * 0.2);
+ctx.lineTo(size * 0.65, -size * 0.2);
+ctx.lineTo(size * 0.65, -size * 0.7);
+ctx.lineTo(size * 0.75, -size * 0.7);
+ctx.lineTo(size * 0.75, size * 0.1);
+ctx.lineTo(size * 0.65, size * 0.1);
+ctx.lineTo(size * 0.65, -size * 0.15);
+ctx.lineTo(size * 0.12, -size * 0.15);
+ctx.lineTo(size * 0.12, size * 0.6);
+ctx.lineTo(0, size * 0.7);
+ctx.lineTo(-size * 0.12, size * 0.6);
+ctx.lineTo(-size * 0.12, -size * 0.15);
+ctx.lineTo(-size * 0.65, -size * 0.15);
+ctx.lineTo(-size * 0.65, size * 0.1);
+ctx.lineTo(-size * 0.75, size * 0.1);
+ctx.lineTo(-size * 0.75, -size * 0.7);
+ctx.lineTo(-size * 0.65, -size * 0.7);
+ctx.lineTo(-size * 0.65, -size * 0.2);
+ctx.lineTo(-size * 0.15, -size * 0.2);
+ctx.lineTo(-size * 0.35, -size * 0.3);
+ctx.lineTo(-size * 0.5, -size * 0.6);
+ctx.lineTo(-size * 0.35, -size * 0.9);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.lineTo(size * 0.35, -size * 0.9);
+            ctx.lineTo(size * 0.5, -size * 0.6);
+            ctx.lineTo(size * 0.35, -size * 0.3);
+            ctx.lineTo(size * 0.15, -size * 0.2);
+            ctx.lineTo(size * 0.65, -size * 0.2);
+            ctx.lineTo(size * 0.65, -size * 0.7);
+            ctx.lineTo(size * 0.75, -size * 0.7);
+            ctx.lineTo(size * 0.75, size * 0.1);
+            ctx.lineTo(size * 0.65, size * 0.1);
+            ctx.lineTo(size * 0.65, -size * 0.15);
+            ctx.lineTo(size * 0.12, -size * 0.15);
+            ctx.lineTo(size * 0.12, size * 0.6);
+            ctx.lineTo(0, size * 0.7);
+            ctx.lineTo(-size * 0.12, size * 0.6);
+            ctx.lineTo(-size * 0.12, -size * 0.15);
+            ctx.lineTo(-size * 0.65, -size * 0.15);
+            ctx.lineTo(-size * 0.65, size * 0.1);
+            ctx.lineTo(-size * 0.75, size * 0.1);
+            ctx.lineTo(-size * 0.75, -size * 0.7);
+            ctx.lineTo(-size * 0.65, -size * 0.7);
+            ctx.lineTo(-size * 0.65, -size * 0.2);
+            ctx.lineTo(-size * 0.15, -size * 0.2);
+            ctx.lineTo(-size * 0.35, -size * 0.3);
+            ctx.lineTo(-size * 0.5, -size * 0.6);
+            ctx.lineTo(-size * 0.35, -size * 0.9);
             ctx.closePath();
           }
         },
@@ -982,6 +1057,40 @@ ctx.closePath();`,
             ctx.closePath();
           }
         },
+        destroyer: {
+          vertexCount: 13,
+          snippet: `// Romulan Destroyer Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 0.9);
+ctx.lineTo(size * 0.15, -size * 0.75);
+ctx.lineTo(size * 0.25, -size * 0.4);
+ctx.lineTo(size * 0.7, -size * 0.1);
+ctx.lineTo(size * 0.3, size * 0.2);
+ctx.lineTo(size * 0.2, size * 0.5);
+ctx.lineTo(0, size * 0.7);
+ctx.lineTo(-size * 0.2, size * 0.5);
+ctx.lineTo(-size * 0.3, size * 0.2);
+ctx.lineTo(-size * 0.7, -size * 0.1);
+ctx.lineTo(-size * 0.25, -size * 0.4);
+ctx.lineTo(-size * 0.15, -size * 0.75);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 0.9);
+            ctx.lineTo(size * 0.15, -size * 0.75);
+            ctx.lineTo(size * 0.25, -size * 0.4);
+            ctx.lineTo(size * 0.7, -size * 0.1);
+            ctx.lineTo(size * 0.3, size * 0.2);
+            ctx.lineTo(size * 0.2, size * 0.5);
+            ctx.lineTo(0, size * 0.7);
+            ctx.lineTo(-size * 0.2, size * 0.5);
+            ctx.lineTo(-size * 0.3, size * 0.2);
+            ctx.lineTo(-size * 0.7, -size * 0.1);
+            ctx.lineTo(-size * 0.25, -size * 0.4);
+            ctx.lineTo(-size * 0.15, -size * 0.75);
+            ctx.closePath();
+          }
+        },
         cruiser: {
           vertexCount: 26,
           snippet: `// Romulan Cruiser Class
@@ -1186,6 +1295,48 @@ ctx.closePath();`,
             ctx.lineTo(-size / 10, -size * 0.2);
             ctx.lineTo(-size / 8, -size * 0.75);
             ctx.lineTo(-size / 6, -size * 0.85);
+            ctx.closePath();
+          }
+        },
+        destroyer: {
+          vertexCount: 17,
+          snippet: `// Klingon Destroyer Class
+ctx.beginPath();
+ctx.moveTo(0, -size);
+ctx.lineTo(size * 0.35, -size * 0.8);
+ctx.lineTo(size * 0.2, -size * 0.6);
+ctx.lineTo(size * 0.12, -size * 0.3);
+ctx.lineTo(size * 0.25, -size * 0.2);
+ctx.lineTo(size * 0.55, size * 0.1);
+ctx.lineTo(size * 0.55, size * 0.5);
+ctx.lineTo(size * 0.45, size * 0.5);
+ctx.lineTo(0, size * 0.6);
+ctx.lineTo(-size * 0.45, size * 0.5);
+ctx.lineTo(-size * 0.55, size * 0.5);
+ctx.lineTo(-size * 0.55, size * 0.1);
+ctx.lineTo(-size * 0.25, -size * 0.2);
+ctx.lineTo(-size * 0.12, -size * 0.3);
+ctx.lineTo(-size * 0.2, -size * 0.6);
+ctx.lineTo(-size * 0.35, -size * 0.8);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.lineTo(size * 0.35, -size * 0.8);
+            ctx.lineTo(size * 0.2, -size * 0.6);
+            ctx.lineTo(size * 0.12, -size * 0.3);
+            ctx.lineTo(size * 0.25, -size * 0.2);
+            ctx.lineTo(size * 0.55, size * 0.1);
+            ctx.lineTo(size * 0.55, size * 0.5);
+            ctx.lineTo(size * 0.45, size * 0.5);
+            ctx.lineTo(0, size * 0.6);
+            ctx.lineTo(-size * 0.45, size * 0.5);
+            ctx.lineTo(-size * 0.55, size * 0.5);
+            ctx.lineTo(-size * 0.55, size * 0.1);
+            ctx.lineTo(-size * 0.25, -size * 0.2);
+            ctx.lineTo(-size * 0.12, -size * 0.3);
+            ctx.lineTo(-size * 0.2, -size * 0.6);
+            ctx.lineTo(-size * 0.35, -size * 0.8);
             ctx.closePath();
           }
         },
@@ -1440,6 +1591,48 @@ ctx.closePath();`,
             ctx.closePath();
           }
         },
+        destroyer: {
+          vertexCount: 17,
+          snippet: `// Gorn Destroyer Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 0.85);
+ctx.lineTo(size * 0.2, -size * 0.75);
+ctx.lineTo(size * 0.2, -size * 0.5);
+ctx.lineTo(size * 0.5, -size * 0.8);
+ctx.lineTo(size * 0.6, -size * 0.8);
+ctx.lineTo(size * 0.6, size * 0.3);
+ctx.lineTo(size * 0.35, size * 0.5);
+ctx.lineTo(size * 0.25, size * 0.75);
+ctx.lineTo(0, size * 0.85);
+ctx.lineTo(-size * 0.25, size * 0.75);
+ctx.lineTo(-size * 0.35, size * 0.5);
+ctx.lineTo(-size * 0.6, size * 0.3);
+ctx.lineTo(-size * 0.6, -size * 0.8);
+ctx.lineTo(-size * 0.5, -size * 0.8);
+ctx.lineTo(-size * 0.2, -size * 0.5);
+ctx.lineTo(-size * 0.2, -size * 0.75);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 0.85);
+            ctx.lineTo(size * 0.2, -size * 0.75);
+            ctx.lineTo(size * 0.2, -size * 0.5);
+            ctx.lineTo(size * 0.5, -size * 0.8);
+            ctx.lineTo(size * 0.6, -size * 0.8);
+            ctx.lineTo(size * 0.6, size * 0.3);
+            ctx.lineTo(size * 0.35, size * 0.5);
+            ctx.lineTo(size * 0.25, size * 0.75);
+            ctx.lineTo(0, size * 0.85);
+            ctx.lineTo(-size * 0.25, size * 0.75);
+            ctx.lineTo(-size * 0.35, size * 0.5);
+            ctx.lineTo(-size * 0.6, size * 0.3);
+            ctx.lineTo(-size * 0.6, -size * 0.8);
+            ctx.lineTo(-size * 0.5, -size * 0.8);
+            ctx.lineTo(-size * 0.2, -size * 0.5);
+            ctx.lineTo(-size * 0.2, -size * 0.75);
+            ctx.closePath();
+          }
+        },
         cruiser: {
           vertexCount: 16,
           snippet: `// Gorn Cruiser Class
@@ -1601,6 +1794,36 @@ ctx.closePath();`,
             ctx.closePath();
           }
         },
+        destroyer: {
+          vertexCount: 11,
+          snippet: `// Tholian Destroyer Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 1.1);
+ctx.lineTo(size * 0.35, -size * 0.4);
+ctx.lineTo(size * 0.75, -size * 0.1);
+ctx.lineTo(size * 0.45, size * 0.35);
+ctx.lineTo(size * 0.15, size * 0.15);
+ctx.lineTo(0, size * 0.8);
+ctx.lineTo(-size * 0.15, size * 0.15);
+ctx.lineTo(-size * 0.45, size * 0.35);
+ctx.lineTo(-size * 0.75, -size * 0.1);
+ctx.lineTo(-size * 0.35, -size * 0.4);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 1.1);
+            ctx.lineTo(size * 0.35, -size * 0.4);
+            ctx.lineTo(size * 0.75, -size * 0.1);
+            ctx.lineTo(size * 0.45, size * 0.35);
+            ctx.lineTo(size * 0.15, size * 0.15);
+            ctx.lineTo(0, size * 0.8);
+            ctx.lineTo(-size * 0.15, size * 0.15);
+            ctx.lineTo(-size * 0.45, size * 0.35);
+            ctx.lineTo(-size * 0.75, -size * 0.1);
+            ctx.lineTo(-size * 0.35, -size * 0.4);
+            ctx.closePath();
+          }
+        },
         cruiser: {
           vertexCount: 12,
           snippet: `// Tholian Cruiser Class
@@ -1751,6 +1974,44 @@ ctx.closePath();`,
             ctx.lineTo(-size * 0.4, size * 0.6);
             ctx.lineTo(-size * 0.9, size * 0.6);
             ctx.lineTo(-size * 0.2, -size * 0.4);
+            ctx.closePath();
+          }
+        },
+        destroyer: {
+          vertexCount: 15,
+          snippet: `// Lyran Destroyer Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 0.2);
+ctx.lineTo(size * 0.4, -size * 0.2);
+ctx.lineTo(size * 0.5, -size * 0.95);
+ctx.lineTo(size * 0.75, -size * 0.95);
+ctx.lineTo(size * 0.75, size * 0.8);
+ctx.lineTo(size * 0.5, size * 0.8);
+ctx.lineTo(size * 0.4, size * 0.4);
+ctx.lineTo(0, size * 0.4);
+ctx.lineTo(-size * 0.4, size * 0.4);
+ctx.lineTo(-size * 0.5, size * 0.8);
+ctx.lineTo(-size * 0.75, size * 0.8);
+ctx.lineTo(-size * 0.75, -size * 0.95);
+ctx.lineTo(-size * 0.5, -size * 0.95);
+ctx.lineTo(-size * 0.4, -size * 0.2);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 0.2);
+            ctx.lineTo(size * 0.4, -size * 0.2);
+            ctx.lineTo(size * 0.5, -size * 0.95);
+            ctx.lineTo(size * 0.75, -size * 0.95);
+            ctx.lineTo(size * 0.75, size * 0.8);
+            ctx.lineTo(size * 0.5, size * 0.8);
+            ctx.lineTo(size * 0.4, size * 0.4);
+            ctx.lineTo(0, size * 0.4);
+            ctx.lineTo(-size * 0.4, size * 0.4);
+            ctx.lineTo(-size * 0.5, size * 0.8);
+            ctx.lineTo(-size * 0.75, size * 0.8);
+            ctx.lineTo(-size * 0.75, -size * 0.95);
+            ctx.lineTo(-size * 0.5, -size * 0.95);
+            ctx.lineTo(-size * 0.4, -size * 0.2);
             ctx.closePath();
           }
         },
