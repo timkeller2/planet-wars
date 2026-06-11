@@ -6248,6 +6248,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
+    const actionButtonsLeft = document.getElementById('action-buttons-left');
     const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-cruiser-bomb', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-cruiser-research', 'btn-dismantle'];
     const upButtonsMap = {
       'btn-up-sensorarray': 'sensorarrays',
