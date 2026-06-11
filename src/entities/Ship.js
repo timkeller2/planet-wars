@@ -4907,6 +4907,37 @@ export class Ship {
         if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
           currentHazards.add(h.id);
 
+          if (h.type === 'storm' || h.type === 'nebula' || h.type === 'minefield') {
+            if (!this.insideHazards.has(h.id)) {
+              if (this.isWarp) {
+                const dmg = Math.floor(Math.random() * 6) + 1;
+                if (this.maxHealth > 0) {
+                  // Cruiser
+                  this.health -= dmg;
+                  if (this.health <= 0) {
+                    this.health = 0;
+                    this.active = false;
+                  }
+                } else {
+                  // Standard fleet
+                  this.count = Math.max(0, this.count - dmg);
+                  if (this.count <= 0) {
+                    this.active = false;
+                  }
+                }
+                this.isWarp = false;
+                effectiveSpeed = Math.max(0, effectiveSpeed - (this.warpBonus || 0));
+                if (explosions) {
+                  explosions.push({ x: this.x, y: this.y, color: '#ff3300', age: 0, isMassive: true });
+                }
+                if (!this.active) {
+                  this.insideHazards = currentHazards;
+                  return;
+                }
+              }
+            }
+          }
+
           if (h.type === 'nebula') {
             const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
             const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
