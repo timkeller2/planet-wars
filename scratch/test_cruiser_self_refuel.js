@@ -12,80 +12,69 @@ const owner = new Player('p1', '#0ff', false);
 game.allPlayers = [owner];
 game.planets = [];
 
-// Create a Cruiser for player 'p1'
+// Create a Cruiser for player 'p1' (needs fuel)
 const cruiser = new Ship('c1', 500, 500, null, owner, 500, 500);
 cruiser.isCruiser = true;
-
-// Setup cruiser upgrades
 cruiser.maxHealth = 25;
 cruiser.health = 25;
 cruiser.fuel_tanker = 1; // Gives +5 fuel capacity, +15 max supplies
 cruiser.maxsupplies = 15;
-cruiser.supplies = 10; // Start with 10 supplies loaded
-
-// Setup radar range
+cruiser.supplies = 10; // Has supplies, but shouldn't use them for self-refueling
 cruiser.cruiserRadarRange = () => 500;
 
+// Test case 1: Verify self-refueling is BLOCKED
+cruiser.fuel = 5.0; // Needs fuel (max is 10)
 game.ships = [cruiser];
-// Mock getShipsInRadiusSq
-game.ships.getShipsInRadiusSq = (x, y, radiusSq) => {
-  return [cruiser];
-};
-
-const maxFuel = cruiser.getMaxFuel();
-console.log(`Max Fuel: ${maxFuel}`); // Should be 10 (25/5 + 5)
-console.log(`Max Supplies: ${cruiser.maxsupplies}`); // Should be 15
-cruiser.fuel = 10;
-
-// Test case 1: Fuel is at 9.0 (only 1.0 lower than max). It should NOT resupply.
-cruiser.fuel = 9.0;
-console.log(`\nSetting fuel to 9.0 (max - 1)`);
 cruiser.update(1000, game.ships, [], game.planets, [], [], 1000, game);
-console.log(`After 1s update:`);
-console.log(`- Fuel: ${cruiser.fuel.toFixed(3)}`);
-console.log(`- Supplies: ${cruiser.supplies}`);
-console.log(`- isSelfRefueling: ${cruiser.isSelfRefueling}`);
 
-const pass1 = cruiser.fuel < 9.0 && cruiser.supplies === 10;
-console.log(`-> Test Case 1 (No Refuel when fuel > max-2): ${pass1 ? "PASSED" : "FAILED"}`);
+console.log("Test Case 1: Self-Refueling Block Check");
+console.log(`- Cruiser supplies: ${cruiser.supplies}`);
+console.log(`- Cruiser isSelfRefueling: ${cruiser.isSelfRefueling}`);
+console.log(`- Cruiser fuel: ${cruiser.fuel.toFixed(3)}`);
 
-// Test case 2: Fuel is at 7.9 (at least 2 lower than max). It should start resupplying.
-cruiser.fuel = 7.9;
-const initialSupplies = cruiser.supplies;
-console.log(`\nSetting fuel to 7.9 (max - 2.1)`);
-cruiser.update(1000, game.ships, [], game.planets, [], [], 1000, game);
-console.log(`After 1s update:`);
-console.log(`- Fuel: ${cruiser.fuel.toFixed(3)}`);
-console.log(`- Supplies: ${cruiser.supplies.toFixed(3)}`);
-console.log(`- isSelfRefueling: ${cruiser.isSelfRefueling}`);
-
-const pass2 = cruiser.fuel > 7.9 && cruiser.supplies < initialSupplies && cruiser.isSelfRefueling === true;
-console.log(`-> Test Case 2 (Refuel triggers when fuel <= max-2): ${pass2 ? "PASSED" : "FAILED"}`);
-
-// Test case 3: Run update loop until it fills up to max, and verify hysteresis states.
-console.log(`\nRefueling until full (monitoring state)...`);
-let steps = 0;
-let wasRefueling = true;
-while (cruiser.fuel < maxFuel && steps < 100) {
-  cruiser.update(1000, game.ships, [], game.planets, [], [], 1000, game);
-  steps++;
-  if (cruiser.fuel < maxFuel) {
-    if (cruiser.isSelfRefueling !== true) {
-      wasRefueling = false;
-    }
-  }
+if (cruiser.supplies === 10 && cruiser.isSelfRefueling === false && cruiser.fuel < 5.0) {
+  console.log("-> PASSED: Cruiser did not use its own supplies for self-refueling");
+} else {
+  console.log("-> FAILED");
+  process.exit(1);
 }
 
-console.log(`Reached Max Fuel: ${cruiser.fuel.toFixed(3)} (after ${steps} steps)`);
-console.log(`- isSelfRefueling at Max: ${cruiser.isSelfRefueling}`);
-console.log(`- Supplies remaining: ${cruiser.supplies.toFixed(3)}`);
+// Test case 2: Verify refueling from ANOTHER supply ship works
+console.log("\nTest Case 2: Refueling from Another Supply Ship");
 
-// One more update step should start draining and keep isSelfRefueling = false
-const fuelAtMax = cruiser.fuel;
+// Create another cruiser with supplies
+const otherCruiser = new Ship('c2', 510, 500, null, owner, 510, 500);
+otherCruiser.isCruiser = true;
+otherCruiser.maxHealth = 25;
+otherCruiser.health = 25;
+otherCruiser.fuel_tanker = 1;
+otherCruiser.maxsupplies = 15;
+otherCruiser.supplies = 10; // Other cruiser has supplies
+otherCruiser.cruiserRadarRange = () => 500;
+
+game.ships = [cruiser, otherCruiser];
+
+// Set cruiser fuel low so it wants fuel
+cruiser.fuel = 5.0;
+const initialOtherSupplies = otherCruiser.supplies;
+
+// Run game updates to let otherCruiser refuel cruiser
+// Ship.js update: fuel is consumed by default cruiser update (1.0/60 per second)
+// Then it should refuel using supplies from otherCruiser.
 cruiser.update(1000, game.ships, [], game.planets, [], [], 1000, game);
-console.log(`After one more step (draining phase):`);
-console.log(`- Fuel: ${cruiser.fuel.toFixed(3)} (expected < ${fuelAtMax.toFixed(3)})`);
-console.log(`- isSelfRefueling: ${cruiser.isSelfRefueling}`);
 
-const pass3 = wasRefueling && cruiser.fuel < fuelAtMax && cruiser.isSelfRefueling === false;
-console.log(`-> Test Case 3 (Hysteresis and refueling stop at max): ${pass3 ? "PASSED" : "FAILED"}`);
+console.log(`- Cruiser fuel after update: ${cruiser.fuel.toFixed(3)}`);
+console.log(`- Other Cruiser supplies after update: ${otherCruiser.supplies.toFixed(3)}`);
+
+// In 1 second:
+// Cruiser fuel consumption: 1/60 = 0.0167
+// Refueling rate: 1.0 fuel per second, consuming supplies = 1.0 * costMultiplier
+// Since fuel is low, it should get refueled, and otherCruiser's supplies should decrease.
+if (cruiser.fuel > 5.0 && otherCruiser.supplies < initialOtherSupplies) {
+  console.log("-> PASSED: Cruiser successfully refueled using other cruiser's supplies");
+} else {
+  console.log("-> FAILED");
+  process.exit(1);
+}
+
+console.log("\nAll cruiser self-refueling restriction checks passed!");

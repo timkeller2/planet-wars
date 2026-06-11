@@ -1,12 +1,9 @@
 const SHIP_CLASSES = {
   corvette: { name: 'Corvette', key: 's', hp: 15, costShips: 50, costCap: 2 },
-  frigate: { name: 'Frigate', key: 'f', hp: 20, costShips: 75, costCap: 3 },
   destroyer: { name: 'Destroyer', key: 'd', hp: 25, costShips: 100, costCap: 4 },
-  cruiser: { name: 'Cruiser', key: 'c', hp: 30, costShips: 150, costCap: 6 },
   battlecruiser: { name: 'Battlecruiser', key: 'a', hp: 35, costShips: 175, costCap: 7 },
-  battleship: { name: 'Battleship', key: 'b', hp: 40, costShips: 225, costCap: 9 },
   titan: { name: 'Titan', key: 't', hp: 45, costShips: 300, costCap: 12 },
-  mammoth: { name: 'Mammoth', key: 'm', hp: 50, costShips: 400, costCap: 16 }
+  mammoth: { name: 'Mammoth', key: 'm', hp: 55, costShips: 500, costCap: 20 }
 };
 
 export class Ship {
@@ -79,6 +76,7 @@ export class Ship {
     this.labs = 0;
     this.accumulatedTech = 0;
     this.beakerIncreaseEvent = 0;
+    this.creditsGainedEvent = 0;
     this.sensorarrays = 0;
     this.armor = 0;
     this.maxArmor = 0;
@@ -245,7 +243,7 @@ export class Ship {
     return { startX, startY };
   }
 
-  findNearbySupplyShip(allShips) {
+  findNearbySupplyShip(allShips, excludeSelf = false) {
     if (!allShips || !this.owner) return null;
     let closestSupplyShip = null;
     let closestDistSq = Infinity;
@@ -253,6 +251,7 @@ export class Ship {
     const radarRangeSq = radarRange * radarRange;
 
     for (const other of allShips) {
+      if (excludeSelf && other === this) continue;
       if (other.active && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.supplies || 0) > 0) {
         const dx = other.x - this.x;
         const dy = other.y - this.y;
@@ -4212,7 +4211,7 @@ export class Ship {
         }
       }
 
-      let supplyShipForFuel = this.findNearbySupplyShip(allShips);
+      let supplyShipForFuel = this.findNearbySupplyShip(allShips, true);
       if (supplyShipForFuel === this) {
         if ((this.fuel || 0) <= this.getMaxFuel() - 2) {
           this.isSelfRefueling = true;
@@ -4936,8 +4935,8 @@ export class Ship {
             const sRed = Math.sqrt(this.expScore || 0);
             const slowPct = Math.max(0, h.intensity - sRed - (eRed + tRed) / 2 - knowledge);
             effectiveSpeed *= Math.max(0.1, 1 - slowPct / 100);
-          } else {
-            // Ion Storm or Minefield speed reduction
+          } else if (h.type === 'storm') {
+            // Ion Storm speed reduction
             const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
             const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
             const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;

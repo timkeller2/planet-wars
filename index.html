@@ -279,13 +279,10 @@
             <button id="btn-focus-terraforming" class="cyber-btn action-btn-icon" style="display: none;" title="Terraforming Mode (T)"><span class="btn-icon">🌱</span>T<span class="btn-cost"></span></button>
             <!-- Capital Ship Build Mode Buttons -->
             <button id="btn-build-corvette" class="cyber-btn action-btn-icon cruiser-build-btn" style="display: none;" title="Build Corvette (S)"><span class="btn-icon">🛸</span>Corvette (S)<span class="btn-cost">50/2</span></button>
-            <button id="btn-build-frigate" class="cyber-btn action-btn-icon cruiser-build-btn" style="display: none;" title="Build Frigate (F)"><span class="btn-icon">🛸</span>Frigate (F)<span class="btn-cost">75/3</span></button>
             <button id="btn-build-destroyer" class="cyber-btn action-btn-icon cruiser-build-btn" style="display: none;" title="Build Destroyer (D)"><span class="btn-icon">🛸</span>Destroyer (D)<span class="btn-cost">100/4</span></button>
-            <button id="btn-build-cruiser" class="cyber-btn action-btn-icon cruiser-build-btn" style="display: none;" title="Build Cruiser (C)"><span class="btn-icon">🛸</span>Cruiser (C)<span class="btn-cost">150/6</span></button>
             <button id="btn-build-battlecruiser" class="cyber-btn action-btn-icon cruiser-build-btn" style="display: none;" title="Build Battlecruiser (A)"><span class="btn-icon">🛸</span>Battlecr. (A)<span class="btn-cost">175/7</span></button>
-            <button id="btn-build-battleship" class="cyber-btn action-btn-icon cruiser-build-btn" style="display: none;" title="Build Battleship (B)"><span class="btn-icon">🛸</span>Battleship (B)<span class="btn-cost">225/9</span></button>
             <button id="btn-build-titan" class="cyber-btn action-btn-icon cruiser-build-btn" style="display: none;" title="Build Titan (T)"><span class="btn-icon">🛸</span>Titan (T)<span class="btn-cost">300/12</span></button>
-            <button id="btn-build-mammoth" class="cyber-btn action-btn-icon cruiser-build-btn" style="display: none;" title="Build Mammoth (M)"><span class="btn-icon">🛸</span>Mammoth (M)<span class="btn-cost">400/16</span></button>
+            <button id="btn-build-mammoth" class="cyber-btn action-btn-icon cruiser-build-btn" style="display: none;" title="Build Mammoth (M)"><span class="btn-icon">🛸</span>Mammoth (M)<span class="btn-cost">500/20</span></button>
           </div>
           <div id="action-buttons-utility" style="display: flex; gap: 10px;">
             <button id="btn-leaderboard" class="cyber-btn action-btn-icon" title="Leaderboard (L)"><span class="btn-icon">🏆</span>L</button>
@@ -461,17 +458,14 @@
           <!-- CRUISERS -->
           <div id="help-topic-cruisers" class="help-page hidden">
             <ul>
-              <li><strong>Building Cruisers 🛸:</strong> Built from 🚀 Military planets or your Homeworld. Press <strong>C</strong> to open the build menu. Choose from 8 hull classes (Corvette 15HP to Mammoth 50HP). Cost = ships + max capacity deducted from the planet. Starting XP is capped at the player's overall XP score (`player.expScore`), only consuming as much player `crewExperience` as needed. The planet must retain at least 55 max capacity after construction.</li>
+              <li><strong>Building Cruisers 🛸:</strong> Built from 🚀 Military planets or your Homeworld. Press <strong>C</strong> to open the build menu. Choose from 5 hull classes (Corvette 15HP to Mammoth 55HP). Cost = ships + max capacity deducted from the planet. Starting XP is capped at the player's overall XP score (`player.expScore`), only consuming as much player `crewExperience` as needed. The planet must retain at least 55 max capacity after construction.</li>
               <li><strong>Hull Classes:</strong>
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
                   <li><strong>Corvette (S):</strong> 15 HP — 50 ships, 2 cap</li>
-                  <li><strong>Frigate (F):</strong> 20 HP — 75 ships, 3 cap</li>
                   <li><strong>Destroyer (D):</strong> 25 HP — 100 ships, 4 cap</li>
-                  <li><strong>Cruiser (C):</strong> 30 HP — 150 ships, 6 cap</li>
                   <li><strong>Battlecruiser (A):</strong> 35 HP — 175 ships, 7 cap</li>
-                  <li><strong>Battleship (B):</strong> 40 HP — 225 ships, 9 cap</li>
                   <li><strong>Titan (T):</strong> 45 HP — 300 ships, 12 cap</li>
-                  <li><strong>Mammoth (M):</strong> 50 HP — 400 ships, 16 cap</li>
+                  <li><strong>Mammoth (M):</strong> 55 HP — 500 ships, 20 cap</li>
                 </ul>
               </li>
               <li><strong>Movement &amp; Speed:</strong> Cruisers always launch at normal speed. Larger cruisers move slower. Engine upgrades add +3 speed per level. Damaged cruisers suffer a speed penalty. Moving at 1/2 or 1/4 speed settings grants hazard saving rolls (75% or 90% save chance).</li>
@@ -533,13 +527,17 @@
           <!-- HAZARDS -->
           <div id="help-topic-hazards" class="help-page hidden">
             <ul>
-              <li><strong>Ion Storms ⚡:</strong> Moving hazards that drift across the map. New storms spawn roughly every 5 minutes. Intensity = 10d6 (capped by spawn count). Ships and planets inside take periodic damage.</li>
+              <li><strong>Ion Storms ⚡:</strong> Moving hazards that drift across the map. New storms spawn roughly every 5 minutes. Intensity = 10d6 (capped by spawn count). Ships inside take damage every second, while planets inside take damage every second to their max capacity.</li>
               <li><strong>Ancient Minefields 💣:</strong> Stationary. Intensity = 12d6. Massive burst damage on entry, especially to fast ships. Ongoing damage to ships inside. Do <em>not</em> damage planets.</li>
               <li><strong>Nebulae 🌫️:</strong> Stationary, 30% larger. Intensity = <strong>5d12</strong> (5–60). Slow ships passing through, reduce combat effectiveness by intensity/4 %. No direct damage or entry burst.</li>
               <li><strong>Sensor Reduction:</strong> Hazards reduce your gravity well sensor range while planets/ships are inside them. Effective intensity is displayed as a clean integer on the starmap.</li>
-              <li><strong>Damage Formula:</strong> Risk Chance % = <strong>(effectiveIntensity × currentSpeed) / 10</strong>, where <code>effectiveIntensity = max(0, intensity − knowledge − (√Tech + √Exp)/2 − √ShipExp − speedReduction)</code>. Traveling slower than maximum speed (e.g. 1/2 or 1/4 speed) reduces effective intensity by the speed difference, greatly lowering risk!</li>
+              <li><strong>Damage Formula:</strong> 
+                <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
+                  <li><strong>Ion Storms:</strong> Hit Chance % = <code>effectiveIntensity = max(0, intensity − knowledge − (√Tech + √Exp)/2 − √ShipExp)</code>. Checked every second. Non-moving ships cut their hit chance to 1/4. On hit, cruisers take 1 damage, and standard fleets take 5–15% damage.</li>
+                  <li><strong>Minefields:</strong> Risk Chance % = <code>(effectiveIntensity × currentSpeed) / 10</code>. Checked every second. Cruisers take 1 damage, and standard fleets take 3d6% damage.</li>
+                </ul>
+              </li>
               <li><strong>Knowledge:</strong> Increases when cruisers with 🔬 Laboratories are within scanning range of a hazard (+1 per lab per 2 minutes). Directly reduces effective intensity.</li>
-              <li><strong>Speed &amp; Entry:</strong> Ships traveling faster than base speed (warp) take 3× entry damage from storms/minefields. Slow ships get Saving Rolls.</li>
               <li><strong>Amoeba Immunity:</strong> Amoebas are immune to Ion Storm entry damage (but not minefields).</li>
               <li><strong>Planet Erosion:</strong> Ion storms (not minefields) erode planet max capacity over time. Below 55 = destroyed! Last Stand gives +20 knowledge bonus.</li>
               <li><strong>Visuals:</strong> Yellow ⚡ = Ion Storm. Blue 💣 = Minefield. Purple 🌫️ = Nebula.</li>

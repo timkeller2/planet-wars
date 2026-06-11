@@ -28,12 +28,9 @@ export class Player {
     this.useCredits = true;
     this.builtClasses = {};
     this.buildCounts = {
-      scout: 0,
-      frigate: 0,
+      corvette: 0,
       destroyer: 0,
-      cruiser: 0,
       battlecruiser: 0,
-      battleship: 0,
       titan: 0,
       mammoth: 0
     };

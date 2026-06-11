@@ -6,13 +6,10 @@ import { AIController } from './systems/AIController.js';
 
 const SHIP_CLASSES = {
   corvette: { name: 'Corvette', key: 's', hp: 15, costShips: 50, costCap: 2 },
-  frigate: { name: 'Frigate', key: 'f', hp: 20, costShips: 75, costCap: 3 },
   destroyer: { name: 'Destroyer', key: 'd', hp: 25, costShips: 100, costCap: 4 },
-  cruiser: { name: 'Cruiser', key: 'c', hp: 30, costShips: 150, costCap: 6 },
   battlecruiser: { name: 'Battlecruiser', key: 'a', hp: 35, costShips: 175, costCap: 7 },
-  battleship: { name: 'Battleship', key: 'b', hp: 40, costShips: 225, costCap: 9 },
   titan: { name: 'Titan', key: 't', hp: 45, costShips: 300, costCap: 12 },
-  mammoth: { name: 'Mammoth', key: 'm', hp: 50, costShips: 400, costCap: 16 }
+  mammoth: { name: 'Mammoth', key: 'm', hp: 55, costShips: 500, costCap: 20 }
 };
 
 class RecycledArray extends Array {
@@ -181,6 +178,7 @@ export class Game {
     this.nextIonStormId = 0;
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
+    this.minefieldDamageTimer = 0;
     const getRandMod = () => Math.round((-0.10 - Math.random() * 0.20) * 100) / 100;
     this.globalUpgradeModifiers = {
       sensorarray: getRandMod(),
@@ -1031,6 +1029,7 @@ export class Game {
     this.exploredGrid = {};
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
+    this.minefieldDamageTimer = 0;
     this.ionStormsCreated = 0;
     this.nextShipId = 1;
     this.gameTime = 0;
@@ -1062,11 +1061,8 @@ export class Game {
       player.builtClasses = {};
       player.buildCounts = {
         corvette: 0,
-        frigate: 0,
         destroyer: 0,
-        cruiser: 0,
         battlecruiser: 0,
-        battleship: 0,
         titan: 0,
         mammoth: 0
       };
@@ -1500,7 +1496,7 @@ export class Game {
 
     // Create Ancient Minefields
     const hazardNames = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Theta', 'Iota'];
-    const numMinefields = Math.round((Math.random() * 2) * hazardScale);
+    const numMinefields = Math.max(3, Math.round((1 + Math.random() * 2) * hazardScale));
     for (let m = 0; m < numMinefields; m++) {
       const mRadius = ((50 + Math.random() * 350) * 0.75) * (hazardScale > 1 ? Math.sqrt(hazardScale) : hazardScale); // 25% smaller
       this.ionStorms.push({
@@ -2046,7 +2042,7 @@ export class Game {
       }
 
       // Check unlock requirement: except for corvettes, previous class must be built
-      const keys = ['corvette', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+      const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
       const idx = keys.indexOf(classType);
       if (idx > 0 && classType !== 'corvette') {
         const prevClass = keys[idx - 1];
@@ -2061,18 +2057,15 @@ export class Game {
       if (isFirst) {
         const baseMultipliers = {
           corvette: 1,
-          frigate: 1.5,
           destroyer: 1.75,
-          cruiser: 2,
           battlecruiser: 2.5,
-          battleship: 3,
           titan: 3.5,
           mammoth: 4
         };
         const baseMult = baseMultipliers[classType] || 1;
         costMult = baseMult;
         if (owner) {
-          const keys = ['corvette', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+          const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
           const idx = keys.indexOf(classType);
           if (idx > 0) {
             const prevClass = keys[idx - 1];
@@ -2090,7 +2083,7 @@ export class Game {
       const maxHealth = cfg.hp;
 
       const creditsAvailable = (owner && owner.useCredits !== false) ? (owner.credits || 0) : 0;
-      const creditsAvailableForAffordability = isFirst ? creditsAvailable : 0;
+      const creditsAvailableForAffordability = (isFirst || !(source.isMilitary || source.homeworldOf)) ? creditsAvailable : 0;
 
       if ((source.ships + creditsAvailableForAffordability) >= costShips && (source.maxShips - costCap) >= 55) {
         const creditsPaid = Math.min(creditsAvailable, costShips);
@@ -3048,13 +3041,13 @@ export class Game {
       }
     }
 
-    // Ion Storm / Minefield ship damage (every second, chance/10) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â skip nebulae
+    // Ion Storm / Minefield ship damage (every second) ... skip nebulae
     this.ionStormDamageTimer += deltaTime;
-    if (this.ionStormDamageTimer >= 6000) {
-      this.ionStormDamageTimer -= 6000;
+    if (this.ionStormDamageTimer >= 1000) {
+      this.ionStormDamageTimer -= 1000;
       for (const storm of this.ionStorms) {
-        if (storm.type === 'nebula') continue;
-        const explosionColor = storm.type === 'minefield' ? '#44f' : '#ff0';
+        if (storm.type !== 'storm') continue;
+        const explosionColor = '#ff0';
         for (const ship of this.ships) {
           if (!ship.active || !ship.owner) continue;
           if (ship.isAmoeba) continue;
@@ -3078,97 +3071,151 @@ export class Game {
               }
             }
 
-            // Determine speed for damage purposes
-            let speed = 0;
-            if (isMoving) {
-              speed = ship.currentSpeed !== undefined ? ship.currentSpeed : ship.speed;
-            }
-            if (storm.type === 'storm') { // Ion storm
-              speed = Math.max(5, speed);
-            }
-
             const knowledge = storm.knowledge[ship.owner.id] || 0;
             const techRed = Math.sqrt(ship.owner.techScore || 0);
             const expRed = Math.sqrt(ship.owner.expScore || 0);
             const shipExpRed = Math.sqrt(ship.expScore || 0);
 
-            const baseEffectiveIntensity = Math.max(0, storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed);
-            const normalSpeed = ship.speed * (ship.speedModifier !== undefined ? ship.speedModifier : 1.0);
-            const speedReduction = Math.max(0, normalSpeed - speed);
-            const effectiveIntensity = Math.max(0, baseEffectiveIntensity - speedReduction);
-            const risk = (effectiveIntensity * speed) / 10;
+            let risk = Math.max(0, storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed);
+            if (!isMoving) {
+              risk *= 0.25;
+            }
 
-            if (risk > 0) {
+            if (risk > 0 && Math.random() * 100 < risk) {
+              this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
+              const boltX = ship.x + (Math.random() - 0.5) * 80;
+              const boltY = ship.y - 30 - Math.random() * 50;
+              const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
+              const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
+              this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
+              this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
+
               if (ship.maxHealth > 0) {
                 // Cruiser
-                const roll = Math.random() * 100;
-                if (roll < risk) {
-                  const damage = Math.ceil((risk - roll) / 10);
-                  ship.health -= damage;
-                  
-                  if (storm.type === 'minefield') {
-                    const minesUsed = Math.min(storm.mines !== undefined ? storm.mines : 1, damage);
-                    storm.mines = Math.max(0, (storm.mines !== undefined ? storm.mines : 1) - minesUsed);
-                    storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
-                  }
-
-                  this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
-                  const boltX = ship.x + (Math.random() - 0.5) * 80;
-                  const boltY = ship.y - 30 - Math.random() * 50;
-                  const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
-                  const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
-                  this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
-                  this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
-
-                  if (ship.health <= 0) {
-                    ship.active = false;
-                  }
+                ship.health -= 1;
+                if (ship.health <= 0) {
+                  ship.active = false;
                 }
               } else {
                 // Standard fleet
-                let destroyedCount = 0;
-                const initialCount = ship.count;
-                for (let i = 0; i < initialCount; i++) {
-                  const roll = Math.random() * 100;
-                  if (roll < risk) {
-                    if (!ship.checkSurvivalRoll()) {
-                      destroyedCount++;
-                    }
-                  }
-                }
-                if (destroyedCount > 0) {
-                  ship.count -= destroyedCount;
-                  
-                  if (storm.type === 'minefield') {
-                    const minesUsed = Math.min(storm.mines !== undefined ? storm.mines : 1, destroyedCount);
-                    storm.mines = Math.max(0, (storm.mines !== undefined ? storm.mines : 1) - minesUsed);
-                    storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
-                  }
-
-                  if (ship.count <= 0) {
-                    ship.count = 0;
-                    ship.active = false;
-                  }
-                  this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
-                  const boltX = ship.x + (Math.random() - 0.5) * 80;
-                  const boltY = ship.y - 30 - Math.random() * 50;
-                  const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
-                  const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
-                  this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
-                  this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
+                const pct = 0.05 + Math.random() * 0.10;
+                const destroyedCount = Math.max(1, Math.floor(ship.count * pct));
+                ship.count -= destroyedCount;
+                if (ship.count <= 0) {
+                  ship.count = 0;
+                  ship.active = false;
                 }
               }
             }
           }
         }
       }
-      this.ionStorms = this.ionStorms.filter(storm => {
-        if (storm.type === 'minefield' && storm.mines <= 0) {
-          console.log(`[Minefield Depleted] Minefield ${storm.name} (id: ${storm.id}) has been fully depleted.`);
-          return false;
+    }
+
+
+    // Minefield damage and lab mining check (every 1 second)
+    this.minefieldDamageTimer += deltaTime;
+    if (this.minefieldDamageTimer >= 1000) {
+      this.minefieldDamageTimer -= 1000;
+      for (let i = this.ionStorms.length - 1; i >= 0; i--) {
+        const storm = this.ionStorms[i];
+        if (storm.type !== 'minefield') continue;
+
+        // 1. Check if a player uses labs on the minefield and is in attack mode
+        for (const player of this.allPlayers) {
+          if (!player.isAlive) continue;
+          for (const ship of this.ships) {
+            if (ship.active && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0 && ship.isResearching && ship.scoutAttackEnabled) {
+              const finalCruiserRadar = ship.cruiserRadarRange();
+              const red = hazardSensorReduction(ship.x, ship.y, player.id);
+              const effRadar = Math.max(10, finalCruiserRadar - red);
+              const dx = ship.x - storm.x;
+              const dy = ship.y - storm.y;
+              if (Math.sqrt(dx * dx + dy * dy) <= effRadar + storm.radius) {
+                // uses labs on minefield and is in attack mode -> destroy 1d6 mines and give credits
+                const rolledMines = Math.floor(Math.random() * 6) + 1;
+                const minesDestroyed = Math.min(storm.mines, rolledMines);
+                storm.mines -= minesDestroyed;
+                player.credits = (player.credits || 0) + minesDestroyed;
+                ship.creditsGainedEvent = (ship.creditsGainedEvent || 0) + minesDestroyed;
+                if (minesDestroyed > 0) {
+                  this.explosions.push({
+                    x: ship.x,
+                    y: ship.y,
+                    isDollarSign: true,
+                    amount: minesDestroyed,
+                    age: 0
+                  });
+                }
+                if (storm.initialMines > 0) {
+                  storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
+                }
+              }
+            }
+          }
         }
-        return true;
-      });
+
+        // 2. Perform damage check for all active ships inside the minefield
+        for (const ship of this.ships) {
+          if (!ship.active || !ship.owner || ship.isAmoeba) continue;
+
+          const dx = ship.x - storm.x;
+          const dy = ship.y - storm.y;
+          if (dx * dx + dy * dy <= storm.radius * storm.radius) {
+            let mineRemoved = false;
+            if (ship.maxHealth > 0) {
+              // Cruiser
+              const damage = ship.owner.isAI ? 0.25 : 1;
+              ship.health -= damage;
+              mineRemoved = true;
+              if (ship.health <= 0) {
+                ship.active = false;
+              }
+            } else {
+              // Standard fleet
+              const d1 = Math.floor(Math.random() * 6) + 1;
+              const d2 = Math.floor(Math.random() * 6) + 1;
+              const d3 = Math.floor(Math.random() * 6) + 1;
+              const pct = (d1 + d2 + d3) / 100;
+              const finalPct = ship.owner.isAI ? (pct / 4) : pct;
+
+              let destroyedCount = Math.round(ship.count * finalPct);
+              if (destroyedCount === 0 && ship.count > 0 && finalPct > 0) {
+                destroyedCount = 1;
+              }
+              destroyedCount = Math.min(ship.count, destroyedCount);
+              if (destroyedCount > 0) {
+                ship.count -= destroyedCount;
+                mineRemoved = true;
+                if (ship.count <= 0) {
+                  ship.count = 0;
+                  ship.active = false;
+                }
+              }
+            }
+
+            if (mineRemoved) {
+              storm.mines = Math.max(0, storm.mines - 1);
+              if (storm.initialMines > 0) {
+                storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
+              }
+              this.explosions.push({ x: ship.x, y: ship.y, color: '#44f', age: 0 });
+              const boltX = ship.x + (Math.random() - 0.5) * 80;
+              const boltY = ship.y - 30 - Math.random() * 50;
+              const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
+              const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
+              this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: '#44f', age: 0, duration: 0.4 });
+              this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: '#44f', age: 0, duration: 0.4 });
+            }
+          }
+        }
+
+        // 3. Remove minefield if reduced below 8 mines
+        if (storm.mines < 8) {
+          console.log(`[Minefield Removed] Minefield ${storm.name} (id: ${storm.id}) has less than 8 mines remaining (${storm.mines}).`);
+          this.ionStorms.splice(i, 1);
+        }
+      }
     }
     this.planetDepletionTimer = (this.planetDepletionTimer || 0) + deltaTime;
     if (this.planetDepletionTimer >= 1000) {
@@ -3357,7 +3404,7 @@ export class Game {
 
         if (totalStockpile > stockpileCapacity) {
           const excess = totalStockpile - stockpileCapacity;
-          const storageFee = excess / (stockpileCapacity * 4);
+          const storageFee = excess / (stockpileCapacity * 8);
           player.storageFeeRate = storageFee * 60;
 
           if ((player.credits || 0) >= storageFee) {

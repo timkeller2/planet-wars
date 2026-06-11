@@ -193,6 +193,7 @@ function getPlanetTradeIncomePerMin(planet) {
     localStorage.setItem('planetWarsPlayerId', playerId);
   }
   const socket = io({ query: { playerId } });
+  window.socket = socket;
 
   const savedPlayerName = localStorage.getItem('planetWarsPlayerName');
   if (savedPlayerName) {
@@ -904,13 +905,10 @@ function getPlanetTradeIncomePerMin(planet) {
   };
   const SHIP_CLASSES = {
     corvette: { name: 'Corvette', key: 's', hp: 15, costShips: 50, costCap: 2, btnId: 'btn-build-corvette' },
-    frigate: { name: 'Frigate', key: 'f', hp: 20, costShips: 75, costCap: 3, btnId: 'btn-build-frigate' },
     destroyer: { name: 'Destroyer', key: 'd', hp: 25, costShips: 100, costCap: 4, btnId: 'btn-build-destroyer' },
-    cruiser: { name: 'Cruiser', key: 'c', hp: 30, costShips: 150, costCap: 6, btnId: 'btn-build-cruiser' },
     battlecruiser: { name: 'Battlecruiser', key: 'a', hp: 35, costShips: 175, costCap: 7, btnId: 'btn-build-battlecruiser' },
-    battleship: { name: 'Battleship', key: 'b', hp: 40, costShips: 225, costCap: 9, btnId: 'btn-build-battleship' },
     titan: { name: 'Titan', key: 't', hp: 45, costShips: 300, costCap: 12, btnId: 'btn-build-titan' },
-    mammoth: { name: 'Mammoth', key: 'm', hp: 50, costShips: 400, costCap: 16, btnId: 'btn-build-mammoth' }
+    mammoth: { name: 'Mammoth', key: 'm', hp: 55, costShips: 500, costCap: 20, btnId: 'btn-build-mammoth' }
   };
   let cruiserBuildModeActive = false;
   let starfieldEnabled = true;
@@ -1133,7 +1131,8 @@ function getPlanetTradeIncomePerMin(planet) {
         prefBonusStr = ` (+${bonusVal.toFixed(1)}%)`;
       }
 
-      titleHTML = `<span style="color: ${ownerColor}">${p.name}${prefBonusStr} - ${sizeClassText} ${habName} ${raceName} ${focusName} World${isLastKnown ? ' <span style="font-size:0.75rem;color:#aaa;">(Last Known)</span>' : ''}</span>`;
+      const racePart = raceName ? `${raceName} ` : '';
+      titleHTML = `<span style="color: ${ownerColor}">${p.name}${prefBonusStr} - ${racePart}${sizeClassText} ${habName} ${focusName} World${isLastKnown ? ' <span style="font-size:0.75rem;color:#aaa;">(Last Known)</span>' : ''}</span>`;
 
       const lines = [];
 
@@ -3024,6 +3023,16 @@ function getPlanetTradeIncomePerMin(planet) {
             });
           }
         }
+        if (s.creditsGainedEvent && s.creditsGainedEvent > 0) {
+          floatingAnimations.push({
+            x: s.x,
+            y: s.y - 12,
+            text: `$$$ +${s.creditsGainedEvent}`,
+            type: 'dollar',
+            age: 0,
+            duration: 2.0
+          });
+        }
         if (s.diplomatSuccessEvent && s.diplomatSuccessEvent > 0) {
           let targetX = s.x;
           let targetY = s.y - 12;
@@ -4737,7 +4746,7 @@ function getPlanetTradeIncomePerMin(planet) {
       newId = hoveredShip.id;
     }
 
-    if (newType && newId) {
+    if (newType && (newId !== null && newId !== undefined)) {
       if (activeInfoPanel && activeInfoPanel.type === newType && activeInfoPanel.id === newId) {
         if (infoPanelTimer) {
           clearTimeout(infoPanelTimer);
@@ -4986,7 +4995,7 @@ function getPlanetTradeIncomePerMin(planet) {
         tappedId = clickedShip.id;
       }
 
-      if (tappedType && tappedId) {
+      if (tappedType && (tappedId !== null && tappedId !== undefined)) {
         if (activeInfoPanel && activeInfoPanel.type === tappedType && activeInfoPanel.id === tappedId) {
           closeInfoPanel();
         } else {
@@ -5116,7 +5125,7 @@ function getPlanetTradeIncomePerMin(planet) {
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
           
           // Check unlock requirement: except for corvettes, previous class must be built
-          const keys = ['corvette', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+          const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
           const idx = keys.indexOf(typeToBuild);
           let isUnlocked = true;
           if (idx > 0 && typeToBuild !== 'corvette') {
@@ -5132,11 +5141,8 @@ function getPlanetTradeIncomePerMin(planet) {
             if (isFirst) {
               const baseMultipliers = {
                 corvette: 1,
-                frigate: 1.5,
                 destroyer: 1.75,
-                cruiser: 2,
                 battlecruiser: 2.5,
-                battleship: 3,
                 titan: 3.5,
                 mammoth: 4
               };
@@ -5157,7 +5163,7 @@ function getPlanetTradeIncomePerMin(planet) {
               costShips *= 2;
             }
 
-            const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+            const creditsAvailable = (isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
             const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
             if (canAfford) {
               socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType: typeToBuild });
@@ -6445,7 +6451,7 @@ function getPlanetTradeIncomePerMin(planet) {
           const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
           
           // Check unlock requirement: except for corvettes, previous class must be built
-          const keys = ['corvette', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+          const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
           const idx = keys.indexOf(classType);
           let isUnlocked = true;
           let lockReason = '';
@@ -6463,18 +6469,15 @@ function getPlanetTradeIncomePerMin(planet) {
           if (isFirst) {
             const baseMultipliers = {
               corvette: 1,
-              frigate: 1.5,
               destroyer: 1.75,
-              cruiser: 2,
               battlecruiser: 2.5,
-              battleship: 3,
               titan: 3.5,
               mammoth: 4
             };
             const baseMult = baseMultipliers[classType] || 1;
             costMult = baseMult;
             if (myPlayer) {
-              const keys = ['corvette', 'frigate', 'destroyer', 'cruiser', 'battlecruiser', 'battleship', 'titan', 'mammoth'];
+              const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
               const idx = keys.indexOf(classType);
               if (idx > 0) {
                 const prevClass = keys[idx - 1];
@@ -6499,7 +6502,7 @@ function getPlanetTradeIncomePerMin(planet) {
             el.style.boxShadow = '';
           }
 
-          const creditsAvailable = isFirst ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+          const creditsAvailable = (isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
           const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
 
           if (!canAfford) {
@@ -7074,7 +7077,7 @@ function getPlanetTradeIncomePerMin(planet) {
                 const chancePercent = Math.max(0, Math.round(rawChance));
 
                 ctx.save();
-                ctx.font = 'bold 10px Orbitron';
+                ctx.font = 'bold 8px Orbitron';
                 ctx.fillStyle = 'rgba(255, 255, 0, 0.95)';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -7083,7 +7086,34 @@ function getPlanetTradeIncomePerMin(planet) {
                 if (p.isResearch || p.isMilitary || p.isSpeedPlanet) {
                   yOffset = 38;
                 }
-                ctx.fillText(`${chancePercent}%`, p.x, p.y - p.radius - yOffset);
+
+                const hasDisp = p.disposition && p.disposition[diplomatOwner.id] !== undefined && p.disposition[diplomatOwner.id] !== null;
+                let prefix = '';
+                if (hasDisp) {
+                  const dVal = Math.round(p.disposition[diplomatOwner.id]);
+                  let dispEmoji = '';
+                  if (dVal < -30) dispEmoji = '😠';
+                  else if (dVal < -10) dispEmoji = '😢';
+                  else if (dVal < 10) dispEmoji = '😐';
+                  else if (dVal < 30) dispEmoji = '🙂';
+                  else dispEmoji = '😍';
+                  prefix += dispEmoji + ' ';
+                }
+                if (hasPref) {
+                  const resourceEmojis = {
+                    antimatter: '🌀',
+                    tritanium: '🔩',
+                    merculite: '☄️',
+                    dilithium: '💎',
+                    duranium: '🔲',
+                    deuterium: '💧',
+                    latinum: '🏺'
+                  };
+                  const prefEmoji = resourceEmojis[prefRes] || '💎';
+                  prefix += prefEmoji + ' ';
+                }
+
+                ctx.fillText(`${prefix}${chancePercent}%`, p.x, p.y - p.radius - yOffset);
                 ctx.restore();
               }
             }
@@ -10373,6 +10403,21 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(endX, endY);
               ctx.stroke();
             }
+            ctx.restore();
+          } else if (exp.isDollarSign) {
+            ctx.save();
+            const alpha = Math.max(0, 1 - exp.age);
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#39ff14'; // vibrant neon green
+            ctx.font = 'bold 16px Orbitron';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = '#39ff14';
+            ctx.shadowBlur = 6;
+            const dollars = '$'.repeat(exp.amount || 1);
+            const text = `${dollars} (+$${exp.amount || 1})`;
+            const yOffset = exp.age * 50;
+            ctx.fillText(text, exp.x, exp.y - 20 - yOffset);
             ctx.restore();
           } else if (exp.color === 'amoeba-shrug') {
             ctx.beginPath();
