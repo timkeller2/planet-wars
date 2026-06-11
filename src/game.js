@@ -4863,44 +4863,45 @@ export class Game {
           console.log(`[MARINE PLANET INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to attack target planet ${targetPlanet.name}.`);
           ship.marineCount = 0;
         }
+      }
 
-        // Direct ship targeting launch check
-        let targetShip = null;
-        if ((ship.marineCount || 0) > 0 && ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null) {
-          const enemy = this.ships.find(s => s.id === ship.cruiserTargetId && s.active);
-          if (enemy && enemy.owner && (enemy.owner.id !== ship.owner.id || enemy.isAmoeba)) {
-            targetShip = enemy;
-          }
-        }
-
-        if (targetShip) {
-          const count = Math.floor(ship.marineCount);
-          const marineFleet = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, targetShip.x, targetShip.y);
-          marineFleet.cruiserStyle = ship.cruiserStyle;
-          marineFleet.count = count;
-          marineFleet.speedModifier = 1.0;
-          marineFleet.isMarineFleet = true;
-          marineFleet.targetShipId = targetShip.id;
-          marineFleet.sourceShipId = ship.id;
-          marineFleet.speed = 35;
-
-          let startingExp = ship.expScore || 0;
-          const tritaniumCost = 0.01 * (count / 3);
-          const owner = ship.owner;
-          if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && count > 0) {
-            owner.resources.tritanium -= tritaniumCost;
-            startingExp += 400;
-          }
-          marineFleet.expScore = startingExp;
-          this.ships.push(marineFleet);
-
-          console.log(`[MARINE SHIP INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to target ship ${targetShip.id}.`);
-          ship.marineCount = 0;
+      // Direct ship targeting launch check (Moved outside of hasEnoughMarines block to fix logic contradiction)
+      let targetShip = null;
+      if ((ship.marineCount || 0) > 0 && ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null) {
+        const enemy = this.ships.find(s => s.id === ship.cruiserTargetId && s.active);
+        if (enemy && enemy.owner && (enemy.owner.id !== ship.owner.id || enemy.isAmoeba)) {
+          targetShip = enemy;
         }
       }
 
+      if (targetShip) {
+        // Only launch up to 3 times the defending crew
+        const count = Math.min(Math.floor(ship.marineCount), Math.max(1, 3 * (targetShip.crew || 0)));
+        const marineFleet = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, targetShip.x, targetShip.y);
+        marineFleet.cruiserStyle = ship.cruiserStyle;
+        marineFleet.count = count;
+        marineFleet.speedModifier = 1.0;
+        marineFleet.isMarineFleet = true;
+        marineFleet.targetShipId = targetShip.id;
+        marineFleet.sourceShipId = ship.id;
+        marineFleet.speed = 35;
+
+        let startingExp = ship.expScore || 0;
+        const tritaniumCost = 0.01 * (count / 3);
+        const owner = ship.owner;
+        if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && count > 0) {
+          owner.resources.tritanium -= tritaniumCost;
+          startingExp += 400;
+        }
+        marineFleet.expScore = startingExp;
+        this.ships.push(marineFleet);
+
+        console.log(`[MARINE SHIP INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to target ship ${targetShip.id}.`);
+        ship.marineCount = Math.max(0, ship.marineCount - count);
+      }
+
       // 5. Boarding Trigger Checks
-      if ((ship.marineCount || 0) > 0 && hasEnoughMarines) {
+      if ((ship.marineCount || 0) > 0 && (ship.marines || 0) > 0) {
         // Find enemy cruiser in full scan range of attacking cruiser
         for (const enemy of cruisers) {
           if (enemy.owner.id !== ship.owner.id && !enemy.isAmoeba) {
@@ -4908,22 +4909,22 @@ export class Game {
             const dy = enemy.y - ship.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist <= radar) {
-              const requiredMarines = 2 * (enemy.crew || 0);
               const isSelectedTarget = (ship.cruiserTargetType === 'ship' && ship.cruiserTargetId === enemy.id);
-              if (isSelectedTarget || (ship.marineCount >= requiredMarines && requiredMarines > 0)) {
-                // Launch Boarding Fleet Pod!
+              if (isSelectedTarget || ship.marineCount > 0) {
+                // Launch Boarding Fleet Pod up to 3 times the defending crew
+                const launchCount = Math.min(Math.floor(ship.marineCount), Math.max(1, 3 * (enemy.crew || 0)));
                 const pod = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, enemy.x, enemy.y);
                 pod.cruiserStyle = ship.cruiserStyle;
                 pod.isBoardingFleet = true;
                 pod.targetShipId = enemy.id;
                 pod.sourceShipId = ship.id;
-                pod.marineCount = ship.marineCount;
+                pod.marineCount = launchCount;
                 pod.speed = 60; // moves at fast pace
                 pod.isCruiser = false; // it is drawn uniquely, not as a cruiser body!
                 this.ships.push(pod);
 
-                console.log(`[BOARDING] Ship ${ship.id} launched pod targeting Ship ${enemy.id} carrying ${ship.marineCount} marines.`);
-                ship.marineCount = 0;
+                console.log(`[BOARDING] Ship ${ship.id} launched pod targeting Ship ${enemy.id} carrying ${launchCount} marines.`);
+                ship.marineCount = Math.max(0, ship.marineCount - launchCount);
                 break;
               }
             }

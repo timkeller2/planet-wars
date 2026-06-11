@@ -1,0 +1,2146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planet Wars Starship Design Lab - All Factions</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #040811;
+      --panel-bg: rgba(8, 18, 36, 0.75);
+      --border-color: #0f3d59;
+      --text-color: #a8b2d1;
+      
+      /* Dynamic theme tokens overridden by body classes */
+      --accent-color: #00f3ff;
+      --accent-glow: rgba(0, 243, 255, 0.4);
+      --accent-orange: #ff7b00;
+      --accent-green: #00ff66;
+    }
+
+    /* Faction specific theme definitions */
+    body.theme-Federation {
+      --accent-color: #00f3ff;
+      --accent-glow: rgba(0, 243, 255, 0.4);
+      --border-color: #0f3d59;
+    }
+    body.theme-Romulan {
+      --accent-color: #00ff66;
+      --accent-glow: rgba(0, 255, 102, 0.4);
+      --border-color: #0c4d27;
+    }
+    body.theme-Klingon {
+      --accent-color: #ff2a2a;
+      --accent-glow: rgba(255, 42, 42, 0.4);
+      --border-color: #5a1212;
+    }
+    body.theme-Gorn {
+      --accent-color: #ffb700;
+      --accent-glow: rgba(255, 183, 0, 0.4);
+      --border-color: #553e05;
+    }
+    body.theme-Tholian {
+      --accent-color: #e000ff;
+      --accent-glow: rgba(224, 0, 255, 0.4);
+      --border-color: #4c0855;
+    }
+    body.theme-Lyran {
+      --accent-color: #a4c3f5;
+      --accent-glow: rgba(164, 195, 245, 0.4);
+      --border-color: #3b4e6b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: 'Share Tech Mono', monospace;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-image: 
+        radial-gradient(circle at 50% 50%, rgba(15, 61, 89, 0.15) 0%, transparent 80%),
+        linear-gradient(rgba(10, 25, 47, 0.2) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(10, 25, 47, 0.2) 1px, transparent 1px);
+      background-size: 100% 100%, 40px 40px, 40px 40px;
+      transition: background 0.5s ease;
+    }
+
+    /* HUD Lines */
+    .hud-line {
+      position: absolute;
+      background-color: var(--border-color);
+      opacity: 0.4;
+      pointer-events: none;
+      transition: background-color 0.5s ease;
+    }
+    .hud-line.horizontal {
+      height: 1px;
+      left: 0;
+      right: 0;
+    }
+    .hud-line.vertical {
+      width: 1px;
+      top: 0;
+      bottom: 0;
+    }
+
+    header {
+      padding: 15px 40px;
+      border-bottom: 2px solid var(--border-color);
+      background-color: rgba(4, 8, 17, 0.9);
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      position: relative;
+      z-index: 10;
+      transition: border-color 0.5s ease;
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      font-size: 22px;
+      letter-spacing: 3px;
+      color: #fff;
+      text-shadow: 0 0 10px var(--accent-glow);
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    header h1 span.faction-badge {
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--accent-color);
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: var(--accent-color);
+      text-shadow: none;
+      letter-spacing: 1px;
+      box-shadow: 0 0 8px var(--accent-glow);
+      transition: all 0.5s ease;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #8892b0;
+      letter-spacing: 1px;
+    }
+
+    /* Faction Tabs */
+    .faction-tabs {
+      display: flex;
+      gap: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 10px;
+      overflow-x: auto;
+    }
+
+    .faction-tab {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #8892b0;
+      padding: 8px 18px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 12px;
+      letter-spacing: 1.5px;
+      transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .faction-tab:hover {
+      border-color: rgba(255, 255, 255, 0.3);
+      color: #fff;
+    }
+
+    .faction-tab.active {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--accent-color);
+      color: var(--accent-color);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 350px 1fr 420px;
+      padding: 20px;
+      gap: 20px;
+      position: relative;
+    }
+
+    @media (max-width: 1300px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(255, 255, 255, 0.02);
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.5s ease;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent-color), transparent);
+      transition: all 0.5s ease;
+    }
+
+    .panel-header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-color);
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 2px;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.02);
+      transition: border-color 0.5s ease;
+    }
+
+    .panel-content {
+      padding: 20px;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    /* Left Panel: Factions & Classes */
+    .ship-class-card {
+      background: rgba(5, 11, 20, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      padding: 14px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+      position: relative;
+    }
+
+    .ship-class-card:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+
+    .ship-class-card.active {
+      border-color: var(--accent-color);
+      background: rgba(255, 255, 255, 0.03);
+      box-shadow: 0 0 15px rgba(255, 255, 255, 0.02);
+    }
+
+    .ship-class-card.active::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 10%;
+      height: 80%;
+      width: 4px;
+      background: var(--accent-color);
+      box-shadow: 0 0 10px var(--accent-color);
+      border-radius: 0 4px 4px 0;
+      transition: all 0.5s ease;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #fff;
+      margin-bottom: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card-title span.group-tag {
+      font-size: 9px;
+      color: var(--accent-color);
+      border: 1px solid var(--accent-color);
+      opacity: 0.8;
+      padding: 2px 6px;
+      border-radius: 3px;
+      transition: all 0.5s ease;
+    }
+
+    .spec-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+      margin-top: 10px;
+      font-size: 11px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 8px;
+    }
+
+    .spec-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .spec-label {
+      color: var(--accent-color);
+      font-size: 8px;
+      text-transform: uppercase;
+      opacity: 0.7;
+      transition: color 0.5s ease;
+    }
+
+    .spec-value {
+      font-size: 12px;
+      color: #e6f1ff;
+      font-weight: bold;
+    }
+
+    /* Middle Panel: Visualizer */
+    .visualizer-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      position: relative;
+    }
+
+    .canvas-wrapper {
+      flex: 1;
+      position: relative;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 4px;
+      border: 1px dashed rgba(255, 255, 255, 0.05);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      min-height: 400px;
+    }
+
+    #shipCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .canvas-overlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      pointer-events: none;
+      font-size: 11px;
+      line-height: 1.6;
+      background: rgba(4, 8, 17, 0.8);
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+    }
+
+    .canvas-overlay span {
+      color: var(--accent-color);
+      font-weight: bold;
+      transition: color 0.5s ease;
+    }
+
+    .hud-ring {
+      position: absolute;
+      border: 1px dashed var(--accent-color);
+      opacity: 0.15;
+      border-radius: 50%;
+      pointer-events: none;
+      animation: spin 60s linear infinite;
+      transition: border-color 0.5s ease;
+    }
+    .hud-ring.outer {
+      width: 320px;
+      height: 320px;
+      border-width: 1px;
+    }
+    .hud-ring.inner {
+      width: 180px;
+      height: 180px;
+      animation-duration: 30s;
+      animation-direction: reverse;
+    }
+
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    .controls-panel {
+      padding: 12px 15px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      background: rgba(4, 8, 17, 0.4);
+      transition: border-color 0.5s ease;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      min-width: 110px;
+    }
+
+    .control-group label {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: var(--accent-color);
+      transition: color 0.5s ease;
+    }
+
+    .control-group input[type="range"] {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 2px;
+      height: 5px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    .control-group input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent-color);
+      cursor: pointer;
+      box-shadow: 0 0 6px var(--accent-color);
+      transition: background 0.5s ease, box-shadow 0.5s ease;
+    }
+
+    .btn-action {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #fff;
+      font-family: 'Share Tech Mono', monospace;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      font-size: 12px;
+    }
+
+    .btn-action:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--accent-color);
+      color: var(--accent-color);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    /* Right Panel: Code Snippet */
+    .code-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .code-pre-wrapper {
+      flex: 1;
+      background: rgba(2, 4, 9, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.03);
+      border-radius: 4px;
+      padding: 15px;
+      overflow: auto;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 11.5px;
+      line-height: 1.45;
+      color: #8892b0;
+      position: relative;
+    }
+
+    .code-keyword { color: #f92672; }
+    .code-method { color: #66d9ef; }
+    .code-number { color: #ae81ff; }
+    .code-comment { color: #75715e; font-style: italic; }
+    .code-variable { color: #f8f8f2; }
+
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 10px;
+      padding: 3px 8px;
+    }
+
+    footer {
+      padding: 15px 40px;
+      text-align: center;
+      font-size: 11px;
+      border-top: 1px solid var(--border-color);
+      color: #4f5b66;
+      transition: border-color 0.5s ease;
+    }
+  </style>
+</head>
+<body class="theme-Federation">
+  <!-- HUD background border bars -->
+  <div class="hud-line horizontal" style="top: 8px;"></div>
+  <div class="hud-line horizontal" style="bottom: 8px;"></div>
+  <div class="hud-line vertical" style="left: 8px;"></div>
+  <div class="hud-line vertical" style="right: 8px;"></div>
+
+  <header>
+    <div class="header-top">
+      <div>
+        <h1>FLEET VECTOR HULL DESIGN LAB <span id="factionBadge" class="faction-badge">🖖 FEDERATION STYLE</span></h1>
+        <div class="subtitle">Multi-Faction Procedural Drawing Specifications & Diagnostics</div>
+      </div>
+      <div style="font-size: 13px; text-align: right; line-height: 1.5;">
+        DIAGNOSTIC STATUS: <span style="color: var(--accent-green);">ONLINE</span><br>
+        COORDINATE REFERENCE: <span style="color: var(--accent-color); transition: color 0.5s ease;">LOCAL HULL CENTER</span>
+      </div>
+    </div>
+    
+    <!-- Faction tabs selector -->
+    <div class="faction-tabs">
+      <div class="faction-tab active" data-faction="Federation">🖖 Federation</div>
+      <div class="faction-tab" data-faction="Romulan">🦅 Romulan</div>
+      <div class="faction-tab" data-faction="Klingon">⚔️ Klingon</div>
+      <div class="faction-tab" data-faction="Gorn">🦖 Gorn</div>
+      <div class="faction-tab" data-faction="Tholian">🕸️ Tholian</div>
+      <div class="faction-tab" data-faction="Lyran">🦁 Lyran</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Left panel: Selection of Ship Class -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>HULL CLASSES</span>
+        <span id="classPanelFaction" style="font-size: 10px; color: var(--accent-color); transition: color 0.5s ease;">🖖 FED</span>
+      </div>
+      <div class="panel-content">
+        <div class="ship-class-card active" data-class="scout">
+          <div class="card-title">
+            <span>Scout / Corvette</span>
+            <span class="group-tag">Default Class</span>
+          </div>
+          <p style="font-size: 11.5px; color: #8892b0; line-height: 1.4;">Light reconnaissance vessels, interceptors, and destroyers. Compact and fast silhouettes.</p>
+          <div class="spec-grid">
+            <div class="spec-item"><span class="spec-label">Hull HP</span><span class="spec-value">15 - 25</span></div>
+            <div class="spec-item"><span class="spec-label">Metal Cost</span><span class="spec-value">50 - 100</span></div>
+            <div class="spec-item"><span class="spec-label">CP Load</span><span class="spec-value">2 - 4</span></div>
+          </div>
+        </div>
+
+        <div class="ship-class-card" data-class="cruiser">
+          <div class="card-title">
+            <span>Cruiser / Battlecruiser</span>
+            <span class="group-tag">Cruiser Group</span>
+          </div>
+          <p style="font-size: 11.5px; color: #8892b0; line-height: 1.4;">Standard combat capital hulls, optimized for tactical operations, missiles, and long-range fire.</p>
+          <div class="spec-grid">
+            <div class="spec-item"><span class="spec-label">Hull HP</span><span class="spec-value">35</span></div>
+            <div class="spec-item"><span class="spec-label">Metal Cost</span><span class="spec-value">175</span></div>
+            <div class="spec-item"><span class="spec-label">CP Load</span><span class="spec-value">7</span></div>
+          </div>
+        </div>
+
+        <div class="ship-class-card" data-class="battleship">
+          <div class="card-title">
+            <span>Battleship / Titan</span>
+            <span class="group-tag">Battleship Group</span>
+          </div>
+          <p style="font-size: 11.5px; color: #8892b0; line-height: 1.4;">Heavy assault capitals. High damage output, thick armor, and wide structural footprints.</p>
+          <div class="spec-grid">
+            <div class="spec-item"><span class="spec-label">Hull HP</span><span class="spec-value">45</span></div>
+            <div class="spec-item"><span class="spec-label">Metal Cost</span><span class="spec-value">300</span></div>
+            <div class="spec-item"><span class="spec-label">CP Load</span><span class="spec-value">12</span></div>
+          </div>
+        </div>
+
+        <div class="ship-class-card" data-class="mammoth">
+          <div class="card-title">
+            <span>Mammoth Carrier</span>
+            <span class="group-tag">Mammoth Group</span>
+          </div>
+          <p style="font-size: 11.5px; color: #8892b0; line-height: 1.4;">Colossal support bases and cargo transports. Extensive geometry with slow turning arcs.</p>
+          <div class="spec-grid">
+            <div class="spec-item"><span class="spec-label">Hull HP</span><span class="spec-value">55</span></div>
+            <div class="spec-item"><span class="spec-label">Metal Cost</span><span class="spec-value">500</span></div>
+            <div class="spec-item"><span class="spec-label">CP Load</span><span class="spec-value">20</span></div>
+          </div>
+        </div>
+
+        <div style="margin-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 15px;">
+          <h4 style="color: #fff; font-size: 12px; letter-spacing: 1px; margin-bottom: 8px;">FACTION DESIGN DIRECTIVE</h4>
+          <p id="factionDescription" style="font-size: 11px; line-height: 1.5; color: #8892b0;">
+            The Federation ship design system is based on classical saucer sections, dual warp nacelle pylons, and central engineering hulls. 
+            These features are procedurally mapped in 2D canvas coordinates using mirrored horizontal structures.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Middle panel: Visualizer -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>VECTOR DIAGNOSTIC MONITOR</span>
+        <span id="activeClassName" style="color: var(--accent-color); transition: color 0.5s ease;">SCOUT CLASS</span>
+      </div>
+      <div class="visualizer-container">
+        <div class="canvas-wrapper">
+          <div class="hud-ring outer"></div>
+          <div class="hud-ring inner"></div>
+          <div class="canvas-overlay">
+            SCALE: <span id="scaleValue">1.0x</span><br>
+            HEADING: <span id="headingValue">0.0 rad</span><br>
+            VERTICES: <span id="vertexValue">24</span><br>
+            FACTION: <span id="factionOverlayValue">Federation</span><br>
+            HULL TYPE: <span id="hullValue">Scout</span>
+          </div>
+          <canvas id="shipCanvas"></canvas>
+        </div>
+
+        <div class="controls-panel">
+          <div class="control-group">
+            <label for="scaleSlider">Hull / Nacelle Scale</label>
+            <input type="range" id="scaleSlider" min="15" max="60" value="30">
+          </div>
+          <div class="control-group">
+            <label for="speedSlider">Rotation Velocity</label>
+            <input type="range" id="speedSlider" min="0" max="100" value="25">
+          </div>
+          <div class="control-group">
+            <label for="colorPicker">Sensor Line Color</label>
+            <input type="color" id="colorPicker" value="#00f3ff" style="border: 1px solid rgba(255, 255, 255, 0.1); height: 24px; width: 100%; cursor: pointer;">
+          </div>
+          <div style="display: flex; align-items: flex-end;">
+            <button class="btn-action" id="toggleGridBtn">🌐 GRID ON</button>
+          </div>
+          <div style="display: flex; align-items: flex-end;">
+            <button class="btn-action" id="toggleFillBtn">🔳 FILL ON</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right panel: Code Snippet -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>CANVAS DRAWING INSTRUCTIONS</span>
+        <span style="font-size: 10px; color: var(--accent-orange);">JAVASCRIPT (2D CONTEXT)</span>
+      </div>
+      <div class="code-container">
+        <div class="code-pre-wrapper">
+          <button class="btn-action copy-btn" id="copyCodeBtn">COPY CODE</button>
+          <pre id="codeSnippet"></pre>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    🖖 Tactical Fleet Procedural Diagnostic System © 2026 Starship yards
+  </footer>
+
+  <script>
+    // Faction drawing formulas taken directly from game.js and main.js
+    const FactionsData = {
+      Federation: {
+        themeColor: '#00f3ff',
+        badge: '🖖 FEDERATION STYLE',
+        desc: 'The Federation design emphasizes classical symmetric shapes: forward circular saucer components, dual horizontal warp nacelles, and interconnecting pylons.',
+        scout: {
+          vertexCount: 12,
+          snippet: `// Federation Scout Class
+ctx.beginPath();
+ctx.moveTo(0, -size);
+ctx.lineTo(size * 0.6, -size * 0.7);
+ctx.lineTo(size * 0.6, -size * 0.3);
+ctx.lineTo(size * 0.15, -size * 0.2);
+ctx.lineTo(size * 0.15, size * 0.5);
+ctx.lineTo(size * 0.1, size * 0.8);
+ctx.lineTo(0, size * 0.9);
+ctx.lineTo(-size * 0.1, size * 0.8);
+ctx.lineTo(-size * 0.15, size * 0.5);
+ctx.lineTo(-size * 0.15, -size * 0.2);
+ctx.lineTo(-size * 0.6, -size * 0.3);
+ctx.lineTo(-size * 0.6, -size * 0.7);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.lineTo(size * 0.6, -size * 0.7);
+            ctx.lineTo(size * 0.6, -size * 0.3);
+            ctx.lineTo(size * 0.15, -size * 0.2);
+            ctx.lineTo(size * 0.15, size * 0.5);
+            ctx.lineTo(size * 0.1, size * 0.8);
+            ctx.lineTo(0, size * 0.9);
+            ctx.lineTo(-size * 0.1, size * 0.8);
+            ctx.lineTo(-size * 0.15, size * 0.5);
+            ctx.lineTo(-size * 0.15, -size * 0.2);
+            ctx.lineTo(-size * 0.6, -size * 0.3);
+            ctx.lineTo(-size * 0.6, -size * 0.7);
+            ctx.closePath();
+          }
+        },
+        cruiser: {
+          vertexCount: 25,
+          snippet: `// Federation Cruiser Class
+ctx.beginPath();
+ctx.moveTo(0, -size);
+ctx.lineTo(size * 0.5, -size * 0.8);
+ctx.lineTo(size * 0.5, -size * 0.4);
+ctx.lineTo(size * 0.2, -size * 0.3);
+ctx.lineTo(size * 0.2, size * 0.2);
+ctx.lineTo(size * 0.7, size * 0.2);
+ctx.lineTo(size * 0.7, -size * 0.2);
+ctx.lineTo(size * 0.9, -size * 0.2);
+ctx.lineTo(size * 0.9, size * 0.8);
+ctx.lineTo(size * 0.7, size * 0.8);
+ctx.lineTo(size * 0.7, size * 0.4);
+ctx.lineTo(size * 0.2, size * 0.4);
+ctx.lineTo(size * 0.2, size * 0.6);
+ctx.lineTo(-size * 0.2, size * 0.6);
+ctx.lineTo(-size * 0.2, size * 0.4);
+ctx.lineTo(-size * 0.7, size * 0.4);
+ctx.lineTo(-size * 0.7, size * 0.8);
+ctx.lineTo(-size * 0.9, size * 0.8);
+ctx.lineTo(-size * 0.9, -size * 0.2);
+ctx.lineTo(-size * 0.7, -size * 0.2);
+ctx.lineTo(-size * 0.7, size * 0.2);
+ctx.lineTo(-size * 0.2, size * 0.2);
+ctx.lineTo(-size * 0.2, -size * 0.3);
+ctx.lineTo(-size * 0.5, -size * 0.4);
+ctx.lineTo(-size * 0.5, -size * 0.8);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.lineTo(size * 0.5, -size * 0.8);
+            ctx.lineTo(size * 0.5, -size * 0.4);
+            ctx.lineTo(size * 0.2, -size * 0.3);
+            ctx.lineTo(size * 0.2, size * 0.2);
+            ctx.lineTo(size * 0.7, size * 0.2);
+            ctx.lineTo(size * 0.7, -size * 0.2);
+            ctx.lineTo(size * 0.9, -size * 0.2);
+            ctx.lineTo(size * 0.9, size * 0.8);
+            ctx.lineTo(size * 0.7, size * 0.8);
+            ctx.lineTo(size * 0.7, size * 0.4);
+            ctx.lineTo(size * 0.2, size * 0.4);
+            ctx.lineTo(size * 0.2, size * 0.6);
+            ctx.lineTo(-size * 0.2, size * 0.6);
+            ctx.lineTo(-size * 0.2, size * 0.4);
+            ctx.lineTo(-size * 0.7, size * 0.4);
+            ctx.lineTo(-size * 0.7, size * 0.8);
+            ctx.lineTo(-size * 0.9, size * 0.8);
+            ctx.lineTo(-size * 0.9, -size * 0.2);
+            ctx.lineTo(-size * 0.7, -size * 0.2);
+            ctx.lineTo(-size * 0.7, size * 0.2);
+            ctx.lineTo(-size * 0.2, size * 0.2);
+            ctx.lineTo(-size * 0.2, -size * 0.3);
+            ctx.lineTo(-size * 0.5, -size * 0.4);
+            ctx.lineTo(-size * 0.5, -size * 0.8);
+            ctx.closePath();
+          }
+        },
+        battleship: {
+          vertexCount: 28,
+          snippet: `// Federation Battleship Class
+ctx.beginPath();
+ctx.moveTo(0, -size);
+ctx.lineTo(size * 0.6, -size * 0.7);
+ctx.lineTo(size * 0.6, -size * 0.3);
+ctx.lineTo(size * 0.2, -size * 0.2);
+ctx.lineTo(size * 0.2, size * 0.1);
+ctx.lineTo(size * 0.7, size * 0.1);
+ctx.lineTo(size * 0.7, -size * 0.3);
+ctx.lineTo(size * 0.85, -size * 0.3);
+ctx.lineTo(size * 0.85, size * 0.7);
+ctx.lineTo(size * 0.7, size * 0.7);
+ctx.lineTo(size * 0.7, size * 0.3);
+ctx.lineTo(size * 0.2, size * 0.3);
+ctx.lineTo(size * 0.15, size * 0.5);
+ctx.lineTo(size * 0.15, size * 0.8);
+ctx.lineTo(0, size * 0.9);
+ctx.lineTo(-size * 0.15, size * 0.8);
+ctx.lineTo(-size * 0.15, size * 0.5);
+ctx.lineTo(-size * 0.2, size * 0.3);
+ctx.lineTo(-size * 0.7, size * 0.3);
+ctx.lineTo(-size * 0.7, size * 0.7);
+ctx.lineTo(-size * 0.85, size * 0.7);
+ctx.lineTo(-size * 0.85, -size * 0.3);
+ctx.lineTo(-size * 0.7, -size * 0.3);
+ctx.lineTo(-size * 0.7, size * 0.1);
+ctx.lineTo(-size * 0.2, size * 0.1);
+ctx.lineTo(-size * 0.2, -size * 0.2);
+ctx.lineTo(-size * 0.6, -size * 0.3);
+ctx.lineTo(-size * 0.6, -size * 0.7);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.lineTo(size * 0.6, -size * 0.7);
+            ctx.lineTo(size * 0.6, -size * 0.3);
+            ctx.lineTo(size * 0.2, -size * 0.2);
+            ctx.lineTo(size * 0.2, size * 0.1);
+            ctx.lineTo(size * 0.7, size * 0.1);
+            ctx.lineTo(size * 0.7, -size * 0.3);
+            ctx.lineTo(size * 0.85, -size * 0.3);
+            ctx.lineTo(size * 0.85, size * 0.7);
+            ctx.lineTo(size * 0.7, size * 0.7);
+            ctx.lineTo(size * 0.7, size * 0.3);
+            ctx.lineTo(size * 0.2, size * 0.3);
+            ctx.lineTo(size * 0.15, size * 0.5);
+            ctx.lineTo(size * 0.15, size * 0.8);
+            ctx.lineTo(0, size * 0.9);
+            ctx.lineTo(-size * 0.15, size * 0.8);
+            ctx.lineTo(-size * 0.15, size * 0.5);
+            ctx.lineTo(-size * 0.2, size * 0.3);
+            ctx.lineTo(-size * 0.7, size * 0.3);
+            ctx.lineTo(-size * 0.7, size * 0.7);
+            ctx.lineTo(-size * 0.85, size * 0.7);
+            ctx.lineTo(-size * 0.85, -size * 0.3);
+            ctx.lineTo(-size * 0.7, -size * 0.3);
+            ctx.lineTo(-size * 0.7, size * 0.1);
+            ctx.lineTo(-size * 0.2, size * 0.1);
+            ctx.lineTo(-size * 0.2, -size * 0.2);
+            ctx.lineTo(-size * 0.6, -size * 0.3);
+            ctx.lineTo(-size * 0.6, -size * 0.7);
+            ctx.closePath();
+          }
+        },
+        mammoth: {
+          vertexCount: 37,
+          snippet: `// Federation Mammoth Class
+ctx.beginPath();
+ctx.moveTo(0, -size);
+ctx.lineTo(size * 0.7, -size * 0.8);
+ctx.lineTo(size * 0.7, -size * 0.4);
+ctx.lineTo(size * 0.3, -size * 0.1);
+ctx.lineTo(size * 0.5, -size * 0.1);
+ctx.lineTo(size * 0.5, -size * 0.4);
+ctx.lineTo(size * 0.65, -size * 0.4);
+ctx.lineTo(size * 0.65, size * 0.3);
+ctx.lineTo(size * 0.5, size * 0.3);
+ctx.lineTo(size * 0.3, size * 0.1);
+ctx.lineTo(size * 0.3, size * 0.3);
+ctx.lineTo(size * 0.9, size * 0.3);
+ctx.lineTo(size * 0.9, 0);
+ctx.lineTo(size * 1.05, 0);
+ctx.lineTo(size * 1.05, size * 0.9);
+ctx.lineTo(size * 0.9, size * 0.9);
+ctx.lineTo(size * 0.9, size * 0.5);
+ctx.lineTo(size * 0.2, size * 0.5);
+ctx.lineTo(size * 0.1, size * 0.7);
+ctx.lineTo(-size * 0.1, size * 0.7);
+ctx.lineTo(-size * 0.2, size * 0.5);
+ctx.lineTo(-size * 0.9, size * 0.5);
+ctx.lineTo(-size * 0.9, size * 0.9);
+ctx.lineTo(-size * 1.05, size * 0.9);
+ctx.lineTo(-size * 1.05, 0);
+ctx.lineTo(-size * 0.9, 0);
+ctx.lineTo(-size * 0.9, size * 0.3);
+ctx.lineTo(-size * 0.3, size * 0.3);
+ctx.lineTo(-size * 0.3, size * 0.1);
+ctx.lineTo(-size * 0.5, size * 0.3);
+ctx.lineTo(-size * 0.65, size * 0.3);
+ctx.lineTo(-size * 0.65, -size * 0.4);
+ctx.lineTo(-size * 0.5, -size * 0.4);
+ctx.lineTo(-size * 0.5, -size * 0.1);
+ctx.lineTo(-size * 0.3, -size * 0.1);
+ctx.lineTo(-size * 0.7, -size * 0.4);
+ctx.lineTo(-size * 0.7, -size * 0.8);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.lineTo(size * 0.7, -size * 0.8);
+            ctx.lineTo(size * 0.7, -size * 0.4);
+            ctx.lineTo(size * 0.3, -size * 0.1);
+            ctx.lineTo(size * 0.5, -size * 0.1);
+            ctx.lineTo(size * 0.5, -size * 0.4);
+            ctx.lineTo(size * 0.65, -size * 0.4);
+            ctx.lineTo(size * 0.65, size * 0.3);
+            ctx.lineTo(size * 0.5, size * 0.3);
+            ctx.lineTo(size * 0.3, size * 0.1);
+            ctx.lineTo(size * 0.3, size * 0.3);
+            ctx.lineTo(size * 0.9, size * 0.3);
+            ctx.lineTo(size * 0.9, 0);
+            ctx.lineTo(size * 1.05, 0);
+            ctx.lineTo(size * 1.05, size * 0.9);
+            ctx.lineTo(size * 0.9, size * 0.9);
+            ctx.lineTo(size * 0.9, size * 0.5);
+            ctx.lineTo(size * 0.2, size * 0.5);
+            ctx.lineTo(size * 0.1, size * 0.7);
+            ctx.lineTo(-size * 0.1, size * 0.7);
+            ctx.lineTo(-size * 0.2, size * 0.5);
+            ctx.lineTo(-size * 0.9, size * 0.5);
+            ctx.lineTo(-size * 0.9, size * 0.9);
+            ctx.lineTo(-size * 1.05, size * 0.9);
+            ctx.lineTo(-size * 1.05, 0);
+            ctx.lineTo(-size * 0.9, 0);
+            ctx.lineTo(-size * 0.9, size * 0.3);
+            ctx.lineTo(-size * 0.3, size * 0.3);
+            ctx.lineTo(-size * 0.3, size * 0.1);
+            ctx.lineTo(-size * 0.5, size * 0.3);
+            ctx.lineTo(-size * 0.65, size * 0.3);
+            ctx.lineTo(-size * 0.65, -size * 0.4);
+            ctx.lineTo(-size * 0.5, -size * 0.4);
+            ctx.lineTo(-size * 0.5, -size * 0.1);
+            ctx.lineTo(-size * 0.3, -size * 0.1);
+            ctx.lineTo(-size * 0.7, -size * 0.4);
+            ctx.lineTo(-size * 0.7, -size * 0.8);
+            ctx.closePath();
+          }
+        }
+      },
+      Romulan: {
+        themeColor: '#00ff66',
+        badge: '🦅 ROMULAN EMPIRE',
+        desc: 'Romulan ship configurations have predatory, bird-like silhouettes featuring swept-forward wing formations, sharp bow beaks, and hollow central sections.',
+        scout: {
+          vertexCount: 22,
+          snippet: `// Romulan Scout Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 1.0);
+ctx.lineTo(size * 0.3, -size * 0.4);
+ctx.lineTo(size * 0.3, -size * 0.05);
+ctx.lineTo(size * 0.55, -size * 0.05);
+ctx.lineTo(size * 0.55, -size * 0.15);
+ctx.lineTo(size * 0.65, -size * 0.15);
+ctx.lineTo(size * 0.65, size * 0.25);
+ctx.lineTo(size * 0.55, size * 0.25);
+ctx.lineTo(size * 0.55, size * 0.05);
+ctx.lineTo(size * 0.3, size * 0.05);
+ctx.lineTo(size * 0.3, size * 0.1);
+ctx.lineTo(0, size * 0.25);
+ctx.lineTo(-size * 0.3, size * 0.1);
+ctx.lineTo(-size * 0.3, size * 0.05);
+ctx.lineTo(-size * 0.55, size * 0.05);
+ctx.lineTo(-size * 0.55, size * 0.25);
+ctx.lineTo(-size * 0.65, size * 0.25);
+ctx.lineTo(-size * 0.65, -size * 0.15);
+ctx.lineTo(-size * 0.55, -size * 0.15);
+ctx.lineTo(-size * 0.55, -size * 0.05);
+ctx.lineTo(-size * 0.3, -size * 0.05);
+ctx.lineTo(-size * 0.3, -size * 0.4);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 1.0);
+            ctx.lineTo(size * 0.3, -size * 0.4);
+            ctx.lineTo(size * 0.3, -size * 0.05);
+            ctx.lineTo(size * 0.55, -size * 0.05);
+            ctx.lineTo(size * 0.55, -size * 0.15);
+            ctx.lineTo(size * 0.65, -size * 0.15);
+            ctx.lineTo(size * 0.65, size * 0.25);
+            ctx.lineTo(size * 0.55, size * 0.25);
+            ctx.lineTo(size * 0.55, size * 0.05);
+            ctx.lineTo(size * 0.3, size * 0.05);
+            ctx.lineTo(size * 0.3, size * 0.1);
+            ctx.lineTo(0, size * 0.25);
+            ctx.lineTo(-size * 0.3, size * 0.1);
+            ctx.lineTo(-size * 0.3, size * 0.05);
+            ctx.lineTo(-size * 0.55, size * 0.05);
+            ctx.lineTo(-size * 0.55, size * 0.25);
+            ctx.lineTo(-size * 0.65, size * 0.25);
+            ctx.lineTo(-size * 0.65, -size * 0.15);
+            ctx.lineTo(-size * 0.55, -size * 0.15);
+            ctx.lineTo(-size * 0.55, -size * 0.05);
+            ctx.lineTo(-size * 0.3, -size * 0.05);
+            ctx.lineTo(-size * 0.3, -size * 0.4);
+            ctx.closePath();
+          }
+        },
+        cruiser: {
+          vertexCount: 26,
+          snippet: `// Romulan Cruiser Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 0.6);
+ctx.lineTo(size * 0.2, -size * 0.55);
+ctx.lineTo(size * 0.35, -size * 0.4);
+ctx.lineTo(size * 0.4, -size * 0.2);
+ctx.lineTo(size * 0.33, size * 0.0);
+// Right forward-sweeping beam to engine (shifted backward)
+ctx.lineTo(size * 0.56, -size * 0.2);
+ctx.lineTo(size * 0.66, -size * 0.75);
+ctx.lineTo(size * 0.74, -size * 0.75);
+ctx.lineTo(size * 0.54, size * 0.25);
+ctx.lineTo(size * 0.46, size * 0.25);
+ctx.lineTo(size * 0.53, -size * 0.1);
+ctx.lineTo(size * 0.3, size * 0.1);
+ctx.lineTo(size * 0.2, size * 0.4);
+ctx.lineTo(0, size * 0.4);
+ctx.lineTo(-size * 0.2, size * 0.4);
+ctx.lineTo(-size * 0.3, size * 0.1);
+// Left forward-sweeping beam to engine (shifted backward)
+ctx.lineTo(-size * 0.53, -size * 0.1);
+ctx.lineTo(-size * 0.46, size * 0.25);
+ctx.lineTo(-size * 0.54, size * 0.25);
+ctx.lineTo(-size * 0.74, -size * 0.75);
+ctx.lineTo(-size * 0.66, -size * 0.75);
+ctx.lineTo(-size * 0.56, -size * 0.2);
+ctx.lineTo(-size * 0.33, size * 0.0);
+ctx.lineTo(-size * 0.4, -size * 0.2);
+ctx.lineTo(-size * 0.35, -size * 0.4);
+ctx.lineTo(-size * 0.2, -size * 0.55);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 0.6);
+            ctx.lineTo(size * 0.2, -size * 0.55);
+            ctx.lineTo(size * 0.35, -size * 0.4);
+            ctx.lineTo(size * 0.4, -size * 0.2);
+            ctx.lineTo(size * 0.33, size * 0.0);
+            // Right forward-sweeping beam to engine (shifted backward)
+            ctx.lineTo(size * 0.56, -size * 0.2);
+            ctx.lineTo(size * 0.66, -size * 0.75);
+            ctx.lineTo(size * 0.74, -size * 0.75);
+            ctx.lineTo(size * 0.54, size * 0.25);
+            ctx.lineTo(size * 0.46, size * 0.25);
+            ctx.lineTo(size * 0.53, -size * 0.1);
+            ctx.lineTo(size * 0.3, size * 0.1);
+            ctx.lineTo(size * 0.2, size * 0.4);
+            ctx.lineTo(0, size * 0.4);
+            ctx.lineTo(-size * 0.2, size * 0.4);
+            ctx.lineTo(-size * 0.3, size * 0.1);
+            // Left forward-sweeping beam to engine (shifted backward)
+            ctx.lineTo(-size * 0.53, -size * 0.1);
+            ctx.lineTo(-size * 0.46, size * 0.25);
+            ctx.lineTo(-size * 0.54, size * 0.25);
+            ctx.lineTo(-size * 0.74, -size * 0.75);
+            ctx.lineTo(-size * 0.66, -size * 0.75);
+            ctx.lineTo(-size * 0.56, -size * 0.2);
+            ctx.lineTo(-size * 0.33, size * 0.0);
+            ctx.lineTo(-size * 0.4, -size * 0.2);
+            ctx.lineTo(-size * 0.35, -size * 0.4);
+            ctx.lineTo(-size * 0.2, -size * 0.55);
+            ctx.closePath();
+          }
+        },
+        battleship: {
+          vertexCount: 18,
+          snippet: `// Romulan Battleship Class
+ctx.beginPath();
+ctx.moveTo(0, -size);
+ctx.lineTo(size * 0.25, -size * 0.7);
+ctx.lineTo(size * 0.6, -size * 0.6);
+ctx.lineTo(size * 1.2, -size * 0.5);
+ctx.lineTo(size * 1.0, 0);
+ctx.lineTo(size * 0.7, -size * 0.2);
+ctx.lineTo(size * 0.5, size * 0.4);
+ctx.lineTo(size * 0.25, size * 0.1);
+ctx.lineTo(size * 0.2, size * 0.8);
+ctx.lineTo(0, size * 0.6);
+ctx.lineTo(-size * 0.2, size * 0.8);
+ctx.lineTo(-size * 0.25, size * 0.1);
+ctx.lineTo(-size * 0.5, size * 0.4);
+ctx.lineTo(-size * 0.7, -size * 0.2);
+ctx.lineTo(-size * 1.0, 0);
+ctx.lineTo(-size * 1.2, -size * 0.5);
+ctx.lineTo(-size * 0.6, -size * 0.6);
+ctx.lineTo(-size * 0.25, -size * 0.7);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.lineTo(size * 0.25, -size * 0.7);
+            ctx.lineTo(size * 0.6, -size * 0.6);
+            ctx.lineTo(size * 1.2, -size * 0.5);
+            ctx.lineTo(size * 1.0, 0);
+            ctx.lineTo(size * 0.7, -size * 0.2);
+            ctx.lineTo(size * 0.5, size * 0.4);
+            ctx.lineTo(size * 0.25, size * 0.1);
+            ctx.lineTo(size * 0.2, size * 0.8);
+            ctx.lineTo(0, size * 0.6);
+            ctx.lineTo(-size * 0.2, size * 0.8);
+            ctx.lineTo(-size * 0.25, size * 0.1);
+            ctx.lineTo(-size * 0.5, size * 0.4);
+            ctx.lineTo(-size * 0.7, -size * 0.2);
+            ctx.lineTo(-size * 1.0, 0);
+            ctx.lineTo(-size * 1.2, -size * 0.5);
+            ctx.lineTo(-size * 0.6, -size * 0.6);
+            ctx.lineTo(-size * 0.25, -size * 0.7);
+            ctx.closePath();
+          }
+        },
+        mammoth: {
+          vertexCount: 14,
+          snippet: `// Romulan Mammoth Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 0.9);
+ctx.lineTo(size * 0.4, -size * 0.8);
+ctx.lineTo(size * 0.8, -size * 0.5);
+ctx.lineTo(size * 1.2, 0);
+ctx.lineTo(size * 0.8, size * 0.6);
+ctx.lineTo(size * 0.5, size * 0.2);
+ctx.lineTo(size * 0.3, size * 0.9);
+ctx.lineTo(0, size * 0.8);
+ctx.lineTo(-size * 0.3, size * 0.9);
+ctx.lineTo(-size * 0.5, size * 0.2);
+ctx.lineTo(-size * 0.8, size * 0.6);
+ctx.lineTo(-size * 1.2, 0);
+ctx.lineTo(-size * 0.8, -size * 0.5);
+ctx.lineTo(-size * 0.4, -size * 0.8);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 0.9);
+            ctx.lineTo(size * 0.4, -size * 0.8);
+            ctx.lineTo(size * 0.8, -size * 0.5);
+            ctx.lineTo(size * 1.2, 0);
+            ctx.lineTo(size * 0.8, size * 0.6);
+            ctx.lineTo(size * 0.5, size * 0.2);
+            ctx.lineTo(size * 0.3, size * 0.9);
+            ctx.lineTo(0, size * 0.8);
+            ctx.lineTo(-size * 0.3, size * 0.9);
+            ctx.lineTo(-size * 0.5, size * 0.2);
+            ctx.lineTo(-size * 0.8, size * 0.6);
+            ctx.lineTo(-size * 1.2, 0);
+            ctx.lineTo(-size * 0.8, -size * 0.5);
+            ctx.lineTo(-size * 0.4, -size * 0.8);
+            ctx.closePath();
+          }
+        }
+      },
+      Klingon: {
+        themeColor: '#ff2a2a',
+        badge: '⚔️ KLINGON FLEET',
+        desc: 'Klingon ship engineering features long forward necks, bulbous command pods, sweeping hull structures, and aft warp engine assemblies designed for speed and aggressive posture.',
+        scout: {
+          vertexCount: 21,
+          snippet: `// Klingon Scout Class
+ctx.beginPath();
+ctx.moveTo(0, -size);
+ctx.lineTo(size / 6, -size * 0.85);
+ctx.lineTo(size / 8, -size * 0.75);
+ctx.lineTo(size / 10, -size * 0.2);
+ctx.lineTo(size * 0.8, -size * 0.1);
+ctx.lineTo(size * 0.9, size * 0.2);
+ctx.lineTo(size * 0.9, size * 0.5);
+ctx.lineTo(size * 0.7, size * 0.5);
+ctx.lineTo(size * 0.6, size * 0.3);
+ctx.lineTo(size / 4, size * 0.4);
+ctx.lineTo(size / 5, size * 0.6);
+ctx.lineTo(-size / 5, size * 0.6);
+ctx.lineTo(-size / 4, size * 0.4);
+ctx.lineTo(-size * 0.6, size * 0.3);
+ctx.lineTo(-size * 0.7, size * 0.5);
+ctx.lineTo(-size * 0.9, size * 0.5);
+ctx.lineTo(-size * 0.9, size * 0.2);
+ctx.lineTo(-size * 0.8, -size * 0.1);
+ctx.lineTo(-size / 10, -size * 0.2);
+ctx.lineTo(-size / 8, -size * 0.75);
+ctx.lineTo(-size / 6, -size * 0.85);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.lineTo(size / 6, -size * 0.85);
+            ctx.lineTo(size / 8, -size * 0.75);
+            ctx.lineTo(size / 10, -size * 0.2);
+            ctx.lineTo(size * 0.8, -size * 0.1);
+            ctx.lineTo(size * 0.9, size * 0.2);
+            ctx.lineTo(size * 0.9, size * 0.5);
+            ctx.lineTo(size * 0.7, size * 0.5);
+            ctx.lineTo(size * 0.6, size * 0.3);
+            ctx.lineTo(size / 4, size * 0.4);
+            ctx.lineTo(size / 5, size * 0.6);
+            ctx.lineTo(-size / 5, size * 0.6);
+            ctx.lineTo(-size / 4, size * 0.4);
+            ctx.lineTo(-size * 0.6, size * 0.3);
+            ctx.lineTo(-size * 0.7, size * 0.5);
+            ctx.lineTo(-size * 0.9, size * 0.5);
+            ctx.lineTo(-size * 0.9, size * 0.2);
+            ctx.lineTo(-size * 0.8, -size * 0.1);
+            ctx.lineTo(-size / 10, -size * 0.2);
+            ctx.lineTo(-size / 8, -size * 0.75);
+            ctx.lineTo(-size / 6, -size * 0.85);
+            ctx.closePath();
+          }
+        },
+        cruiser: {
+          vertexCount: 27,
+          snippet: `// Klingon Cruiser Class
+ctx.beginPath();
+ctx.moveTo(0, -size);
+ctx.lineTo(size / 6, -size * 0.85);
+ctx.lineTo(size / 8, -size * 0.75);
+ctx.lineTo(size / 10, -size * 0.2);
+ctx.lineTo(size * 0.8, -size * 0.1);
+// Right wingtip gun barrel
+ctx.lineTo(size * 0.87, size * 0.2);
+ctx.lineTo(size * 0.87, size * 0.05);
+ctx.lineTo(size * 0.93, size * 0.05);
+ctx.lineTo(size * 0.93, size * 0.2);
+ctx.lineTo(size * 0.9, size * 0.5);
+ctx.lineTo(size * 0.7, size * 0.5);
+ctx.lineTo(size * 0.6, size * 0.3);
+ctx.lineTo(size / 4, size * 0.4);
+ctx.lineTo(size / 5, size * 0.6);
+ctx.lineTo(-size / 5, size * 0.6);
+ctx.lineTo(-size / 4, size * 0.4);
+ctx.lineTo(-size * 0.6, size * 0.3);
+ctx.lineTo(-size * 0.7, size * 0.5);
+ctx.lineTo(-size * 0.9, size * 0.5);
+// Left wingtip gun barrel
+ctx.lineTo(-size * 0.93, size * 0.2);
+ctx.lineTo(-size * 0.93, size * 0.05);
+ctx.lineTo(-size * 0.87, size * 0.05);
+ctx.lineTo(-size * 0.87, size * 0.2);
+ctx.lineTo(-size * 0.8, -size * 0.1);
+ctx.lineTo(-size / 10, -size * 0.2);
+ctx.lineTo(-size / 8, -size * 0.75);
+ctx.lineTo(-size / 6, -size * 0.85);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.lineTo(size / 6, -size * 0.85);
+            ctx.lineTo(size / 8, -size * 0.75);
+            ctx.lineTo(size / 10, -size * 0.2);
+            ctx.lineTo(size * 0.8, -size * 0.1);
+            // Right wingtip gun barrel
+            ctx.lineTo(size * 0.87, size * 0.2);
+            ctx.lineTo(size * 0.87, size * 0.05);
+            ctx.lineTo(size * 0.93, size * 0.05);
+            ctx.lineTo(size * 0.93, size * 0.2);
+            ctx.lineTo(size * 0.9, size * 0.5);
+            ctx.lineTo(size * 0.7, size * 0.5);
+            ctx.lineTo(size * 0.6, size * 0.3);
+            ctx.lineTo(size / 4, size * 0.4);
+            ctx.lineTo(size / 5, size * 0.6);
+            ctx.lineTo(-size / 5, size * 0.6);
+            ctx.lineTo(-size / 4, size * 0.4);
+            ctx.lineTo(-size * 0.6, size * 0.3);
+            ctx.lineTo(-size * 0.7, size * 0.5);
+            ctx.lineTo(-size * 0.9, size * 0.5);
+            // Left wingtip gun barrel
+            ctx.lineTo(-size * 0.93, size * 0.2);
+            ctx.lineTo(-size * 0.93, size * 0.05);
+            ctx.lineTo(-size * 0.87, size * 0.05);
+            ctx.lineTo(-size * 0.87, size * 0.2);
+            ctx.lineTo(-size * 0.8, -size * 0.1);
+            ctx.lineTo(-size / 10, -size * 0.2);
+            ctx.lineTo(-size / 8, -size * 0.75);
+            ctx.lineTo(-size / 6, -size * 0.85);
+            ctx.closePath();
+          }
+        },
+        battleship: {
+          vertexCount: 27,
+          snippet: `// Klingon Battleship Class
+ctx.beginPath();
+ctx.moveTo(0, -size);
+ctx.lineTo(size / 6, -size * 0.85);
+ctx.lineTo(size / 8, -size * 0.75);
+ctx.lineTo(size / 10, -size * 0.2);
+ctx.lineTo(size * 0.8, -size * 0.1);
+// Right wingtip gun barrel
+ctx.lineTo(size * 0.87, size * 0.2);
+ctx.lineTo(size * 0.87, size * 0.05);
+ctx.lineTo(size * 0.93, size * 0.05);
+ctx.lineTo(size * 0.93, size * 0.2);
+ctx.lineTo(size * 0.9, size * 0.5);
+ctx.lineTo(size * 0.7, size * 0.5);
+ctx.lineTo(size * 0.6, size * 0.3);
+ctx.lineTo(size / 4, size * 0.4);
+ctx.lineTo(size / 5, size * 0.6);
+ctx.lineTo(-size / 5, size * 0.6);
+ctx.lineTo(-size / 4, size * 0.4);
+ctx.lineTo(-size * 0.6, size * 0.3);
+ctx.lineTo(-size * 0.7, size * 0.5);
+ctx.lineTo(-size * 0.9, size * 0.5);
+// Left wingtip gun barrel
+ctx.lineTo(-size * 0.93, size * 0.2);
+ctx.lineTo(-size * 0.93, size * 0.05);
+ctx.lineTo(-size * 0.87, size * 0.05);
+ctx.lineTo(-size * 0.87, size * 0.2);
+ctx.lineTo(-size * 0.8, -size * 0.1);
+ctx.lineTo(-size / 10, -size * 0.2);
+ctx.lineTo(-size / 8, -size * 0.75);
+ctx.lineTo(-size / 6, -size * 0.85);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.lineTo(size / 6, -size * 0.85);
+            ctx.lineTo(size / 8, -size * 0.75);
+            ctx.lineTo(size / 10, -size * 0.2);
+            ctx.lineTo(size * 0.8, -size * 0.1);
+            // Right wingtip gun barrel
+            ctx.lineTo(size * 0.87, size * 0.2);
+            ctx.lineTo(size * 0.87, size * 0.05);
+            ctx.lineTo(size * 0.93, size * 0.05);
+            ctx.lineTo(size * 0.93, size * 0.2);
+            ctx.lineTo(size * 0.9, size * 0.5);
+            ctx.lineTo(size * 0.7, size * 0.5);
+            ctx.lineTo(size * 0.6, size * 0.3);
+            ctx.lineTo(size / 4, size * 0.4);
+            ctx.lineTo(size / 5, size * 0.6);
+            ctx.lineTo(-size / 5, size * 0.6);
+            ctx.lineTo(-size / 4, size * 0.4);
+            ctx.lineTo(-size * 0.6, size * 0.3);
+            ctx.lineTo(-size * 0.7, size * 0.5);
+            ctx.lineTo(-size * 0.9, size * 0.5);
+            // Left wingtip gun barrel
+            ctx.lineTo(-size * 0.93, size * 0.2);
+            ctx.lineTo(-size * 0.93, size * 0.05);
+            ctx.lineTo(-size * 0.87, size * 0.05);
+            ctx.lineTo(-size * 0.87, size * 0.2);
+            ctx.lineTo(-size * 0.8, -size * 0.1);
+            ctx.lineTo(-size / 10, -size * 0.2);
+            ctx.lineTo(-size / 8, -size * 0.75);
+            ctx.lineTo(-size / 6, -size * 0.85);
+            ctx.closePath();
+          }
+        },
+        mammoth: {
+          vertexCount: 27,
+          snippet: `// Klingon Mammoth Class
+ctx.beginPath();
+ctx.moveTo(0, -size);
+ctx.lineTo(size / 6, -size * 0.85);
+ctx.lineTo(size / 8, -size * 0.75);
+ctx.lineTo(size / 10, -size * 0.2);
+ctx.lineTo(size * 0.8, -size * 0.1);
+// Right wingtip gun barrel
+ctx.lineTo(size * 0.87, size * 0.2);
+ctx.lineTo(size * 0.87, size * 0.05);
+ctx.lineTo(size * 0.93, size * 0.05);
+ctx.lineTo(size * 0.93, size * 0.2);
+ctx.lineTo(size * 0.9, size * 0.5);
+ctx.lineTo(size * 0.7, size * 0.5);
+ctx.lineTo(size * 0.6, size * 0.3);
+ctx.lineTo(size / 4, size * 0.4);
+ctx.lineTo(size / 5, size * 0.6);
+ctx.lineTo(-size / 5, size * 0.6);
+ctx.lineTo(-size / 4, size * 0.4);
+ctx.lineTo(-size * 0.6, size * 0.3);
+ctx.lineTo(-size * 0.7, size * 0.5);
+ctx.lineTo(-size * 0.9, size * 0.5);
+// Left wingtip gun barrel
+ctx.lineTo(-size * 0.93, size * 0.2);
+ctx.lineTo(-size * 0.93, size * 0.05);
+ctx.lineTo(-size * 0.87, size * 0.05);
+ctx.lineTo(-size * 0.87, size * 0.2);
+ctx.lineTo(-size * 0.8, -size * 0.1);
+ctx.lineTo(-size / 10, -size * 0.2);
+ctx.lineTo(-size / 8, -size * 0.75);
+ctx.lineTo(-size / 6, -size * 0.85);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.lineTo(size / 6, -size * 0.85);
+            ctx.lineTo(size / 8, -size * 0.75);
+            ctx.lineTo(size / 10, -size * 0.2);
+            ctx.lineTo(size * 0.8, -size * 0.1);
+            // Right wingtip gun barrel
+            ctx.lineTo(size * 0.87, size * 0.2);
+            ctx.lineTo(size * 0.87, size * 0.05);
+            ctx.lineTo(size * 0.93, size * 0.05);
+            ctx.lineTo(size * 0.93, size * 0.2);
+            ctx.lineTo(size * 0.9, size * 0.5);
+            ctx.lineTo(size * 0.7, size * 0.5);
+            ctx.lineTo(size * 0.6, size * 0.3);
+            ctx.lineTo(size / 4, size * 0.4);
+            ctx.lineTo(size / 5, size * 0.6);
+            ctx.lineTo(-size / 5, size * 0.6);
+            ctx.lineTo(-size / 4, size * 0.4);
+            ctx.lineTo(-size * 0.6, size * 0.3);
+            ctx.lineTo(-size * 0.7, size * 0.5);
+            ctx.lineTo(-size * 0.9, size * 0.5);
+            // Left wingtip gun barrel
+            ctx.lineTo(-size * 0.93, size * 0.2);
+            ctx.lineTo(-size * 0.93, size * 0.05);
+            ctx.lineTo(-size * 0.87, size * 0.05);
+            ctx.lineTo(-size * 0.87, size * 0.2);
+            ctx.lineTo(-size * 0.8, -size * 0.1);
+            ctx.lineTo(-size / 10, -size * 0.2);
+            ctx.lineTo(-size / 8, -size * 0.75);
+            ctx.lineTo(-size / 6, -size * 0.85);
+            ctx.closePath();
+          }
+        }
+      },
+      Gorn: {
+        themeColor: '#ffb700',
+        badge: '🦖 GORN HEGEMONY',
+        desc: 'Gorn ships look like heavy, aggressive rectangular and blocky wedges. They are brutish platforms focusing on maximum structural density and raw firepower.',
+        scout: {
+          vertexCount: 16,
+          snippet: `// Gorn Scout Class
+ctx.beginPath();
+ctx.moveTo(-size * 0.25, -size * 0.56);
+ctx.lineTo(size * 0.25, -size * 0.56);
+ctx.lineTo(size * 0.34, -size * 0.28);
+ctx.lineTo(size * 0.67, -size * 0.14);
+ctx.lineTo(size * 0.67, size * 0.28);
+ctx.lineTo(size * 0.42, size * 0.28);
+ctx.lineTo(size * 0.42, size * 0.56);
+ctx.lineTo(size * 0.17, size * 0.56);
+ctx.lineTo(size * 0.17, size * 0.42);
+ctx.lineTo(-size * 0.17, size * 0.42);
+ctx.lineTo(-size * 0.17, size * 0.56);
+ctx.lineTo(-size * 0.42, size * 0.56);
+ctx.lineTo(-size * 0.42, size * 0.28);
+ctx.lineTo(-size * 0.67, size * 0.28);
+ctx.lineTo(-size * 0.67, -size * 0.14);
+ctx.lineTo(-size * 0.34, -size * 0.28);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(-size * 0.25, -size * 0.56);
+            ctx.lineTo(size * 0.25, -size * 0.56);
+            ctx.lineTo(size * 0.34, -size * 0.28);
+            ctx.lineTo(size * 0.67, -size * 0.14);
+            ctx.lineTo(size * 0.67, size * 0.28);
+            ctx.lineTo(size * 0.42, size * 0.28);
+            ctx.lineTo(size * 0.42, size * 0.56);
+            ctx.lineTo(size * 0.17, size * 0.56);
+            ctx.lineTo(size * 0.17, size * 0.42);
+            ctx.lineTo(-size * 0.17, size * 0.42);
+            ctx.lineTo(-size * 0.17, size * 0.56);
+            ctx.lineTo(-size * 0.42, size * 0.56);
+            ctx.lineTo(-size * 0.42, size * 0.28);
+            ctx.lineTo(-size * 0.67, size * 0.28);
+            ctx.lineTo(-size * 0.67, -size * 0.14);
+            ctx.lineTo(-size * 0.34, -size * 0.28);
+            ctx.closePath();
+          }
+        },
+        cruiser: {
+          vertexCount: 16,
+          snippet: `// Gorn Cruiser Class
+ctx.beginPath();
+ctx.moveTo(-size * 0.4, -size * 0.8);
+ctx.lineTo(size * 0.4, -size * 0.8);
+ctx.lineTo(size * 0.4, -size * 0.5);
+ctx.lineTo(size * 0.2, -size * 0.5);
+ctx.lineTo(size * 0.2, size * 0.1);
+ctx.lineTo(size * 0.8, size * 0.1);
+ctx.lineTo(size * 0.8, size * 0.5);
+ctx.lineTo(size * 0.5, size * 0.5);
+ctx.lineTo(size * 0.3, size * 0.8);
+ctx.lineTo(-size * 0.3, size * 0.8);
+ctx.lineTo(-size * 0.5, size * 0.5);
+ctx.lineTo(-size * 0.8, size * 0.5);
+ctx.lineTo(-size * 0.8, size * 0.1);
+ctx.lineTo(-size * 0.2, size * 0.1);
+ctx.lineTo(-size * 0.2, -size * 0.5);
+ctx.lineTo(-size * 0.4, -size * 0.5);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(-size * 0.4, -size * 0.8);
+            ctx.lineTo(size * 0.4, -size * 0.8);
+            ctx.lineTo(size * 0.4, -size * 0.5);
+            ctx.lineTo(size * 0.2, -size * 0.5);
+            ctx.lineTo(size * 0.2, size * 0.1);
+            ctx.lineTo(size * 0.8, size * 0.1);
+            ctx.lineTo(size * 0.8, size * 0.5);
+            ctx.lineTo(size * 0.5, size * 0.5);
+            ctx.lineTo(size * 0.3, size * 0.8);
+            ctx.lineTo(-size * 0.3, size * 0.8);
+            ctx.lineTo(-size * 0.5, size * 0.5);
+            ctx.lineTo(-size * 0.8, size * 0.5);
+            ctx.lineTo(-size * 0.8, size * 0.1);
+            ctx.lineTo(-size * 0.2, size * 0.1);
+            ctx.lineTo(-size * 0.2, -size * 0.5);
+            ctx.lineTo(-size * 0.4, -size * 0.5);
+            ctx.closePath();
+          }
+        },
+        battleship: {
+          vertexCount: 16,
+          snippet: `// Gorn Battleship Class
+ctx.beginPath();
+ctx.moveTo(-size * 0.4, -size);
+ctx.lineTo(size * 0.4, -size);
+ctx.lineTo(size * 0.4, -size * 0.6);
+ctx.lineTo(size * 0.8, -size * 0.6);
+ctx.lineTo(size * 0.8, size * 0.3);
+ctx.lineTo(size * 0.5, size * 0.3);
+ctx.lineTo(size * 0.5, size * 0.8);
+ctx.lineTo(size * 0.2, size * 0.8);
+ctx.lineTo(size * 0.2, size * 0.9);
+ctx.lineTo(-size * 0.2, size * 0.9);
+ctx.lineTo(-size * 0.2, size * 0.8);
+ctx.lineTo(-size * 0.5, size * 0.8);
+ctx.lineTo(-size * 0.5, size * 0.3);
+ctx.lineTo(-size * 0.8, size * 0.3);
+ctx.lineTo(-size * 0.8, -size * 0.6);
+ctx.lineTo(-size * 0.4, -size * 0.6);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(-size * 0.4, -size);
+            ctx.lineTo(size * 0.4, -size);
+            ctx.lineTo(size * 0.4, -size * 0.6);
+            ctx.lineTo(size * 0.8, -size * 0.6);
+            ctx.lineTo(size * 0.8, size * 0.3);
+            ctx.lineTo(size * 0.5, size * 0.3);
+            ctx.lineTo(size * 0.5, size * 0.8);
+            ctx.lineTo(size * 0.2, size * 0.8);
+            ctx.lineTo(size * 0.2, size * 0.9);
+            ctx.lineTo(-size * 0.2, size * 0.9);
+            ctx.lineTo(-size * 0.2, size * 0.8);
+            ctx.lineTo(-size * 0.5, size * 0.8);
+            ctx.lineTo(-size * 0.5, size * 0.3);
+            ctx.lineTo(-size * 0.8, size * 0.3);
+            ctx.lineTo(-size * 0.8, -size * 0.6);
+            ctx.lineTo(-size * 0.4, -size * 0.6);
+            ctx.closePath();
+          }
+        },
+        mammoth: {
+          vertexCount: 12,
+          snippet: `// Gorn Mammoth Class
+ctx.beginPath();
+ctx.moveTo(-size * 0.6, -size * 0.9);
+ctx.lineTo(size * 0.6, -size * 0.9);
+ctx.lineTo(size * 0.6, -size * 0.3);
+ctx.lineTo(size * 0.9, -size * 0.3);
+ctx.lineTo(size * 0.9, size * 0.9);
+ctx.lineTo(size * 0.5, size * 0.9);
+ctx.lineTo(size * 0.5, size * 0.3);
+ctx.lineTo(-size * 0.5, size * 0.3);
+ctx.lineTo(-size * 0.5, size * 0.9);
+ctx.lineTo(-size * 0.9, size * 0.9);
+ctx.lineTo(-size * 0.9, -size * 0.3);
+ctx.lineTo(-size * 0.6, -size * 0.3);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(-size * 0.6, -size * 0.9);
+            ctx.lineTo(size * 0.6, -size * 0.9);
+            ctx.lineTo(size * 0.6, -size * 0.3);
+            ctx.lineTo(size * 0.9, -size * 0.3);
+            ctx.lineTo(size * 0.9, size * 0.9);
+            ctx.lineTo(size * 0.5, size * 0.9);
+            ctx.lineTo(size * 0.5, size * 0.3);
+            ctx.lineTo(-size * 0.5, size * 0.3);
+            ctx.lineTo(-size * 0.5, size * 0.9);
+            ctx.lineTo(-size * 0.9, size * 0.9);
+            ctx.lineTo(-size * 0.9, -size * 0.3);
+            ctx.lineTo(-size * 0.6, -size * 0.3);
+            ctx.closePath();
+          }
+        }
+      },
+      Tholian: {
+        themeColor: '#e000ff',
+        badge: '🕸️ THOLIAN ASSEMBLY',
+        desc: 'Tholian vessels utilize sharp crystal-like formations, diamonds, and triangular trusses. Their geometry focuses on web weaving and high structural deflection.',
+        scout: {
+          vertexCount: 12,
+          snippet: `// Tholian Scout Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 1.2);
+ctx.lineTo(size * 0.4, -size * 0.5);
+ctx.lineTo(size * 0.9, 0);
+ctx.lineTo(size * 0.4, size * 0.25);
+ctx.lineTo(0, size * 0.6);
+ctx.lineTo(-size * 0.4, size * 0.25);
+ctx.lineTo(-size * 0.9, 0);
+ctx.lineTo(-size * 0.4, -size * 0.5);
+// Inner core structure
+ctx.moveTo(0, -size * 0.6);
+ctx.lineTo(-size * 0.2, 0);
+ctx.lineTo(0, size * 0.3);
+ctx.lineTo(size * 0.2, 0);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 1.2);
+            ctx.lineTo(size * 0.4, -size * 0.5);
+            ctx.lineTo(size * 0.9, 0);
+            ctx.lineTo(size * 0.4, size * 0.25);
+            ctx.lineTo(0, size * 0.6);
+            ctx.lineTo(-size * 0.4, size * 0.25);
+            ctx.lineTo(-size * 0.9, 0);
+            ctx.lineTo(-size * 0.4, -size * 0.5);
+            ctx.closePath();
+            
+            // Inner core diamond
+            ctx.moveTo(0, -size * 0.6);
+            ctx.lineTo(-size * 0.2, 0);
+            ctx.lineTo(0, size * 0.3);
+            ctx.lineTo(size * 0.2, 0);
+            ctx.closePath();
+          }
+        },
+        cruiser: {
+          vertexCount: 12,
+          snippet: `// Tholian Cruiser Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 1.2);
+ctx.lineTo(size * 0.3, -size * 0.65);
+ctx.lineTo(size * 0.8, -size * 0.65);
+ctx.lineTo(size * 0.5, 0);
+ctx.lineTo(size * 0.9, size * 0.3);
+ctx.lineTo(size * 0.3, size * 0.3);
+ctx.lineTo(0, size * 0.6);
+ctx.lineTo(-size * 0.3, size * 0.3);
+ctx.lineTo(-size * 0.9, size * 0.3);
+ctx.lineTo(-size * 0.5, 0);
+ctx.lineTo(-size * 0.8, -size * 0.65);
+ctx.lineTo(-size * 0.3, -size * 0.65);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 1.2);
+            ctx.lineTo(size * 0.3, -size * 0.65);
+            ctx.lineTo(size * 0.8, -size * 0.65);
+            ctx.lineTo(size * 0.5, 0);
+            ctx.lineTo(size * 0.9, size * 0.3);
+            ctx.lineTo(size * 0.3, size * 0.3);
+            ctx.lineTo(0, size * 0.6);
+            ctx.lineTo(-size * 0.3, size * 0.3);
+            ctx.lineTo(-size * 0.9, size * 0.3);
+            ctx.lineTo(-size * 0.5, 0);
+            ctx.lineTo(-size * 0.8, -size * 0.65);
+            ctx.lineTo(-size * 0.3, -size * 0.65);
+            ctx.closePath();
+          }
+        },
+        battleship: {
+          vertexCount: 12,
+          snippet: `// Tholian Battleship Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 1.2);
+ctx.lineTo(size * 0.4, -size * 0.85);
+ctx.lineTo(size * 0.9, -size * 0.55);
+ctx.lineTo(size * 0.6, 0);
+ctx.lineTo(size * 0.9, size * 0.25);
+ctx.lineTo(size * 0.4, size * 0.45);
+ctx.lineTo(0, size * 0.6);
+ctx.lineTo(-size * 0.4, size * 0.45);
+ctx.lineTo(-size * 0.9, size * 0.25);
+ctx.lineTo(-size * 0.6, 0);
+ctx.lineTo(-size * 0.9, -size * 0.55);
+ctx.lineTo(-size * 0.4, -size * 0.85);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 1.2);
+            ctx.lineTo(size * 0.4, -size * 0.85);
+            ctx.lineTo(size * 0.9, -size * 0.55);
+            ctx.lineTo(size * 0.6, 0);
+            ctx.lineTo(size * 0.9, size * 0.25);
+            ctx.lineTo(size * 0.4, size * 0.45);
+            ctx.lineTo(0, size * 0.6);
+            ctx.lineTo(-size * 0.4, size * 0.45);
+            ctx.lineTo(-size * 0.9, size * 0.25);
+            ctx.lineTo(-size * 0.6, 0);
+            ctx.lineTo(-size * 0.9, -size * 0.55);
+            ctx.lineTo(-size * 0.4, -size * 0.85);
+            ctx.closePath();
+          }
+        },
+        mammoth: {
+          vertexCount: 20,
+          snippet: `// Tholian Mammoth Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 1.25);
+ctx.lineTo(size * 0.2, -size * 0.75);
+ctx.lineTo(size * 0.7, -size * 1.0);
+ctx.lineTo(size * 0.5, -size * 0.45);
+ctx.lineTo(size * 1.0, -size * 0.45);
+ctx.lineTo(size * 0.6, 0);
+ctx.lineTo(size * 1.0, size * 0.18);
+ctx.lineTo(size * 0.5, size * 0.18);
+ctx.lineTo(size * 0.7, size * 0.5);
+ctx.lineTo(size * 0.2, size * 0.38);
+ctx.lineTo(0, size * 0.6);
+ctx.lineTo(-size * 0.2, size * 0.38);
+ctx.lineTo(-size * 0.7, size * 0.5);
+ctx.lineTo(-size * 0.5, size * 0.18);
+ctx.lineTo(-size * 1.0, size * 0.18);
+ctx.lineTo(-size * 0.6, 0);
+ctx.lineTo(-size * 1.0, -size * 0.45);
+ctx.lineTo(-size * 0.5, -size * 0.45);
+ctx.lineTo(-size * 0.7, -size * 1.0);
+ctx.lineTo(-size * 0.2, -size * 0.75);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 1.25);
+            ctx.lineTo(size * 0.2, -size * 0.75);
+            ctx.lineTo(size * 0.7, -size * 1.0);
+            ctx.lineTo(size * 0.5, -size * 0.45);
+            ctx.lineTo(size * 1.0, -size * 0.45);
+            ctx.lineTo(size * 0.6, 0);
+            ctx.lineTo(size * 1.0, size * 0.18);
+            ctx.lineTo(size * 0.5, size * 0.18);
+            ctx.lineTo(size * 0.7, size * 0.5);
+            ctx.lineTo(size * 0.2, size * 0.38);
+            ctx.lineTo(0, size * 0.6);
+            ctx.lineTo(-size * 0.2, size * 0.38);
+            ctx.lineTo(-size * 0.7, size * 0.5);
+            ctx.lineTo(-size * 0.5, size * 0.18);
+            ctx.lineTo(-size * 1.0, size * 0.18);
+            ctx.lineTo(-size * 0.6, 0);
+            ctx.lineTo(-size * 1.0, -size * 0.45);
+            ctx.lineTo(-size * 0.5, -size * 0.45);
+            ctx.lineTo(-size * 0.7, -size * 1.0);
+            ctx.lineTo(-size * 0.2, -size * 0.75);
+            ctx.closePath();
+          }
+        }
+      },
+      Lyran: {
+        themeColor: '#a4c3f5',
+        badge: '🦁 LYRAN STAR EMPIRE',
+        desc: 'Lyran starship engineering is distinct, featuring sharp twin outrigger pods and rectangular central columns that house heavy power generation cores.',
+        scout: {
+          vertexCount: 10,
+          snippet: `// Lyran Scout Class
+ctx.beginPath();
+ctx.moveTo(-size * 0.2, -size * 0.9);
+ctx.lineTo(size * 0.2, -size * 0.9);
+ctx.lineTo(size * 0.2, -size * 0.4);
+ctx.lineTo(size * 0.9, size * 0.6);
+ctx.lineTo(size * 0.4, size * 0.6);
+ctx.lineTo(size * 0.2, size * 0.9);
+ctx.lineTo(-size * 0.2, size * 0.9);
+ctx.lineTo(-size * 0.4, size * 0.6);
+ctx.lineTo(-size * 0.9, size * 0.6);
+ctx.lineTo(-size * 0.2, -size * 0.4);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(-size * 0.2, -size * 0.9);
+            ctx.lineTo(size * 0.2, -size * 0.9);
+            ctx.lineTo(size * 0.2, -size * 0.4);
+            ctx.lineTo(size * 0.9, size * 0.6);
+            ctx.lineTo(size * 0.4, size * 0.6);
+            ctx.lineTo(size * 0.2, size * 0.9);
+            ctx.lineTo(-size * 0.2, size * 0.9);
+            ctx.lineTo(-size * 0.4, size * 0.6);
+            ctx.lineTo(-size * 0.9, size * 0.6);
+            ctx.lineTo(-size * 0.2, -size * 0.4);
+            ctx.closePath();
+          }
+        },
+        cruiser: {
+          vertexCount: 12,
+          snippet: `// Lyran Cruiser Class
+ctx.beginPath();
+ctx.moveTo(-size * 0.7, -size * 0.9);
+ctx.lineTo(-size * 0.3, -size * 0.9);
+ctx.lineTo(-size * 0.3, size * 0.2);
+ctx.lineTo(size * 0.3, size * 0.2);
+ctx.lineTo(size * 0.3, -size * 0.9);
+ctx.lineTo(size * 0.7, -size * 0.9);
+ctx.lineTo(size * 0.9, size * 0.6);
+ctx.lineTo(size * 0.4, size * 0.6);
+ctx.lineTo(size * 0.2, size * 0.9);
+ctx.lineTo(-size * 0.2, size * 0.9);
+ctx.lineTo(-size * 0.4, size * 0.6);
+ctx.lineTo(-size * 0.9, size * 0.6);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(-size * 0.7, -size * 0.9);
+            ctx.lineTo(-size * 0.3, -size * 0.9);
+            ctx.lineTo(-size * 0.3, size * 0.2);
+            ctx.lineTo(size * 0.3, size * 0.2);
+            ctx.lineTo(size * 0.3, -size * 0.9);
+            ctx.lineTo(size * 0.7, -size * 0.9);
+            ctx.lineTo(size * 0.9, size * 0.6);
+            ctx.lineTo(size * 0.4, size * 0.6);
+            ctx.lineTo(size * 0.2, size * 0.9);
+            ctx.lineTo(-size * 0.2, size * 0.9);
+            ctx.lineTo(-size * 0.4, size * 0.6);
+            ctx.lineTo(-size * 0.9, size * 0.6);
+            ctx.closePath();
+          }
+        },
+        battleship: {
+          vertexCount: 25,
+          snippet: `// Lyran Battleship Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 0.7);
+ctx.lineTo(size * 0.2, -size * 0.7);
+ctx.lineTo(size * 0.2, -size * 0.4);
+ctx.lineTo(size * 0.5, -size * 0.4);
+ctx.lineTo(size * 0.5, -size);
+ctx.lineTo(size * 0.8, -size);
+ctx.lineTo(size * 0.8, -size * 0.2);
+ctx.lineTo(size * 1.2, 0);
+ctx.lineTo(size * 1.2, size * 0.4);
+ctx.lineTo(size * 0.8, size * 0.4);
+ctx.lineTo(size * 0.8, size * 0.9);
+ctx.lineTo(size * 0.4, size * 0.9);
+ctx.lineTo(size * 0.4, size * 0.6);
+ctx.lineTo(-size * 0.4, size * 0.6);
+ctx.lineTo(-size * 0.4, size * 0.9);
+ctx.lineTo(-size * 0.8, size * 0.9);
+ctx.lineTo(-size * 0.8, size * 0.4);
+ctx.lineTo(-size * 1.2, size * 0.4);
+ctx.lineTo(-size * 1.2, 0);
+ctx.lineTo(-size * 0.8, -size * 0.2);
+ctx.lineTo(-size * 0.8, -size);
+ctx.lineTo(-size * 0.5, -size);
+ctx.lineTo(-size * 0.5, -size * 0.4);
+ctx.lineTo(-size * 0.2, -size * 0.4);
+ctx.lineTo(-size * 0.2, -size * 0.7);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 0.7);
+            ctx.lineTo(size * 0.2, -size * 0.7);
+            ctx.lineTo(size * 0.2, -size * 0.4);
+            ctx.lineTo(size * 0.5, -size * 0.4);
+            ctx.lineTo(size * 0.5, -size);
+            ctx.lineTo(size * 0.8, -size);
+            ctx.lineTo(size * 0.8, -size * 0.2);
+            ctx.lineTo(size * 1.2, 0);
+            ctx.lineTo(size * 1.2, size * 0.4);
+            ctx.lineTo(size * 0.8, size * 0.4);
+            ctx.lineTo(size * 0.8, size * 0.9);
+            ctx.lineTo(size * 0.4, size * 0.9);
+            ctx.lineTo(size * 0.4, size * 0.6);
+            ctx.lineTo(-size * 0.4, size * 0.6);
+            ctx.lineTo(-size * 0.4, size * 0.9);
+            ctx.lineTo(-size * 0.8, size * 0.9);
+            ctx.lineTo(-size * 0.8, size * 0.4);
+            ctx.lineTo(-size * 1.2, size * 0.4);
+            ctx.lineTo(-size * 1.2, 0);
+            ctx.lineTo(-size * 0.8, -size * 0.2);
+            ctx.lineTo(-size * 0.8, -size);
+            ctx.lineTo(-size * 0.5, -size);
+            ctx.lineTo(-size * 0.5, -size * 0.4);
+            ctx.lineTo(-size * 0.2, -size * 0.4);
+            ctx.lineTo(-size * 0.2, -size * 0.7);
+            ctx.closePath();
+          }
+        },
+        mammoth: {
+          vertexCount: 33,
+          snippet: `// Lyran Mammoth Class
+ctx.beginPath();
+ctx.moveTo(0, -size * 0.4);
+ctx.lineTo(size * 0.1, -size * 0.4);
+ctx.lineTo(size * 0.1, -size * 0.7);
+ctx.lineTo(size * 0.3, -size * 0.7);
+ctx.lineTo(size * 0.3, -size * 0.4);
+ctx.lineTo(size * 0.6, -size * 0.4);
+ctx.lineTo(size * 0.6, -size);
+ctx.lineTo(size * 0.9, -size);
+ctx.lineTo(size * 0.9, -size * 0.2);
+ctx.lineTo(size * 1.3, -size * 0.2);
+ctx.lineTo(size * 1.3, size * 0.5);
+ctx.lineTo(size * 0.9, size * 0.5);
+ctx.lineTo(size * 0.9, size * 0.9);
+ctx.lineTo(size * 0.6, size * 0.9);
+ctx.lineTo(size * 0.6, size * 0.6);
+ctx.lineTo(size * 0.2, size * 0.6);
+ctx.lineTo(size * 0.2, size * 0.9);
+ctx.lineTo(-size * 0.2, size * 0.9);
+ctx.lineTo(-size * 0.2, size * 0.6);
+ctx.lineTo(-size * 0.6, size * 0.6);
+ctx.lineTo(-size * 0.6, size * 0.9);
+ctx.lineTo(-size * 0.9, size * 0.9);
+ctx.lineTo(-size * 0.9, size * 0.5);
+ctx.lineTo(-size * 1.3, size * 0.5);
+ctx.lineTo(-size * 1.3, -size * 0.2);
+ctx.lineTo(-size * 0.9, -size * 0.2);
+ctx.lineTo(-size * 0.9, -size);
+ctx.lineTo(-size * 0.6, -size);
+ctx.lineTo(-size * 0.6, -size * 0.4);
+ctx.lineTo(-size * 0.3, -size * 0.4);
+ctx.lineTo(-size * 0.3, -size * 0.7);
+ctx.lineTo(-size * 0.1, -size * 0.7);
+ctx.lineTo(-size * 0.1, -size * 0.4);
+ctx.closePath();`,
+          draw: (ctx, size) => {
+            ctx.beginPath();
+            ctx.moveTo(0, -size * 0.4);
+            ctx.lineTo(size * 0.1, -size * 0.4);
+            ctx.lineTo(size * 0.1, -size * 0.7);
+            ctx.lineTo(size * 0.3, -size * 0.7);
+            ctx.lineTo(size * 0.3, -size * 0.4);
+            ctx.lineTo(size * 0.6, -size * 0.4);
+            ctx.lineTo(size * 0.6, -size);
+            ctx.lineTo(size * 0.9, -size);
+            ctx.lineTo(size * 0.9, -size * 0.2);
+            ctx.lineTo(size * 1.3, -size * 0.2);
+            ctx.lineTo(size * 1.3, size * 0.5);
+            ctx.lineTo(size * 0.9, size * 0.5);
+            ctx.lineTo(size * 0.9, size * 0.9);
+            ctx.lineTo(size * 0.6, size * 0.9);
+            ctx.lineTo(size * 0.6, size * 0.6);
+            ctx.lineTo(size * 0.2, size * 0.6);
+            ctx.lineTo(size * 0.2, size * 0.9);
+            ctx.lineTo(-size * 0.2, size * 0.9);
+            ctx.lineTo(-size * 0.2, size * 0.6);
+            ctx.lineTo(-size * 0.6, size * 0.6);
+            ctx.lineTo(-size * 0.6, size * 0.9);
+            ctx.lineTo(-size * 0.9, size * 0.9);
+            ctx.lineTo(-size * 0.9, size * 0.5);
+            ctx.lineTo(-size * 1.3, size * 0.5);
+            ctx.lineTo(-size * 1.3, -size * 0.2);
+            ctx.lineTo(-size * 0.9, -size * 0.2);
+            ctx.lineTo(-size * 0.9, -size);
+            ctx.lineTo(-size * 0.6, -size);
+            ctx.lineTo(-size * 0.6, -size * 0.4);
+            ctx.lineTo(-size * 0.3, -size * 0.4);
+            ctx.lineTo(-size * 0.3, -size * 0.7);
+            ctx.lineTo(-size * 0.1, -size * 0.7);
+            ctx.lineTo(-size * 0.1, -size * 0.4);
+            ctx.closePath();
+          }
+        }
+      }
+    };
+
+    // State Variables
+    let activeFactionKey = 'Federation';
+    let activeClassKey = 'scout';
+    let rotationAngle = 0;
+    let gridEnabled = true;
+    let fillEnabled = true;
+
+    // DOM Elements
+    const canvas = document.getElementById('shipCanvas');
+    const ctx = canvas.getContext('2d');
+    const scaleSlider = document.getElementById('scaleSlider');
+    const speedSlider = document.getElementById('speedSlider');
+    const colorPicker = document.getElementById('colorPicker');
+    const toggleGridBtn = document.getElementById('toggleGridBtn');
+    const toggleFillBtn = document.getElementById('toggleFillBtn');
+    const codeSnippet = document.getElementById('codeSnippet');
+    const copyCodeBtn = document.getElementById('copyCodeBtn');
+
+    // UI overlays
+    const factionBadge = document.getElementById('factionBadge');
+    const factionDescription = document.getElementById('factionDescription');
+    const classPanelFaction = document.getElementById('classPanelFaction');
+    const activeClassName = document.getElementById('activeClassName');
+    const scaleValue = document.getElementById('scaleValue');
+    const headingValue = document.getElementById('headingValue');
+    const vertexValue = document.getElementById('vertexValue');
+    const factionOverlayValue = document.getElementById('factionOverlayValue');
+    const hullValue = document.getElementById('hullValue');
+
+    // Setup Canvas Sizing
+    function resizeCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Faction Switching Tabs
+    const factionTabs = document.querySelectorAll('.faction-tab');
+    factionTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        factionTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        activeFactionKey = tab.getAttribute('data-faction');
+        
+        // Update CSS Theme class
+        document.body.className = '';
+        document.body.classList.add('theme-' + activeFactionKey);
+        
+        // Update Color Picker default
+        const faction = FactionsData[activeFactionKey];
+        colorPicker.value = faction.themeColor;
+        
+        // Update labels
+        factionBadge.textContent = faction.badge;
+        factionDescription.textContent = faction.desc;
+        classPanelFaction.textContent = activeFactionKey.substring(0, 3).toUpperCase();
+        factionOverlayValue.textContent = activeFactionKey;
+        
+        updateInfoPanel();
+      });
+    });
+
+    // Select Ship Class Cards
+    const cards = document.querySelectorAll('.ship-class-card');
+    cards.forEach(card => {
+      card.addEventListener('click', () => {
+        cards.forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        activeClassKey = card.getAttribute('data-class');
+        updateInfoPanel();
+      });
+    });
+
+    // Toggle Settings
+    toggleGridBtn.addEventListener('click', () => {
+      gridEnabled = !gridEnabled;
+      toggleGridBtn.textContent = gridEnabled ? '🌐 GRID ON' : '🌐 GRID OFF';
+      toggleGridBtn.style.background = gridEnabled ? 'rgba(255, 255, 255, 0.05)' : 'transparent';
+    });
+
+    toggleFillBtn.addEventListener('click', () => {
+      fillEnabled = !fillEnabled;
+      toggleFillBtn.textContent = fillEnabled ? '🔳 FILL ON' : '🔳 FILL OFF';
+      toggleFillBtn.style.background = fillEnabled ? 'rgba(255, 255, 255, 0.05)' : 'transparent';
+    });
+
+    // Copy Code
+    copyCodeBtn.addEventListener('click', () => {
+      const text = codeSnippet.innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        copyCodeBtn.textContent = 'COPIED!';
+        setTimeout(() => copyCodeBtn.textContent = 'COPY CODE', 2000);
+      });
+    });
+
+    // Syntax Highlight formatting
+    function formatCodeSnippet(rawText) {
+      return rawText
+        .replace(/(ctx\.\w+)/g, '<span class="code-method">$1</span>')
+        .replace(/(\/\/.*)/g, '<span class="code-comment">$1</span>')
+        .replace(/\b(size|ctx)\b/g, '<span class="code-variable">$1</span>')
+        .replace(/(-?\d+(\.\d+)?)/g, '<span class="code-number">$1</span>');
+    }
+
+    function updateInfoPanel() {
+      const faction = FactionsData[activeFactionKey];
+      const shipDrawing = faction[activeClassKey];
+      
+      activeClassName.textContent = `${activeFactionKey.toUpperCase()} ${activeClassKey.toUpperCase()} CLASS`;
+      hullValue.textContent = activeClassKey.charAt(0).toUpperCase() + activeClassKey.slice(1);
+      vertexValue.textContent = shipDrawing.vertexCount;
+      codeSnippet.innerHTML = formatCodeSnippet(shipDrawing.snippet);
+    }
+    updateInfoPanel();
+
+    // Render Loop
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const scale = parseInt(scaleSlider.value);
+      const rotationSpeed = parseInt(speedSlider.value) / 1000;
+      const accentColor = colorPicker.value;
+
+      // Update rotation
+      rotationAngle += rotationSpeed;
+      if (rotationAngle > Math.PI * 2) rotationAngle -= Math.PI * 2;
+
+      // Update HUD values
+      scaleValue.textContent = (scale / 30).toFixed(1) + 'x';
+      headingValue.textContent = rotationAngle.toFixed(2) + ' rad';
+
+      // 1. Draw Grid Lines
+      if (gridEnabled) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+        ctx.lineWidth = 1;
+        const gridSpacing = 40;
+        
+        // Horizontal lines
+        for (let y = centerY % gridSpacing; y < canvas.height; y += gridSpacing) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvas.width, y);
+          ctx.stroke();
+        }
+        // Vertical lines
+        for (let x = centerX % gridSpacing; x < canvas.width; x += gridSpacing) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvas.height);
+          ctx.stroke();
+        }
+
+        // Concentric radar circles
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
+        ctx.lineWidth = 1.5;
+        for (let r = 80; r < Math.max(canvas.width, canvas.height); r += 80) {
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // Crosshairs
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+        ctx.beginPath();
+        ctx.moveTo(centerX - 120, centerY);
+        ctx.lineTo(centerX + 120, centerY);
+        ctx.moveTo(centerX, centerY - 120);
+        ctx.lineTo(centerX, centerY + 120);
+        ctx.stroke();
+      }
+
+      // 2. Draw Ship Schematic
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(rotationAngle);
+
+      // Shadow glow effect
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = accentColor;
+
+      // Draw ship fill
+      if (fillEnabled) {
+        ctx.fillStyle = 'rgba(4, 8, 17, 0.7)';
+        FactionsData[activeFactionKey][activeClassKey].draw(ctx, scale);
+        ctx.fill();
+      }
+
+      // Draw ship outline
+      ctx.strokeStyle = accentColor;
+      ctx.lineWidth = 2.2;
+      FactionsData[activeFactionKey][activeClassKey].draw(ctx, scale);
+      ctx.stroke();
+
+      // Highlight ship origin/center
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#ff7b00';
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+
+      requestAnimationFrame(render);
+    }
+
+    // Start Loop
+    setTimeout(() => {
+      resizeCanvas();
+      render();
+    }, 100);
+  </script>
+</body>
+</html>
