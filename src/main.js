@@ -3439,7 +3439,10 @@ function getPlanetTradeIncomePerMin(planet) {
           `;
         }
 
-        const netIncome = totalTradeRatePerMin - stockpileMaintenanceRatePerMin + interestRatePerMin;
+        const pirateActivityRatePerMin = (myPlayer.pirateActivity || 0) / 25;
+        const pirateIncomeRatePerMin = (myPlayer.pirateIncome || 0) / 25;
+
+        const netIncome = totalTradeRatePerMin - stockpileMaintenanceRatePerMin + interestRatePerMin - pirateActivityRatePerMin + pirateIncomeRatePerMin;
         let totalIncomeColor = '#aaa';
         let totalIncomeText = '0.00';
         if (netIncome > 0) {
@@ -3461,6 +3464,28 @@ function getPlanetTradeIncomePerMin(planet) {
           `;
         }
 
+        let pirateActivityRowHtml = "";
+        if (pirateActivityRatePerMin > 0) {
+          pirateActivityRowHtml = `
+            <tr style="border-top: 1px dashed rgba(255, 255, 255, 0.15);">
+              <td style="padding: 6px 0; color: #ff3333; text-align: left;">Pirate Activity</td>
+              <td style="padding: 6px 0; text-align: center; color: #ff3333;">${Math.round(myPlayer.pirateActivity)}</td>
+              <td style="padding: 6px 0; text-align: right; color: #ff3333; font-weight: bold;">-${pirateActivityRatePerMin.toFixed(2)}/m</td>
+            </tr>
+          `;
+        }
+
+        let pirateIncomeRowHtml = "";
+        if (pirateIncomeRatePerMin > 0) {
+          pirateIncomeRowHtml = `
+            <tr style="border-top: 1px dashed rgba(255, 255, 255, 0.15);">
+              <td style="padding: 6px 0; color: #4caf50; text-align: left;">Pirate Income</td>
+              <td style="padding: 6px 0; text-align: center; color: #4caf50;">${Math.round(myPlayer.pirateIncome)}</td>
+              <td style="padding: 6px 0; text-align: right; color: #4caf50; font-weight: bold;">+${pirateIncomeRatePerMin.toFixed(2)}/m</td>
+            </tr>
+          `;
+        }
+
         tooltipPanel.innerHTML = `
           <div style="font-weight: bold; font-size: 0.85rem; color: #ffeb3b; border-bottom: 1px solid rgba(255, 235, 59, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Income Summary</div>
           <table style="width: 100%; border-collapse: collapse; font-family: 'Rajdhani', sans-serif; font-size: 0.9rem;">
@@ -3476,6 +3501,8 @@ function getPlanetTradeIncomePerMin(planet) {
             </tbody>
             <tfoot>
               ${stockpileRowHtml}
+              ${pirateActivityRowHtml}
+              ${pirateIncomeRowHtml}
               <tr style="border-top: 1px dashed rgba(255, 255, 255, 0.15);">
                 <td style="padding: 6px 0; color: #aaa; text-align: left;">Interest Accrual</td>
                 <td style="padding: 6px 0;"></td>

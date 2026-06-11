@@ -3559,6 +3559,63 @@ export class Game {
       player.cruiserCount = this.ships.filter(s => s.active && s.owner === player && s.isCruiser).length;
     }
 
+    // Calculate Pirate Activity and Pirate Income for all players
+    for (const p of this.allPlayers) {
+      p.pirateActivity = 0;
+      p.pirateIncome = 0;
+    }
+
+    for (const planet of this.planets) {
+      if (planet.dead || !planet.owner) continue;
+
+      // Calculate effective ships at this planet (Commerce worlds count double/quadruple)
+      let effShips = planet.ships;
+      if (planet.focusMode === 'commerce') {
+        const isFull = planet.ships >= planet.maxShips;
+        effShips = isFull ? planet.ships * 4 : planet.ships * 2;
+      }
+
+      // Group enemy cruisers/amoebas max health in the planet's gravity well by owner
+      const enemyMaxHealthByOwner = new Map();
+      let totalEnemyMaxHealth = 0;
+
+      for (const ship of this.ships) {
+        if (ship.active && (ship.isCruiser || ship.isAmoeba) && ship.owner && ship.owner.id !== planet.owner.id) {
+          const dx = ship.x - planet.x;
+          const dy = ship.y - planet.y;
+          const gr = planet.getGravityRadius();
+          if (dx * dx + dy * dy <= gr * gr) {
+            const hp = ship.maxHealth || 0;
+            if (hp > 0) {
+              enemyMaxHealthByOwner.set(ship.owner.id, (enemyMaxHealthByOwner.get(ship.owner.id) || 0) + hp);
+              totalEnemyMaxHealth += hp;
+            }
+          }
+        }
+      }
+
+      if (totalEnemyMaxHealth > 0) {
+        // Pirate Activity equals 10 times maxhealth, capped at total effective ships
+        const rawActivity = totalEnemyMaxHealth * 10;
+        const activity = Math.min(rawActivity, effShips);
+
+        // Deduct from planet owner's pirate activity
+        planet.owner.pirateActivity = (planet.owner.pirateActivity || 0) + activity;
+
+        // Prorated if rawActivity was higher than effective ships of the planet
+        const scale = Math.min(1.0, effShips / rawActivity);
+
+        // Increase Pirate Income for each of the enemy players
+        for (const [ownerId, hpSum] of enemyMaxHealthByOwner.entries()) {
+          const enemyPlayer = this.allPlayers.find(pl => pl.id === ownerId);
+          if (enemyPlayer) {
+            const income = hpSum * 10 * scale;
+            enemyPlayer.pirateIncome = (enemyPlayer.pirateIncome || 0) + income;
+          }
+        }
+      }
+    }
+
     // Dynamic calculations for player limits and trade options
     for (const player of this.allPlayers) {
       if ((player.credits || 0) < 0) {
@@ -3750,6 +3807,15 @@ export class Game {
         const tradingIncome = tradingIncomeRate * (deltaTime / 1000);
         player.credits = (player.credits || 0) + tradingIncome;
         player.passiveIncomeRate = tradingIncomeRate; // Store for client UI display!
+
+        // Apply Pirate Activity and Pirate Income adjustments
+        const pirateActivityRate = (player.pirateActivity || 0) / 1500;
+        const pirateActivityDeduction = pirateActivityRate * (deltaTime / 1000);
+        player.credits = (player.credits || 0) - pirateActivityDeduction;
+
+        const pirateIncomeRate = (player.pirateIncome || 0) / 1500;
+        const pirateIncomeAddition = pirateIncomeRate * (deltaTime / 1000);
+        player.credits = (player.credits || 0) + pirateIncomeAddition;
 
         player.tradingPartners = [];
         for (const key in visiblePartnerShips) {
