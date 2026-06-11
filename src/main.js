@@ -108,8 +108,12 @@ function getEffectiveSympathyClient(pl, playerId) {
     }
 
     if (isKnown) {
-      const gr = (pl.maxShips || 0) * 1.5;
-      const maxDist = Math.max(gr, (pl.radius || 0) + 120);
+      let baseRadius = (pl.maxShips || 0) * 1.5;
+      if (pl.isMilitary && (pl.ships || 0) >= (pl.maxShips || 0)) {
+        baseRadius *= 1.5;
+      }
+      const gr = baseRadius * 0.5;
+      const maxDist = gr;
       const maxDistSq = maxDist * maxDist;
       for (const ship of serverState.ships) {
         if (ship.active && ship.ownerId === playerId) {

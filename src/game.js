@@ -42,7 +42,7 @@ export function getEffectiveSympathy(planet, playerId, allShips, player = null, 
 
     if (isKnown) {
       const gr = planet.getGravityRadius();
-      const maxDist = Math.max(gr, (planet.radius || 0) + 120);
+      const maxDist = gr;
       const maxDistSq = maxDist * maxDist;
       for (const ship of allShips) {
         if (ship.active && ship.owner && ship.owner.id === playerId) {
