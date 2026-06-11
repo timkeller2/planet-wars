@@ -249,8 +249,7 @@ export class Ship {
     if (!allShips || !this.owner) return null;
     let closestSupplyShip = null;
     let closestDistSq = Infinity;
-    const radarRange = (this.isCruiser && typeof this.cruiserRadarRange === 'function') ? this.cruiserRadarRange() : 150;
-    const radarRangeSq = radarRange * radarRange;
+    const myRadarRange = (this.isCruiser && typeof this.cruiserRadarRange === 'function') ? this.cruiserRadarRange() : 150;
 
     for (const other of allShips) {
       if (excludeSelf && other === this) continue;
@@ -258,7 +257,12 @@ export class Ship {
         const dx = other.x - this.x;
         const dy = other.y - this.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= radarRangeSq) {
+        
+        const otherRadarRange = (typeof other.cruiserRadarRange === 'function') ? other.cruiserRadarRange() : 150;
+        const maxRange = Math.max(myRadarRange, otherRadarRange);
+        const maxRangeSq = maxRange * maxRange;
+
+        if (distSq <= maxRangeSq) {
           if (distSq < closestDistSq) {
             closestDistSq = distSq;
             closestSupplyShip = other;
