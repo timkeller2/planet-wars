@@ -1736,7 +1736,11 @@ function getPlanetTradeIncomePerMin(planet) {
         }
 
         const hitChance = Math.round(Math.min(100, Math.max(10.0, hitChanceValue + friendlyGrav - enemyGrav - hazardPenalty))) + '%';
-        const volleySize = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
+        let volleySizeVal = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
+        const cap = Math.floor(hs.health - 2);
+        if (volleySizeVal > cap) volleySizeVal = cap;
+        if (hs.health <= 2) volleySizeVal = 0;
+        const volleySize = volleySizeVal === 0 ? '0 (Disabled)' : volleySizeVal;
         let rangeLabel = 'Range';
         if (hs.specialbombs && hs.specialbombs > 0) {
           rangeLabel += '*';
@@ -8532,7 +8536,11 @@ function getPlanetTradeIncomePerMin(planet) {
 
             const hitChance = Math.round(Math.min(100, Math.max(10.0, hitChanceValue + friendlyGrav - enemyGrav - hazardPenalty))) + '%';
 
-            const volleySize = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
+            let volleySizeVal = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
+            const cap = Math.floor(hs.health - 2);
+            if (volleySizeVal > cap) volleySizeVal = cap;
+            if (hs.health <= 2) volleySizeVal = 0;
+            const volleySize = volleySizeVal === 0 ? '0 (Disabled)' : volleySizeVal;
             let rangeLabel = 'Range';
             if (hs.specialbombs && hs.specialbombs > 0) {
               rangeLabel += '*';

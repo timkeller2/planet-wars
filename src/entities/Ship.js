@@ -1601,8 +1601,16 @@ export class Ship {
 
     // Rate of Fire (maxShots)
     let maxShots = 1;
-    if (this.maxHealth > 0 && !this.isAmoeba) {
-      maxShots = Math.max(1, Math.floor((this.maxHealth + this.health) / 6));
+    if (this.isCruiser && !this.isAmoeba) {
+      if (this.health <= 2) {
+        maxShots = 0;
+      } else {
+        maxShots = Math.max(1, Math.floor((this.maxHealth + this.health) / 6));
+        const cap = Math.floor(this.health - 2);
+        if (maxShots > cap) {
+          maxShots = cap;
+        }
+      }
     } else if (this.maxHealth > 0) {
       maxShots = Math.max(1, Math.floor(this.health));
     }
@@ -1610,7 +1618,7 @@ export class Ship {
     let shotsFired = 0;
 
     this.fireCooldown -= (deltaTime / 1000);
-    if (this.fireCooldown <= 0) {
+    if (this.fireCooldown <= 0 && maxShots > 0) {
       let amoebaCount = 1;
       if (game && game.amoebaCount !== undefined) {
         amoebaCount = game.amoebaCount;
@@ -1649,6 +1657,43 @@ export class Ship {
               targetedByOurBoarding = true;
             }
             if (targetedByOurBoarding) continue;
+          }
+
+          if (this.isCruiser && this.owner && enemyShip.isCruiser && enemyShip.health <= 2) {
+            let attemptBoarding = false;
+            
+            // 1. Cruiser with marines is nearby (within 500px)
+            if (allShips) {
+              for (const other of allShips) {
+                if (other.active && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.marineCount || 0) > 0) {
+                  const dx = other.x - enemyShip.x;
+                  const dy = other.y - enemyShip.y;
+                  if (dx * dx + dy * dy <= 500 * 500) {
+                    attemptBoarding = true;
+                    break;
+                  }
+                }
+              }
+            }
+            
+            // 2. Marines in flight (boarding fleet)
+            if (!attemptBoarding && allShips) {
+              for (const other of allShips) {
+                if (other.active && other.isBoardingFleet && other.targetShipId === enemyShip.id && other.owner && other.owner.id === this.owner.id) {
+                  attemptBoarding = true;
+                  break;
+                }
+              }
+            }
+            
+            // 3. Marines actively attacking (already boarding)
+            if (!attemptBoarding && enemyShip.isUnderBoarding && enemyShip.boardingPlayer && enemyShip.boardingPlayer.id === this.owner.id && (enemyShip.boardingMarines || 0) > 0) {
+              attemptBoarding = true;
+            }
+            
+            if (attemptBoarding) {
+              continue; // Cease firing!
+            }
           }
 
           if (this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
