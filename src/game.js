@@ -2674,14 +2674,11 @@ export class Game {
           }
         }
 
-        const controlText = `${planet.name} Revolt! ${winnerPlayer.name} gains control!`;
-        const statusText = "SUCCESSFUL REVOLT";
-        let reportText = `[${statusText}] ${controlText} `;
         const details = competitors.map(c => {
           const odds = oddsMap[c.id] || '0%';
-          return `${c.name} (Odds: ${odds}, Rolled ${c.roll}/${c.maxRoll})`;
+          return `${c.name} ${c.roll}/${c.maxRoll} (${odds})`;
         }).join(', ');
-        reportText += `Details: ${details}.`;
+        const reportText = `✊ ${planet.name} revolt successful! ${winnerPlayer.name} gains control! ${details}`;
 
         for (const comp of competitors) {
           if (comp.id !== 'neutral') {
@@ -2707,14 +2704,11 @@ export class Game {
       planet.revoltWarmup = 0;
 
       const ownerName = winner.name;
-      const controlText = `${planet.name} Revolt! ${ownerName} retains control!`;
-      const statusText = "REVOLT FAILED";
-      let reportText = `[${statusText}] ${controlText} `;
       const details = competitors.map(c => {
         const odds = oddsMap[c.id] || '0%';
-        return `${c.name} (Odds: ${odds}, Rolled ${c.roll}/${c.maxRoll})`;
+        return `${c.name} ${c.roll}/${c.maxRoll} (${odds})`;
       }).join(', ');
-      reportText += `Details: ${details}.`;
+      const reportText = `✊ ${planet.name} revolt failed! ${ownerName} retains control! ${details}`;
 
       for (const comp of competitors) {
         if (comp.id !== 'neutral') {
