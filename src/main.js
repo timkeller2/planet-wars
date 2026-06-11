@@ -3368,10 +3368,53 @@ function getPlanetTradeIncomePerMin(planet) {
     if (creditsDisplay) {
       const creditsVal = myPlayer.credits || 0;
 
+      const interestRatePerMin = creditsVal < 0 ? (creditsVal * 0.01) : (creditsVal * 0.005);
+      const stockpileMaintenanceRatePerMin = myPlayer.storageFeeRate || 0;
+      let totalTradeRatePerMin = 0;
+      let rowsHtml = "";
+      if (myPlayer.tradingPartners && myPlayer.tradingPartners.length > 0) {
+        for (const partner of myPlayer.tradingPartners) {
+          const partnerName = partner.name;
+          const ratePerMin = partner.rate * 60;
+          let partnerColor = '#ffffff';
+          if (partnerName === 'Domestic Ships') {
+            partnerColor = myPlayer.color || '#00e5ff';
+          } else if (partnerName === 'Neutral') {
+            partnerColor = '#ffffff';
+          } else {
+            const partnerPlayer = serverState.players.find(p => p.name === partnerName);
+            if (partnerPlayer && partnerPlayer.color) {
+              partnerColor = partnerPlayer.color;
+            }
+          }
+          rowsHtml += `
+            <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: ${partnerColor};">
+              <td style="padding: 6px 0; color: ${partnerColor}; text-align: left;">${partnerName}</td>
+              <td style="padding: 6px 0; text-align: center; color: ${partnerColor};">${Math.floor(partner.ships)}</td>
+              <td style="padding: 6px 0; text-align: right; color: ${partnerColor}; font-weight: bold;">+${ratePerMin.toFixed(2)}/m</td>
+            </tr>
+          `;
+          totalTradeRatePerMin += ratePerMin;
+        }
+      } else {
+        rowsHtml = `
+          <tr style="color: #88a; font-style: italic;">
+            <td colspan="3" style="padding: 10px 0; text-align: center;">
+              No active trading lines<br>
+              <span style="font-size: 0.7rem; color: #668; font-style: normal;">(Requires visible friendly/neutral planets & own ships)</span>
+            </td>
+          </tr>
+        `;
+      }
+
+      const pirateActivityRatePerMin = (myPlayer.pirateActivity || 0) / 25;
+      const pirateIncomeRatePerMin = (myPlayer.pirateIncome || 0) / 25;
+      const netIncome = totalTradeRatePerMin - stockpileMaintenanceRatePerMin + interestRatePerMin - pirateActivityRatePerMin + pirateIncomeRatePerMin;
+      const incomeInt = Math.round(netIncome);
+
       // Render custom tooltip panel HTML (Task 101 Overhaul)
       const tooltipPanel = document.getElementById('credits-tooltip-panel');
       if (tooltipPanel && tooltipPanel.style.display === 'block' && tooltipPanel.dataset.source === 'credits') {
-        const interestRatePerMin = creditsVal < 0 ? (creditsVal * 0.01) : (creditsVal * 0.005);
         let interestColor = '#aaa';
         let interestText = '0.00';
         if (interestRatePerMin > 0) {
@@ -3402,49 +3445,6 @@ function getPlanetTradeIncomePerMin(planet) {
           `;
         }
 
-        const stockpileMaintenanceRatePerMin = myPlayer.storageFeeRate || 0;
-
-        let totalTradeRatePerMin = 0;
-        let rowsHtml = "";
-        if (myPlayer.tradingPartners && myPlayer.tradingPartners.length > 0) {
-          for (const partner of myPlayer.tradingPartners) {
-            const partnerName = partner.name;
-            const ratePerMin = partner.rate * 60;
-            let partnerColor = '#ffffff';
-            if (partnerName === 'Domestic Ships') {
-              partnerColor = myPlayer.color || '#00e5ff';
-            } else if (partnerName === 'Neutral') {
-              partnerColor = '#ffffff';
-            } else {
-              const partnerPlayer = serverState.players.find(p => p.name === partnerName);
-              if (partnerPlayer && partnerPlayer.color) {
-                partnerColor = partnerPlayer.color;
-              }
-            }
-            rowsHtml += `
-              <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); color: ${partnerColor};">
-                <td style="padding: 6px 0; color: ${partnerColor}; text-align: left;">${partnerName}</td>
-                <td style="padding: 6px 0; text-align: center; color: ${partnerColor};">${Math.floor(partner.ships)}</td>
-                <td style="padding: 6px 0; text-align: right; color: ${partnerColor}; font-weight: bold;">+${ratePerMin.toFixed(2)}/m</td>
-              </tr>
-            `;
-            totalTradeRatePerMin += ratePerMin;
-          }
-        } else {
-          rowsHtml = `
-            <tr style="color: #88a; font-style: italic;">
-              <td colspan="3" style="padding: 10px 0; text-align: center;">
-                No active trading lines<br>
-                <span style="font-size: 0.7rem; color: #668; font-style: normal;">(Requires visible friendly/neutral planets & own ships)</span>
-              </td>
-            </tr>
-          `;
-        }
-
-        const pirateActivityRatePerMin = (myPlayer.pirateActivity || 0) / 25;
-        const pirateIncomeRatePerMin = (myPlayer.pirateIncome || 0) / 25;
-
-        const netIncome = totalTradeRatePerMin - stockpileMaintenanceRatePerMin + interestRatePerMin - pirateActivityRatePerMin + pirateIncomeRatePerMin;
         let totalIncomeColor = '#aaa';
         let totalIncomeText = '0.00';
         if (netIncome > 0) {
@@ -3525,7 +3525,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       creditsDisplay.style.display = 'block';
-      creditsDisplay.textContent = `💲 ${Math.floor(creditsVal)}`;
+      creditsDisplay.innerHTML = `💲 ${Math.floor(creditsVal)}<span style="font-size: 33.33%; font-weight: normal; margin-left: 4px; opacity: 0.85;">${incomeInt >= 0 ? '+' : ''}${incomeInt}</span>`;
       creditsDisplay.removeAttribute('title');
 
       if (creditsVal < 0) {
