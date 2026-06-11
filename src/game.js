@@ -4913,20 +4913,24 @@ export class Game {
     }
     
     for (const planet of this.planets) {
+      const mapScale = this.width > 1600 ? this.width / 1600 : 1.0;
+      const gravityRadius = planet.getGravityRadius(mapScale);
+      
+      this.ctx.beginPath();
+      this.ctx.arc(planet.x, planet.y, gravityRadius, 0, Math.PI * 2);
       if (planet.owner) {
-        const mapScale = this.width > 1600 ? this.width / 1600 : 1.0;
-        const gravityRadius = planet.getGravityRadius(mapScale);
-        
-        this.ctx.beginPath();
-        this.ctx.arc(planet.x, planet.y, gravityRadius, 0, Math.PI * 2);
         this.ctx.strokeStyle = planet.owner.color;
         this.ctx.globalAlpha = 0.15;
-        this.ctx.lineWidth = 1;
-        this.ctx.setLineDash([5, 10]);
-        this.ctx.stroke();
-        this.ctx.setLineDash([]);
-        this.ctx.globalAlpha = 1.0;
+      } else {
+        this.ctx.strokeStyle = 'rgba(211, 211, 211, 0.25)';
+        this.ctx.globalAlpha = 0.15;
       }
+      this.ctx.lineWidth = 1;
+      this.ctx.setLineDash([5, 10]);
+      this.ctx.stroke();
+      this.ctx.setLineDash([]);
+      this.ctx.globalAlpha = 1.0;
+      
       planet.draw(this.ctx, planet === this.selectedPlanet);
     }
     

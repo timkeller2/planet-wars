@@ -623,7 +623,11 @@ export class Planet {
     }
     const tb = 0.01 * Math.sqrt(this.owner ? (this.owner.techScore || 0) : 0);
     const eb = 0.01 * Math.sqrt(this.owner ? (this.owner.expScore || 0) : 0);
-    return baseRadius * (1 + tb + eb);
+    let r = baseRadius * (1 + tb + eb);
+    if (!this.owner) {
+      r *= 0.5;
+    }
+    return r;
   }
 
   draw(ctx, isSelected) {

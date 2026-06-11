@@ -1340,7 +1340,11 @@ function getPlanetTradeIncomePerMin(planet) {
         }
         const tb = 0.01 * Math.sqrt(plOwner ? (plOwner.techScore || 0) : 0);
         const eb = 0.01 * Math.sqrt(plOwner ? (plOwner.expScore || 0) : 0);
-        return baseRadius * (1 + tb + eb);
+        let r = baseRadius * (1 + tb + eb);
+        if (!plOwner) {
+          r *= 0.5;
+        }
+        return r;
       };
 
       let gravityWellBonusTotal = 0;
@@ -6902,6 +6906,21 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.globalAlpha = 1.0;
+        } else {
+          let baseRadius = p.maxShips * 1.5;
+          const gravityRadius = baseRadius * 0.5;
+          const pct = hazardSensorReductionPct(p.x, p.y, null);
+          const drawRadius = Math.max(10, gravityRadius * pct);
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, drawRadius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(211, 211, 211, 0.04)';
+          ctx.strokeStyle = 'rgba(211, 211, 211, 0.25)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([5, 10]);
+          ctx.fill();
+          ctx.stroke();
+          ctx.setLineDash([]);
         }
 
         let drawnPlanetImage = false;
