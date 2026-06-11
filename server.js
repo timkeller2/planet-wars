@@ -920,31 +920,6 @@ async function bootstrap() {
       }
     });
 
-    socket.on('toggleCruiserDiplomacy', (data) => {
-      if (!game.isRunning || game.isPaused) return;
-      const player = connectedClients.get(socket.id);
-      if (!player) return;
-
-      const { shipId, enabled } = data;
-      if (shipId === undefined || enabled === undefined) return;
-
-      const ship = game.ships.find(s => s.id === shipId);
-      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.diplomat > 0) {
-        const nextState = !!enabled;
-        ship.isDiplomacy = nextState;
-        ship.diplomacyFuelRetreating = false;
-        ship.isRetreating = false;
-        ship.retreatTargetPlanetId = null;
-        if (ship.isDiplomacy) {
-          ship.isResearching = false;
-          ship.isScouting = false;
-          ship.isPatrolling = false;
-          ship.orderQueue = [];
-          ship.cruiserTargetType = null;
-          ship.cruiserTargetId = null;
-        }
-      }
-    });
 
     socket.on('togglePause', () => {
       game.isPaused = !game.isPaused;

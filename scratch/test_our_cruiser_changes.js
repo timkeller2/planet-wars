@@ -55,7 +55,7 @@ console.log("Starting verification tests...");
 
   const cruiser = new Ship('c1', 100, 100, null, player);
   cruiser.isCruiser = true;
-  cruiser.isDiplomacy = true;
+  cruiser.diplomat = 1;
 
   // It is not moving yet
   assert(cruiser.isCruiserMoving() === false, "Cruiser should not be moving initially");
@@ -67,7 +67,6 @@ console.log("Starting verification tests...");
   assert(cruiser.isDiplomacy === true, "Cruiser diplomacy mode should NOT be disabled on manual move order");
 
   // Manually enable diplomacy mode and move it very close to target planet
-  cruiser.isDiplomacy = true;
   cruiser.x = targetPlanet.x;
   cruiser.y = targetPlanet.y;
   assert(cruiser.isCruiserMoving() === false, "Cruiser should not be moving when close to targetPlanet");
@@ -132,7 +131,6 @@ console.log("Starting verification tests...");
   cruiser.targetX = 500;
   cruiser.targetY = 100;
   cruiser.isScouting = true;
-  cruiser.isDiplomacy = true;
 
   game.updateCustomCruiserSystems(0.1);
   assert(p1.activeDiplomatId === cruiser.id, "Claim should be active even when moving and scouting if in range");
@@ -153,7 +151,6 @@ console.log("Starting verification tests...");
   cruiser.targetX = 100;
   cruiser.targetY = 100;
   cruiser.isScouting = false;
-  cruiser.isDiplomacy = true;
   cruiser.parley = 1.0;
   p1.activeDiplomatId = cruiser.id;
   p1.diplomacyWarmupTimer = 0;

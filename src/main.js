@@ -1323,14 +1323,12 @@ function getPlanetTradeIncomePerMin(planet) {
       const techBonus = Math.round(Math.sqrt(hpOwner.techScore || 0));
       if (techBonus > 0) {
         totalDefense += techBonus;
-        defenseLines.push({ label: 'Owner Tech Defense', value: `${techBonus}%`, color: '#00e5ff' });
       }
 
       // Owner Experience defense bonus
       const expBonus = Math.round(Math.sqrt(hpOwner.expScore || 0));
       if (expBonus > 0) {
         totalDefense += expBonus;
-        defenseLines.push({ label: 'Owner Exp Defense', value: `${expBonus}%`, color: '#ffeb3b' });
       }
 
       // Planet Local Experience defense bonus
@@ -5510,19 +5508,6 @@ function getPlanetTradeIncomePerMin(planet) {
         }
         return;
       }
-      const selectedDiplomats = selectedCruisers.filter(s => s.diplomat > 0);
-      if (selectedDiplomats.length > 0) {
-        event.preventDefault();
-        const anyNotDiplomacy = selectedDiplomats.some(c => !c.isDiplomacy);
-        const nextState = anyNotDiplomacy;
-        selectedDiplomats.forEach(ship => {
-          ship.isDiplomacy = nextState;
-          ship.isResearching = false;
-          ship.isScouting = false;
-          ship.isPatrolling = false;
-          socket.emit('toggleCruiserDiplomacy', { shipId: ship.id, enabled: nextState });
-        });
-      }
     }
     if (event.key.toLowerCase() === 'c') {
       const hasCruiserBase = selectedPlanets.some(p => p.ownerId === localPlayer.id && !p.isSpeedPlanet && p.ships >= 50 && p.maxShips >= 57);
@@ -5727,23 +5712,6 @@ function getPlanetTradeIncomePerMin(planet) {
           ship.isScouting = false;
           ship.isPatrolling = false;
           socket.emit('toggleCruiserResearch', { shipId: ship.id, enabled: nextState });
-        }
-      }
-    });
-  }
-  const btnCruiserDiplomacyEl = document.getElementById('btn-cruiser-diplomacy');
-  if (btnCruiserDiplomacyEl) {
-    btnCruiserDiplomacyEl.addEventListener('click', () => {
-      const selectedCruisers = getSelectedCruisers().filter(c => c.diplomat > 0);
-      if (selectedCruisers.length > 0) {
-        const anyNotDiplomacy = selectedCruisers.some(c => !c.isDiplomacy);
-        const nextState = anyNotDiplomacy;
-        for (const ship of selectedCruisers) {
-          ship.isDiplomacy = nextState;
-          ship.isResearching = false;
-          ship.isScouting = false;
-          ship.isPatrolling = false;
-          socket.emit('toggleCruiserDiplomacy', { shipId: ship.id, enabled: nextState });
         }
       }
     });
@@ -6280,8 +6248,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
-    const actionButtonsLeft = document.getElementById('action-buttons-left');
-    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-cruiser-bomb', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-cruiser-research', 'btn-cruiser-diplomacy', 'btn-dismantle'];
+    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-cruiser-bomb', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-cruiser-research', 'btn-dismantle'];
     const upButtonsMap = {
       'btn-up-sensorarray': 'sensorarrays',
       'btn-up-lab': 'labs',
@@ -6722,15 +6689,6 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      const btnCruiserDiplomacy = document.getElementById('btn-cruiser-diplomacy');
-      if (btnCruiserDiplomacy) {
-        const hasDiplomats = selectedCruisers.some(c => c.diplomat > 0);
-        btnCruiserDiplomacy.style.display = (selectedCruisers.length > 0 && hasDiplomats) ? 'inline-flex' : 'none';
-        if (selectedCruisers.length > 0 && hasDiplomats) {
-          const anyDiplomacy = selectedCruisers.some(c => c.isDiplomacy);
-          btnCruiserDiplomacy.classList.toggle('action-btn-active', anyDiplomacy);
-        }
-      }
 
       const btnDismantle = document.getElementById('btn-dismantle');
       if (btnDismantle) {
@@ -8038,12 +7996,10 @@ function getPlanetTradeIncomePerMin(planet) {
             const techDef = Math.round(Math.sqrt(hpOwner.techScore || 0) * 100) / 100;
             if (techDef > 0) {
               totalDefense += techDef;
-              lines.push({ label: 'Tech Defense', value: `${Math.round(techDef)}%`, color: '#4f4' });
             }
             const expDef = Math.round(Math.sqrt(hpOwner.expScore || 0) * 100) / 100;
             if (expDef > 0) {
               totalDefense += expDef;
-              lines.push({ label: 'Exp Defense', value: `${Math.round(expDef)}%`, color: '#4f4' });
             }
             const planetExp = Math.round(Math.sqrt(hp.expScore || 0) * 100) / 100;
             if (planetExp > 0) {

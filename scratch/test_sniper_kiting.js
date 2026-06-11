@@ -1,6 +1,6 @@
-import { Game } from 'file:///s:/Dist/AntiGravity/Planet Wars/src/game.js';
-import { Ship } from 'file:///s:/Dist/AntiGravity/Planet Wars/src/entities/Ship.js';
-import { Player } from 'file:///s:/Dist/AntiGravity/Planet Wars/src/entities/Player.js';
+import { Game } from '../src/game.js';
+import { Ship } from '../src/entities/Ship.js';
+import { Player } from '../src/entities/Player.js';
 
 function assert(condition, message) {
   if (!condition) {

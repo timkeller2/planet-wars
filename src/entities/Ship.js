@@ -71,7 +71,6 @@ export class Ship {
     this.researchFuelRetreatTargetPlanetId = null;
     this.researchRearming = false;
     this.researchRearmTargetPlanetId = null;
-    this.isDiplomacy = false;
     this.diplomacyFuelRetreating = false;
     this.diplomacyFuelRetreatTargetPlanetId = null;
     this.diplomacyFleeing = false;
@@ -189,6 +188,14 @@ export class Ship {
         this.strategy = 'normal';
       }
     }
+  }
+
+  get isDiplomacy() {
+    return (this.diplomat || 0) > 0;
+  }
+
+  set isDiplomacy(val) {
+    // no-op
   }
 
   isCruiserMoving() {
@@ -461,6 +468,7 @@ export class Ship {
       // Patrol mode is preserved since it updates patrol station.
       this.isScouting = false;
       this.isResearching = false;
+      this.bombPlanetsEnabled = false;
     }
   }
 
@@ -782,7 +790,7 @@ export class Ship {
       // Trigger condition
       if (!this.isRetreating) {
         const specialModeActive = this.isPatrolling || this.isScouting || this.isResearching || this.isDiplomacy;
-        if (specialModeActive) {
+        if (specialModeActive || isStandby) {
           const combatTrigger = inCombat && (emptyBombs || lowHealth);
           const normalTrigger = !this.inFriendlyWell && (lowFuel || emptyBombs || (lowHealth && (inActiveMode || isStandby)));
 
@@ -4224,7 +4232,7 @@ export class Ship {
         const radarRange = this.cruiserRadarRange();
         const radarRangeSq = radarRange * radarRange;
         for (const other of allShips) {
-          if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.fuel || 0) > 4) {
+          if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.fuel || 0) > 4 && (other.fuel || 0) > (this.fuel || 0) + 2) {
             const dx = other.x - this.x;
             const dy = other.y - this.y;
             const distSq = dx * dx + dy * dy;
