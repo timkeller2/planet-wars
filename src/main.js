@@ -1147,8 +1147,8 @@ function getPlanetTradeIncomePerMin(planet) {
       };
 
       const hpOwner = owner || { techScore: 0, expScore: 0, id: 'neutral' };
-      const techScoreVal = hpOwner ? (hpOwner.techScore || 0) : 0;
-      const softCap = Math.round(p.sizeClass * ((p.habitability + techScoreVal) / 100));
+      const techBonusVal = hpOwner ? Math.sqrt(hpOwner.techScore || 0) : 0;
+      const softCap = Math.round(p.sizeClass * ((p.habitability + techBonusVal) / 100));
       lines.push({ label: `Improvement Rate: ${p.habitability}`, value: `Potential: ${softCap}`, color: '#ffb74d' });
 
       const producedIcons = p.resources ? p.resources.map(r => resourceEmojis[r] || '').filter(Boolean).join(' ') : '';
@@ -6963,7 +6963,7 @@ function getPlanetTradeIncomePerMin(planet) {
         // Soft cap and current maxships filled circles (only for known planets)
         const isLastKnownPlanet = p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id] ? true : false;
         if (!p.inFog || p.permanentlyTracked || isLastKnownPlanet) {
-          const techBonus = owner ? (owner.techScore || 0) : 0;
+          const techBonus = owner ? Math.sqrt(owner.techScore || 0) : 0;
           const threshold = p.sizeClass * ((p.habitability + techBonus) / 100);
           if (threshold > 0) {
             ctx.save();
@@ -7488,7 +7488,7 @@ function getPlanetTradeIncomePerMin(planet) {
             if (isLastKnown) {
               textColor = '#666';
             } else {
-              const techBonus = displayOwner ? (displayOwner.techScore || 0) : 0;
+              const techBonus = displayOwner ? Math.sqrt(displayOwner.techScore || 0) : 0;
               const threshold = p.sizeClass * ((p.habitability + techBonus) / 100);
               if (displayMaxShips >= threshold) {
                 textColor = '#008800'; // green instead of normal black

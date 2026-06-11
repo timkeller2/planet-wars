@@ -109,7 +109,7 @@ export class Planet {
   increaseMaxShips(amount = 1) {
     const oldMax = this.maxShips;
     let increase = amount * (this.habitability / 100);
-    const techBonus = this.owner ? (this.owner.techScore || 0) : 0;
+    const techBonus = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
     const threshold = this.sizeClass * ((this.habitability + techBonus) / 100);
     if (this.maxShips >= threshold) {
       increase /= 3;
@@ -123,7 +123,7 @@ export class Planet {
     }
 
     if (this.owner && this.focusMode === 'economy') {
-      const currentThreshold = this.sizeClass * ((this.habitability + (this.owner.techScore || 0)) / 100);
+      const currentThreshold = this.sizeClass * ((this.habitability + Math.sqrt(this.owner.techScore || 0)) / 100);
       if (this.maxShips >= currentThreshold) {
         if (this.maxShips > 119) {
           this.focusMode = 'commerce';
@@ -660,7 +660,7 @@ export class Planet {
     const pillHeight = Math.max(14, this.radius * 0.55);
     ctx.fillRect(this.x - textWidth / 2 - 6, this.y - pillHeight / 2, textWidth + 12, pillHeight);
 
-    const techBonus = this.owner ? (this.owner.techScore || 0) : 0;
+    const techBonus = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
     const threshold = this.sizeClass * ((this.habitability + techBonus) / 100);
     if (this.maxShips >= threshold) {
       ctx.fillStyle = '#00ff00'; // green for dark background
