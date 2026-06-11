@@ -640,25 +640,25 @@ function getPlanetTradeIncomePerMin(planet) {
       } else {
         ctx.moveTo(0, -size * 1.0);
         ctx.lineTo(size * 0.3, -size * 0.4);
-        ctx.lineTo(size * 0.3, -size * 0.05);
-        ctx.lineTo(size * 0.55, -size * 0.05);
+        ctx.lineTo(size * 0.3, -size * 0.15);
         ctx.lineTo(size * 0.55, -size * 0.15);
-        ctx.lineTo(size * 0.65, -size * 0.15);
-        ctx.lineTo(size * 0.65, size * 0.25);
-        ctx.lineTo(size * 0.55, size * 0.25);
-        ctx.lineTo(size * 0.55, size * 0.05);
-        ctx.lineTo(size * 0.3, size * 0.05);
+        ctx.lineTo(size * 0.55, -size * 0.35);
+        ctx.lineTo(size * 0.65, -size * 0.35);
+        ctx.lineTo(size * 0.65, size * 0.15);
+        ctx.lineTo(size * 0.55, size * 0.15);
+        ctx.lineTo(size * 0.55, -size * 0.05);
+        ctx.lineTo(size * 0.3, -size * 0.05);
         ctx.lineTo(size * 0.3, size * 0.1);
         ctx.lineTo(0, size * 0.25);
         ctx.lineTo(-size * 0.3, size * 0.1);
-        ctx.lineTo(-size * 0.3, size * 0.05);
-        ctx.lineTo(-size * 0.55, size * 0.05);
-        ctx.lineTo(-size * 0.55, size * 0.25);
-        ctx.lineTo(-size * 0.65, size * 0.25);
-        ctx.lineTo(-size * 0.65, -size * 0.15);
-        ctx.lineTo(-size * 0.55, -size * 0.15);
-        ctx.lineTo(-size * 0.55, -size * 0.05);
         ctx.lineTo(-size * 0.3, -size * 0.05);
+        ctx.lineTo(-size * 0.55, -size * 0.05);
+        ctx.lineTo(-size * 0.55, size * 0.15);
+        ctx.lineTo(-size * 0.65, size * 0.15);
+        ctx.lineTo(-size * 0.65, -size * 0.35);
+        ctx.lineTo(-size * 0.55, -size * 0.35);
+        ctx.lineTo(-size * 0.55, -size * 0.15);
+        ctx.lineTo(-size * 0.3, -size * 0.15);
         ctx.lineTo(-size * 0.3, -size * 0.4);
       }
     } else if (style === 'Gorn') {
