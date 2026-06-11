@@ -77,6 +77,25 @@ function checkMusicRotation() {
   }
 }
 
+function getEffectiveSympathyClient(pl, playerId) {
+  let sympathyVal = pl.sympathy?.[playerId] || 0;
+  if (!pl.ownerId && serverState && serverState.ships) {
+    const gr = (pl.maxShips || 0) * 1.5;
+    const grSq = gr * gr;
+    for (const ship of serverState.ships) {
+      if (ship.active && ship.ownerId === playerId) {
+        const dx = ship.x - pl.x;
+        const dy = ship.y - pl.y;
+        if (dx * dx + dy * dy <= grSq) {
+          const shipHp = (ship.isCruiser || (ship.maxHealth && ship.maxHealth > 0)) ? ((ship.maxHealth || ship.health || 0) * 0.5) : ((ship.count || 1) * 0.5);
+          sympathyVal += shipHp;
+        }
+      }
+    }
+  }
+  return sympathyVal;
+}
+
 function getPlanetTradeIncomePerMin(planet) {
   const myPlayer = localPlayer;
   if (!myPlayer || planet.dead) return 0;
@@ -117,7 +136,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (!isOwn && isNotAtWar) {
         let baseShips = pl.ships || 0;
         if (!pl.ownerId) {
-          const sympathyVal = pl.sympathy?.[myPlayer.id] || 0;
+          const sympathyVal = getEffectiveSympathyClient(pl, myPlayer.id);
           baseShips = Math.min(baseShips, sympathyVal * 10);
         }
         let eff = baseShips;
@@ -130,10 +149,12 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   }
 
-  // 3. Scale factor
+  // 3. Scale factor - Soft Cap
   let scale = 1.0;
   if (otherEffectiveShips > playerEffectiveShips) {
-    scale = playerEffectiveShips / otherEffectiveShips;
+    const excess = otherEffectiveShips - playerEffectiveShips;
+    const credited = playerEffectiveShips + 0.10 * excess;
+    scale = credited / otherEffectiveShips;
   }
 
   // 4. Calculate for the given planet
@@ -158,7 +179,7 @@ function getPlanetTradeIncomePerMin(planet) {
   } else if (isNotAtWar) {
     let baseShips = planet.ships || 0;
     if (!planet.ownerId) {
-      const sympathyVal = planet.sympathy?.[myPlayer.id] || 0;
+      const sympathyVal = getEffectiveSympathyClient(planet, myPlayer.id);
       baseShips = Math.min(baseShips, sympathyVal * 10);
     }
     let eff = baseShips;
@@ -1159,7 +1180,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
       const isNeutralOrEnemy = !p.ownerId || p.ownerId !== localPlayer.id;
       if (isNeutralOrEnemy) {
-        const currentSym = p.sympathy?.[localPlayer.id] || 0;
+        const currentSym = getEffectiveSympathyClient(p, localPlayer.id);
         const expBonus = Math.sqrt(localPlayer.expScore || 0);
         const selectedCruiser = getSelectedCruiser();
         const shipExpBonus = selectedCruiser ? Math.sqrt(selectedCruiser.expScore || 0) : 0;
@@ -1207,12 +1228,22 @@ function getPlanetTradeIncomePerMin(planet) {
           assocPlayers.add(pId);
         }
       }
+      if (!p.ownerId && serverState && serverState.players) {
+        for (const pl of serverState.players) {
+          if (pl.id !== 'monsters') {
+            const symVal = getEffectiveSympathyClient(p, pl.id);
+            if (symVal > 0) {
+              assocPlayers.add(pl.id);
+            }
+          }
+        }
+      }
       for (const pId of assocPlayers) {
         const targetPlayer = serverState.players.find(pl => pl.id === pId);
         const pName = targetPlayer ? targetPlayer.name : pId;
         const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
         const dispVal = p.disposition?.[pId];
-        const symVal = p.sympathy?.[pId] ?? 0;
+        const symVal = getEffectiveSympathyClient(p, pId);
         if (dispVal !== undefined || symVal !== 0) {
           let dispStr = 'Unknown';
           if (dispVal !== undefined) {
@@ -5418,15 +5449,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
     if (event.key.toLowerCase() === 'b') {
       const selectedCruisers = getSelectedCruisers();
-      if (selectedCruisers.length > 0) {
-        event.preventDefault();
-        const anyNotBombing = selectedCruisers.some(c => c.bombPlanetsEnabled === false);
-        const nextState = anyNotBombing;
-        for (const ship of selectedCruisers) {
-          ship.bombPlanetsEnabled = nextState;
-          socket.emit('toggleCruiserBomb', { shipId: ship.id, enabled: nextState });
-        }
-      } else {
+      if (selectedCruisers.length === 0) {
         bombOrderNext = bombOrderNext === 'eco' ? false : 'eco';
       }
     }
@@ -5639,20 +5662,7 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   }
 
-  const btnCruiserBombEl = document.getElementById('btn-cruiser-bomb');
-  if (btnCruiserBombEl) {
-    btnCruiserBombEl.addEventListener('click', () => {
-      const selectedCruisers = getSelectedCruisers();
-      if (selectedCruisers.length > 0) {
-        const anyNotBombing = selectedCruisers.some(c => c.bombPlanetsEnabled === false);
-        const nextState = anyNotBombing;
-        for (const ship of selectedCruisers) {
-          ship.bombPlanetsEnabled = nextState;
-          socket.emit('toggleCruiserBomb', { shipId: ship.id, enabled: nextState });
-        }
-      }
-    });
-  }
+
   const btnPatrolEl = document.getElementById('btn-patrol');
   if (btnPatrolEl) {
     btnPatrolEl.addEventListener('click', () => {
@@ -6110,12 +6120,7 @@ function getPlanetTradeIncomePerMin(planet) {
     toggle('btn-scout', scoutModeNext);
     toggle('btn-cruiser', cruiserBuildModeActive);
 
-    const selectedCruiser = getSelectedCruiser();
-    if (selectedCruiser) {
-      toggle('btn-cruiser-bomb', selectedCruiser.bombPlanetsEnabled !== false);
-    } else {
-      toggle('btn-cruiser-bomb', false);
-    }
+
   }
 
 
@@ -6255,7 +6260,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
     const actionButtonsLeft = document.getElementById('action-buttons-left');
-    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-cruiser-bomb', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-cruiser-research', 'btn-dismantle'];
+    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-cruiser-research', 'btn-dismantle'];
     const upButtonsMap = {
       'btn-up-sensorarray': 'sensorarrays',
       'btn-up-lab': 'labs',
@@ -6647,14 +6652,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      const btnCruiserBomb = document.getElementById('btn-cruiser-bomb');
-      if (btnCruiserBomb) {
-        btnCruiserBomb.style.display = selectedCruisers.length > 0 ? 'inline-flex' : 'none';
-        if (selectedCruisers.length > 0) {
-          const anyBombing = selectedCruisers.some(c => c.bombPlanetsEnabled !== false);
-          btnCruiserBomb.classList.toggle('action-btn-active', anyBombing);
-        }
-      }
+
 
       const btnPatrol = document.getElementById('btn-patrol');
       if (btnPatrol) {
@@ -7060,7 +7058,7 @@ function getPlanetTradeIncomePerMin(planet) {
                 const expBonus = Math.sqrt(diplomatOwner.expScore || 0);
                 const shipExpBonus = Math.sqrt(diplomat.expScore || 0);
                 const MathSquareBase = expBonus + shipExpBonus;
-                const currentSym = p.sympathy ? (p.sympathy[diplomatOwner.id] || 0) : 0;
+                const currentSym = getEffectiveSympathyClient(p, diplomatOwner.id);
                 const disposition = p.disposition ? (p.disposition[diplomatOwner.id] ?? 0) : 0;
 
                 const prefRes = p.preferredResource;
@@ -7152,11 +7150,11 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
 
-        if (p.sympathy) {
+        if (serverState.players) {
           let currentAngle = -Math.PI / 2;
           const ringRadius = p.radius + 6;
           for (const player of serverState.players) {
-            const symLevel = p.sympathy[player.id] || 0;
+            const symLevel = getEffectiveSympathyClient(p, player.id);
             if (symLevel > 0) {
               const angleSize = (Math.PI * 2 * symLevel) / p.maxShips;
               ctx.beginPath();
@@ -7318,14 +7316,17 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           let sympathyForeign = 0;
-          if (p.sympathy) {
-            for (const [pId, symVal] of Object.entries(p.sympathy)) {
-              if (!p.ownerId || pId !== p.ownerId) {
-                sympathyForeign += symVal;
+          if (serverState.players) {
+            for (const player of serverState.players) {
+              if (player.id !== 'monsters') {
+                const symVal = getEffectiveSympathyClient(p, player.id);
+                if (!p.ownerId || player.id !== p.ownerId) {
+                  sympathyForeign += symVal;
+                }
               }
             }
           }
-          const sympathyOwner = (p.ownerId && p.sympathy) ? (p.sympathy[p.ownerId] || 0) : 0;
+          const sympathyOwner = p.ownerId ? getEffectiveSympathyClient(p, p.ownerId) : 0;
           const ratePerMinute = sympathyForeign - (p.ships / 3) - sympathyOwner;
           const eligibleForRevolt = !isLastKnown && ratePerMinute > 0;
 
@@ -7765,14 +7766,17 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           
           let sympathyForeign = 0;
-          if (p.sympathy) {
-            for (const [pId, symVal] of Object.entries(p.sympathy)) {
-              if (!p.ownerId || pId !== p.ownerId) {
-                sympathyForeign += symVal;
+          if (serverState.players) {
+            for (const player of serverState.players) {
+              if (player.id !== 'monsters') {
+                const symVal = getEffectiveSympathyClient(p, player.id);
+                if (!p.ownerId || player.id !== p.ownerId) {
+                  sympathyForeign += symVal;
+                }
               }
             }
           }
-          const sympathyOwner = (p.ownerId && p.sympathy) ? (p.sympathy[p.ownerId] || 0) : 0;
+          const sympathyOwner = p.ownerId ? getEffectiveSympathyClient(p, p.ownerId) : 0;
           const ratePerMinute = sympathyForeign - (p.ships / 3) - sympathyOwner;
           const eligibleForRevolt = !isLastKnown && ratePerMinute > 0;
           if (eligibleForRevolt) {
@@ -7911,7 +7915,7 @@ function getPlanetTradeIncomePerMin(planet) {
           // Show Diplomacy Chance on neutral/enemy planets
           const isNeutralOrEnemy = !hp.ownerId || hp.ownerId !== localPlayer.id;
           if (isNeutralOrEnemy) {
-            const currentSym = hp.sympathy?.[localPlayer.id] || 0;
+            const currentSym = getEffectiveSympathyClient(hp, localPlayer.id);
             const expBonus = Math.sqrt(myPlayer.expScore || 0);
             const selectedCruiser = getSelectedCruiser();
             const shipExpBonus = selectedCruiser ? Math.sqrt(selectedCruiser.expScore || 0) : 0;
@@ -8115,13 +8119,13 @@ function getPlanetTradeIncomePerMin(planet) {
           lines[0].value = totalDefense > 0 ? `🛡️ ${Math.round(totalDefense)}%` : '';
 
           // Show sympathy levels on the planet tooltip
-          if (hp.sympathy) {
-            for (const [pId, symVal] of Object.entries(hp.sympathy)) {
-              if (symVal > 0) {
-                const targetPlayer = serverState.players.find(pl => pl.id === pId);
-                const pName = targetPlayer ? targetPlayer.name : pId;
-                const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
-                lines.push({ label: `💖 Sympathy (${pName})`, value: `${Math.round(symVal)}`, color: pColor });
+          if (serverState && serverState.players) {
+            for (const pl of serverState.players) {
+              if (pl.id !== 'monsters') {
+                const symVal = getEffectiveSympathyClient(hp, pl.id);
+                if (symVal > 0) {
+                  lines.push({ label: `💖 Sympathy (${pl.name})`, value: `${Math.round(symVal)}`, color: pl.color });
+                }
               }
             }
           }

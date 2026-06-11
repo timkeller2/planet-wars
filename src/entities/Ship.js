@@ -35,7 +35,7 @@ export class Ship {
     this.cruiserTargetClickX = null;
     this.cruiserTargetClickY = null;
     this.orderQueue = [];
-    this.bombPlanetsEnabled = false;
+    this.savedBombardPlanetId = null;
     this.isRetreating = false;
     this.retreatTargetPlanetId = null;
     this.retreatTargetShipId = null;
@@ -416,6 +416,7 @@ export class Ship {
         this.patrolFuelRetreatTargetPlanetId = null;
         this.bombardRearming = false;
         this.bombardRearmTargetPlanetId = null;
+        this.savedBombardPlanetId = null;
         this.scoutFuelRetreating = false;
         this.scoutFuelRetreatTargetPlanetId = null;
         this.researchFuelRetreating = false;
@@ -467,7 +468,7 @@ export class Ship {
       // Patrol mode is preserved since it updates patrol station.
       this.isScouting = false;
       this.isResearching = false;
-      this.bombPlanetsEnabled = false;
+      this.savedBombardPlanetId = null;
     }
   }
 
@@ -485,6 +486,7 @@ export class Ship {
       this.cruiserTargetOffsetY = 0;
       this.cruiserTargetType = null;
       this.cruiserTargetId = null;
+      this.savedBombardPlanetId = null;
       this.targetX = order.targetX;
       this.targetY = order.targetY;
       this.startX = this.x;
@@ -513,6 +515,7 @@ export class Ship {
         this.targetY = null;
         this.cruiserTargetType = null;
         this.cruiserTargetId = null;
+        this.savedBombardPlanetId = null;
         this.cruiserTargetOffsetX = order.offsetX || 0;
         this.cruiserTargetOffsetY = order.offsetY || 0;
         this.startX = this.x;
@@ -537,6 +540,7 @@ export class Ship {
     } else if (order.type === 'target') {
       this.cruiserTargetType = order.targetType;
       this.cruiserTargetId = order.targetId;
+      this.savedBombardPlanetId = null;
       this.cruiserTargetClickX = order.clickX !== undefined ? order.clickX : null;
       this.cruiserTargetClickY = order.clickY !== undefined ? order.clickY : null;
       this.targetPlanet = null;
@@ -780,7 +784,8 @@ export class Ship {
       const emptyBombs = maxBombs > 0 && this.bombs <= 0;
       const lowHealth = this.health < this.maxHealth * 0.5;
 
-      const inActiveMode = this.isPatrolling || this.isScouting || this.isResearching || this.isDiplomacy || this.bombPlanetsEnabled;
+      const isBombingPlanet = (this.cruiserTargetType === 'planet' && this.cruiserTargetId !== null) || this.savedBombardPlanetId !== null;
+      const inActiveMode = this.isPatrolling || this.isScouting || this.isResearching || this.isDiplomacy || isBombingPlanet;
       const isStandby = this.timeNotMoved >= 60;
 
       const inCombat = (Date.now() - (this.lastTimeAttacked || 0) < 10000) || 
@@ -809,7 +814,8 @@ export class Ship {
         const requiredFuelPct = this.isScouting ? 0.97 : 1.0;
         const fullyFueled = this.fuel >= maxFuel * requiredFuelPct;
         const fullyArmed = maxBombs === 0 || this.bombs >= maxBombs;
-        const requiredHealthPct = (this.isResearching || this.isScouting || this.isDiplomacy || this.bombPlanetsEnabled) ? 1.0 : 0.75;
+        const isBombingPlanet = (this.cruiserTargetType === 'planet' && this.cruiserTargetId !== null) || this.savedBombardPlanetId !== null;
+        const requiredHealthPct = (this.isResearching || this.isScouting || this.isDiplomacy || isBombingPlanet) ? 1.0 : 0.75;
         const fullyHealed = this.health >= this.maxHealth * requiredHealthPct;
 
         if (fullyFueled && fullyArmed && fullyHealed) {
@@ -1169,8 +1175,6 @@ export class Ship {
 
     // Pirate Cruiser AI
     if (this.isCruiser && this.owner && (this.owner.isMonster || this.owner.id === 'monsters')) {
-      this.bombPlanetsEnabled = false;
-
       // Fuel, bombs, and health regeneration (1 per 30 seconds)
       this.pirateRegenTimer = (this.pirateRegenTimer || 0) + (deltaTime / 1000);
       if (this.pirateRegenTimer >= 30) {
@@ -2172,12 +2176,19 @@ export class Ship {
             }
           }
         }
-        if (!isCruiser || (this.bombPlanetsEnabled !== false && this.bombs >= 1 && (!this.planetBombardTimer || this.planetBombardTimer <= 0) && !enemyNearby)) {
+        let isCruiserBombing = false;
+        if (isCruiser) {
+          if (this.cruiserTargetType === 'planet' && this.cruiserTargetId !== null) {
+            isCruiserBombing = true;
+          }
+        }
+        if (!isCruiser || (isCruiserBombing && this.bombs >= 1 && (!this.planetBombardTimer || this.planetBombardTimer <= 0) && !enemyNearby)) {
           let validPlanets = [];
           for (const p of allPlanets) {
             if (p.owner === this.owner) continue;
             if (this.isAmoeba && !p.owner && (this.amoebaGrowCooldown || 0) > 0) continue;
             if (p.ships > 0) {
+              if (isCruiser && p.id !== this.cruiserTargetId) continue;
               const pdx = p.x - this.x;
               const pdy = p.y - this.y;
               const distSq = pdx * pdx + pdy * pdy;
@@ -3441,17 +3452,25 @@ export class Ship {
 
 
 
-    if (this.bombPlanetsEnabled === false || !this.scoutAttackEnabled) {
+    const isTargetingPlanet = (this.cruiserTargetType === 'planet' && this.cruiserTargetId !== null);
+    const hasSavedPlanet = (this.savedBombardPlanetId !== null && this.savedBombardPlanetId !== undefined);
+
+    if (!isTargetingPlanet && !hasSavedPlanet) {
       this.bombardRearming = false;
       this.bombardRearmTargetPlanetId = null;
     }
 
     // Cruiser Bombard Mode Decision Engine
-    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && !this.isPatrolling && this.bombPlanetsEnabled !== false && this.scoutAttackEnabled && !this.isRetreating) {
+    if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && !this.isPatrolling && (isTargetingPlanet || hasSavedPlanet) && !this.isRetreating) {
       // If out of bombs and not in a friendly gravity well, enter rearming retreat mode
       const supplyShip = this.findNearbySupplyShip(allShips);
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
       if (this.bombs <= 0 && !this.inFriendlyWell && !hasNearbySupply) {
+        if (isTargetingPlanet) {
+          this.savedBombardPlanetId = this.cruiserTargetId;
+          this.cruiserTargetType = null;
+          this.cruiserTargetId = null;
+        }
         this.bombardRearming = true;
       }
       
@@ -3459,6 +3478,11 @@ export class Ship {
       if (this.bombardRearming) {
         if (this.bombs >= this.getMaxBombs()) {
           this.bombardRearming = false;
+          if (hasSavedPlanet) {
+            this.cruiserTargetType = 'planet';
+            this.cruiserTargetId = this.savedBombardPlanetId;
+            this.savedBombardPlanetId = null;
+          }
         }
       }
       
@@ -3557,51 +3581,6 @@ export class Ship {
       } else {
         this.bombardRearming = false;
         this.bombardRearmTargetPlanetId = null;
-        
-        // Find the lowest ship count enemy or neutral planet within 500px
-        let bestTarget = null;
-        let lowestShips = Infinity;
-        
-        if (allPlanets) {
-          for (const p of allPlanets) {
-            if (p.owner !== this.owner && this.canSeeStats(p, allPlanets, allShips, game)) {
-              const dx = p.x - this.x;
-              const dy = p.y - this.y;
-              const distSq = dx * dx + dy * dy;
-              if (distSq <= 500 * 500) {
-                if (p.ships < lowestShips) {
-                  lowestShips = p.ships;
-                  bestTarget = p;
-                }
-              }
-            }
-          }
-        }
-        
-        if (bestTarget) {
-          const dx = this.x - bestTarget.x;
-          const dy = this.y - bestTarget.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const bombRange = effectiveRange + bestTarget.radius;
-          const stopDist = bombRange * 0.5;
-          
-          if (dist > stopDist + 2) {
-            // Move to a distance from the planet equal to half the bombing range
-            const angle = Math.atan2(dy, dx);
-            this.targetPlanet = null;
-            this.targetX = bestTarget.x + Math.cos(angle) * stopDist;
-            this.targetY = bestTarget.y + Math.sin(angle) * stopDist;
-            this.cruiserTargetType = null;
-            this.cruiserTargetId = null;
-          } else {
-            // Already close enough! Stop moving and target the planet to bombard it
-            this.targetPlanet = null;
-            this.targetX = this.x;
-            this.targetY = this.y;
-            this.cruiserTargetType = 'planet';
-            this.cruiserTargetId = bestTarget.id;
-          }
-        }
       }
     }
     

@@ -754,21 +754,7 @@ async function bootstrap() {
       }
     });
 
-    socket.on('toggleCruiserBomb', (data) => {
-      if (!game.isRunning || game.isPaused) return;
-      const player = connectedClients.get(socket.id);
-      if (!player) return;
 
-      const { shipId, enabled } = data;
-      if (shipId === undefined || enabled === undefined) return;
-
-      const ship = game.ships.find(s => s.id === shipId);
-      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
-        ship.bombPlanetsEnabled = !!enabled;
-        ship.isRetreating = false;
-        ship.retreatTargetPlanetId = null;
-      }
-    });
 
     socket.on('setCruiserPackage', (data) => {
       if (!game.isRunning || game.isPaused) return;
@@ -1864,7 +1850,7 @@ async function bootstrap() {
             }
             return null;
           }).filter(Boolean) : [],
-          bombPlanetsEnabled: s.bombPlanetsEnabled !== false,
+          savedBombardPlanetId: s.savedBombardPlanetId !== undefined ? s.savedBombardPlanetId : null,
           isPatrolling: s.isPatrolling || false,
           isScouting: s.isScouting || false,
           scoutTargetX: s.scoutTargetX !== undefined ? s.scoutTargetX : null,

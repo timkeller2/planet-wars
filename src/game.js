@@ -4,6 +4,25 @@ import { Ship } from './entities/Ship.js';
 import { InputHandler } from './systems/InputHandler.js';
 import { AIController } from './systems/AIController.js';
 
+export function getEffectiveSympathy(planet, playerId, allShips) {
+  let sympathyVal = planet.sympathy ? (planet.sympathy[playerId] || 0) : 0;
+  if (!planet.owner && allShips) {
+    const gr = planet.getGravityRadius();
+    const grSq = gr * gr;
+    for (const ship of allShips) {
+      if (ship.active && ship.owner && ship.owner.id === playerId) {
+        const dx = ship.x - planet.x;
+        const dy = ship.y - planet.y;
+        if (dx * dx + dy * dy <= grSq) {
+          const shipHp = (ship.isCruiser || ship.maxHealth > 0) ? (ship.maxHealth * 0.5) : ((ship.count || 1) * 0.5);
+          sympathyVal += shipHp;
+        }
+      }
+    }
+  }
+  return sympathyVal;
+}
+
 const SHIP_CLASSES = {
   corvette: { name: 'Corvette', key: 's', hp: 15, costShips: 50, costCap: 2 },
   destroyer: { name: 'Destroyer', key: 'd', hp: 25, costShips: 100, costCap: 4 },
@@ -355,7 +374,7 @@ export class Game {
       }
       
       // 2. Sympathy check
-      if (p.sympathy && p.sympathy[hp.id] > 0) return true;
+      if (getEffectiveSympathy(p, hp.id, this.ships) > 0) return true;
 
       // 3. Ship sensor check
       for (const s of this.ships) {
@@ -395,7 +414,7 @@ export class Game {
     }
 
     // 2. Sympathy check
-    if (p.sympathy && p.sympathy[player.id] > 0) return true;
+    if (getEffectiveSympathy(p, player.id, this.ships) > 0) return true;
 
     // 3. Ship sensor check
     for (const s of this.ships) {
@@ -2536,10 +2555,14 @@ export class Game {
     if (typeof planet.isBeingInvaded === 'function' && planet.isBeingInvaded(this)) return;
 
     const eligibleNonOwners = [];
-    for (const [pId, symVal] of Object.entries(planet.sympathy)) {
-      const isNotOwner = !planet.owner || pId !== planet.owner.id;
-      if (isNotOwner && symVal > 0) {
-        eligibleNonOwners.push({ id: pId, sympathy: symVal });
+    for (const player of this.allPlayers) {
+      if (player === this.monsterPlayer) continue;
+      const isNotOwner = !planet.owner || player.id !== planet.owner.id;
+      if (isNotOwner) {
+        const symVal = getEffectiveSympathy(planet, player.id, this.ships);
+        if (symVal > 0) {
+          eligibleNonOwners.push({ id: player.id, sympathy: symVal });
+        }
       }
     }
 
@@ -2547,7 +2570,7 @@ export class Game {
       const competitors = [];
 
       if (planet.owner) {
-        const ownerSym = planet.sympathy[planet.owner.id] || 0;
+        const ownerSym = getEffectiveSympathy(planet, planet.owner.id, this.ships);
         const maxRoll = Math.floor(planet.ships + ownerSym);
         competitors.push({ id: planet.owner.id, maxRoll, isOwner: true, name: planet.owner.name });
       } else {
@@ -2571,11 +2594,10 @@ export class Game {
       // Calculate sympathy induced extra casualties to destroy over time
       let totalSubvertingSympathy = 0;
       const originalOwner = planet.owner;
-      if (planet.sympathy) {
-        for (const [pId, symVal] of Object.entries(planet.sympathy)) {
-          if (!originalOwner || pId !== originalOwner.id) {
-            totalSubvertingSympathy += symVal;
-          }
+      for (const player of this.allPlayers) {
+        if (player === this.monsterPlayer) continue;
+        if (!originalOwner || player.id !== originalOwner.id) {
+          totalSubvertingSympathy += getEffectiveSympathy(planet, player.id, this.ships);
         }
       }
       const maxExtraDestroyed = Math.floor(totalSubvertingSympathy / 5);
@@ -2917,7 +2939,6 @@ export class Game {
           pirate.cruiserStyle = randomStyle;
           pirate.fuel = pirate.getMaxFuel();
           pirate.bombs = pirate.getMaxBombs();
-          pirate.bombPlanetsEnabled = false;
           pirate.speed = Math.max(5, pirate.speed - 10);
           pirate.speedModifier = 1.0;
 
@@ -3492,7 +3513,7 @@ export class Game {
               let baseShips = planet.ships;
               if (!planet.owner) {
                 // Neutral planet: cap counted ships to sympathy on that planet toward the player * 10
-                const sympathyVal = planet.sympathy?.[player.id] || 0;
+                const sympathyVal = getEffectiveSympathy(planet, player.id, this.ships);
                 baseShips = Math.min(baseShips, sympathyVal * 10);
               }
 
@@ -3514,10 +3535,12 @@ export class Game {
           }
         }
 
-        // 3. Apply the cap (sum of other effective ships capped at player's own effective ships)
+        // 3. Apply the cap (sum of other effective ships capped at player's own effective ships) - Soft Cap
         let scale = 1.0;
         if (otherEffectiveShips > playerEffectiveShips) {
-          scale = playerEffectiveShips / otherEffectiveShips;
+          const excess = otherEffectiveShips - playerEffectiveShips;
+          const credited = playerEffectiveShips + 0.10 * excess;
+          scale = credited / otherEffectiveShips;
         }
 
         // 4. Build visible partner ships list using the scaled values
@@ -4251,7 +4274,7 @@ export class Game {
     const expBonus = Math.sqrt(ship.owner.expScore || 0);
     const shipExpBonus = Math.sqrt(ship.expScore || 0);
     const MathSquareBase = expBonus + shipExpBonus;
-    const currentSym = targetPlanet.sympathy ? (targetPlanet.sympathy[ship.owner.id] || 0) : 0;
+    const currentSym = getEffectiveSympathy(targetPlanet, ship.owner.id, this.ships);
     const disposition = targetPlanet.disposition ? (targetPlanet.disposition[ship.owner.id] ?? 0) : 0;
 
     const prefRes = targetPlanet.preferredResource;
@@ -4515,7 +4538,7 @@ export class Game {
             const dy = p.y - ship.y;
             const dist = Math.sqrt(dx*dx + dy*dy);
             if (dist <= radar) {
-              const currentSym = p.sympathy ? (p.sympathy[ship.owner.id] || 0) : 0;
+              const currentSym = getEffectiveSympathy(p, ship.owner.id, this.ships);
               const isMaxEmpathy = currentSym >= p.maxShips;
               if (!isMaxEmpathy && !p.dead) {
                 const isFriendly = p.owner && p.owner.id === ship.owner.id;
@@ -4550,8 +4573,8 @@ export class Game {
                 const isFriendlyA = a.planet.owner && a.planet.owner.id === ship.owner.id;
                 const isFriendlyB = b.planet.owner && b.planet.owner.id === ship.owner.id;
 
-                const symA = a.planet.sympathy ? (a.planet.sympathy[ship.owner.id] || 0) : 0;
-                const symB = b.planet.sympathy ? (b.planet.sympathy[ship.owner.id] || 0) : 0;
+                const symA = getEffectiveSympathy(a.planet, ship.owner.id, this.ships);
+                const symB = getEffectiveSympathy(b.planet, ship.owner.id, this.ships);
 
                 // Friendly planets are low priority (Tier 0)
                 const tierA = isFriendlyA ? 0 : ((symA === 0) ? 3 : ((symA > a.planet.ships) ? 1 : 2));
@@ -4615,7 +4638,8 @@ export class Game {
 
       // 4b. Marine Planet Attack Check
       const maxMarinesCapacity = (ship.marines || 0) * (ship.maxHealth || 0);
-      const hasEnoughMarines = maxMarinesCapacity > 0 && ship.marineCount > 0.5 * maxMarinesCapacity && ship.bombPlanetsEnabled === true;
+      const isTargetingPlanet = (ship.cruiserTargetType === 'planet' && ship.cruiserTargetId !== null);
+      const hasEnoughMarines = maxMarinesCapacity > 0 && ship.marineCount > 0.5 * maxMarinesCapacity && ship.scoutAttackEnabled === true && isTargetingPlanet;
 
       if ((ship.marineCount || 0) > 0 && hasEnoughMarines) {
         let targetPlanet = null;
@@ -4623,27 +4647,6 @@ export class Game {
           const p = this.planets.find(p => p.id === ship.cruiserTargetId);
           if (p && (!p.owner || p.owner.id !== ship.owner.id)) {
             targetPlanet = p;
-          }
-        }
-
-        // If no explicit target planet, search automatically using standard rules
-        if (!targetPlanet) {
-          if (ship.marineCount >= 0.5 * maxMarinesCapacity) {
-            for (const p of this.planets) {
-              const isNeutralOrEnemy = !p.owner || p.owner.id !== ship.owner.id;
-              if (isNeutralOrEnemy) {
-                const dx = p.x - ship.x;
-                const dy = p.y - ship.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist <= radar) {
-                  // Check if marine count > triple the planet's defending ships
-                  if (ship.marineCount > 3 * p.ships) {
-                    targetPlanet = p;
-                    break;
-                  }
-                }
-              }
-            }
           }
         }
 
