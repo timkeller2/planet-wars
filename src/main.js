@@ -1196,10 +1196,12 @@ function getPlanetTradeIncomePerMin(planet) {
             if (p.maxShips >= 150) mult = 4;
             else if (p.maxShips >= 120) mult = 3;
             else if (p.maxShips >= 100) mult = 2;
-            bonusVal = Math.sqrt(qty) * mult;
+            bonusVal = Math.round(Math.sqrt(qty) * mult);
           }
         }
-        prefBonusStr = ` (+${bonusVal.toFixed(1)}%)`;
+        if (bonusVal > 0) {
+          prefBonusStr = ` (+${bonusVal}%)`;
+        }
       }
 
       const racePart = raceName ? `${raceName} ` : '';
