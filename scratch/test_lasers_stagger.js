@@ -33,7 +33,7 @@ const cruiser = new Ship('c_human', 500, 710, null, human);
 cruiser.isCruiser = true;
 cruiser.maxHealth = 50;
 cruiser.health = 50;
-cruiser.labs = 3;
+cruiser.labs = 9;
 cruiser.fuel = 100;
 cruiser.isResearching = true;
 cruiser.scoutAttackEnabled = true;
@@ -43,6 +43,7 @@ game.ships.push(cruiser);
 
 console.log("Running first update (100ms with damage timer ready)...");
 game.minefieldDamageTimer = 999;
+cruiser.accumulatedTech = 1.0;
 game.update(100);
 
 game.minefieldDamageTimer = 0;
@@ -68,8 +69,8 @@ const blueLasers = game.lasers.filter(l => l.color === '#44f');
 console.log("Blue explosions count:", blueExplosions.length);
 console.log("Blue lasers count:", blueLasers.length);
 
-if (blueExplosions.length !== 4 || blueLasers.length !== 4) {
-  console.error(`FAILED: Expected 4 blue explosions and 4 blue lasers, got: explosions=${blueExplosions.length}, lasers=${blueLasers.length}`);
+if (blueExplosions.length !== 16 || blueLasers.length !== 16) {
+  console.error(`FAILED: Expected 16 blue explosions and 16 blue lasers, got: explosions=${blueExplosions.length}, lasers=${blueLasers.length}`);
   process.exit(1);
 }
 

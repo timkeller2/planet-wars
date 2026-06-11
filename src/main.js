@@ -266,6 +266,12 @@ function getPlanetTradeIncomePerMin(planet) {
     if (nameInput) nameInput.value = savedPlayerName;
   }
 
+  const savedPlayerRace = localStorage.getItem('planetWarsPlayerRace');
+  if (savedPlayerRace) {
+    const raceSelect = document.getElementById('player-race-select');
+    if (raceSelect) raceSelect.value = savedPlayerRace;
+  }
+
   let localPlayer = null;
   let serverState = null;
   let lastGameStartTime = null;
@@ -6382,7 +6388,12 @@ function getPlanetTradeIncomePerMin(planet) {
       const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 500;
       startingCreditsVal = isNaN(customCredits) ? "500" : String(customCredits);
     }
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, enableCheats };
+    const raceSelect = document.getElementById('player-race-select');
+    const selectedRace = raceSelect ? raceSelect.value : 'Random';
+    if (raceSelect) {
+      localStorage.setItem('planetWarsPlayerRace', selectedRace);
+    }
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, enableCheats, race: selectedRace };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;

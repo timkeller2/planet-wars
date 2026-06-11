@@ -1362,6 +1362,11 @@ async function bootstrap() {
       const p = connectedClients.get(socket.id);
       if (p) {
         p.lastCommandTime = Date.now();
+        if (options && options.race && options.race !== 'Random') {
+          p.cruiserStyle = options.race;
+        } else {
+          p.cruiserStyle = null;
+        }
         game.tryAssignPlanet(p);
       }
     });
@@ -1418,7 +1423,18 @@ async function bootstrap() {
         p.lastCommandTime = now;
         p.discoveredPlanets = new Set();
         p.attackedPlanets = new Map();
-        p.cruiserStyle = null;
+        
+        const initiatingPlayer = connectedClients.get(socket.id);
+        if (p === initiatingPlayer) {
+          if (options && options.race && options.race !== 'Random') {
+            p.cruiserStyle = options.race;
+          } else {
+            p.cruiserStyle = null;
+          }
+        } else {
+          p.cruiserStyle = null;
+        }
+        
         p.credits = game.settings && game.settings.startingCredits !== undefined ? game.settings.startingCredits : 250;
         const resources = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
         p.autoBuyOrders = resources.map(res => ({
