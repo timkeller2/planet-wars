@@ -3143,14 +3143,13 @@ export class Game {
             const dx = ship.x - storm.x;
             const dy = ship.y - storm.y;
             if (Math.sqrt(dx * dx + dy * dy) <= effRadar + storm.radius) {
-              overlapCount += ship.labs;
-
               const k = storm.knowledge[player.id] || 0;
               const tR = Math.sqrt(player.techScore || 0);
               const eR = Math.sqrt(player.expScore || 0);
               const effectiveIntensity = Math.max(0, storm.intensity - k - (tR + eR) / 2);
 
-              if (effectiveIntensity > 1) {
+              if (effectiveIntensity > 0) {
+                overlapCount += ship.labs;
                 const knowledgeGained = (ship.labs * deltaTime) / 120000;
                 player.techScore = (player.techScore || 0) + knowledgeGained;
                 ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
@@ -3176,6 +3175,7 @@ export class Game {
       if (storm.type !== 'minefield') continue;
       for (const player of this.allPlayers) {
         if (!player.isAlive) continue;
+        let overlapCount = 0;
         for (const ship of this.ships) {
           if (ship.active && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0) {
             const finalCruiserRadar = ship.cruiserRadarRange();
@@ -3184,142 +3184,118 @@ export class Game {
             const dx = ship.x - storm.x;
             const dy = ship.y - storm.y;
             if (Math.sqrt(dx * dx + dy * dy) <= effRadar + storm.radius) {
-              // Cruiser is actively researching minefield
-              ship.isActivelyResearching = true;
-              const knowledgeGained = (ship.labs * deltaTime) / 120000;
-              player.techScore = (player.techScore || 0) + knowledgeGained;
-              ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
-              
-              if (ship.accumulatedTech >= 1.0) {
-                const completions = Math.floor(ship.accumulatedTech);
-                ship.accumulatedTech -= completions;
+              const k = storm.knowledge[player.id] || 0;
+              const tR = Math.sqrt(player.techScore || 0);
+              const eR = Math.sqrt(player.expScore || 0);
+              const effectiveIntensity = Math.max(0, storm.intensity - k - (tR + eR) / 2);
+
+              if (effectiveIntensity > 0) {
+                overlapCount += ship.labs;
+                // Cruiser is actively researching minefield
+                ship.isActivelyResearching = true;
+                const knowledgeGained = (ship.labs * deltaTime) / 120000;
+                player.techScore = (player.techScore || 0) + knowledgeGained;
+                ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
                 
-                if (ship.scoutAttackEnabled) {
-                  for (let c = 0; c < completions; c++) {
-                    const cap = Math.floor(ship.health - 2);
-                    let volleySize = Math.max(1, Math.floor((ship.maxHealth + ship.health) / 6));
-                    if (volleySize > cap) volleySize = cap;
-                    if (ship.health <= 2) volleySize = 0;
+                if (ship.accumulatedTech >= 1.0) {
+                  const completions = Math.floor(ship.accumulatedTech);
+                  ship.accumulatedTech -= completions;
+                  
+                  if (ship.scoutAttackEnabled) {
+                    for (let c = 0; c < completions; c++) {
+                      const cap = Math.floor(ship.health - 2);
+                      let volleySize = Math.max(1, Math.floor((ship.maxHealth + ship.health) / 6));
+                      if (volleySize > cap) volleySize = cap;
+                      if (ship.health <= 2) volleySize = 0;
 
-                    const hitChance = Math.min(1.0, Math.max(0.0, ship.getAccuracy() + 0.10 * ship.labs));
-                    let minesDestroyed = 0;
+                      const hitChance = Math.min(1.0, Math.max(0.0, ship.getAccuracy() + 0.10 * ship.labs));
+                      let minesDestroyed = 0;
 
-                    for (let v = 0; v < volleySize; v++) {
-                      let tx = storm.x;
-                      let ty = storm.y;
-                      for (let attempt = 0; attempt < 30; attempt++) {
-                        const angle = Math.random() * Math.PI * 2;
-                        const r = Math.random() * storm.radius;
-                        const px = storm.x + Math.cos(angle) * r;
-                        const py = storm.y + Math.sin(angle) * r;
-                        const sDx = px - ship.x;
-                        const sDy = py - ship.y;
-                        if (sDx * sDx + sDy * sDy <= effRadar * effRadar) {
-                          tx = px;
-                          ty = py;
-                          break;
-                        }
-                      }
-
-                      const isHit = (storm.mines > 0) && (Math.random() < hitChance);
-                      if (isHit) {
-                        storm.mines -= 1;
-                        minesDestroyed += 1;
-                      }
-
-                      const delayMs = Math.random() * 2000;
-                      const shipId = ship.id;
-                      const finalTx = tx;
-                      const finalTy = ty;
-
-                      this.scheduledEvents.push({
-                        delay: delayMs,
-                        action: () => {
-                          const currentShip = this.ships.find(s => s.id === shipId);
-                          if (currentShip && currentShip.active) {
-                            this.lasers.push({
-                              startX: currentShip.x,
-                              startY: currentShip.y,
-                              endX: finalTx,
-                              endY: finalTy,
-                              color: '#44f',
-                              age: 0,
-                              duration: 0.4
-                            });
-                          }
-                          if (isHit) {
-                            this.explosions.push({
-                              x: finalTx,
-                              y: finalTy,
-                              color: '#44f',
-                              age: 0
-                            });
+                      for (let v = 0; v < volleySize; v++) {
+                        let tx = storm.x;
+                        let ty = storm.y;
+                        for (let attempt = 0; attempt < 30; attempt++) {
+                          const angle = Math.random() * Math.PI * 2;
+                          const r = Math.random() * storm.radius;
+                          const px = storm.x + Math.cos(angle) * r;
+                          const py = storm.y + Math.sin(angle) * r;
+                          const sDx = px - ship.x;
+                          const sDy = py - ship.y;
+                          if (sDx * sDx + sDy * sDy <= effRadar * effRadar) {
+                            tx = px;
+                            ty = py;
+                            break;
                           }
                         }
-                      });
-                    }
 
-                    if (minesDestroyed > 0) {
-                      player.credits = (player.credits || 0) + minesDestroyed;
-                      ship.creditsGainedEvent = (ship.creditsGainedEvent || 0) + minesDestroyed;
+                        const isHit = (storm.mines > 0) && (Math.random() < hitChance);
+                        if (isHit) {
+                          storm.mines -= 1;
+                          minesDestroyed += 1;
+                        }
 
-                      this.explosions.push({
-                        x: ship.x,
-                        y: ship.y,
-                        isDollarSign: true,
-                        amount: minesDestroyed,
-                        remainingMines: storm.mines,
-                        age: 0
-                      });
+                        const delayMs = Math.random() * 2000;
+                        const shipId = ship.id;
+                        const finalTx = tx;
+                        const finalTy = ty;
+
+                        this.scheduledEvents.push({
+                          delay: delayMs,
+                          action: () => {
+                            const currentShip = this.ships.find(s => s.id === shipId);
+                            if (currentShip && currentShip.active) {
+                              this.lasers.push({
+                                startX: currentShip.x,
+                                startY: currentShip.y,
+                                endX: finalTx,
+                                endY: finalTy,
+                                color: '#44f',
+                                age: 0,
+                                duration: 0.4
+                              });
+                            }
+                            if (isHit) {
+                              this.explosions.push({
+                                x: finalTx,
+                                y: finalTy,
+                                color: '#44f',
+                                age: 0
+                              });
+                            }
+                          }
+                        });
+                      }
+
+                      if (minesDestroyed > 0) {
+                        player.credits = (player.credits || 0) + minesDestroyed;
+                        ship.creditsGainedEvent = (ship.creditsGainedEvent || 0) + minesDestroyed;
+
+                        this.explosions.push({
+                          x: ship.x,
+                          y: ship.y,
+                          isDollarSign: true,
+                          amount: minesDestroyed,
+                          remainingMines: storm.mines,
+                          age: 0
+                        });
+                      }
                     }
+                  } else {
+                    // Pure research: trigger beaker animation
+                    ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + completions;
                   }
-                } else {
-                  // Pure research: trigger beaker animation
-                  ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + completions;
-                }
-                
-                if (storm.initialMines > 0) {
-                  storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
+                  
+                  if (storm.initialMines > 0) {
+                    storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
+                  }
                 }
               }
             }
           }
         }
-      }
-    }
-
-    // Cruiser friendly/neutral research space loop
-    for (const player of this.allPlayers) {
-      if (!player.isAlive) continue;
-      for (const ship of this.ships) {
-        if (ship.active && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0) {
-          let inResearchSpace = false;
-          for (const planet of this.planets) {
-            const isFriendlyOrNeutral = !planet.owner || planet.owner.id === player.id;
-            const isResearchPlanet = planet.isResearch || planet.focusMode === 'research';
-            if (isFriendlyOrNeutral && isResearchPlanet) {
-              const dx = ship.x - planet.x;
-              const dy = ship.y - planet.y;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-              if (dist <= planet.getGravityRadius()) {
-                inResearchSpace = true;
-                break;
-              }
-            }
-          }
-
-          if (inResearchSpace) {
-            ship.isActivelyResearching = true;
-            const techGained = (ship.labs * deltaTime) / 120000;
-            player.techScore = (player.techScore || 0) + techGained;
-            ship.accumulatedTech = (ship.accumulatedTech || 0) + techGained;
-            
-            if (ship.accumulatedTech >= 1.0) {
-              const completions = Math.floor(ship.accumulatedTech);
-              ship.accumulatedTech -= completions;
-              ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + completions;
-            }
-          }
+        if (overlapCount > 0) {
+          if (!storm.knowledge[player.id]) storm.knowledge[player.id] = 0;
+          storm.knowledge[player.id] += (overlapCount * deltaTime) / 120000;
         }
       }
     }
