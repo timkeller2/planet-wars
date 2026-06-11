@@ -854,8 +854,6 @@ export class Game {
         techScore: p.techScore,
         expScore: p.expScore,
         expProgress: p.expProgress,
-        crewExperience: p.crewExperience,
-        storedXpBonus: p.storedXpBonus,
         credits: p.credits,
         tradingBonus: p.tradingBonus,
         useCredits: p.useCredits,
@@ -954,8 +952,6 @@ export class Game {
       p.techScore = pData.techScore;
       p.expScore = pData.expScore;
       p.expProgress = pData.expProgress;
-      p.crewExperience = pData.crewExperience;
-      p.storedXpBonus = pData.storedXpBonus || 0;
       p.credits = pData.credits;
       p.tradingBonus = pData.tradingBonus;
       p.useCredits = pData.useCredits;
@@ -1108,8 +1104,6 @@ export class Game {
       player.techScore = 0;
       player.expScore = 0;
       player.expProgress = 0;
-      player.crewExperience = 0;
-      player.storedXpBonus = 0;
       player.cruiserStyle = null;
       player.prevTechBonus = 0;
       player.credits = this.settings && this.settings.startingCredits !== undefined ? this.settings.startingCredits : 250;
@@ -2190,16 +2184,7 @@ export class Game {
         startingXp += (source.expScore || 0);
         startingXp += (owner ? (owner.expScore || 0) : 0);
 
-        let crewExpXp = 0;
-        const storedXp = owner ? (owner.storedXpBonus || 0) : 0;
-        if (owner && owner.crewExperience && startingXp < storedXp) {
-          const diff = storedXp - startingXp;
-          const neededCrewExp = diff * finalMaxHealth;
-          const crewExpToUse = Math.min(owner.crewExperience, neededCrewExp);
-          owner.crewExperience -= crewExpToUse;
-          crewExpXp = crewExpToUse / finalMaxHealth;
-        }
-        ship.expScore = startingXp + crewExpXp;
+        ship.expScore = startingXp;
 
         ship.cruiserStyle = source.racialAffinity;
         ship.isCruiser = true;

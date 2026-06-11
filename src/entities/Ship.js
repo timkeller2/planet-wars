@@ -1383,10 +1383,9 @@ export class Ship {
         
         if (this.owner) {
           const localXp = this.expScore || 0;
-          const gainedExp = this.maxHealth * localXp * 0.70;
-          this.owner.crewExperience = (this.owner.crewExperience || 0) + gainedExp;
-          this.owner.storedXpBonus = Math.max(this.owner.storedXpBonus || 0, localXp);
-          console.log(`[Cruiser Dismantled] Ship ${this.id} dismantled. Owner gained ${gainedExp} crew experience. Total: ${this.owner.crewExperience}, storedXpBonus: ${this.owner.storedXpBonus}`);
+          const gainedPlayerXp = localXp * 0.10;
+          this.owner.expScore = (this.owner.expScore || 0) + gainedPlayerXp;
+          console.log(`[Cruiser Dismantled] Ship ${this.id} dismantled. Owner gained ${gainedPlayerXp.toFixed(2)} player XP.`);
         }
       }
     }
