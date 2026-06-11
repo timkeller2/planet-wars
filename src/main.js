@@ -3744,10 +3744,10 @@ function getPlanetTradeIncomePerMin(planet) {
 
     const commandLimitDisplay = document.getElementById('player-command-limit-display');
     if (commandLimitDisplay) {
-      const cruiserCount = myPlayer.cruiserCount || 0;
+      const commandCount = myPlayer.commandCount || 0;
       const commandLimit = myPlayer.commandLimit || 0;
       commandLimitDisplay.style.display = 'block';
-      commandLimitDisplay.textContent = `⚓: ${cruiserCount}/${commandLimit}`;
+      commandLimitDisplay.textContent = `⚓: ${commandCount}/${commandLimit}`;
     }
 
     const tradeOptionsDisplay = document.getElementById('player-trade-options-display');

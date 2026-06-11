@@ -100,6 +100,7 @@ export class Ship {
     this.specialduranium = 0;
     this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
     this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+    this.conversionTimer = 0;
     this.crew = 0;
     this.marineCount = 0;
     this._cruiserStyle = null;
@@ -5326,6 +5327,72 @@ export class Ship {
       }
     }
     this.currentSpeed = effectiveSpeed;
+
+    if (this.isCruiser && !this.isAmoeba && this.owner) {
+      this.conversionTimer = (this.conversionTimer || 0) + deltaTime;
+      if (this.conversionTimer >= 30000) {
+        this.conversionTimer -= 30000;
+        this.tryAutoResourceConversion();
+      }
+    }
+  }
+
+  tryAutoResourceConversion() {
+    if (!this.owner || !this.owner.resources) return;
+
+    const initEvents = () => {
+      if (!this.resourceConsumeEvents) {
+        this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+      }
+      if (!this.resourceAccumulators) {
+        this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+      }
+    };
+
+    if (this.armorPoints > (this.specialduranium || 0)) {
+      const consumed = (1/12) / 3;
+      if ((this.owner.resources.duranium || 0) >= consumed) {
+        this.owner.resources.duranium -= consumed;
+        this.specialduranium = (this.specialduranium || 0) + 1;
+        initEvents();
+        this.resourceConsumeEvents.duranium = (this.resourceConsumeEvents.duranium || 0) + 1;
+        return;
+      }
+    }
+
+    if (this.fuel > (this.specialfuel || 0)) {
+      let costMultiplier = 1.0;
+      if (this.fuel_tanker && this.fuel_tanker > 0) {
+        costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.fuel_tanker));
+      }
+      const consumed = ((1/12) * costMultiplier) / 3;
+      if ((this.owner.resources.deuterium || 0) >= consumed) {
+        this.owner.resources.deuterium -= consumed;
+        this.specialfuel = (this.specialfuel || 0) + 1;
+        initEvents();
+        this.resourceConsumeEvents.deuterium = (this.resourceConsumeEvents.deuterium || 0) + 1;
+        return;
+      }
+    }
+
+    let bombResource = 'merculite';
+    const style = this.cruiserStyle || (this.owner ? this.owner.cruiserStyle : null);
+    if (style === 'Romulan' || style === 'Gorn') {
+      bombResource = 'antimatter';
+    } else if (style === 'Tholian' || style === 'Lyran') {
+      bombResource = 'dilithium';
+    }
+
+    if (this.bombs > (this.specialbombs || 0)) {
+      const consumed = (1/12) / 3;
+      if ((this.owner.resources[bombResource] || 0) >= consumed) {
+        this.owner.resources[bombResource] -= consumed;
+        this.specialbombs = (this.specialbombs || 0) + 1;
+        initEvents();
+        this.resourceConsumeEvents[bombResource] = (this.resourceConsumeEvents[bombResource] || 0) + 1;
+        return;
+      }
+    }
   }
 
   takeDamage(explosions, attacker = null, isHazard = false, targetType = null) {

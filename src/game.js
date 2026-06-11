@@ -3617,6 +3617,9 @@ export class Game {
 
     for (const player of this.allPlayers) {
       player.cruiserCount = this.ships.filter(s => s.active && s.owner === player && s.isCruiser).length;
+      player.commandCount = this.ships
+        .filter(s => s.active && s.owner === player && s.isCruiser)
+        .reduce((sum, s) => sum + Math.floor((s.maxHealth || 0) / 10), 0);
     }
 
     // Calculate Pirate Activity and Pirate Income for all players
@@ -3708,7 +3711,7 @@ export class Game {
         }
       }
 
-      player.commandLimit = 1 + Math.ceil((player.planetCount || 0) / 3) + garrisonWorlds + fullGarrisonWorlds + controlledHomeworlds + (controlsOwnHomeworld ? 1 : 0);
+      player.commandLimit = 5 + (player.planetCount || 0) + (garrisonWorlds * 2) + (fullGarrisonWorlds * 2) + (controlledHomeworlds * 2) + (controlsOwnHomeworld ? 3 : 0);
       player.tradeCapacity = Math.ceil((player.planetCount || 0) / 5) + commerceWorlds;
       player.stockpileCapacity = ((player.commandLimit || 0) + (player.tradeCapacity || 0)) * 2;
 
@@ -3764,12 +3767,12 @@ export class Game {
         }
 
         // Fleet cost overages
-        const commandLimit = player.commandLimit || 1;
-        const cruiserCount = player.cruiserCount || 0;
-        if (cruiserCount > commandLimit) {
-          const excessCruisers = cruiserCount - commandLimit;
-          const fleetCost = (excessCruisers * 5) / (commandLimit * 8);
-          player.fleetCostRate = fleetCost * 60;
+        const commandLimit = player.commandLimit || 5;
+        const commandCount = player.commandCount || 0;
+        if (commandCount > commandLimit) {
+          const excess = commandCount - commandLimit;
+          const fleetCost = (excess * 5) / 60;
+          player.fleetCostRate = excess * 5;
 
           if ((player.credits || 0) >= fleetCost) {
             player.credits -= fleetCost;
