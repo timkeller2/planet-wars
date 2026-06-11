@@ -3234,50 +3234,76 @@ export class Game {
           const dx = ship.x - storm.x;
           const dy = ship.y - storm.y;
           if (dx * dx + dy * dy <= storm.radius * storm.radius) {
-            let mineRemoved = false;
-            if (ship.maxHealth > 0) {
-              // Cruiser
-              const damage = ship.owner.isAI ? 0.25 : 1;
-              ship.health -= damage;
-              mineRemoved = true;
-              if (ship.health <= 0) {
-                ship.active = false;
+            // Determine if moving
+            let isMoving = false;
+            if (ship.targetPlanet) {
+              const pdx = ship.targetPlanet.x - ship.x;
+              const pdy = ship.targetPlanet.y - ship.y;
+              if (pdx * pdx + pdy * pdy > (ship.targetPlanet.radius + 1) * (ship.targetPlanet.radius + 1)) {
+                isMoving = true;
               }
-            } else {
-              // Standard fleet
-              const d1 = Math.floor(Math.random() * 6) + 1;
-              const d2 = Math.floor(Math.random() * 6) + 1;
-              const d3 = Math.floor(Math.random() * 6) + 1;
-              const pct = (d1 + d2 + d3) / 100;
-              const finalPct = ship.owner.isAI ? (pct / 4) : pct;
-
-              let destroyedCount = Math.round(ship.count * finalPct);
-              if (destroyedCount === 0 && ship.count > 0 && finalPct > 0) {
-                destroyedCount = 1;
-              }
-              destroyedCount = Math.min(ship.count, destroyedCount);
-              if (destroyedCount > 0) {
-                ship.count -= destroyedCount;
-                mineRemoved = true;
-                if (ship.count <= 0) {
-                  ship.count = 0;
-                  ship.active = false;
-                }
+            } else if (ship.targetX !== null && ship.targetY !== null && ship.targetX !== undefined && ship.targetY !== undefined) {
+              const pdx = ship.targetX - ship.x;
+              const pdy = ship.targetY - ship.y;
+              if (pdx * pdx + pdy * pdy >= 25) { // 5 squared
+                isMoving = true;
               }
             }
 
-            if (mineRemoved) {
-              storm.mines = Math.max(0, storm.mines - 1);
-              if (storm.initialMines > 0) {
-                storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
+            if (!isMoving) continue;
+
+            const knowledge = storm.knowledge[ship.owner.id] || 0;
+            const techRed = Math.sqrt(ship.owner.techScore || 0);
+            const expRed = Math.sqrt(ship.owner.expScore || 0);
+            const shipExpRed = Math.sqrt(ship.expScore || 0);
+            const effectiveIntensity = Math.max(0, storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed);
+
+            if (Math.random() * 100 < effectiveIntensity) {
+              let mineRemoved = false;
+              if (ship.maxHealth > 0) {
+                // Cruiser
+                const damage = ship.owner.isAI ? 0.25 : 1;
+                ship.health -= damage;
+                mineRemoved = true;
+                if (ship.health <= 0) {
+                  ship.active = false;
+                }
+              } else {
+                // Standard fleet
+                const d1 = Math.floor(Math.random() * 6) + 1;
+                const d2 = Math.floor(Math.random() * 6) + 1;
+                const d3 = Math.floor(Math.random() * 6) + 1;
+                const pct = (d1 + d2 + d3) / 100;
+                const finalPct = ship.owner.isAI ? (pct / 4) : pct;
+
+                let destroyedCount = Math.round(ship.count * finalPct);
+                if (destroyedCount === 0 && ship.count > 0 && finalPct > 0) {
+                  destroyedCount = 1;
+                }
+                destroyedCount = Math.min(ship.count, destroyedCount);
+                if (destroyedCount > 0) {
+                  ship.count -= destroyedCount;
+                  mineRemoved = true;
+                  if (ship.count <= 0) {
+                    ship.count = 0;
+                    ship.active = false;
+                  }
+                }
               }
-              this.explosions.push({ x: ship.x, y: ship.y, color: '#44f', age: 0 });
-              const boltX = ship.x + (Math.random() - 0.5) * 80;
-              const boltY = ship.y - 30 - Math.random() * 50;
-              const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
-              const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
-              this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: '#44f', age: 0, duration: 0.4 });
-              this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: '#44f', age: 0, duration: 0.4 });
+
+              if (mineRemoved) {
+                storm.mines = Math.max(0, storm.mines - 1);
+                if (storm.initialMines > 0) {
+                  storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
+                }
+                this.explosions.push({ x: ship.x, y: ship.y, color: '#44f', age: 0 });
+                const boltX = ship.x + (Math.random() - 0.5) * 80;
+                const boltY = ship.y - 30 - Math.random() * 50;
+                const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
+                const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
+                this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: '#44f', age: 0, duration: 0.4 });
+                this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: '#44f', age: 0, duration: 0.4 });
+              }
             }
           }
         }
