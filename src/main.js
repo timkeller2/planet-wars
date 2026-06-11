@@ -1625,7 +1625,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
         const techBonus = Math.sqrt(rawTech);
         const expBonus = Math.sqrt(rawExp);
-        const shipExpBonus = Math.sqrt(shipExp);
+        const shipExpBonus = Math.sqrt(shipExp) + (hs.commandPoints || 0);
 
         const baseDeflection = hs.maxHealth + (techBonus + expBonus + shipExpBonus);
         const deflectionRem = 100 - baseDeflection;
