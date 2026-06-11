@@ -3115,6 +3115,7 @@ export class Game {
 
     // Ion Storm knowledge accumulation (ships with labs are the primary method of gaining knowledge now)
     for (const storm of this.ionStorms) {
+      if (storm.type === 'minefield') continue;
       for (const player of this.allPlayers) {
         if (!player.isAlive) continue;
         let overlapCount = 0;
@@ -3151,6 +3152,105 @@ export class Game {
         if (overlapCount > 0) {
           if (!storm.knowledge[player.id]) storm.knowledge[player.id] = 0;
           storm.knowledge[player.id] += (overlapCount * deltaTime) / 120000;
+        }
+      }
+    }
+
+    // Minefield research/mining loop (continuous warmup, only destroy mines when warmup completes)
+    for (const storm of this.ionStorms) {
+      if (storm.type !== 'minefield') continue;
+      for (const player of this.allPlayers) {
+        if (!player.isAlive) continue;
+        for (const ship of this.ships) {
+          if (ship.active && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0 && ship.scoutAttackEnabled) {
+            const finalCruiserRadar = ship.cruiserRadarRange();
+            const red = hazardSensorReduction(ship.x, ship.y, player.id);
+            const effRadar = Math.max(10, finalCruiserRadar - red);
+            const dx = ship.x - storm.x;
+            const dy = ship.y - storm.y;
+            if (Math.sqrt(dx * dx + dy * dy) <= effRadar + storm.radius) {
+              // Cruiser is actively researching minefield
+              ship.isActivelyResearching = true;
+              const knowledgeGained = (ship.labs * deltaTime) / 120000;
+              ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
+              
+              if (ship.accumulatedTech >= 1.0) {
+                const completions = Math.floor(ship.accumulatedTech);
+                ship.accumulatedTech -= completions;
+                
+                for (let c = 0; c < completions; c++) {
+                  const rolledMines = Math.floor(Math.random() * 6) + 1;
+                  const minesDestroyed = Math.min(storm.mines, rolledMines);
+                  storm.mines -= minesDestroyed;
+                  player.credits = (player.credits || 0) + minesDestroyed;
+                  ship.creditsGainedEvent = (ship.creditsGainedEvent || 0) + minesDestroyed;
+                  
+                  if (minesDestroyed > 0) {
+                    this.explosions.push({
+                      x: ship.x,
+                      y: ship.y,
+                      isDollarSign: true,
+                      amount: minesDestroyed,
+                      remainingMines: storm.mines,
+                      age: 0
+                    });
+
+                    for (let k = 0; k < minesDestroyed; k++) {
+                      const delayMs = Math.random() * 2000;
+                      
+                      let tx = storm.x;
+                      let ty = storm.y;
+                      for (let attempt = 0; attempt < 30; attempt++) {
+                        const angle = Math.random() * Math.PI * 2;
+                        const r = Math.random() * storm.radius;
+                        const px = storm.x + Math.cos(angle) * r;
+                        const py = storm.y + Math.sin(angle) * r;
+                        const sDx = px - ship.x;
+                        const sDy = py - ship.y;
+                        if (sDx * sDx + sDy * sDy <= effRadar * effRadar) {
+                          tx = px;
+                          ty = py;
+                          break;
+                        }
+                      }
+
+                      const shipId = ship.id;
+                      const finalTx = tx;
+                      const finalTy = ty;
+
+                      this.scheduledEvents.push({
+                        delay: delayMs,
+                        action: () => {
+                          const currentShip = this.ships.find(s => s.id === shipId);
+                          if (currentShip && currentShip.active) {
+                            this.lasers.push({
+                              startX: currentShip.x,
+                              startY: currentShip.y,
+                              endX: finalTx,
+                              endY: finalTy,
+                              color: '#44f',
+                              age: 0,
+                              duration: 0.4
+                            });
+                          }
+                          this.explosions.push({
+                            x: finalTx,
+                            y: finalTy,
+                            color: '#44f',
+                            age: 0
+                          });
+                        }
+                      });
+                    }
+                  }
+                }
+                
+                if (storm.initialMines > 0) {
+                  storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -3252,92 +3352,6 @@ export class Game {
         const storm = this.ionStorms[i];
         if (storm.type !== 'minefield') continue;
 
-        // 1. Check if a player uses labs on the minefield and is in attack mode
-        for (const player of this.allPlayers) {
-          if (!player.isAlive) continue;
-          for (const ship of this.ships) {
-            if (ship.active && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0 && ship.scoutAttackEnabled) {
-              const finalCruiserRadar = ship.cruiserRadarRange();
-              const red = hazardSensorReduction(ship.x, ship.y, player.id);
-              const effRadar = Math.max(10, finalCruiserRadar - red);
-              const dx = ship.x - storm.x;
-              const dy = ship.y - storm.y;
-              if (Math.sqrt(dx * dx + dy * dy) <= effRadar + storm.radius) {
-                // uses labs on minefield and is in attack mode -> destroy 1d6 mines and give credits
-                const rolledMines = Math.floor(Math.random() * 6) + 1;
-                const minesDestroyed = Math.min(storm.mines, rolledMines);
-                storm.mines -= minesDestroyed;
-                player.credits = (player.credits || 0) + minesDestroyed;
-                ship.creditsGainedEvent = (ship.creditsGainedEvent || 0) + minesDestroyed;
-                if (minesDestroyed > 0) {
-                  this.explosions.push({
-                    x: ship.x,
-                    y: ship.y,
-                    isDollarSign: true,
-                    amount: minesDestroyed,
-                    remainingMines: storm.mines,
-                    age: 0
-                  });
-
-                  for (let k = 0; k < minesDestroyed; k++) {
-                    const delayMs = Math.random() * 2000;
-                    
-                    // Choose target point within both firing range (effRadar) and minefield (storm.radius)
-                    let tx = storm.x;
-                    let ty = storm.y;
-                    for (let attempt = 0; attempt < 30; attempt++) {
-                      const angle = Math.random() * Math.PI * 2;
-                      const r = Math.random() * storm.radius;
-                      const px = storm.x + Math.cos(angle) * r;
-                      const py = storm.y + Math.sin(angle) * r;
-                      const sDx = px - ship.x;
-                      const sDy = py - ship.y;
-                      if (sDx * sDx + sDy * sDy <= effRadar * effRadar) {
-                        tx = px;
-                        ty = py;
-                        break;
-                      }
-                    }
-
-                    const shipId = ship.id;
-                    const finalTx = tx;
-                    const finalTy = ty;
-
-                    this.scheduledEvents.push({
-                      delay: delayMs,
-                      action: () => {
-                        const currentShip = this.ships.find(s => s.id === shipId);
-                        if (currentShip && currentShip.active) {
-                          // Fire a blue laser from the ship's current position to the target mine
-                          this.lasers.push({
-                            startX: currentShip.x,
-                            startY: currentShip.y,
-                            endX: finalTx,
-                            endY: finalTy,
-                            color: '#44f',
-                            age: 0,
-                            duration: 0.4
-                          });
-                        }
-                        // Create a blue explosion at the destroyed mine position
-                        this.explosions.push({
-                          x: finalTx,
-                          y: finalTy,
-                          color: '#44f',
-                          age: 0
-                        });
-                      }
-                    });
-                  }
-                }
-                if (storm.initialMines > 0) {
-                  storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
-                }
-              }
-            }
-          }
-        }
-
         // 2. Perform damage check for all active ships inside the minefield
         for (const ship of this.ships) {
           if (!ship.active || !ship.owner || ship.isAmoeba) continue;
@@ -3373,7 +3387,8 @@ export class Game {
               let mineRemoved = false;
               if (ship.maxHealth > 0) {
                 // Cruiser
-                const damage = ship.owner.isAI ? 0.25 : 1;
+                const roll = Math.floor(Math.random() * 6) + 1;
+                const damage = ship.owner.isAI ? roll * 0.25 : roll;
                 ship.health -= damage;
                 mineRemoved = true;
                 if (ship.health <= 0) {
@@ -4011,7 +4026,7 @@ export class Game {
     // Update and remove explosions
     for (let i = this.explosions.length - 1; i >= 0; i--) {
       this.explosions[i].age += deltaTime / 1000;
-      const maxAge = this.explosions[i].isDollarSign ? 3.0 : 1.0;
+      const maxAge = this.explosions[i].isDollarSign ? 5.0 : 1.0;
       if (this.explosions[i].age > maxAge) {
         this.explosions.splice(i, 1);
       }

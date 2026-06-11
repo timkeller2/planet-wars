@@ -10517,17 +10517,17 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.restore();
           } else if (exp.isDollarSign) {
             ctx.save();
-            const alpha = Math.max(0, 1 - exp.age / 3.0);
+            const alpha = Math.max(0, 1 - exp.age / 5.0);
             ctx.globalAlpha = alpha;
             ctx.fillStyle = '#39ff14'; // vibrant neon green
-            ctx.font = 'bold 8px Orbitron';
+            ctx.font = 'bold 7px Orbitron';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.shadowColor = '#39ff14';
-            ctx.shadowBlur = 6;
-            const remaining = exp.remainingMines !== undefined ? exp.remainingMines : 0;
-            const text = `${remaining} $[${exp.amount || 1}]`;
-            const yOffset = exp.age * 25;
+            ctx.shadowBlur = 4;
+            const numDollarSigns = Math.min(3, exp.amount || 1);
+            const text = '$'.repeat(numDollarSigns);
+            const yOffset = exp.age * 10;
             ctx.fillText(text, exp.x, exp.y - 20 - yOffset);
             ctx.restore();
           } else if (exp.color === 'amoeba-shrug') {
