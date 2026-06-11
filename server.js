@@ -413,8 +413,10 @@ async function bootstrap() {
               const distSq = dx * dx + dy * dy;
               if (distSq <= effGravity * effGravity) {
                 // Rule: Limit such a garrison world from paying upgrade costs unless the upgrading ship is within 25px of the garrison world.
+                // Exception: If the player has enough credits to cover the cost of the upgrade.
                 const isSuchGarrisonWorld = (p.isMilitary || p.focusMode === 'garrison') && (p.ships >= p.maxShips * 2 - 10);
-                if (isSuchGarrisonWorld && distSq > 25 * 25) {
+                const hasEnoughCredits = player.useCredits !== false && player.credits >= cost;
+                if (isSuchGarrisonWorld && distSq > 25 * 25 && !hasEnoughCredits) {
                   continue;
                 }
                 
