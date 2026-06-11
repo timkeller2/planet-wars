@@ -10041,6 +10041,16 @@ function getPlanetTradeIncomePerMin(planet) {
           const progress = laser.age / laser.duration;
           
           if (laser.isBombAttack) {
+            const delay = (laser.index || 0) * 0.08;
+            if (laser.age < delay) {
+              continue;
+            }
+            const travelDuration = 0.35;
+            if (laser.age > delay + travelDuration) {
+              continue;
+            }
+            const progress = (laser.age - delay) / travelDuration;
+
             let startPtX = laser.startX;
             let startPtY = laser.startY;
             let endPtX = laser.endX;

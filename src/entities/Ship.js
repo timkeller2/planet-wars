@@ -2116,7 +2116,7 @@ export class Ship {
               endY: enemyShip.y,
               color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
               age: 0,
-              duration: 0.8,
+              duration: Math.max(0.8, 0.4 + (shotsPerVolley * 0.08)),
               width: usedBomb ? 8 : undefined,
               isBombAttack: usedBomb,
               cruiserStyle: this.cruiserStyle || (this.owner ? this.owner.cruiserStyle : 'Klingon'),
@@ -2137,7 +2137,7 @@ export class Ship {
               targetIsBomber: enemyShip.isBomber || false,
               sourceMaxHealth: this.maxHealth,
               targetMaxHealth: enemyShip.maxHealth,
-              index: 0
+              index: shotsFired - 1
             });
           }
           
