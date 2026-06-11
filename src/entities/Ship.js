@@ -4912,8 +4912,40 @@ export class Ship {
             const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
             const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
             const sRed = Math.sqrt(this.expScore || 0);
-            const slowPct = Math.max(0, h.intensity - sRed - (eRed + tRed) / 2 - knowledge);
-            effectiveSpeed *= Math.max(0.1, 1 - slowPct / 100);
+            const effectiveIntensity = Math.max(0, h.intensity - sRed - (eRed + tRed) / 2 - knowledge);
+            const V0 = effectiveSpeed;
+            let speed = V0;
+            let remaining = effectiveIntensity;
+
+            // Phase 1: reduce by effective intensity down to half speed
+            const maxRed1 = 0.5 * V0;
+            if (remaining <= maxRed1) {
+              speed -= remaining;
+              remaining = 0;
+            } else {
+              speed -= maxRed1;
+              remaining -= maxRed1;
+            }
+
+            // Phase 2: reduce with 1/2 of remaining effective intensity down to 1/4 speed
+            if (remaining > 0) {
+              const maxRed2 = 0.25 * V0;
+              const maxIntensity2 = maxRed2 / 0.5;
+              if (remaining <= maxIntensity2) {
+                speed -= remaining * 0.5;
+                remaining = 0;
+              } else {
+                speed -= maxRed2;
+                remaining -= maxIntensity2;
+              }
+            }
+
+            // Phase 3: reduce by 1/4 of remaining effective intensity down to a minimum of 3
+            if (remaining > 0) {
+              speed -= remaining * 0.25;
+            }
+
+            effectiveSpeed = Math.max(Math.min(3, V0), speed);
           } else if (h.type === 'storm') {
             // Ion Storm speed reduction
             const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
