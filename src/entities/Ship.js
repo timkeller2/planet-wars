@@ -640,6 +640,40 @@ export class Ship {
     return totalBonus;
   }
 
+  getAccuracy() {
+    const techBonus = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
+    const expBonus = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
+    const shipExpBonus = this.getLocalXpBonus();
+
+    if (this.maxHealth > 0 && !this.isAmoeba) {
+      let hitChance = 0.10;
+      let bombAccuracyBonus = 0;
+      if (this.bombs > 0) {
+        bombAccuracyBonus = 0.10;
+        if (this.tactics === 'patient') {
+          bombAccuracyBonus = 0.07;
+        } else if (this.tactics === 'frenzied') {
+          bombAccuracyBonus = 0.20;
+        }
+      }
+      hitChance += bombAccuracyBonus;
+      hitChance += (techBonus + expBonus + shipExpBonus) / 100;
+      const targetingBonus = (this.targeting || 0) * 0.05;
+      hitChance += targetingBonus;
+      if (this.fuel_tanker && this.fuel_tanker > 0) {
+        hitChance -= this.fuel_tanker * 0.05;
+      }
+      if (this.specialbombs && this.specialbombs > 0) {
+        hitChance += 0.10;
+      }
+      return Math.min(1.0, Math.max(0.0, hitChance));
+    } else {
+      const bombBonus = (this.bombs && this.bombs > 0) ? (this.bombs * 3) : 0;
+      const hitChance = (10 + techBonus + expBonus + shipExpBonus + this.maxHealth * 5 + bombBonus) / 100;
+      return Math.min(1.0, Math.max(0.0, hitChance));
+    }
+  }
+
   getHazardAccuracyReduction(allStorms) {
     if (this.isAmoeba) return 0;
     if (!allStorms || !this.owner) return 0;

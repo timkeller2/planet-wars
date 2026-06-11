@@ -10700,7 +10700,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.textBaseline = 'middle';
             ctx.shadowColor = '#39ff14';
             ctx.shadowBlur = 4;
-            const numDollarSigns = Math.min(3, exp.amount || 1);
+            const numDollarSigns = Math.max(1, Math.round(Math.sqrt(exp.amount || 1)));
             const text = '$'.repeat(numDollarSigns);
             const yOffset = exp.age * 10;
             ctx.fillText(text, exp.x, exp.y - 20 - yOffset);

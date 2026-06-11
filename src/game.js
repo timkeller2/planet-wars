@@ -3194,13 +3194,73 @@ export class Game {
                 ship.accumulatedTech -= completions;
                 
                 for (let c = 0; c < completions; c++) {
-                  const rolledMines = Math.floor(Math.random() * 6) + 1;
-                  const minesDestroyed = Math.min(storm.mines, rolledMines);
-                  storm.mines -= minesDestroyed;
-                  player.credits = (player.credits || 0) + minesDestroyed;
-                  ship.creditsGainedEvent = (ship.creditsGainedEvent || 0) + minesDestroyed;
-                  
+                  const cap = Math.floor(ship.health - 2);
+                  let volleySize = Math.max(1, Math.floor((ship.maxHealth + ship.health) / 6));
+                  if (volleySize > cap) volleySize = cap;
+                  if (ship.health <= 2) volleySize = 0;
+
+                  const hitChance = Math.min(1.0, Math.max(0.0, ship.getAccuracy() + 0.10 * ship.labs));
+                  let minesDestroyed = 0;
+
+                  for (let v = 0; v < volleySize; v++) {
+                    let tx = storm.x;
+                    let ty = storm.y;
+                    for (let attempt = 0; attempt < 30; attempt++) {
+                      const angle = Math.random() * Math.PI * 2;
+                      const r = Math.random() * storm.radius;
+                      const px = storm.x + Math.cos(angle) * r;
+                      const py = storm.y + Math.sin(angle) * r;
+                      const sDx = px - ship.x;
+                      const sDy = py - ship.y;
+                      if (sDx * sDx + sDy * sDy <= effRadar * effRadar) {
+                        tx = px;
+                        ty = py;
+                        break;
+                      }
+                    }
+
+                    const isHit = (storm.mines > 0) && (Math.random() < hitChance);
+                    if (isHit) {
+                      storm.mines -= 1;
+                      minesDestroyed += 1;
+                    }
+
+                    const delayMs = Math.random() * 2000;
+                    const shipId = ship.id;
+                    const finalTx = tx;
+                    const finalTy = ty;
+
+                    this.scheduledEvents.push({
+                      delay: delayMs,
+                      action: () => {
+                        const currentShip = this.ships.find(s => s.id === shipId);
+                        if (currentShip && currentShip.active) {
+                          this.lasers.push({
+                            startX: currentShip.x,
+                            startY: currentShip.y,
+                            endX: finalTx,
+                            endY: finalTy,
+                            color: '#44f',
+                            age: 0,
+                            duration: 0.4
+                          });
+                        }
+                        if (isHit) {
+                          this.explosions.push({
+                            x: finalTx,
+                            y: finalTy,
+                            color: '#44f',
+                            age: 0
+                          });
+                        }
+                      }
+                    });
+                  }
+
                   if (minesDestroyed > 0) {
+                    player.credits = (player.credits || 0) + minesDestroyed;
+                    ship.creditsGainedEvent = (ship.creditsGainedEvent || 0) + minesDestroyed;
+
                     this.explosions.push({
                       x: ship.x,
                       y: ship.y,
@@ -3209,54 +3269,6 @@ export class Game {
                       remainingMines: storm.mines,
                       age: 0
                     });
-
-                    for (let k = 0; k < minesDestroyed; k++) {
-                      const delayMs = Math.random() * 2000;
-                      
-                      let tx = storm.x;
-                      let ty = storm.y;
-                      for (let attempt = 0; attempt < 30; attempt++) {
-                        const angle = Math.random() * Math.PI * 2;
-                        const r = Math.random() * storm.radius;
-                        const px = storm.x + Math.cos(angle) * r;
-                        const py = storm.y + Math.sin(angle) * r;
-                        const sDx = px - ship.x;
-                        const sDy = py - ship.y;
-                        if (sDx * sDx + sDy * sDy <= effRadar * effRadar) {
-                          tx = px;
-                          ty = py;
-                          break;
-                        }
-                      }
-
-                      const shipId = ship.id;
-                      const finalTx = tx;
-                      const finalTy = ty;
-
-                      this.scheduledEvents.push({
-                        delay: delayMs,
-                        action: () => {
-                          const currentShip = this.ships.find(s => s.id === shipId);
-                          if (currentShip && currentShip.active) {
-                            this.lasers.push({
-                              startX: currentShip.x,
-                              startY: currentShip.y,
-                              endX: finalTx,
-                              endY: finalTy,
-                              color: '#44f',
-                              age: 0,
-                              duration: 0.4
-                            });
-                          }
-                          this.explosions.push({
-                            x: finalTx,
-                            y: finalTy,
-                            color: '#44f',
-                            age: 0
-                          });
-                        }
-                      });
-                    }
                   }
                 }
                 

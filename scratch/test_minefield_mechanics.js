@@ -58,6 +58,7 @@ game.ships.push(cruiser);
 const startCredits = human.credits || 0;
 const startMines = minefield.mines;
 
+cruiser.accumulatedTech = 1.0;
 game.update(1000); // Trigger 1 second update
 
 const minesDiff = startMines - minefield.mines;
@@ -65,8 +66,8 @@ const creditsDiff = (human.credits || 0) - startCredits;
 
 console.log(`Mines destroyed by research: ${minesDiff}`);
 console.log(`Credits gained by research: ${creditsDiff}`);
-if (minesDiff < 1 || minesDiff > 6) {
-  console.error(`-> FAILED: Expected 1-6 mines destroyed, got ${minesDiff}`);
+if (minesDiff !== 16) {
+  console.error(`-> FAILED: Expected 16 mines destroyed (volley size 16, all hitting), got ${minesDiff}`);
   process.exit(1);
 }
 if (Math.round(creditsDiff) !== minesDiff) {
@@ -86,6 +87,7 @@ console.log("\n--- Part 2: Testing Minefield Damage & Depletion ---");
 // Reset minefield to 50 mines
 minefield.mines = 50;
 minefield.initialMines = 50;
+game.ionStorms = [minefield];
 game.explosions.length = 0;
 
 // Human cruiser inside minefield (not researching)
