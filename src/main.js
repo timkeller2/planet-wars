@@ -7089,6 +7089,46 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.lineWidth = 1.5;
           ctx.stroke();
           ctx.restore();
+
+          if (p.activeDiplomatId && serverState.ships && serverState.players) {
+            const diplomat = serverState.ships.find(s => s.id === p.activeDiplomatId && s.active);
+            if (diplomat) {
+              const diplomatOwner = serverState.players.find(pl => pl.id === diplomat.ownerId);
+              if (diplomatOwner) {
+                const expBonus = Math.sqrt(diplomatOwner.expScore || 0);
+                const shipExpBonus = Math.sqrt(diplomat.expScore || 0);
+                const MathSquareBase = expBonus + shipExpBonus;
+                const currentSym = p.sympathy ? (p.sympathy[diplomatOwner.id] || 0) : 0;
+                const disposition = p.disposition ? (p.disposition[diplomatOwner.id] ?? 0) : 0;
+
+                const prefRes = p.preferredResource;
+                const initialQty = prefRes ? (diplomatOwner.resources?.[prefRes] || 0) : 0;
+                const hasPref = prefRes && initialQty >= 0.1;
+
+                const chanceBase = 30 + disposition + currentSym + MathSquareBase;
+                const chancePref = 30 + disposition + currentSym + (MathSquareBase * 3) + 10;
+                
+                let rawChance = hasPref ? chancePref : chanceBase;
+                if (diplomat.cruiserStyle === p.racialAffinity || (diplomatOwner.cruiserStyle === p.racialAffinity)) {
+                  rawChance += 20;
+                }
+                const chancePercent = Math.max(0, Math.round(rawChance));
+
+                ctx.save();
+                ctx.font = 'bold 10px Orbitron';
+                ctx.fillStyle = 'rgba(255, 255, 0, 0.95)';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                let yOffset = 26;
+                if (p.isResearch || p.isMilitary || p.isSpeedPlanet) {
+                  yOffset = 38;
+                }
+                ctx.fillText(`${chancePercent}%`, p.x, p.y - p.radius - yOffset);
+                ctx.restore();
+              }
+            }
+          }
         }
 
         let groupNum = null;
