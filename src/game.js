@@ -852,7 +852,9 @@ export class Game {
         revoltWarmup: p.revoltWarmup,
         revoltWarmupMax: p.revoltWarmupMax,
         diplomacyWarmupTimer: p.diplomacyWarmupTimer,
-        activeDiplomatId: p.activeDiplomatId
+        activeDiplomatId: p.activeDiplomatId,
+        revoltShipsToDestroy: p.revoltShipsToDestroy,
+        revoltShipsDestroyedSoFar: p.revoltShipsDestroyedSoFar
       })),
       ships: this.ships.map(s => {
         const sData = {};
@@ -959,6 +961,8 @@ export class Game {
       p.revoltWarmupMax = pData.revoltWarmupMax || 1;
       p.diplomacyWarmupTimer = pData.diplomacyWarmupTimer || 0;
       p.activeDiplomatId = pData.activeDiplomatId || null;
+      p.revoltShipsToDestroy = pData.revoltShipsToDestroy || 0;
+      p.revoltShipsDestroyedSoFar = pData.revoltShipsDestroyedSoFar || 0;
 
       planetsMap.set(p.id, p);
       return p;
@@ -2571,6 +2575,20 @@ export class Game {
       planet.revoltCompetitors = competitors;
       planet.revoltAttemptEvent = true;
 
+      // Calculate sympathy induced extra casualties to destroy over time
+      let totalSubvertingSympathy = 0;
+      const originalOwner = planet.owner;
+      if (planet.sympathy) {
+        for (const [pId, symVal] of Object.entries(planet.sympathy)) {
+          if (!originalOwner || pId !== originalOwner.id) {
+            totalSubvertingSympathy += symVal;
+          }
+        }
+      }
+      const maxExtraDestroyed = Math.floor(totalSubvertingSympathy / 5);
+      planet.revoltShipsToDestroy = Math.floor(Math.random() * (maxExtraDestroyed + 1));
+      planet.revoltShipsDestroyedSoFar = 0;
+
       // Construct and queue the start chat message: [Planet Name] is in revolt! [Participant 1] [Maxroll 1], ...
       const participantsText = competitors.map(c => `${c.name} ${c.maxRoll}`).join(', ');
       const startText = `✊ ${planet.name} is in revolt! ${participantsText}`;
@@ -2628,23 +2646,12 @@ export class Game {
         const oldShips = planet.ships;
         const originalOwner = planet.owner;
 
-        let totalSubvertingSympathy = 0;
-        if (planet.sympathy) {
-          for (const [pId, symVal] of Object.entries(planet.sympathy)) {
-            if (!originalOwner || pId !== originalOwner.id) {
-              totalSubvertingSympathy += symVal;
-            }
-          }
-        }
-
         planet.owner = winnerPlayer;
 
         planet.revoltWarmup = 0;
         
         const baseShips = Math.floor(planet.ships / 2);
-        const maxExtraDestroyed = Math.floor(totalSubvertingSympathy / 5);
-        const extraDestroyed = Math.floor(Math.random() * (maxExtraDestroyed + 1));
-        planet.ships = Math.max(1, baseShips - extraDestroyed);
+        planet.ships = Math.max(1, baseShips);
         if (planet.sympathy) {
           for (const pId in planet.sympathy) {
             planet.sympathy[pId] /= 2;
@@ -3513,6 +3520,18 @@ export class Game {
     for (const planet of this.planets) {
       if (planet.inRevolt) {
         planet.revoltTimer = Math.max(0, (planet.revoltTimer || 0) - deltaTime);
+        
+        // Gradual sympathy-induced extra casualties countdown
+        if (planet.revoltShipsToDestroy && planet.revoltShipsToDestroy > 0) {
+          const ratio = Math.min(1.0, 1.0 - (planet.revoltTimer / 15000));
+          const targetDestroyed = Math.floor(ratio * planet.revoltShipsToDestroy);
+          const toDestroy = Math.min(targetDestroyed - (planet.revoltShipsDestroyedSoFar || 0), planet.ships - 1);
+          if (toDestroy > 0) {
+            planet.ships -= toDestroy;
+            planet.revoltShipsDestroyedSoFar = (planet.revoltShipsDestroyedSoFar || 0) + toDestroy;
+          }
+        }
+
         if (Math.random() < 0.15) {
           const angle = Math.random() * Math.PI * 2;
           const dist = Math.random() * planet.radius;
