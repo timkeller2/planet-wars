@@ -68,27 +68,57 @@ function playRandomIntroTrack() {
 }
 
 function checkMusicRotation() {
-  const musicCheckbox = document.getElementById('music-checkbox');
-  const bgMusic = document.getElementById('bg-music');
-  if (!musicCheckbox || !musicCheckbox.checked || !bgMusic) return;
-
-  if (Date.now() - lastMusicChangeTime >= 10 * 60 * 1000) {
-    playRandomIntroTrack();
-  }
+  // Disabled as the intro piece is looping indefinitely.
 }
 
 function getEffectiveSympathyClient(pl, playerId) {
   let sympathyVal = pl.sympathy?.[playerId] || 0;
   if (!pl.ownerId && serverState && serverState.ships) {
-    const gr = (pl.maxShips || 0) * 1.5;
-    const grSq = gr * gr;
-    for (const ship of serverState.ships) {
-      if (ship.active && ship.ownerId === playerId) {
-        const dx = ship.x - pl.x;
-        const dy = ship.y - pl.y;
-        if (dx * dx + dy * dy <= grSq) {
-          const shipHp = (ship.isCruiser || (ship.maxHealth && ship.maxHealth > 0)) ? ((ship.maxHealth || ship.health || 0) * 0.5) : ((ship.count || 1) * 0.5);
-          sympathyVal += shipHp;
+    let isKnown = false;
+    if (!serverState.settings || !serverState.settings.fogOfWar) {
+      isKnown = true;
+    } else {
+      const resolvedPlayer = serverState.players ? serverState.players.find(p => p.id === playerId) : null;
+      if (resolvedPlayer) {
+        if (resolvedPlayer.discoveredPlanetsArray && resolvedPlayer.discoveredPlanetsArray.includes(pl.id)) {
+          isKnown = true;
+        } else {
+          // Check if any of the player's ships currently has the planet in its radar range
+          for (const ship of serverState.ships) {
+            if (ship.active && ship.ownerId === playerId) {
+              const dx = ship.x - pl.x;
+              const dy = ship.y - pl.y;
+              const distSq = dx * dx + dy * dy;
+              
+              let radarRange = 50;
+              if (ship.isCruiser || (ship.maxHealth && ship.maxHealth > 0)) {
+                radarRange = Math.min(250, 5 * (ship.maxHealth || ship.health || 0));
+              }
+              const extendedRadar = radarRange * 1.5;
+              if (distSq <= extendedRadar * extendedRadar) {
+                isKnown = true;
+                break;
+              }
+            }
+          }
+        }
+      } else {
+        isKnown = true;
+      }
+    }
+
+    if (isKnown) {
+      const gr = (pl.maxShips || 0) * 1.5;
+      const maxDist = Math.max(gr, (pl.radius || 0) + 120);
+      const maxDistSq = maxDist * maxDist;
+      for (const ship of serverState.ships) {
+        if (ship.active && ship.ownerId === playerId) {
+          const dx = ship.x - pl.x;
+          const dy = ship.y - pl.y;
+          if (dx * dx + dy * dy <= maxDistSq) {
+            const shipHp = (ship.isCruiser || (ship.maxHealth && ship.maxHealth > 0)) ? ((ship.maxHealth || ship.health || 0) * 0.5) : ((ship.count || 1) * 0.5);
+            sympathyVal += shipHp;
+          }
         }
       }
     }
@@ -5511,21 +5541,7 @@ function getPlanetTradeIncomePerMin(planet) {
         });
       }
     }
-    if (event.key.toLowerCase() === 'r') {
-      const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id && s.labs > 0);
-      if (selectedCruisers.length > 0) {
-        event.preventDefault();
-        const anyNotResearching = selectedCruisers.some(c => !c.isResearching);
-        const nextState = anyNotResearching;
-        selectedCruisers.forEach(ship => {
-          ship.isResearching = nextState;
-          ship.isDiplomacy = false;
-          ship.isScouting = false;
-          ship.isPatrolling = false;
-          socket.emit('toggleCruiserResearch', { shipId: ship.id, enabled: nextState });
-        });
-      }
-    }
+
     if (event.key.toLowerCase() === 'd') {
       const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id);
       const hasCruiserInFriendlyWell = selectedCruisers.some(c => !c.isDismantling && isCruiserInFriendlyGravityWell(c));
@@ -5715,23 +5731,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     });
   }
-  const btnCruiserResearchEl = document.getElementById('btn-cruiser-research');
-  if (btnCruiserResearchEl) {
-    btnCruiserResearchEl.addEventListener('click', () => {
-      const selectedCruisers = getSelectedCruisers().filter(c => c.labs > 0);
-      if (selectedCruisers.length > 0) {
-        const anyNotResearching = selectedCruisers.some(c => !c.isResearching);
-        const nextState = anyNotResearching;
-        for (const ship of selectedCruisers) {
-          ship.isResearching = nextState;
-          ship.isDiplomacy = false;
-          ship.isScouting = false;
-          ship.isPatrolling = false;
-          socket.emit('toggleCruiserResearch', { shipId: ship.id, enabled: nextState });
-        }
-      }
-    });
-  }
+
   const btnDismantleEl = document.getElementById('btn-dismantle');
   if (btnDismantleEl) {
     btnDismantleEl.addEventListener('click', () => {
@@ -6260,7 +6260,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
     const actionButtonsLeft = document.getElementById('action-buttons-left');
-    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-cruiser-research', 'btn-dismantle'];
+    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-dismantle'];
     const upButtonsMap = {
       'btn-up-sensorarray': 'sensorarrays',
       'btn-up-lab': 'labs',
@@ -6681,15 +6681,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      const btnCruiserResearch = document.getElementById('btn-cruiser-research');
-      if (btnCruiserResearch) {
-        const hasLabs = selectedCruisers.some(c => c.labs > 0);
-        btnCruiserResearch.style.display = (selectedCruisers.length > 0 && hasLabs) ? 'inline-flex' : 'none';
-        if (selectedCruisers.length > 0 && hasLabs) {
-          const anyResearching = selectedCruisers.some(c => c.isResearching);
-          btnCruiserResearch.classList.toggle('action-btn-active', anyResearching);
-        }
-      }
+
 
 
       const btnDismantle = document.getElementById('btn-dismantle');

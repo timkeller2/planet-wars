@@ -880,31 +880,7 @@ async function bootstrap() {
       }
     });
 
-    socket.on('toggleCruiserResearch', (data) => {
-      if (!game.isRunning || game.isPaused) return;
-      const player = connectedClients.get(socket.id);
-      if (!player) return;
 
-      const { shipId, enabled } = data;
-      if (shipId === undefined || enabled === undefined) return;
-
-      const ship = game.ships.find(s => s.id === shipId);
-      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0) {
-        ship.isResearching = !!enabled;
-        ship.researchFuelRetreating = false;
-        ship.researchRearming = false;
-        ship.isRetreating = false;
-        ship.retreatTargetPlanetId = null;
-        if (ship.isResearching) {
-          ship.isDiplomacy = false;
-          ship.isScouting = false;
-          ship.isPatrolling = false;
-          ship.orderQueue = [];
-          ship.cruiserTargetType = null;
-          ship.cruiserTargetId = null;
-        }
-      }
-    });
 
 
     socket.on('togglePause', () => {
@@ -2231,7 +2207,11 @@ async function bootstrap() {
         explosions: visibleExplosions,
         lasers: visibleLasers,
         storms: visibleStorms,
-        players: game.allPlayers,
+        players: game.allPlayers.map(p => {
+          const pObj = Object.assign({}, p);
+          pObj.discoveredPlanetsArray = p.discoveredPlanets ? Array.from(p.discoveredPlanets) : [];
+          return pObj;
+        }),
         globalUpgradeModifiers: game.globalUpgradeModifiers,
         upgradeEnhanceEvents: visibleUpgradeEnhanceEvents,
         accuracyEvents: visibleAccuracyEvents,
