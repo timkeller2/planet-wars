@@ -419,31 +419,27 @@ function getPlanetTradeIncomePerMin(planet) {
     ctx.beginPath();
     if (style === 'Federation') {
       if (cohort === 'destroyer_group') {
-        // Federation Destroyer (disk/saucer with side engines staggered back)
+        // Federation Destroyer (disk/saucer with side engines staggered back, no tail)
         ctx.moveTo(0, -size);
         ctx.lineTo(size * 0.35, -size * 0.9);
         ctx.lineTo(size * 0.5, -size * 0.6);
+        ctx.lineTo(size * 0.65, -size * 0.6);
+        ctx.lineTo(size * 0.65, -size * 0.8);
+        ctx.lineTo(size * 0.75, -size * 0.8);
+        ctx.lineTo(size * 0.75, 0);
+        ctx.lineTo(size * 0.65, 0);
+        ctx.lineTo(size * 0.65, -size * 0.5);
+        ctx.lineTo(size * 0.45, -size * 0.5);
         ctx.lineTo(size * 0.35, -size * 0.3);
-        ctx.lineTo(size * 0.15, -size * 0.2);
-        ctx.lineTo(size * 0.65, -size * 0.2);
-        ctx.lineTo(size * 0.65, -size * 0.7);
-        ctx.lineTo(size * 0.75, -size * 0.7);
-        ctx.lineTo(size * 0.75, size * 0.1);
-        ctx.lineTo(size * 0.65, size * 0.1);
-        ctx.lineTo(size * 0.65, -size * 0.15);
-        ctx.lineTo(size * 0.12, -size * 0.15);
-        ctx.lineTo(size * 0.12, size * 0.6);
-        ctx.lineTo(0, size * 0.7);
-        ctx.lineTo(-size * 0.12, size * 0.6);
-        ctx.lineTo(-size * 0.12, -size * 0.15);
-        ctx.lineTo(-size * 0.65, -size * 0.15);
-        ctx.lineTo(-size * 0.65, size * 0.1);
-        ctx.lineTo(-size * 0.75, size * 0.1);
-        ctx.lineTo(-size * 0.75, -size * 0.7);
-        ctx.lineTo(-size * 0.65, -size * 0.7);
-        ctx.lineTo(-size * 0.65, -size * 0.2);
-        ctx.lineTo(-size * 0.15, -size * 0.2);
+        ctx.lineTo(0, -size * 0.2);
         ctx.lineTo(-size * 0.35, -size * 0.3);
+        ctx.lineTo(-size * 0.45, -size * 0.5);
+        ctx.lineTo(-size * 0.65, -size * 0.5);
+        ctx.lineTo(-size * 0.65, 0);
+        ctx.lineTo(-size * 0.75, 0);
+        ctx.lineTo(-size * 0.75, -size * 0.8);
+        ctx.lineTo(-size * 0.65, -size * 0.8);
+        ctx.lineTo(-size * 0.65, -size * 0.6);
         ctx.lineTo(-size * 0.5, -size * 0.6);
         ctx.lineTo(-size * 0.35, -size * 0.9);
       } else if (cohort === 'cruiser_group') {
@@ -559,16 +555,22 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     } else if (style === 'Romulan') {
       if (cohort === 'destroyer_group') {
-        // Romulan Destroyer (sleeker bird-of-prey style)
+        // Romulan Destroyer (sleeker bird-of-prey style with wingtip guns)
         ctx.moveTo(0, -size * 0.9);
         ctx.lineTo(size * 0.15, -size * 0.75);
         ctx.lineTo(size * 0.25, -size * 0.4);
         ctx.lineTo(size * 0.7, -size * 0.1);
+        ctx.lineTo(size * 0.7, -size * 0.3);
+        ctx.lineTo(size * 0.66, -size * 0.3);
+        ctx.lineTo(size * 0.66, -size * 0.08);
         ctx.lineTo(size * 0.3, size * 0.2);
         ctx.lineTo(size * 0.2, size * 0.5);
         ctx.lineTo(0, size * 0.7);
         ctx.lineTo(-size * 0.2, size * 0.5);
         ctx.lineTo(-size * 0.3, size * 0.2);
+        ctx.lineTo(-size * 0.66, -size * 0.08);
+        ctx.lineTo(-size * 0.66, -size * 0.3);
+        ctx.lineTo(-size * 0.7, -size * 0.3);
         ctx.lineTo(-size * 0.7, -size * 0.1);
         ctx.lineTo(-size * 0.25, -size * 0.4);
         ctx.lineTo(-size * 0.15, -size * 0.75);
@@ -921,19 +923,25 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     } else {
       if (cohort === 'destroyer_group') {
-        // Klingon Destroyer (bulbous head, short neck, angled engine pods)
+        // Klingon Destroyer (bulbous head, short neck, angled engine pods, side engines)
         ctx.moveTo(0, -size);
         ctx.lineTo(size * 0.35, -size * 0.8);
         ctx.lineTo(size * 0.2, -size * 0.6);
         ctx.lineTo(size * 0.12, -size * 0.3);
         ctx.lineTo(size * 0.25, -size * 0.2);
-        ctx.lineTo(size * 0.55, size * 0.1);
+        ctx.lineTo(size * 0.55, -size * 0.2);
+        ctx.lineTo(size * 0.55, -size * 0.3);
+        ctx.lineTo(size * 0.7, -size * 0.3);
+        ctx.lineTo(size * 0.7, size * 0.5);
         ctx.lineTo(size * 0.55, size * 0.5);
         ctx.lineTo(size * 0.45, size * 0.5);
         ctx.lineTo(0, size * 0.6);
         ctx.lineTo(-size * 0.45, size * 0.5);
         ctx.lineTo(-size * 0.55, size * 0.5);
-        ctx.lineTo(-size * 0.55, size * 0.1);
+        ctx.lineTo(-size * 0.7, size * 0.5);
+        ctx.lineTo(-size * 0.7, -size * 0.3);
+        ctx.lineTo(-size * 0.55, -size * 0.3);
+        ctx.lineTo(-size * 0.55, -size * 0.2);
         ctx.lineTo(-size * 0.25, -size * 0.2);
         ctx.lineTo(-size * 0.12, -size * 0.3);
         ctx.lineTo(-size * 0.2, -size * 0.6);
