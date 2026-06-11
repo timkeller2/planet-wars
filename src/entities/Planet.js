@@ -1,3 +1,5 @@
+import { getEffectiveSympathy } from '../game.js';
+
 function getHabName(habitability) {
   const hab = habitability || 0;
   if (hab < 20) return 'Toxic';
@@ -400,14 +402,28 @@ export class Planet {
 
     if (!this.inRevolt && !(typeof this.isBeingInvaded === 'function' && this.isBeingInvaded(game))) {
       let sympathyForeign = 0;
-      if (this.sympathy) {
+      let sympathyOwner = 0;
+      
+      if (game && game.allPlayers) {
+        for (const player of game.allPlayers) {
+          if (player.id === 'monsters') continue;
+          const symVal = getEffectiveSympathy(this, player.id, game.ships, player, game);
+          if (this.owner && player.id === this.owner.id) {
+            sympathyOwner = symVal;
+          } else {
+            sympathyForeign += symVal;
+          }
+        }
+      } else if (this.sympathy) {
         for (const [pId, symVal] of Object.entries(this.sympathy)) {
+          if (pId === 'monsters') continue;
           if (!this.owner || pId !== this.owner.id) {
             sympathyForeign += symVal;
           }
         }
+        sympathyOwner = (this.owner && this.sympathy) ? (this.sympathy[this.owner.id] || 0) : 0;
       }
-      const sympathyOwner = (this.owner && this.sympathy) ? (this.sympathy[this.owner.id] || 0) : 0;
+      
       const ships = this.ships;
       const ratePerMinute = sympathyForeign - (ships / 3) - sympathyOwner;
       const maxRatePerMinute = Math.max(30, ships);
