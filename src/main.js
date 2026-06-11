@@ -10032,6 +10032,15 @@ function getPlanetTradeIncomePerMin(planet) {
               currentY -= 1;
             }
             
+            if (s.isCruiser && (s.commandPoints || 0) > 0) {
+              currentY -= barH;
+              ctx.fillStyle = '#3a0f0f';
+              ctx.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctx.fillStyle = '#800000';
+              ctx.fillRect(s.x - barW / 2, currentY, barW * Math.min(1.0, s.commandPoints / 20), barH);
+              currentY -= 1;
+            }
+            
             if (s.isCruiser && s.maxsupplies > 0) {
               currentY -= barH;
               ctx.fillStyle = '#3a1a4a';
