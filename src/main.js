@@ -1203,7 +1203,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       const racePart = raceName ? `${raceName} ` : '';
-      titleHTML = `<span style="color: ${ownerColor}">${p.name}${prefBonusStr} - ${racePart}${sizeClassText} ${habName} ${focusName} World${isLastKnown ? ' <span style="font-size:0.75rem;color:#aaa;">(Last Known)</span>' : ''}</span>`;
+      titleHTML = `<span style="color: ${ownerColor}">${p.name} - ${racePart}${sizeClassText} ${habName} ${focusName} World${isLastKnown ? ' <span style="font-size:0.75rem;color:#aaa;">(Last Known)</span>' : ''}</span>`;
 
       const lines = [];
 
@@ -1224,7 +1224,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
       const producedIcons = p.resources ? p.resources.map(r => resourceEmojis[r] || '').filter(Boolean).join(' ') : '';
       const wantedResourceName = p.preferredResource ? p.preferredResource.charAt(0).toUpperCase() + p.preferredResource.slice(1) : 'Nothing';
-      const wantedStr = p.preferredResource ? `${resourceEmojis[p.preferredResource] || ''} ${wantedResourceName}` : 'Nothing';
+      const wantedStr = p.preferredResource ? `${resourceEmojis[p.preferredResource] || ''} ${wantedResourceName}${prefBonusStr}` : 'Nothing';
 
       lines.push({ label: `Produces: ${producedIcons}`, value: `Wants: ${wantedStr}`, color: '#fff' });
 
