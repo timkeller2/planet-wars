@@ -65,14 +65,14 @@ cruiser1.isCruiser = true;
 cruiser1.isScouting = true;
 cruiser1.isResearching = true;
 cruiser1.isDiplomacy = true;
-cruiser1.bombPlanetsEnabled = true;
+cruiser1.savedBombardPlanetId = 'enemyPlanet';
 
 // Player issues move order to open space (which is unsafe, but ship is NOT retreating, so it should just exit modes)
 cruiser1.handlePlayerMoveOrder({ x: 500, y: 500 }, game);
 assert(cruiser1.isScouting === false, "Should exit scouting mode");
 assert(cruiser1.isResearching === false, "Should exit researching mode");
 assert(cruiser1.isDiplomacy === false, "Should exit diplomacy mode");
-assert(cruiser1.bombPlanetsEnabled === false, "Should exit planet bombing");
+assert(cruiser1.savedBombardPlanetId === null, "Should exit planet bombing");
 
 // --- Test 2: Retreating cruiser exits retreat and modes on unsafe move order ---
 const cruiser2 = new Ship(2, 400, 400, null, p1);

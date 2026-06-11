@@ -1308,8 +1308,10 @@ function getPlanetTradeIncomePerMin(planet) {
       // Show Trade Income below the disposition rows
       const planetTradeRatePerMin = getPlanetTradeIncomePerMin(p);
       if (planetTradeRatePerMin > 0) {
+        const effShips = planetTradeRatePerMin * 25;
+        const effShipsStr = Number(effShips.toFixed(1)).toString();
         lines.push({
-          label: '💰 Trade Income',
+          label: `💰 Trading Ships Active: ${effShipsStr}`,
           value: `+${planetTradeRatePerMin.toFixed(2)}/m`,
           color: '#ffd54f'
         });
@@ -1595,6 +1597,9 @@ function getPlanetTradeIncomePerMin(planet) {
           crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${hs.marines * hs.maxHealth}`;
         }
         lines.push({ label: 'Crew / Marines', value: crewVal, color: '#81d4fa' });
+        if (hs.commandPoints > 0) {
+          lines.push({ label: '👑 Command Points', value: `+${(hs.commandPoints).toFixed(2)}`, color: '#ffeb3b' });
+        }
 
         const rawTech = hsOwner ? (hsOwner.techScore || 0) : 0;
         const rawExp = hsOwner ? (hsOwner.expScore || 0) : 0;
@@ -1777,6 +1782,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
         if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ ${25 + hs.fuel_tanker * 10}% Savings`, color: '#ffa500' });
         if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
+        if (hs.command > 0) lines.push({ label: `Command (${hs.command})`, value: `👑 Active`, color: '#ffeb3b' });
       } else {
         const swarmRange = 100;
         const swarmRangesq = swarmRange * swarmRange;
@@ -1843,6 +1849,9 @@ function getPlanetTradeIncomePerMin(planet) {
         if (shipExp > 0) {
           totalAttackMod += shipExp;
           lines.push({ label: 'ship Exp', value: `${shipExp}%`, color: '#4f4' });
+        }
+        if (hs.commandPoints > 0) {
+          lines.push({ label: '👑 Command Points', value: `+${(hs.commandPoints).toFixed(2)}`, color: '#ffeb3b' });
         }
 
         let friendlyGrav = 0;
@@ -3158,7 +3167,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const flat = state.flatShips;
       const len = flat.length;
       state.ships = state.ships || [];
-      for (let i = 0; i < len; i += 18) {
+      for (let i = 0; i < len; i += 19) {
         const owner = state.players[flat[i + 4]];
         const isMarine = flat[i + 17] === 1;
         state.ships.push({
@@ -3180,6 +3189,7 @@ function getPlanetTradeIncomePerMin(planet) {
           flightTime: flat[i + 15],
           currentSpeed: flat[i + 16],
           isMarineFleet: isMarine,
+          commandPoints: flat[i + 18] || 0,
           speed: isMarine ? 35 : 15,
           formation: 'arrow',
           isCruiser: false,
@@ -3286,7 +3296,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (state.flatShips) {
       const flat = state.flatShips;
       const len = flat.length;
-      for (let i = 0; i < len; i += 18) {
+      for (let i = 0; i < len; i += 19) {
         currentShipIds.add(flat[i]);
       }
     }
@@ -4130,7 +4140,7 @@ function getPlanetTradeIncomePerMin(planet) {
     const validProps = [
       'sensorarrays', 'labs', 'armor', 'shields', 'engine',
       'munitions', 'targeting', 'damagecontrol', 'fuel_tanker',
-      'diplomat', 'marines'
+      'diplomat', 'marines', 'command'
     ];
     let minCost = Infinity;
     for (const prop of validProps) {
@@ -5312,14 +5322,14 @@ function getPlanetTradeIncomePerMin(planet) {
         const key = event.key.toLowerCase();
         
         if (ship.isUpgrading) {
-          if (key === 'c' || key === 'u' || event.key === 'Escape') {
+          if (key === 'u' || event.key === 'Escape') {
             event.preventDefault();
             upgradeModeActive = false;
           }
           return;
         }
         
-        if (key === 'c' || key === 'u' || event.key === 'Escape') {
+        if (key === 'u' || event.key === 'Escape') {
           event.preventDefault();
           upgradeModeActive = false;
           return;
@@ -5337,7 +5347,8 @@ function getPlanetTradeIncomePerMin(planet) {
                                 (ship.damagecontrol || 0) +
                                 (ship.fuel_tanker || 0) +
                                 (ship.diplomat || 0) +
-                                (ship.marines || 0);
+                                (ship.marines || 0) +
+                                (ship.command || 0);
 
           const maxIndividualLevel = Math.floor((ship.maxHealth || 0) / 10);
           const maxTotalUpgrades = Math.floor((ship.maxHealth || 0) / 5);
@@ -5418,6 +5429,11 @@ function getPlanetTradeIncomePerMin(planet) {
           if (key === 'r') {
             event.preventDefault();
             if (isAllowed('marines')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'marines' });
+            triggered = true;
+          }
+          if (key === 'c') {
+            event.preventDefault();
+            if (isAllowed('command')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'command' });
             triggered = true;
           }
           if (triggered) {
@@ -5553,6 +5569,7 @@ function getPlanetTradeIncomePerMin(planet) {
         });
       }
     }
+
 
     if (event.key.toLowerCase() === 'd') {
       const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id);
@@ -5743,6 +5760,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     });
   }
+
 
   const btnDismantleEl = document.getElementById('btn-dismantle');
   if (btnDismantleEl) {
@@ -6045,7 +6063,8 @@ function getPlanetTradeIncomePerMin(planet) {
     damagecontrol: 'damagecontrol',
     fuel_tanker: 'fueltanker',
     diplomat: 'diplomat',
-    marines: 'marines'
+    marines: 'marines',
+    command: 'command'
   };
 
   const registerUpgradeBtn = (id, type) => {
@@ -6065,7 +6084,8 @@ function getPlanetTradeIncomePerMin(planet) {
                                 (ship.damagecontrol || 0) +
                                 (ship.fuel_tanker || 0) +
                                 (ship.diplomat || 0) +
-                                (ship.marines || 0);
+                                (ship.marines || 0) +
+                                (ship.command || 0);
 
           const maxIndividualLevel = Math.floor((ship.maxHealth || 0) / 10);
           const maxTotalUpgrades = Math.floor((ship.maxHealth || 0) / 5);
@@ -6114,6 +6134,7 @@ function getPlanetTradeIncomePerMin(planet) {
   registerUpgradeBtn('btn-up-fueltanker', 'fuel_tanker');
   registerUpgradeBtn('btn-up-diplomat', 'diplomat');
   registerUpgradeBtn('btn-up-marines', 'marines');
+  registerUpgradeBtn('btn-up-command', 'command');
 
   const btnUpCancel = document.getElementById('btn-up-cancel');
   if (btnUpCancel) {
@@ -6284,7 +6305,8 @@ function getPlanetTradeIncomePerMin(planet) {
       'btn-up-damagecontrol': 'damagecontrol',
       'btn-up-fueltanker': 'fuel_tanker',
       'btn-up-diplomat': 'diplomat',
-      'btn-up-marines': 'marines'
+      'btn-up-marines': 'marines',
+      'btn-up-command': 'command'
     };
 
     if (focusModeActive && selectedPlanetFocus) {
@@ -6371,7 +6393,8 @@ function getPlanetTradeIncomePerMin(planet) {
         'btn-up-damagecontrol': 'Damage Control (D)',
         'btn-up-fueltanker': 'Fuel Tanker (F)',
         'btn-up-diplomat': 'Diplomat (I)',
-        'btn-up-marines': 'Marines (R)'
+        'btn-up-marines': 'Marines (R)',
+        'btn-up-command': 'Command (C)'
       };
 
       const descMap = {
@@ -6385,7 +6408,8 @@ function getPlanetTradeIncomePerMin(planet) {
         'damagecontrol': 'Adds +50% out-of-combat repair and +20% deep-space/in-combat repair rate per level',
         'fuel_tanker': 'Adds +5 fuel capacity, +15 max supplies, and +(25 + level*10)% supply cost discount per level. Reduces speed by -3, accuracy by -5, range by -5 per level',
         'diplomat': 'Adds diplomat subversion to project 1 passive sympathy/min or reduce 1 enemy sympathy/min',
-        'marines': 'Adds +1 marine capacity factor per level to drastically boost planetary boarding success'
+        'marines': 'Adds +1 marine capacity factor per level to drastically boost planetary boarding success',
+        'command': 'Gives command points equal to (xp bonus * level) / 4 to ships in sensor range. Stacks. Caps at 1.5 * highest xp bonus among commanders. Points act as local xp bonus and add 1/2 value to speed'
       };
 
       const totalUpgrades = (selectedCruiser.sensorarrays || 0) +
@@ -6398,7 +6422,8 @@ function getPlanetTradeIncomePerMin(planet) {
                             (selectedCruiser.damagecontrol || 0) +
                             (selectedCruiser.fuel_tanker || 0) +
                             (selectedCruiser.diplomat || 0) +
-                            (selectedCruiser.marines || 0);
+                            (selectedCruiser.marines || 0) +
+                            (selectedCruiser.command || 0);
 
       const maxIndividualLevel = Math.floor((selectedCruiser.maxHealth || 0) / 10);
       const maxTotalUpgrades = Math.floor((selectedCruiser.maxHealth || 0) / 5);
@@ -6692,6 +6717,7 @@ function getPlanetTradeIncomePerMin(planet) {
           btnCruiserAttack.classList.toggle('action-btn-active', anyAttacking);
         }
       }
+
 
 
 
@@ -8184,8 +8210,10 @@ function getPlanetTradeIncomePerMin(planet) {
           // Show Trade Income below the disposition rows on canvas planet tooltip
           const planetTradeRatePerMin = getPlanetTradeIncomePerMin(hp);
           if (planetTradeRatePerMin > 0) {
+            const effShips = planetTradeRatePerMin * 25;
+            const effShipsStr = Number(effShips.toFixed(1)).toString();
             lines.push({
-              label: '💰 Trade Income',
+              label: `💰 Trading Ships Active: ${effShipsStr}`,
               value: `+${planetTradeRatePerMin.toFixed(2)}/m`,
               color: '#ffd54f'
             });
@@ -9725,6 +9753,7 @@ function getPlanetTradeIncomePerMin(planet) {
           if ((s.fuel_tanker || 0) > 0) activeUpgrades.push({ symbol: '⛽', count: s.fuel_tanker });
           if ((s.diplomat || 0) > 0) activeUpgrades.push({ symbol: '🤝', count: s.diplomat });
           if ((s.marines || 0) > 0) activeUpgrades.push({ symbol: '🪖', count: s.marines });
+          if ((s.command || 0) > 0) activeUpgrades.push({ symbol: '👑', count: s.command });
 
           let upgradesHeight = 0;
           if (cameraZoom >= 1.0 && activeUpgrades.length > 0) {
@@ -10443,17 +10472,17 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.restore();
           } else if (exp.isDollarSign) {
             ctx.save();
-            const alpha = Math.max(0, 1 - exp.age);
+            const alpha = Math.max(0, 1 - exp.age / 3.0);
             ctx.globalAlpha = alpha;
             ctx.fillStyle = '#39ff14'; // vibrant neon green
-            ctx.font = 'bold 16px Orbitron';
+            ctx.font = 'bold 8px Orbitron';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.shadowColor = '#39ff14';
             ctx.shadowBlur = 6;
-            const dollars = '$'.repeat(exp.amount || 1);
-            const text = `${dollars} (+$${exp.amount || 1})`;
-            const yOffset = exp.age * 50;
+            const remaining = exp.remainingMines !== undefined ? exp.remainingMines : 0;
+            const text = `${remaining} $[${exp.amount || 1}]`;
+            const yOffset = exp.age * 25;
             ctx.fillText(text, exp.x, exp.y - 20 - yOffset);
             ctx.restore();
           } else if (exp.color === 'amoeba-shrug') {

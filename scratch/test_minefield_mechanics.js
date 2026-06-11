@@ -2,6 +2,8 @@ import { Game } from '../src/game.js';
 import { Player } from '../src/entities/Player.js';
 import { Ship } from '../src/entities/Ship.js';
 
+global.Math.random = () => 0.1;
+
 console.log("=== Testing Minefield Mechanics Redesign ===");
 
 const game = new Game();
@@ -89,7 +91,10 @@ game.explosions.length = 0;
 // Human cruiser inside minefield (not researching)
 cruiser.y = 500;
 cruiser.isResearching = false;
+cruiser.scoutAttackEnabled = false;
 cruiser.health = 50;
+cruiser.targetX = 500;
+cruiser.targetY = 600;
 
 const startCruiserMines = minefield.mines;
 game.update(1000);
@@ -112,6 +117,8 @@ aiCruiser.maxHealth = 50;
 aiCruiser.health = 50;
 aiCruiser.fuel = 100;
 aiCruiser.cruiserRadarRange = () => 150;
+aiCruiser.targetX = 500;
+aiCruiser.targetY = 600;
 
 game.ships.length = 0;
 game.ships.push(aiCruiser);
@@ -132,6 +139,8 @@ const fleet = new Ship('f_human', 500, 500, null, human);
 fleet.count = 1000;
 fleet.isCruiser = false;
 fleet.maxHealth = 0;
+fleet.targetX = 500;
+fleet.targetY = 600;
 
 game.ships.length = 0;
 game.ships.push(fleet);
@@ -160,6 +169,8 @@ const aiFleet = new Ship('f_ai', 500, 500, null, aiPlayer);
 aiFleet.count = 1000;
 aiFleet.isCruiser = false;
 aiFleet.maxHealth = 0;
+aiFleet.targetX = 500;
+aiFleet.targetY = 600;
 
 game.ships.length = 0;
 game.ships.push(aiFleet);

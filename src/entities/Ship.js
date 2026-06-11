@@ -93,6 +93,8 @@ export class Ship {
     this.diplomat = 0;
     this.parley = 0;
     this.marines = 0;
+    this.command = 0;
+    this.commandPoints = 0;
     this.specialfuel = 0;
     this.specialbombs = 0;
     this.specialduranium = 0;
@@ -267,6 +269,10 @@ export class Ship {
     return closestSupplyShip;
   }
 
+  getLocalXpBonus() {
+    return Math.sqrt(this.expScore || 0) + (this.commandPoints || 0);
+  }
+
   getMaxBombs() {
     const baseMax = Math.floor(this.maxHealth / 5);
     const bonus = this.munitions || 0;
@@ -283,6 +289,7 @@ export class Ship {
     let maxSp = this.speed * (1 + speedTechBonus);
     let engineBonus = (this.engine || 0) * 3;
     maxSp += engineBonus;
+    maxSp += (this.commandPoints || 0) * 0.5;
     if (this.isWarp) {
       maxSp += this.warpBonus || 0;
     }
@@ -357,7 +364,7 @@ export class Ship {
               const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
               const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
               const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
-              const sRed = Math.sqrt(this.expScore || 0);
+              const sRed = this.getLocalXpBonus();
               const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
               if (effectiveIntensity > hazardIntensityVal) {
                 hazardIntensityVal = effectiveIntensity;
@@ -611,7 +618,7 @@ export class Ship {
         const knowledge = (storm.knowledge && storm.knowledge[this.owner.id]) || 0;
         const tRed = Math.sqrt(this.owner.techScore || 0);
         const eRed = Math.sqrt(this.owner.expScore || 0);
-        const sRed = Math.sqrt(this.expScore || 0);
+        const sRed = this.getLocalXpBonus();
         const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
         reduction += eff / 100;
       }
@@ -793,7 +800,7 @@ export class Ship {
 
       // Trigger condition
       if (!this.isRetreating) {
-        const specialModeActive = this.isPatrolling || this.isScouting || this.isResearching || this.isDiplomacy;
+        const specialModeActive = this.isPatrolling || this.isScouting || this.isResearching || this.isDiplomacy || isBombingPlanet;
         if (specialModeActive || isStandby) {
           const combatTrigger = inCombat && (emptyBombs || lowHealth);
           const normalTrigger = !this.inFriendlyWell && (lowFuel || emptyBombs || (lowHealth && (inActiveMode || isStandby)));
@@ -981,7 +988,7 @@ export class Ship {
                         const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
                         const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
                         const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
-                        const sRed = Math.sqrt(this.expScore || 0);
+                        const sRed = this.getLocalXpBonus();
                         const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
                         if (effectiveIntensity > hazardIntensityVal) {
                           hazardIntensityVal = effectiveIntensity;
@@ -1537,7 +1544,7 @@ export class Ship {
 
     const playerTechBonus = this.owner ? Math.floor(Math.sqrt(this.owner.techScore || 0)) : 0;
     const laserTechBonus = 0.01 * playerTechBonus;
-    const shipExpBonus = Math.sqrt(this.expScore || 0);
+    const shipExpBonus = this.getLocalXpBonus();
     
     // Range Calculation
     let effectiveRange = 40 * (1 + laserTechBonus);
@@ -2202,7 +2209,7 @@ export class Ship {
           const playerTechBonus = 0.01 * Math.floor(techBonus);
           const playerExpBonus = 0.01 * expBonus;
           const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
-          const shipXpBonus = Math.sqrt(this.expScore || 0);
+          const shipXpBonus = this.getLocalXpBonus();
           const sensorRange = baseRange * (100 + shipXpBonus * 3) / 100;
           const rangeSq = sensorRange * sensorRange;
 
@@ -2367,6 +2374,15 @@ export class Ship {
       this.diplomacyFuelRetreatTargetPlanetId = null;
     }
     
+    if (this.maxHealth > 0 && this.labs > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
+      const isIdle = !this.isPatrolling && !this.isScouting && !this.isDiplomacy && !this.isRetreating &&
+                     (this.targetX === null || this.targetY === null) &&
+                     (!this.orderQueue || this.orderQueue.length === 0);
+      if (isIdle) {
+        this.isResearching = true;
+      }
+    }
+
     // Cruiser Patrol Mode Decision Engine
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isPatrolling && !this.isRetreating) {
       // Check if fuel is 1 or less while patrolling
@@ -3451,7 +3467,7 @@ export class Ship {
               if (this.sensorarrays > 0) {
                 cruiserRadar *= (1.0 + this.sensorarrays * 0.20);
               }
-              const shipXpBonus = Math.sqrt(this.expScore || 0);
+              const shipXpBonus = this.getLocalXpBonus();
               const finalCruiserRadar = cruiserRadar * (100 + shipXpBonus * 3) / 100;
               const parkingDist = bestHazard.radius + Math.max(20, finalCruiserRadar - 40);
 
@@ -4610,7 +4626,7 @@ export class Ship {
             const defenderTechPenalty = 0.01 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.techScore || 0) : 0);
             const defenderExpPenalty = 0.01 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.expScore || 0) : 0);
             
-            const attackerLocalExpBonus = 0.01 * Math.sqrt(this.expScore || 0);
+            const attackerLocalExpBonus = 0.01 * this.getLocalXpBonus();
             const defenderLocalExpPenalty = 0.01 * Math.sqrt(this.targetPlanet.expScore || 0);
 
             const humanInvolved = (!this.owner.isAI) || (this.targetPlanet.owner && !this.targetPlanet.owner.isAI);
@@ -4644,7 +4660,7 @@ export class Ship {
                   const knowledge = storm.knowledge[this.owner.id] || 0;
                   const tRed = Math.sqrt(this.owner.techScore || 0);
                   const eRed = Math.sqrt(this.owner.expScore || 0);
-                  const sRed = Math.sqrt(this.expScore || 0);
+                  const sRed = this.getLocalXpBonus();
                   const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
                   hazardPenalty += eff / 100;
                 }
@@ -4911,6 +4927,7 @@ export class Ship {
     let effectiveSpeed = this.speed * (1 + speedTechBonus);
     let engineBonus = (this.engine || 0) * 3;
     effectiveSpeed += engineBonus;
+    effectiveSpeed += (this.commandPoints || 0) * 0.5;
     if (this.isWarp) {
       effectiveSpeed += this.warpBonus || 0;
     }
@@ -4987,7 +5004,7 @@ export class Ship {
             const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
             const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
             const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
-            const sRed = Math.sqrt(this.expScore || 0);
+            const sRed = this.getLocalXpBonus();
             const effectiveIntensity = Math.max(0, h.intensity - sRed - (eRed + tRed) / 2 - knowledge);
             const V0 = effectiveSpeed;
             let speed = V0;
@@ -5027,7 +5044,7 @@ export class Ship {
             const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
             const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
             const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
-            const sRed = Math.sqrt(this.expScore || 0);
+            const sRed = this.getLocalXpBonus();
 
             const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
             const normalSpeed = effectiveSpeed;
@@ -5233,7 +5250,7 @@ export class Ship {
       if (this.maxHealth > 0) {
         const techBonus = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
         const expBonus = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
-        const shipExpBonus = Math.sqrt(this.expScore || 0);
+        const shipExpBonus = this.getLocalXpBonus();
         let shrugChance = 0;
         if (!this.isAmoeba) {
           const baseDeflection = this.maxHealth + (techBonus + expBonus + shipExpBonus);

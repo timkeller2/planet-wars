@@ -331,7 +331,8 @@ async function bootstrap() {
           damagecontrol: 'damagecontrol',
           fueltanker: 'fuel_tanker',
           diplomat: 'diplomat',
-          marines: 'marines'
+          marines: 'marines',
+          command: 'command'
         };
         const prop = typesMap[data.type];
          if (prop && (ship[prop] || 0) < 5 && !ship.isUpgrading) {
@@ -345,7 +346,8 @@ async function bootstrap() {
                                 (ship.damagecontrol || 0) +
                                 (ship.fuel_tanker || 0) +
                                 (ship.diplomat || 0) +
-                                (ship.marines || 0);
+                                (ship.marines || 0) +
+                                (ship.command || 0);
 
           const maxIndividualLevel = Math.floor((ship.maxHealth || 0) / 10);
           const maxTotalUpgrades = Math.floor((ship.maxHealth || 0) / 5);
@@ -440,6 +442,7 @@ async function bootstrap() {
               fuel_tanker: 'fueltanker',
               diplomat: 'diplomat',
               marines: 'marines',
+              command: 'command',
               
               sensorarray: 'sensorarray',
               lab: 'lab',
@@ -879,6 +882,8 @@ async function bootstrap() {
         ship.scoutAttackEnabled = !!enabled;
       }
     });
+
+
 
 
 
@@ -1783,6 +1788,8 @@ async function bootstrap() {
           diplomat: s.diplomat || 0,
           parley: s.parley !== undefined ? s.parley : 0,
           marines: s.marines || 0,
+          command: s.command || 0,
+          commandPoints: s.commandPoints || 0,
           diplomatTargetPlanetId: s.diplomatTargetPlanetId || null,
           crew: s.crew || 0,
           marineCount: s.marineCount || 0,
@@ -2127,7 +2134,8 @@ async function bootstrap() {
               Math.round((s.expScore || 0) * 10) / 10,
               Math.round((s.flightTime || 0) * 10) / 10,
               Math.round((s.currentSpeed || 0) * 10) / 10,
-              s.isMarineFleet ? 1 : 0
+              s.isMarineFleet ? 1 : 0,
+              Math.round((s.commandPoints || 0) * 100) / 100
             );
           }
         }

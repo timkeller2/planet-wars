@@ -68,7 +68,7 @@ cruiser3.maxHealth = 100;
 cruiser3.health = 100;
 cruiser3.fuel = 100;
 cruiser3.bombs = 0; // empty bombs
-cruiser3.bombPlanetsEnabled = true;
+cruiser3.savedBombardPlanetId = 'enemyPlanet';
 
 const targetShip = new Ship(5, 120, 100, null, p2);
 targetShip.active = true;

@@ -229,6 +229,7 @@ export class Game {
     this.incubatingPlanet = null;
     this.rampageIncubationTimeRemaining = 0;
     this.scheduledAttacks = [];
+    this.scheduledEvents = [];
     this.ionStorms = [];
     this.nextIonStormId = 0;
     this.ionStormSpawnTimer = 0;
@@ -283,7 +284,8 @@ export class Game {
                           (ship.damagecontrol || 0) +
                           (ship.fuel_tanker || 0) +
                           (ship.diplomat || 0) +
-                          (ship.marines || 0);
+                          (ship.marines || 0) +
+                          (ship.command || 0);
     const baseCost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
     
     const typeKeyMap = {
@@ -298,6 +300,7 @@ export class Game {
       fuel_tanker: 'fueltanker',
       diplomat: 'diplomat',
       marines: 'marines',
+      command: 'command',
       
       sensorarray: 'sensorarray',
       lab: 'lab',
@@ -323,7 +326,7 @@ export class Game {
     const upgradeProps = [
       'sensorarrays', 'labs', 'armor', 'shields', 'engine', 
       'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 
-      'diplomat', 'marines'
+      'diplomat', 'marines', 'command'
     ];
     let totalSpent = 0;
     
@@ -2794,7 +2797,63 @@ export class Game {
   update(deltaTime) {
     this.ships.updateGrid();
 
+    // Update Command Points for all ships based on nearby Command-upgraded friendly cruisers
+    for (const s of this.ships) {
+      s.commandPoints = 0;
+    }
+
+    const commanders = this.ships.filter(s => s.active && s.isCruiser && s.command > 0 && s.maxHealth > 0);
+
+    if (commanders.length > 0) {
+      const commandersByPlayer = new Map();
+      for (const c of commanders) {
+        if (!c.owner) continue;
+        if (!commandersByPlayer.has(c.owner.id)) {
+          commandersByPlayer.set(c.owner.id, []);
+        }
+        commandersByPlayer.get(c.owner.id).push(c);
+      }
+
+      for (const [playerId, playerCommanders] of commandersByPlayer.entries()) {
+        const playerShips = this.ships.filter(s => s.active && s.owner && s.owner.id === playerId);
+        for (const ship of playerShips) {
+          let sumCP = 0;
+          let maxXPBonus = 0;
+
+          for (const cmd of playerCommanders) {
+            const sensorRange = cmd.cruiserRadarRange();
+            const dx = ship.x - cmd.x;
+            const dy = ship.y - cmd.y;
+            if (dx * dx + dy * dy <= sensorRange * sensorRange) {
+              const xpBonus = Math.sqrt(cmd.expScore || 0);
+              const cpContribution = (xpBonus * cmd.command) / 4;
+              sumCP += cpContribution;
+              if (xpBonus > maxXPBonus) {
+                maxXPBonus = xpBonus;
+              }
+            }
+          }
+
+          if (maxXPBonus > 0) {
+            const cap = 1.5 * maxXPBonus;
+            ship.commandPoints = Math.min(sumCP, cap);
+          }
+        }
+      }
+    }
+
     this.gameTime += deltaTime;
+
+    if (this.scheduledEvents) {
+      for (let i = this.scheduledEvents.length - 1; i >= 0; i--) {
+        const ev = this.scheduledEvents[i];
+        ev.delay -= deltaTime;
+        if (ev.delay <= 0) {
+          ev.action();
+          this.scheduledEvents.splice(i, 1);
+        }
+      }
+    }
 
     if (this.settings && this.settings.timedGameLimit && this.settings.timedGameLimit !== 'unlimited') {
       if (this.timeRemaining === undefined || this.timeRemaining === null) {
@@ -3146,7 +3205,7 @@ export class Game {
             const knowledge = storm.knowledge[ship.owner.id] || 0;
             const techRed = Math.sqrt(ship.owner.techScore || 0);
             const expRed = Math.sqrt(ship.owner.expScore || 0);
-            const shipExpRed = Math.sqrt(ship.expScore || 0);
+            const shipExpRed = ship.getLocalXpBonus();
 
             let risk = Math.max(0, storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed);
             if (!isMoving) {
@@ -3197,7 +3256,7 @@ export class Game {
         for (const player of this.allPlayers) {
           if (!player.isAlive) continue;
           for (const ship of this.ships) {
-            if (ship.active && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0 && ship.isResearching && ship.scoutAttackEnabled) {
+            if (ship.active && ship.isCruiser && ship.owner && ship.owner.id === player.id && ship.labs > 0 && ship.scoutAttackEnabled) {
               const finalCruiserRadar = ship.cruiserRadarRange();
               const red = hazardSensorReduction(ship.x, ship.y, player.id);
               const effRadar = Math.max(10, finalCruiserRadar - red);
@@ -3216,8 +3275,60 @@ export class Game {
                     y: ship.y,
                     isDollarSign: true,
                     amount: minesDestroyed,
+                    remainingMines: storm.mines,
                     age: 0
                   });
+
+                  for (let k = 0; k < minesDestroyed; k++) {
+                    const delayMs = Math.random() * 2000;
+                    
+                    // Choose target point within both firing range (effRadar) and minefield (storm.radius)
+                    let tx = storm.x;
+                    let ty = storm.y;
+                    for (let attempt = 0; attempt < 30; attempt++) {
+                      const angle = Math.random() * Math.PI * 2;
+                      const r = Math.random() * storm.radius;
+                      const px = storm.x + Math.cos(angle) * r;
+                      const py = storm.y + Math.sin(angle) * r;
+                      const sDx = px - ship.x;
+                      const sDy = py - ship.y;
+                      if (sDx * sDx + sDy * sDy <= effRadar * effRadar) {
+                        tx = px;
+                        ty = py;
+                        break;
+                      }
+                    }
+
+                    const shipId = ship.id;
+                    const finalTx = tx;
+                    const finalTy = ty;
+
+                    this.scheduledEvents.push({
+                      delay: delayMs,
+                      action: () => {
+                        const currentShip = this.ships.find(s => s.id === shipId);
+                        if (currentShip && currentShip.active) {
+                          // Fire a blue laser from the ship's current position to the target mine
+                          this.lasers.push({
+                            startX: currentShip.x,
+                            startY: currentShip.y,
+                            endX: finalTx,
+                            endY: finalTy,
+                            color: '#44f',
+                            age: 0,
+                            duration: 0.4
+                          });
+                        }
+                        // Create a blue explosion at the destroyed mine position
+                        this.explosions.push({
+                          x: finalTx,
+                          y: finalTy,
+                          color: '#44f',
+                          age: 0
+                        });
+                      }
+                    });
+                  }
                 }
                 if (storm.initialMines > 0) {
                   storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
@@ -3255,7 +3366,7 @@ export class Game {
             const knowledge = storm.knowledge[ship.owner.id] || 0;
             const techRed = Math.sqrt(ship.owner.techScore || 0);
             const expRed = Math.sqrt(ship.owner.expScore || 0);
-            const shipExpRed = Math.sqrt(ship.expScore || 0);
+            const shipExpRed = ship.getLocalXpBonus();
             const effectiveIntensity = Math.max(0, storm.intensity - knowledge - (techRed + expRed) / 2 - shipExpRed);
 
             if (Math.random() * 100 < effectiveIntensity) {
@@ -3834,7 +3945,8 @@ export class Game {
     // Update and remove explosions
     for (let i = this.explosions.length - 1; i >= 0; i--) {
       this.explosions[i].age += deltaTime / 1000;
-      if (this.explosions[i].age > 1.0) {
+      const maxAge = this.explosions[i].isDollarSign ? 3.0 : 1.0;
+      if (this.explosions[i].age > maxAge) {
         this.explosions.splice(i, 1);
       }
     }
@@ -4349,7 +4461,7 @@ export class Game {
 
   triggerDiplomacyEvent(ship, targetPlanet) {
     const expBonus = Math.sqrt(ship.owner.expScore || 0);
-    const shipExpBonus = Math.sqrt(ship.expScore || 0);
+    const shipExpBonus = ship.getLocalXpBonus();
     const MathSquareBase = expBonus + shipExpBonus;
     const currentSym = getEffectiveSympathy(targetPlanet, ship.owner.id, this.ships, ship.owner, this);
     const disposition = targetPlanet.disposition ? (targetPlanet.disposition[ship.owner.id] ?? 0) : 0;
