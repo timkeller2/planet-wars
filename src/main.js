@@ -664,22 +664,22 @@ function getPlanetTradeIncomePerMin(planet) {
     } else if (style === 'Gorn') {
       if (cohort === 'destroyer_group') {
         // Gorn Destroyer (heavy angular spearhead with double nose-gun pods)
-        ctx.moveTo(0, -size * 0.85);
-        ctx.lineTo(size * 0.2, -size * 0.75);
-        ctx.lineTo(size * 0.2, -size * 0.5);
-        ctx.lineTo(size * 0.5, -size * 0.8);
-        ctx.lineTo(size * 0.6, -size * 0.8);
-        ctx.lineTo(size * 0.6, size * 0.3);
-        ctx.lineTo(size * 0.35, size * 0.5);
-        ctx.lineTo(size * 0.25, size * 0.75);
-        ctx.lineTo(0, size * 0.85);
-        ctx.lineTo(-size * 0.25, size * 0.75);
-        ctx.lineTo(-size * 0.35, size * 0.5);
-        ctx.lineTo(-size * 0.6, size * 0.3);
-        ctx.lineTo(-size * 0.6, -size * 0.8);
-        ctx.lineTo(-size * 0.5, -size * 0.8);
-        ctx.lineTo(-size * 0.2, -size * 0.5);
-        ctx.lineTo(-size * 0.2, -size * 0.75);
+        ctx.moveTo(0, -size * 0.425);
+        ctx.lineTo(size * 0.2, -size * 0.375);
+        ctx.lineTo(size * 0.2, -size * 0.25);
+        ctx.lineTo(size * 0.5, -size * 0.4);
+        ctx.lineTo(size * 0.6, -size * 0.4);
+        ctx.lineTo(size * 0.6, size * 0.15);
+        ctx.lineTo(size * 0.35, size * 0.23125);
+        ctx.lineTo(size * 0.25, size * 0.29375);
+        ctx.lineTo(0, size * 0.31875);
+        ctx.lineTo(-size * 0.25, size * 0.29375);
+        ctx.lineTo(-size * 0.35, size * 0.23125);
+        ctx.lineTo(-size * 0.6, size * 0.15);
+        ctx.lineTo(-size * 0.6, -size * 0.4);
+        ctx.lineTo(-size * 0.5, -size * 0.4);
+        ctx.lineTo(-size * 0.2, -size * 0.25);
+        ctx.lineTo(-size * 0.2, -size * 0.375);
       } else if (cohort === 'cruiser_group') {
         ctx.moveTo(-size * 0.4, -size * 0.8);
         ctx.lineTo(size * 0.4, -size * 0.8);
@@ -910,16 +910,16 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.lineTo(-size * 0.1, -size * 0.7);
         ctx.lineTo(-size * 0.1, -size * 0.4);
       } else {
-        ctx.moveTo(-size * 0.2, -size * 0.9);
-        ctx.lineTo(size * 0.2, -size * 0.9);
-        ctx.lineTo(size * 0.2, -size * 0.4);
-        ctx.lineTo(size * 0.9, size * 0.6);
-        ctx.lineTo(size * 0.4, size * 0.6);
-        ctx.lineTo(size * 0.2, size * 0.9);
-        ctx.lineTo(-size * 0.2, size * 0.9);
-        ctx.lineTo(-size * 0.4, size * 0.6);
-        ctx.lineTo(-size * 0.9, size * 0.6);
-        ctx.lineTo(-size * 0.2, -size * 0.4);
+        ctx.moveTo(-size * 0.14, -size * 0.9);
+        ctx.lineTo(size * 0.14, -size * 0.9);
+        ctx.lineTo(size * 0.14, -size * 0.4);
+        ctx.lineTo(size * 0.63, size * 0.6);
+        ctx.lineTo(size * 0.28, size * 0.6);
+        ctx.lineTo(size * 0.14, size * 0.9);
+        ctx.lineTo(-size * 0.14, size * 0.9);
+        ctx.lineTo(-size * 0.28, size * 0.6);
+        ctx.lineTo(-size * 0.63, size * 0.6);
+        ctx.lineTo(-size * 0.14, -size * 0.4);
       }
     } else {
       if (cohort === 'destroyer_group') {
