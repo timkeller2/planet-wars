@@ -1266,7 +1266,7 @@ export class Ship {
         this.upgradeAccumulator += deltaTime / 1000;
         while (this.upgradeAccumulator >= 0.2 && this.upgradeTimer > 0) {
           const currentCredits = (this.owner && this.owner.useCredits !== false) ? (this.owner.credits || 0) : 0;
-          const currentCreditsAvailable = currentCredits - minAllowedCredits;
+          const currentCreditsAvailable = (this.owner && this.owner.useCredits !== false) ? (currentCredits - minAllowedCredits) : 0;
           if (currentCreditsAvailable >= 1) {
             this.owner.credits -= 1;
             this.upgradeShipsPaid += 1;
