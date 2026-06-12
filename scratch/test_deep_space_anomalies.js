@@ -500,6 +500,56 @@ const testAmoebaRangeLocking = () => {
   console.log("-> Amoeba Range Locking PASSED!");
 };
 
+const testRevoltInvasionImmunityRemoval = () => {
+  console.log("\n--- Part 10: Revolt Invasion Immunity Removal ---");
+
+  const game = new Game();
+  const human = new Player('human', '#0ff', false);
+  const enemy = new Player('enemy', '#f00', false);
+  game.allPlayers = [human, enemy];
+
+  const planet = new Planet(1, 100, 100, 30, enemy, 10, 2000, 2000);
+  planet.sympathy = { human: 100 };
+  game.planets = [planet];
+
+  // Spawn a hostile ship targeting the planet
+  const hostileShip = new Ship('s1', 500, 500, null, human);
+  hostileShip.active = true;
+  hostileShip.targetPlanet = planet;
+  game.ships.push(hostileShip);
+
+  // Verify that the planet is considered "being invaded"
+  const isInvaded = planet.isBeingInvaded(game);
+  console.log(`Planet is being invaded: ${isInvaded} (expected true)`);
+  if (!isInvaded) {
+    console.error("FAILED: Planet should be considered invaded!");
+    process.exit(1);
+  }
+
+  // Update game/planet and verify that revoltWarmup still advances despite being invaded!
+  // ratePerMinute = sympathyForeign (100) - (ships / 3) (10 / 3) - sympathyOwner (0) = 96.67
+  // revoltWarmup should increase!
+  planet.update(1000, game.planets, game.settings, game);
+
+  console.log(`Revolt Warmup progress: ${planet.revoltWarmup} (expected > 0)`);
+  if (!(planet.revoltWarmup > 0)) {
+    console.error("FAILED: Revolt Warmup did not advance while planet was invaded!");
+    process.exit(1);
+  }
+
+  // Set revoltWarmup to maximum and trigger update to start revolt
+  planet.revoltWarmup = planet.revoltWarmupMax;
+  planet.update(100, game.planets, game.settings, game);
+
+  console.log(`Planet inRevolt state: ${planet.inRevolt} (expected true)`);
+  if (!planet.inRevolt) {
+    console.error("FAILED: Revolt did not start while planet was invaded!");
+    process.exit(1);
+  }
+
+  console.log("-> Revolt Invasion Immunity Removal PASSED!");
+};
+
 testPlanetarySpawnChance();
 testDeepSpaceDiscovery();
 testDiscoveryCooldown();
@@ -509,6 +559,7 @@ testSpecialDuraniumConsumption();
 testDiplomatTargetSelection();
 testMarketPricingMinimumConstraint();
 testAmoebaRangeLocking();
+testRevoltInvasionImmunityRemoval();
 
 console.log("\nALL NEW ANOMALY TESTS PASSED SUCCESSFULLY!");
 process.exit(0);

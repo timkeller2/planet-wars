@@ -431,7 +431,7 @@ export class Planet {
       this.capacityProgress = 0;
     }
 
-    if (!this.inRevolt && !(typeof this.isBeingInvaded === 'function' && this.isBeingInvaded(game))) {
+    if (!this.inRevolt) {
       let sympathyForeign = 0;
       let sympathyOwner = 0;
       

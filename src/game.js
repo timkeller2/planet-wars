@@ -3002,8 +3002,6 @@ export class Game {
     if (planet.inRevolt) return;
     if (!planet.sympathy) return;
 
-    if (typeof planet.isBeingInvaded === 'function' && planet.isBeingInvaded(this)) return;
-
     const eligibleNonOwners = [];
     for (const player of this.allPlayers) {
       if (player === this.monsterPlayer) continue;
