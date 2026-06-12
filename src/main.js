@@ -1913,7 +1913,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const opacityStyle = isShiftSelectingInHUD && !hudSelectedSet.has(key) ? ' style="opacity: 0.5;"' : '';
 
         html += `
-          <div class="selection-tile${activeClass}" data-type="ship" data-id="${liveShip.id}"${opacityStyle} title="${liveShip.name || shipClass}">
+          <div class="selection-tile${activeClass}" data-type="ship" data-id="${liveShip.id}"${opacityStyle} title="${liveShip.name ? shipClass + ' ' + liveShip.name : shipClass}">
             <canvas class="selection-tile-canvas" width="120" height="120" style="width: 56px; height: 56px;"></canvas>
           </div>
         `;
@@ -2774,7 +2774,7 @@ function getPlanetTradeIncomePerMin(planet) {
           raceStr = (icon ? icon + ' ' : '') + raceStyle;
         }
 
-        titleHTML = `<span style="color: ${hsOwner ? hsOwner.color : '#0ff'}">${(hsOwner ? hsOwner.name : 'Unknown')}'s ${raceStr ? raceStr + ' ' : ''}${hs.name || shipClass}</span>`;
+        titleHTML = `<span style="color: ${hsOwner ? hsOwner.color : '#0ff'}">${(hsOwner ? hsOwner.name : 'Unknown')}'s ${raceStr ? raceStr + ' ' : ''}${hs.name ? shipClass + ' ' + hs.name : shipClass}</span>`;
         lines.push({ label: 'Hull Integrity', value: `${Math.floor(hs.health)} / ${hs.maxHealth}`, color: '#fff' });
         if (hs.isCruiser) {
           const totalUpgrades = (hs.sensorarrays || 0) +
@@ -10913,7 +10913,7 @@ function getPlanetTradeIncomePerMin(planet) {
               raceStr = (icon ? icon + ' ' : '') + raceStyle;
             }
 
-            const headerLabel = hsOwner.name + (raceStr ? ' ' + raceStr : '') + ' ' + (hs.name ? hs.name : shipClass);
+            const headerLabel = hsOwner.name + (raceStr ? ' ' + raceStr : '') + ' ' + (hs.name ? shipClass + ' ' + hs.name : shipClass);
             lines.push({ label: headerLabel, value: '', color: hsOwner.color || '#0ff', isHeader: true });
 
             lines.push({ label: 'Hull Integrity', value: Math.floor(hs.health) + ' / ' + hs.maxHealth, color: '#fff' });

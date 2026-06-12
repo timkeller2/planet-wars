@@ -550,6 +550,89 @@ const testRevoltInvasionImmunityRemoval = () => {
   console.log("-> Revolt Invasion Immunity Removal PASSED!");
 };
 
+const testCruiserFuelTransfer = () => {
+  console.log("\n--- Part 11: Cruiser Fuel Transfer with Special Fuel ---");
+
+  const game = new Game();
+  const human = new Player('human', '#0ff', false);
+  game.allPlayers = [human];
+
+  // Donor cruiser: special fuel >= standard fuel
+  const donor = new Ship('c_donor', 100, 100, null, human);
+  donor.isCruiser = true;
+  donor.active = true;
+  donor.maxHealth = 20;
+  donor.health = 20;
+  donor.fuel = 3;
+  donor.specialfuel = 3;
+  donor.isMaterializing = false;
+
+  // Receiver cruiser: has less fuel, is within range
+  const receiver = new Ship('c_receiver', 105, 100, null, human);
+  receiver.isCruiser = true;
+  receiver.active = true;
+  receiver.maxHealth = 20;
+  receiver.health = 20;
+  receiver.fuel = 0;
+  receiver.specialfuel = 0;
+  receiver.isMaterializing = false;
+
+  game.ships.push(donor, receiver);
+  game.ships.updateGrid();
+
+  // Trigger receiver sensor sweep refuel update
+  // receiver.fuel is < receiver.maxHealth (20)
+  // donor has canDonate = true (receiver.fuel <= 0 and donor.fuel > 1)
+  // donor is in sensor range
+  receiver.update(100, game.ships, [], [], [], [], 2000, game);
+
+  console.log(`Donor fuel after transfer: ${donor.fuel} (expected 2)`);
+  console.log(`Donor special fuel after transfer: ${donor.specialfuel} (expected 2)`);
+  console.log(`Receiver fuel after transfer: ${receiver.fuel} (expected ~1)`);
+  console.log(`Receiver special fuel after transfer: ${receiver.specialfuel} (expected ~1)`);
+
+  if (donor.fuel !== 2 || donor.specialfuel !== 2 || Math.round(receiver.fuel) !== 1 || Math.round(receiver.specialfuel) !== 1) {
+    console.error("FAILED: Cruiser fuel transfer failed or special fuel was not transferred!");
+    process.exit(1);
+  }
+
+  // Donor cruiser with special fuel < standard fuel
+  const donor2 = new Ship('c_donor2', 200, 200, null, human);
+  donor2.isCruiser = true;
+  donor2.active = true;
+  donor2.maxHealth = 20;
+  donor2.health = 20;
+  donor2.fuel = 3;
+  donor2.specialfuel = 2; // < fuel (3)
+  donor2.isMaterializing = false;
+
+  const receiver2 = new Ship('c_receiver2', 205, 200, null, human);
+  receiver2.isCruiser = true;
+  receiver2.active = true;
+  receiver2.maxHealth = 20;
+  receiver2.health = 20;
+  receiver2.fuel = 0;
+  receiver2.specialfuel = 0;
+  receiver2.isMaterializing = false;
+
+  game.ships.push(donor2, receiver2);
+  game.ships.updateGrid();
+
+  receiver2.update(100, game.ships, [], [], [], [], 2000, game);
+
+  console.log(`Donor2 fuel after transfer: ${donor2.fuel} (expected 2)`);
+  console.log(`Donor2 special fuel after transfer: ${donor2.specialfuel} (expected 2 - no transfer)`);
+  console.log(`Receiver2 fuel after transfer: ${receiver2.fuel} (expected ~1)`);
+  console.log(`Receiver2 special fuel after transfer: ${receiver2.specialfuel} (expected 0)`);
+
+  if (donor2.fuel !== 2 || donor2.specialfuel !== 2 || Math.round(receiver2.fuel) !== 1 || Math.round(receiver2.specialfuel) !== 0) {
+    console.error("FAILED: Cruiser fuel transfer without special fuel criteria failed!");
+    process.exit(1);
+  }
+
+  console.log("-> Cruiser Fuel Transfer PASSED!");
+};
+
 testPlanetarySpawnChance();
 testDeepSpaceDiscovery();
 testDiscoveryCooldown();
@@ -560,6 +643,7 @@ testDiplomatTargetSelection();
 testMarketPricingMinimumConstraint();
 testAmoebaRangeLocking();
 testRevoltInvasionImmunityRemoval();
+testCruiserFuelTransfer();
 
 console.log("\nALL NEW ANOMALY TESTS PASSED SUCCESSFULLY!");
 process.exit(0);

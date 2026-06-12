@@ -4156,7 +4156,6 @@ export class Ship {
       }
     }
 
-
     if (this.maxHealth > 0 && !this.isAmoeba) {
       this.crew = Math.min(this.crew || 0, 2 * this.health);
       if (this.fuel < this.maxHealth && allShips) {
@@ -4180,8 +4179,15 @@ export class Ship {
               const dy = other.y - this.y;
               const dist = Math.sqrt(dx * dx + dy * dy);
               if (dist <= sensorRange) {
+                const donorSpecial = other.specialfuel || 0;
+                const donorFuel = other.fuel || 0;
                 other.fuel -= 1;
                 this.fuel += 1;
+                if (donorSpecial >= donorFuel) {
+                  const specTransfer = Math.min(donorSpecial, 1);
+                  other.specialfuel = Math.max(0, donorSpecial - specTransfer);
+                  this.specialfuel = (this.specialfuel || 0) + specTransfer;
+                }
                 break;
               }
             }
@@ -4436,8 +4442,16 @@ export class Ship {
                   }
                 }
               } else if (fuelSourceShip && (fuelSourceShip.fuel || 0) > 4) {
+                const donorSpecial = fuelSourceShip.specialfuel || 0;
+                const donorFuel = fuelSourceShip.fuel || 0;
                 const fuelTaken = amountRefueled;
-                fuelSourceShip.fuel = Math.max(4, fuelSourceShip.fuel - fuelTaken);
+                const actualFuelTaken = Math.min(fuelTaken, Math.max(0, donorFuel - 4));
+                fuelSourceShip.fuel = donorFuel - actualFuelTaken;
+                if (donorSpecial >= donorFuel) {
+                  const specTransfer = Math.min(donorSpecial, actualFuelTaken);
+                  fuelSourceShip.specialfuel = donorSpecial - specTransfer;
+                  this.specialfuel = (this.specialfuel || 0) + specTransfer;
+                }
               } else if (hasExcessDeuterium && deuteriumSellPrice < 12) {
                 const consumed = (1/12) * amountRefueled * costMultiplier;
                 owner.resources.deuterium = (owner.resources.deuterium || 0) - consumed;
