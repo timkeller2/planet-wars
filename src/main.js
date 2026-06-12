@@ -11679,19 +11679,36 @@ function getPlanetTradeIncomePerMin(planet) {
 
             const dotRadius = Math.max(1.2, size * 0.08);
 
+            const drawDotCluster = (cx, cy, count, fill, stroke, lw) => {
+              if (count <= 0) return;
+              ctx.fillStyle = fill;
+              ctx.strokeStyle = stroke;
+              ctx.lineWidth = lw;
+              if (count === 1) {
+                ctx.beginPath();
+                ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+              } else {
+                const R = dotRadius * 1.5;
+                for (let i = 0; i < count; i++) {
+                  const theta = (i * 2 * Math.PI) / count;
+                  const dx = cx + R * Math.cos(theta);
+                  const dy = cy + R * Math.sin(theta);
+                  ctx.beginPath();
+                  ctx.arc(dx, dy, dotRadius, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.stroke();
+                }
+              }
+            };
+
             // 1. Special Bombs -> Tiny red dots at laser originating points
             if (s.specialbombs > 0) {
-              ctx.fillStyle = '#ff0000';
-              ctx.strokeStyle = '#000000';
-              ctx.lineWidth = dotRadius * 0.3;
-              ctx.beginPath();
-              ctx.arc(size * 0.75, size * 0.15, dotRadius, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.stroke();
-              ctx.beginPath();
-              ctx.arc(-size * 0.75, size * 0.15, dotRadius, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.stroke();
+              const leftCount = Math.floor(s.specialbombs / 2);
+              const rightCount = Math.ceil(s.specialbombs / 2);
+              drawDotCluster(-size * 0.75, size * 0.15, leftCount, '#ff0000', '#000000', dotRadius * 0.3);
+              drawDotCluster(size * 0.75, size * 0.15, rightCount, '#ff0000', '#000000', dotRadius * 0.3);
             }
 
             // 2. Special Fuel -> Tiny yellow dots on engine(s)
@@ -11717,26 +11734,17 @@ function getPlanetTradeIncomePerMin(planet) {
                 engines = [{ x: 0, y: size * 0.6 }];
               }
 
-              ctx.fillStyle = '#ffff00';
-              ctx.strokeStyle = '#000000';
-              ctx.lineWidth = dotRadius * 0.3;
-              for (const engine of engines) {
-                ctx.beginPath();
-                ctx.arc(engine.x, engine.y, dotRadius, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
+              const numEngines = engines.length;
+              for (let j = 0; j < numEngines; j++) {
+                const engine = engines[j];
+                const engineCount = Math.floor(s.specialfuel / numEngines) + (j < (s.specialfuel % numEngines) ? 1 : 0);
+                drawDotCluster(engine.x, engine.y, engineCount, '#ffff00', '#000000', dotRadius * 0.3);
               }
             }
 
             // 3. Special Duranium -> Tiny gray dot in the middle of hull
             if (s.specialduranium > 0) {
-              ctx.fillStyle = '#aaaaaa';
-              ctx.strokeStyle = '#000000';
-              ctx.lineWidth = dotRadius * 0.3;
-              ctx.beginPath();
-              ctx.arc(0, 0, dotRadius * 1.2, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.stroke();
+              drawDotCluster(0, 0, s.specialduranium, '#aaaaaa', '#000000', dotRadius * 0.3);
             }
 
             ctx.restore();
