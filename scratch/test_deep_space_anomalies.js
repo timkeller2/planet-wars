@@ -294,7 +294,7 @@ const testSpecialDuraniumConsumption = () => {
   cruiser.isCruiser = true;
   cruiser.maxHealth = 20;
   cruiser.health = 20;
-  cruiser.armorPoints = 10;
+  cruiser.armorPoints = 2;
   cruiser.specialduranium = 5;
   cruiser.checkSurvivalRoll = () => true;
   game.ships.push(cruiser);
@@ -303,16 +303,19 @@ const testSpecialDuraniumConsumption = () => {
   // Mock Math.random to return 1.0 (fails shrug check)
   Math.random = () => 1.0;
 
-  // 1. Normal hit: damage = 1
+  // 1. Hit of 1 damage: armor absorbs it fully
   cruiser.takeDamage([], null, false, 'front');
 
-  console.log(`Special Duranium after normal hit: ${cruiser.specialduranium} (expected 4.5)`);
-  if (cruiser.specialduranium !== 4.5) {
-    console.error("FAILED: Normal hit did not consume 0.5 Special Duranium!");
+  console.log(`Armor after 1 damage hit: ${cruiser.armorPoints} (expected 1)`);
+  console.log(`Special Duranium after 1 damage hit: ${cruiser.specialduranium} (expected 5)`);
+  if (cruiser.armorPoints !== 1 || cruiser.specialduranium !== 5) {
+    console.error("FAILED: Armor did not absorb damage, or Special Duranium was incorrectly depleted!");
     process.exit(1);
   }
 
-  // 2. Hazard hit: mock Math.random to return 0.5 (so Math.floor(Math.random() * 6) + 1 = 4)
+  // 2. Hit of 4 damage: 1 remaining armor absorbs 1 damage. 3 remaining damage goes to Special Duranium.
+  // We trigger a hazard hit with damage = 4.
+  // Mock Math.random to return 0.5 (so Math.floor(Math.random() * 6) + 1 = 4)
   let callCount = 0;
   Math.random = () => {
     callCount++;
@@ -322,9 +325,29 @@ const testSpecialDuraniumConsumption = () => {
 
   cruiser.takeDamage([], null, true, 'front');
 
-  console.log(`Special Duranium after hazard hit: ${cruiser.specialduranium} (expected 2.5)`);
-  if (cruiser.specialduranium !== 2.5) {
-    console.error("FAILED: Hazard hit did not consume 2.0 (4 * 0.5) Special Duranium!");
+  console.log(`Armor after hazard hit: ${cruiser.armorPoints} (expected 0)`);
+  console.log(`Special Duranium after hazard hit: ${cruiser.specialduranium} (expected 2)`);
+  console.log(`Health after hazard hit: ${cruiser.health} (expected 20)`);
+  if (cruiser.armorPoints !== 0 || cruiser.specialduranium !== 2 || cruiser.health !== 20) {
+    console.error("FAILED: Armor layer logic for Special Duranium not working correctly!");
+    process.exit(1);
+  }
+
+  // 3. Test replenishment cost (1/12)
+  cruiser.owner = {
+    resources: {
+      duranium: 1.0
+    },
+    tradeLimitToggle: true
+  };
+  cruiser.inFriendlyWell = true;
+  cruiser.armorPoints = 5; // armor > specialduranium (2)
+  cruiser.tryAutoResourceConversion();
+
+  console.log(`Special Duranium after replenishment: ${cruiser.specialduranium} (expected 3)`);
+  console.log(`Owner duranium stock remaining: ${cruiser.owner.resources.duranium} (expected ${1 - 1/12})`);
+  if (cruiser.specialduranium !== 3 || Math.abs(cruiser.owner.resources.duranium - (1 - 1/12)) > 0.0001) {
+    console.error("FAILED: Replenishment conversion cost is not exactly 1/12!");
     process.exit(1);
   }
 

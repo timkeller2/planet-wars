@@ -5349,7 +5349,7 @@ export class Ship {
     };
 
     if (this.armorPoints > (this.specialduranium || 0)) {
-      const consumed = (1/12) / 3;
+      const consumed = 1/12;
       if ((this.owner.resources.duranium || 0) >= consumed) {
         this.owner.resources.duranium -= consumed;
         this.specialduranium = (this.specialduranium || 0) + 1;
@@ -5485,9 +5485,8 @@ export class Ship {
 
       const cruiserCheck = this.maxHealth > 0 && !this.isAmoeba;
       let damageAmt = (cruiserCheck && isHazard) ? (Math.floor(Math.random() * 6) + 1) : 1;
-      if (this.isCruiser && (this.specialduranium || 0) > 0) {
-        this.specialduranium = Math.max(0, this.specialduranium - damageAmt * 0.5);
-      }
+      
+      // 1. Deplete armor first
       if (cruiserCheck && (this.armorPoints || 0) > 0) {
         if (this.armorPoints >= damageAmt) {
           this.armorPoints -= damageAmt;
@@ -5497,6 +5496,19 @@ export class Ship {
           this.armorPoints = 0;
         }
       }
+      
+      // 2. Deplete special duranium second (armor layer between armor and health)
+      if (damageAmt > 0 && this.isCruiser && (this.specialduranium || 0) > 0) {
+        if (this.specialduranium >= damageAmt) {
+          this.specialduranium -= damageAmt;
+          damageAmt = 0;
+        } else {
+          damageAmt -= this.specialduranium;
+          this.specialduranium = 0;
+        }
+      }
+      
+      // 3. Deplete health last
       this.health -= damageAmt;
 
       if (attacker && attacker.maxHealth > 0 && !attacker.isAmoeba && (attacker.bombs || 0) > 0 && (attacker.splashDamage || 0) > 0) {
@@ -5509,6 +5521,8 @@ export class Ship {
         for (let i = 0; i < splash; i++) {
           if (this.armorPoints && this.armorPoints > 0) {
             this.armorPoints -= 1;
+          } else if (this.isCruiser && this.specialduranium && this.specialduranium > 0) {
+            this.specialduranium -= 1;
           } else if (this.health > 0) {
             this.health -= 1;
             if (this.health <= 0 && this.isAmoeba && this.maxHealth > 0) {
