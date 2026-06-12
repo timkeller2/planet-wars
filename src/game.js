@@ -3394,6 +3394,9 @@ export class Game {
               const dy = ship.y - p.anomaly.y;
               
               if (dx*dx + dy*dy <= effRadar * effRadar) {
+                if (p.anomaly.beingResearched) {
+                  continue; // Only one research ship may work on an anomaly at a time
+                }
                 p.anomaly.beingResearched = true;
                 ship.isActivelyResearching = true;
                 
@@ -4867,7 +4870,7 @@ export class Game {
     
     // Choose a random reward from the 5 options:
     const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];
-    const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
+    const rewardType = (planet.anomaly && planet.anomaly.rewardType) ? planet.anomaly.rewardType : rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
     
     let text = '';
     let floatText = '';

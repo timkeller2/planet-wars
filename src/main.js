@@ -1132,6 +1132,8 @@ function getPlanetTradeIncomePerMin(planet) {
   let starfieldEnabled = true;
   let hoveredPlanet = null;
   let hoveredShip = null;
+  let hoveredAnomaly = null;
+  let hoveredAnomalyPlanet = null;
   let isHoveringSelectionTile = false;
   let selectionTileMouseX = 0;
   let selectionTileMouseY = 0;
@@ -2054,7 +2056,17 @@ function getPlanetTradeIncomePerMin(planet) {
       return false;
     }
     
-    if (activeInfoPanel.type === 'planet') {
+    if (activeInfoPanel.type === 'anomaly') {
+      const p = serverState.planets.find(pp => pp.id === activeInfoPanel.id);
+      if (p && p.anomaly && !p.anomaly.researched) {
+        const serverPos = getMouseServerPos(lastCanvasMouseX, lastCanvasMouseY);
+        const adx = p.anomaly.x - serverPos.x;
+        const ady = p.anomaly.y - serverPos.y;
+        const adist = Math.sqrt(adx * adx + ady * ady);
+        return adist <= 15;
+      }
+      return false;
+    } else if (activeInfoPanel.type === 'planet') {
       const p = getPlanetAt(lastCanvasMouseX, lastCanvasMouseY);
       return p && p.id === activeInfoPanel.id;
     } else if (activeInfoPanel.type === 'ship' || activeInfoPanel.type === 'fleet') {
@@ -2087,6 +2099,23 @@ function getPlanetTradeIncomePerMin(planet) {
         closeInfoPanel();
       }
     }, 250);
+  }
+
+  function getAnomalyColor(diff) {
+    if (diff <= 10) return '#00ff88';
+    if (diff <= 35) return '#ffcc00';
+    if (diff <= 60) return '#00e5ff';
+    if (diff <= 85) return '#ff6d00';
+    return '#ff00ff';
+  }
+
+  function getDeterministicProgressAccuracy(anomalyId) {
+    let hash = 0;
+    if (!anomalyId) return 50;
+    for (let i = 0; i < anomalyId.length; i++) {
+      hash = anomalyId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return Math.abs(hash % 100);
   }
 
   function openInfoPanel(type, id) {
@@ -2211,7 +2240,70 @@ function getPlanetTradeIncomePerMin(planet) {
     let titleHTML = '';
     let bodyHTML = '';
 
-    if (type === 'planet') {
+    const blueprintText = document.querySelector('.info-panel-blueprint-text');
+    if (blueprintText) {
+      if (type === 'anomaly') {
+        blueprintText.textContent = 'ANOMALY DETECTED';
+      } else {
+        blueprintText.textContent = 'SYSTEM BLUEPRINT';
+      }
+    }
+
+    if (type === 'anomaly') {
+      let p = serverState.planets.find(pp => pp.id === id);
+      if (!p || !p.anomaly || p.anomaly.researched) {
+        closeInfoPanel();
+        return;
+      }
+      
+      const anomalyColor = getAnomalyColor(p.anomaly.difficulty);
+      titleHTML = `<span style="color: ${anomalyColor}">PLANETARY ANOMALY</span>`;
+      
+      const lines = [];
+      lines.push({ label: 'Location', value: p.name, color: '#fff' });
+      lines.push({ label: 'Research Progress', value: `${p.anomaly.progress || 0} / ${p.anomaly.difficulty}`, color: '#ffb74d' });
+      lines.push({ label: 'Difficulty', value: `${p.anomaly.difficulty}`, color: anomalyColor });
+      
+      // Calculate likely reward
+      const selectedCruiser = getSelectedCruiser();
+      const localShipXpBonus = selectedCruiser ? (Math.sqrt(selectedCruiser.expScore || 0) + (selectedCruiser.commandPoints || 0)) : 0;
+      const accuracyChance = Math.min(100, Math.max(0, Math.round(50 + localShipXpBonus * 3)));
+      
+      // Deterministic roll based on anomaly ID
+      const hashVal = getDeterministicProgressAccuracy(p.anomaly.id);
+      const isAccurate = hashVal < accuracyChance;
+      
+      const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];
+      const trueType = p.anomaly.rewardType || 'credits';
+      let displayedType = trueType;
+      
+      if (!isAccurate) {
+        const trueIndex = rewardOptions.indexOf(trueType);
+        const incorrectIndex = (trueIndex + 1 + (hashVal % (rewardOptions.length - 1))) % rewardOptions.length;
+        displayedType = rewardOptions[incorrectIndex];
+      }
+      
+      const rewardLabels = {
+        discount: 'Upgrade Discount',
+        credits: 'Credits Reward',
+        tech: 'Tech Score Reward',
+        xp: 'Player XP Reward',
+        hab: 'Habitability Increase'
+      };
+      
+      const displayLabel = rewardLabels[displayedType] || 'Unknown';
+      lines.push({ label: 'Likely Reward', value: displayLabel, color: '#00e5ff' });
+      lines.push({ label: 'Scanner Accuracy', value: `${accuracyChance}%`, color: '#888' });
+
+      for (const line of lines) {
+        const displayLabel = formatTooltipString(line.label);
+        const displayValue = formatTooltipString(line.value);
+        bodyHTML += `<div class="info-panel-row" style="color: ${line.color || '#fff'}">
+          <div class="info-panel-label">${displayLabel}</div>
+          <div class="info-panel-value">${displayValue}</div>
+        </div>`;
+      }
+    } else if (type === 'planet') {
       let p = serverState.planets.find(pp => pp.id === id);
       const isLastKnown = p && p.inFog && (p.permanentlyTracked || !!lastKnownPlanets[p.id]);
       if (isLastKnown && !p.permanentlyTracked && lastKnownPlanets[p.id]) {
@@ -3104,7 +3196,14 @@ function getPlanetTradeIncomePerMin(planet) {
     let targetY = 0;
     let hasTargetCoords = false;
 
-    if (type === 'planet') {
+    if (type === 'anomaly') {
+      let p = serverState.planets.find(pp => pp.id === id);
+      if (p && p.anomaly) {
+        targetX = p.anomaly.x;
+        targetY = p.anomaly.y;
+        hasTargetCoords = true;
+      }
+    } else if (type === 'planet') {
       let p = serverState.planets.find(pp => pp.id === id);
       const isLastKnown = p && p.inFog && (p.permanentlyTracked || !!lastKnownPlanets[p.id]);
       if (isLastKnown && !p.permanentlyTracked && lastKnownPlanets[p.id]) {
@@ -5837,6 +5936,24 @@ function getPlanetTradeIncomePerMin(planet) {
     const serverPos = getMouseServerPos(x, y);
     hoveredPlanet = getPlanetAt(x, y);
 
+    // Detect hovered anomaly (must supercede the planet it is on)
+    hoveredAnomaly = null;
+    hoveredAnomalyPlanet = null;
+    if (serverState && serverState.planets) {
+      for (const p of serverState.planets) {
+        if (p.anomaly && !p.anomaly.researched) {
+          const adx = p.anomaly.x - serverPos.x;
+          const ady = p.anomaly.y - serverPos.y;
+          const adist = Math.sqrt(adx * adx + ady * ady);
+          if (adist <= 15) { // hover threshold of 15 pixels
+            hoveredAnomaly = p.anomaly;
+            hoveredAnomalyPlanet = p;
+            break;
+          }
+        }
+      }
+    }
+
     // Detect hovered ship (prioritize cruisers)
     hoveredShip = null;
     if (serverState && serverState.ships) {
@@ -5854,8 +5971,11 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
 
-    // Cruiser hover overrides planet hover
-    if (hoveredShip && hoveredShip.isCruiser) {
+    // Hover overrides hierarchy
+    if (hoveredAnomaly) {
+      hoveredPlanet = null;
+      hoveredShip = null;
+    } else if (hoveredShip && hoveredShip.isCruiser) {
       hoveredPlanet = null;
     } else if (hoveredPlanet) {
       hoveredShip = null; // Planet overrides non-cruiser ships
@@ -6016,7 +6136,10 @@ function getPlanetTradeIncomePerMin(planet) {
     // Tooltip hover check
     let newType = null;
     let newId = null;
-    if (hoveredShip && hoveredShip.isCruiser) {
+    if (hoveredAnomaly) {
+      newType = 'anomaly';
+      newId = hoveredAnomalyPlanet.id;
+    } else if (hoveredShip && hoveredShip.isCruiser) {
       newType = 'ship';
       newId = hoveredShip.id;
     } else if (hoveredPlanet) {
@@ -8546,15 +8669,28 @@ function getPlanetTradeIncomePerMin(planet) {
           if (cycleTime < 250) {
             twinkle = 1.0 + Math.sin(cycleTime * Math.PI / 250) * 0.8;
           }
-          
+
+          let anomalyColor = '#00ff88';
+          if (diff <= 10) {
+            anomalyColor = '#00ff88';
+          } else if (diff <= 35) {
+            anomalyColor = '#ffcc00';
+          } else if (diff <= 60) {
+            anomalyColor = '#00e5ff';
+          } else if (diff <= 85) {
+            anomalyColor = '#ff6d00';
+          } else {
+            anomalyColor = '#ff00ff';
+          }
+
           ctx.save();
           
           if (diff <= 10) {
             // Tier 1: Faint Spark (Green, Slow Pulse)
             const scale = 1.0 + Math.sin(Date.now() / 250) * 0.2;
             const lineLength = 2.5 * scale * twinkle;
-            ctx.strokeStyle = '#00ff88';
-            ctx.shadowColor = '#00ff88';
+            ctx.strokeStyle = anomalyColor;
+            ctx.shadowColor = anomalyColor;
             ctx.shadowBlur = 3 * twinkle;
             ctx.lineWidth = 0.8;
             
@@ -8568,8 +8704,8 @@ function getPlanetTradeIncomePerMin(planet) {
             // Tier 2: Glowing Core (Yellow, Medium Pulse + static center dot)
             const scale = 1.0 + Math.sin(Date.now() / 150) * 0.3;
             const lineLength = 2.75 * scale * twinkle;
-            ctx.strokeStyle = '#ffcc00';
-            ctx.shadowColor = '#ffcc00';
+            ctx.strokeStyle = anomalyColor;
+            ctx.shadowColor = anomalyColor;
             ctx.shadowBlur = 4 * twinkle;
             ctx.lineWidth = 1.0;
             
@@ -8581,7 +8717,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.stroke();
             
             // Draw center dot
-            ctx.fillStyle = '#ffcc00';
+            ctx.fillStyle = anomalyColor;
             ctx.beginPath();
             ctx.arc(p.anomaly.x, p.anomaly.y, 0.75 * twinkle, 0, Math.PI * 2);
             ctx.fill();
@@ -8589,8 +8725,8 @@ function getPlanetTradeIncomePerMin(planet) {
             // Tier 3: Pulsing Nova (Cyan, Medium Pulse + slight rotation over time)
             const scale = 1.0 + Math.sin(Date.now() / 120) * 0.35;
             const lineLength = 3.0 * scale * twinkle;
-            ctx.strokeStyle = '#00e5ff';
-            ctx.shadowColor = '#00e5ff';
+            ctx.strokeStyle = anomalyColor;
+            ctx.shadowColor = anomalyColor;
             ctx.shadowBlur = 5 * twinkle;
             ctx.lineWidth = 1.2;
             
@@ -8609,8 +8745,8 @@ function getPlanetTradeIncomePerMin(planet) {
             // Tier 4: Radiant Star (Orange, Fast Pulse + outer ring)
             const scale = 1.0 + Math.sin(Date.now() / 80) * 0.4;
             const lineLength = 3.25 * scale * twinkle;
-            ctx.strokeStyle = '#ff6d00';
-            ctx.shadowColor = '#ff6d00';
+            ctx.strokeStyle = anomalyColor;
+            ctx.shadowColor = anomalyColor;
             ctx.shadowBlur = 6 * twinkle;
             ctx.lineWidth = 1.4;
             
@@ -8636,8 +8772,8 @@ function getPlanetTradeIncomePerMin(planet) {
             const ax = p.anomaly.x + jitterX;
             const ay = p.anomaly.y + jitterY;
             
-            ctx.strokeStyle = '#ff00ff';
-            ctx.shadowColor = '#ff00ff';
+            ctx.strokeStyle = anomalyColor;
+            ctx.shadowColor = anomalyColor;
             ctx.shadowBlur = 8 * twinkle;
             ctx.lineWidth = 1.5;
             
@@ -8663,25 +8799,15 @@ function getPlanetTradeIncomePerMin(planet) {
           
           ctx.restore();
           
-          if (p.anomaly.beingResearched && p.anomaly.difficulty > 0) {
-            const barWidth = 24;
-            const barHeight = 4;
-            const barX = p.anomaly.x - barWidth / 2;
-            const barY = p.anomaly.y - 10;
-            const progressPct = Math.min(1.0, Math.max(0.0, p.anomaly.progress / p.anomaly.difficulty));
-            
+          if (p.anomaly.difficulty > 0 && p.anomaly.progress > 0) {
+            const progressRatio = Math.max(0, Math.min(1.0, p.anomaly.progress / p.anomaly.difficulty));
             ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-            ctx.fillRect(barX, barY, barWidth, barHeight);
-            
-            ctx.fillStyle = '#00ffcc';
-            ctx.shadowColor = '#00ffcc';
-            ctx.shadowBlur = 4;
-            ctx.fillRect(barX, barY, barWidth * progressPct, barHeight);
-            
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(barX, barY, barWidth, barHeight);
+            ctx.strokeStyle = anomalyColor;
+            ctx.lineWidth = 0.5; // very thin
+            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.arc(p.anomaly.x, p.anomaly.y, 7.5, -Math.PI / 2, -Math.PI / 2 + progressRatio * Math.PI * 2);
+            ctx.stroke();
             ctx.restore();
           }
         }

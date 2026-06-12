@@ -1806,7 +1806,8 @@ async function bootstrap() {
             difficulty: p.anomaly.difficulty,
             progress: p.anomaly.progress,
             researched: p.anomaly.researched,
-            beingResearched: p.anomaly.beingResearched || false
+            beingResearched: p.anomaly.beingResearched || false,
+            rewardType: p.anomaly.rewardType
           } : null
       };
     });
@@ -2175,14 +2176,24 @@ async function bootstrap() {
               const angle = Math.random() * Math.PI * 2;
               const ax = p.x + Math.cos(angle) * dist;
               const ay = p.y + Math.sin(angle) * dist;
+              const elapsedMinutes = (Date.now() - (game.gameStartTime || Date.now())) / 60000;
+              const isUnlimited = !game.settings || !game.settings.timedGameLimit || game.settings.timedGameLimit === 'unlimited';
+              const minDiff = isUnlimited ? Math.floor(-10 - elapsedMinutes / 2) : -10;
+              const maxDiff = 100;
+              const difficulty = Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff;
+              
+              const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];
+              const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
+              
               p.anomaly = {
                 id: Math.random().toString(36).substr(2, 9),
                 x: ax,
                 y: ay,
-                difficulty: Math.floor(Math.pow(Math.random(), 2) * 111) - 10,
+                difficulty: difficulty,
                 progress: 0,
                 researched: false,
-                beingResearched: false
+                beingResearched: false,
+                rewardType: rewardType
               };
             }
           }
