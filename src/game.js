@@ -5156,6 +5156,7 @@ export class Game {
           ship.owner = this.allPlayers.find(p => p.id === ship.boardingPlayer.id);
           if (wasMonsterShip) {
             ship.speed = (ship.speed || 0) + 10;
+            ship.isRefueling = false;
           }
           
           // Crew from survivors
