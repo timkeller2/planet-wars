@@ -4445,10 +4445,10 @@ export class Game {
           let chosenType = null;
           if (roll === 1 && eligibleUpgradeTypes.length > 0) {
             chosenType = eligibleUpgradeTypes[Math.floor(Math.random() * eligibleUpgradeTypes.length)];
-            player.upgradeModifiers[chosenType] = Math.max(-0.50, player.upgradeModifiers[chosenType] - 0.10);
+            player.upgradeModifiers[chosenType] = Math.max(-0.50, player.upgradeModifiers[chosenType] - 0.15);
           } else if (zeroUpgradeTypes.length > 0) {
             chosenType = zeroUpgradeTypes[Math.floor(Math.random() * zeroUpgradeTypes.length)];
-            player.upgradeModifiers[chosenType] = Math.max(-0.50, player.upgradeModifiers[chosenType] - 0.10);
+            player.upgradeModifiers[chosenType] = Math.max(-0.50, player.upgradeModifiers[chosenType] - 0.15);
           }
 
           if (chosenType) {
