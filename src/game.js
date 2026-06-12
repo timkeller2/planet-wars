@@ -2023,7 +2023,7 @@ export class Game {
       }
       ship.fuel -= 1;
       if (ship.specialfuel && ship.specialfuel > 0) {
-        ship.specialfuel = Math.max(0, ship.specialfuel - 0.5);
+        ship.specialfuel = Math.max(0, ship.specialfuel - 1.0);
       }
     }
 
@@ -2076,7 +2076,7 @@ export class Game {
             if (ship.fuel > 0) {
               ship.fuel -= 1;
               if (ship.specialfuel && ship.specialfuel > 0) {
-                ship.specialfuel = Math.max(0, ship.specialfuel - 0.5);
+                ship.specialfuel = Math.max(0, ship.specialfuel - 1.0);
               }
             } else {
               const warpDamage = Math.floor(Math.random() * 6) + 1;

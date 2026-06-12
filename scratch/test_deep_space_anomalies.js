@@ -252,11 +252,11 @@ const testSpecialFuelConsumption = () => {
     process.exit(1);
   }
 
-  // Expect special fuel consumed to be exactly half of normal fuel consumed
+  // Expect special fuel consumed to be exactly equal to normal fuel consumed
   const ratio = specialFuelConsumed / fuelConsumed;
-  console.log(`Consumption ratio: ${ratio.toFixed(4)} (expected 0.5000)`);
-  if (Math.abs(ratio - 0.5) > 1e-4) {
-    console.error("FAILED: Special fuel was not consumed at half the rate of standard fuel!");
+  console.log(`Consumption ratio: ${ratio.toFixed(4)} (expected 1.0000)`);
+  if (Math.abs(ratio - 1.0) > 1e-4) {
+    console.error("FAILED: Special fuel was not consumed at the same rate of standard fuel!");
     process.exit(1);
   }
 
@@ -273,9 +273,9 @@ const testSpecialFuelConsumption = () => {
   Math.random = originalRandom;
 
   console.log(`Fuel after warp jump: ${cruiser.fuel} (expected 9)`);
-  console.log(`Special fuel after warp jump: ${cruiser.specialfuel} (expected 4.5)`);
+  console.log(`Special fuel after warp jump: ${cruiser.specialfuel} (expected 4)`);
 
-  if (cruiser.fuel !== 9 || cruiser.specialfuel !== 4.5) {
+  if (cruiser.fuel !== 9 || cruiser.specialfuel !== 4) {
     console.error("FAILED: Warp jump fuel/special fuel consumption incorrect!");
     process.exit(1);
   }
