@@ -5642,7 +5642,7 @@ export class Game {
                 const dispB = b.planet.disposition ? (b.planet.disposition[ship.owner.id] || 0) : 0;
 
                 if (dispA !== dispB) {
-                  return dispB - dispA; // Higher disposition first
+                  return dispA - dispB; // Lower/no disposition first
                 }
 
                 return a.dist - b.dist; // Closer first

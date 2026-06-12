@@ -264,8 +264,13 @@ const testSpecialFuelConsumption = () => {
   cruiser.fuel = 10;
   cruiser.specialfuel = 5;
 
+  const originalRandom = Math.random;
+  Math.random = () => 1.0;
+
   // Warp jump consumes 1 standard fuel
   game.applyWarpToShip(cruiser, human);
+
+  Math.random = originalRandom;
 
   console.log(`Fuel after warp jump: ${cruiser.fuel} (expected 9)`);
   console.log(`Special fuel after warp jump: ${cruiser.specialfuel} (expected 4.5)`);
@@ -327,12 +332,53 @@ const testSpecialDuraniumConsumption = () => {
   console.log("-> Special Duranium Consumption PASSED!");
 };
 
+const testDiplomatTargetSelection = () => {
+  console.log("\n--- Part 7: Diplomat Target Selection ---");
+
+  const game = new Game();
+  game.isRunning = true;
+  const human = new Player('human', '#0ff', false);
+  game.allPlayers = [human];
+
+  // Planet 1: disposition = 20
+  const planet1 = new Planet(1, 150, 100, 30, null, 10, 2000, 2000);
+  planet1.disposition = { human: 20 };
+  
+  // Planet 2: no disposition
+  const planet2 = new Planet(2, 100, 150, 30, null, 10, 2000, 2000);
+  planet2.disposition = {};
+
+  game.planets = [planet1, planet2];
+
+  // Diplomat cruiser in range of both
+  const diplomat = new Ship('c1', 100, 100, null, human);
+  diplomat.isCruiser = true;
+  diplomat.maxHealth = 20;
+  diplomat.health = 20;
+  diplomat.diplomat = 1; // enable diplomat module
+  diplomat.isDiplomacy = true;
+  diplomat.parley = 3;
+  game.ships.push(diplomat);
+
+  // Run game update to select diplomat target
+  game.update(100);
+
+  console.log(`Diplomat target planet ID: ${diplomat.diplomatTargetPlanetId} (expected 2)`);
+  if (diplomat.diplomatTargetPlanetId !== 2) {
+    console.error("FAILED: Diplomat did not prioritize planet without disposition!");
+    process.exit(1);
+  }
+
+  console.log("-> Diplomat Target Selection PASSED!");
+};
+
 testPlanetarySpawnChance();
 testDeepSpaceDiscovery();
 testDiscoveryCooldown();
 testDiplomacyLinkBreak();
 testSpecialFuelConsumption();
 testSpecialDuraniumConsumption();
+testDiplomatTargetSelection();
 
 console.log("\nALL NEW ANOMALY TESTS PASSED SUCCESSFULLY!");
 process.exit(0);
