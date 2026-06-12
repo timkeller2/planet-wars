@@ -5233,6 +5233,44 @@ export class Game {
     }
   }
 
+  spawnNewDeepSpaceAnomaly(x, y, player, shipName) {
+    const elapsedMinutes = (Date.now() - (this.gameStartTime || Date.now())) / 60000;
+    const isUnlimited = !this.settings || !this.settings.timedGameLimit || this.settings.timedGameLimit === 'unlimited';
+    const minDiff = isUnlimited ? Math.floor(-10 - elapsedMinutes / 2) : -10;
+    const timedLimitSecs = !isUnlimited ? parseFloat(this.settings.timedGameLimit) : null;
+    const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
+    const difficulty = Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff;
+
+    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];
+    const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
+
+    const planetId = 30000 + this.planets.length;
+    const deepSpacePlanet = new Planet(planetId, x, y, 0, null, 0, this.width, this.height);
+    deepSpacePlanet.isDeepSpaceAnomaly = true;
+    deepSpacePlanet.radius = 0;
+    deepSpacePlanet.maxShips = 0;
+    deepSpacePlanet.ships = 0;
+    deepSpacePlanet.name = "Deep Space Anomaly";
+    deepSpacePlanet.anomaly = {
+      id: Math.random().toString(36).substr(2, 9),
+      x: x,
+      y: y,
+      difficulty: difficulty,
+      progress: 0,
+      researched: false,
+      beingResearched: false,
+      rewardType: rewardType
+    };
+    this.planets.push(deepSpacePlanet);
+
+    // Notify player in chat/logs
+    this.pendingChatMessages = this.pendingChatMessages || [];
+    this.pendingChatMessages.push({
+      playerId: player.id,
+      text: `🔍 Cruiser ${shipName || 'Cruiser'} has discovered a new Deep Space Anomaly!`
+    });
+  }
+
   triggerAnomalyCompletion(planet, player) {
     const difficulty = planet.anomaly ? planet.anomaly.difficulty : 0;
     

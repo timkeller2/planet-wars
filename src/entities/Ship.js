@@ -129,6 +129,7 @@ export class Ship {
     this.marineLaunchCooldown = 0;
     this.name = null;
     this.expScore = 0;
+    this.anomalyDiscoveryCooldown = 0;
     this.cruiserTargetOffsetX = 0;
     this.cruiserTargetOffsetY = 0;
     this.bomberOffsetMag = 0; // Assigned in game.js during launch
@@ -694,6 +695,9 @@ export class Ship {
 
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
+    if (this.anomalyDiscoveryCooldown > 0) {
+      this.anomalyDiscoveryCooldown = Math.max(0, this.anomalyDiscoveryCooldown - deltaTime);
+    }
     this.isMovingBackward = false;
 
     let friendlyWellPlanet = null;
@@ -1209,6 +1213,39 @@ export class Ship {
               if (this.isCruiser) {
                 const xpGain = alreadyExploredByAnyone ? 1 : 2;
                 this.gainXp(xpGain, game, cx * 100 + 50, cy * 100 + 50);
+
+                if ((this.anomalyDiscoveryCooldown || 0) <= 0) {
+                  const tileX = cx * 100 + 50;
+                  const tileY = cy * 100 + 50;
+                  const mapH = (game && game.height) ? game.height : 1620;
+                  if (tileX >= 0 && tileX <= mapWidth && tileY >= 0 && tileY <= mapH) {
+                    let isTileInDeepSpace = true;
+                    if (allPlanets) {
+                      for (const planet of allPlanets) {
+                        if (planet.isDeepSpaceAnomaly) continue;
+                        const dx = planet.x - tileX;
+                        const dy = planet.y - tileY;
+                        const distSq = dx * dx + dy * dy;
+                        const safeDist = planet.getGravityRadius ? planet.getGravityRadius() : (planet.radius * 3);
+                        if (distSq <= safeDist * safeDist) {
+                          isTileInDeepSpace = false;
+                          break;
+                        }
+                      }
+                    }
+                    if (isTileInDeepSpace) {
+                      const xpBonus = this.getLocalXpBonus ? this.getLocalXpBonus() : 0;
+                      const labs = this.labs || 0;
+                      const chance = ((xpBonus + labs * 2) / 10) / 100;
+                      if (Math.random() < chance) {
+                        this.anomalyDiscoveryCooldown = 60000;
+                        if (game && typeof game.spawnNewDeepSpaceAnomaly === 'function') {
+                          game.spawnNewDeepSpaceAnomaly(tileX, tileY, this.owner, this.name);
+                        }
+                      }
+                    }
+                  }
+                }
               }
             } else {
               game.exploredGrid[key] = now;

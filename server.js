@@ -1915,6 +1915,7 @@ async function bootstrap() {
           targetX: s.targetPlanet ? s.targetPlanet.x : s.targetX,
           targetY: s.targetPlanet ? s.targetPlanet.y : s.targetY,
           formation: s.formation,
+          anomalyDiscoveryCooldown: s.anomalyDiscoveryCooldown || 0,
           beakerIncreaseEvent: bEvent,
           creditsGainedEvent: cEvent,
           diplomatSuccessEvent: dipSuccess,
@@ -2173,6 +2174,7 @@ async function bootstrap() {
           if (p.owner === null && p.anomalyAttempted === undefined) {
             p.anomalyAttempted = true;
             let maxLabs = 0;
+            let maxShipXpBonus = 0;
             const playerShips = game.ships.filter(s => s.active && s.owner && s.owner.id === player.id);
             for (const ship of playerShips) {
               const radar = ship.isCruiser ? (ship.cruiserRadarRange ? ship.cruiserRadarRange() : 150) : 50;
@@ -2185,9 +2187,13 @@ async function bootstrap() {
                 if (labs > maxLabs) {
                   maxLabs = labs;
                 }
+                const xpBonus = typeof ship.getLocalXpBonus === 'function' ? ship.getLocalXpBonus() : 0;
+                if (xpBonus > maxShipXpBonus) {
+                  maxShipXpBonus = xpBonus;
+                }
               }
             }
-            let spawnChance = 0.30 + 0.10 * maxLabs;
+            let spawnChance = Math.min(0.50, 0.10 + 0.10 * maxLabs + 0.03 * maxShipXpBonus);
             const discoveredByOthers = game.allPlayers.some(op => op.id !== player.id && op.discoveredPlanets && op.discoveredPlanets.has(p.id));
             if (discoveredByOthers) {
               spawnChance -= 0.25;
