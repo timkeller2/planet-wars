@@ -1894,7 +1894,7 @@ export class Game {
       const capDeduction = Math.floor(finalShipsToSend / 50);
       if (capDeduction > 0) {
         source.decreaseMaxShips(capDeduction);
-        if (source.maxShips < 10) source.dead = true;
+        if (source.maxShips < 55) source.dead = true;
       }
     }
     
@@ -2145,7 +2145,7 @@ export class Game {
       const capDeduction = Math.floor(finalShipsToSend / 50);
       if (capDeduction > 0) {
         source.decreaseMaxShips(capDeduction);
-        if (source.maxShips < 10) source.dead = true;
+        if (source.maxShips < 55) source.dead = true;
       }
     }
     

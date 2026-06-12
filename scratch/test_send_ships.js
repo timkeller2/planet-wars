@@ -125,17 +125,17 @@ function createTestState() {
   const { game, p1, source, friendly } = createTestState();
   // Reinforcing, so no Tritanium used.
   source.ships = 100;
-  source.maxShips = 10; // Low maxShips
+  source.maxShips = 55; // Low maxShips
 
   // Launching 50 ships will deduct floor(50/50) = 1 maxShips.
-  // maxShips will drop to 9, which is < 10, so it should die.
+  // maxShips will drop to 54, which is < 55, so it should die.
   game.sendShips(source, friendly, false, null, false, 50);
 
   console.log("Source max ships:", source.maxShips);
   console.log("Source planet dead:", source.dead);
 
-  assert(source.maxShips === 9, "maxShips should decrease to 9");
-  assert(source.dead === true, "Source planet should be dead (maxShips < 10)");
+  assert(source.maxShips === 54, "maxShips should decrease to 54");
+  assert(source.dead === true, "Source planet should be dead (maxShips < 55)");
   console.log("-> Test 5 Passed!");
 }
 
