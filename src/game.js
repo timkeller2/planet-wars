@@ -1823,7 +1823,7 @@ export class Game {
     shipsToSend = Math.min(250, shipsToSend);
 
     const tritaniumCost = 0.01 * shipsToSend;
-    const payWithTritanium = source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0 && (source.useResources || source.owner.tradeLimitToggle === true);
+    const payWithTritanium = !isReinforcing && source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0 && (source.useResources || source.owner.tradeLimitToggle === true);
 
     let finalShipsToSend = shipsToSend;
     let finalLaunchCost = 0;
@@ -1889,6 +1889,14 @@ export class Game {
 
     source.ships -= finalLaunchCost;
     source.ships -= finalShipsToSend;
+    
+    if (!isTritaniumPaid) {
+      const capDeduction = Math.floor(finalShipsToSend / 50);
+      if (capDeduction > 0) {
+        source.decreaseMaxShips(capDeduction);
+        if (source.maxShips < 10) source.dead = true;
+      }
+    }
     
     if (source.rampageEvent) {
       source.decreaseMaxShips(1);
@@ -2132,6 +2140,14 @@ export class Game {
 
     source.ships -= finalLaunchCost;
     source.ships -= finalShipsToSend;
+    
+    if (!isTritaniumPaid) {
+      const capDeduction = Math.floor(finalShipsToSend / 50);
+      if (capDeduction > 0) {
+        source.decreaseMaxShips(capDeduction);
+        if (source.maxShips < 10) source.dead = true;
+      }
+    }
     
     if (source.rampageEvent) {
       source.decreaseMaxShips(1);
