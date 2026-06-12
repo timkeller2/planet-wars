@@ -5484,8 +5484,10 @@ function getPlanetTradeIncomePerMin(planet) {
         const distSq = dx * dx + dy * dy;
         if (distSq <= effGravity * effGravity) {
           // Rule: Limit such a garrison world from paying upgrade costs unless the upgrading ship is within 25px of the garrison world.
+          // Exception: If the player has enough credits to cover the cost of the upgrade.
           const isSuchGarrisonWorld = (p.isMilitary || p.focusMode === 'garrison') && (p.ships >= p.maxShips * 2 - 10);
-          if (isSuchGarrisonWorld && distSq > 25 * 25) {
+          const hasEnoughCredits = myPlayer && myPlayer.useCredits !== false && (myPlayer.credits || 0) >= minCost;
+          if (isSuchGarrisonWorld && distSq > 25 * 25 && !hasEnoughCredits) {
             continue;
           }
           
