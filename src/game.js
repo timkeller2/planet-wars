@@ -1141,7 +1141,26 @@ export class Game {
       rampageDelayMultiple = 1600 / this.width;
     }
     this.rampageInterval = Math.round(1800000 * rampageDelayMultiple);
-    this.nextRampageTime = this.rampageInterval;
+    
+    let rampageDelayAddMs = 0;
+    if (this.settings) {
+      const aiEntry = this.settings.aiEntry || 'mid';
+      if (aiEntry === 'start') {
+        rampageDelayAddMs = 0;
+      } else if (aiEntry === 'early') {
+        rampageDelayAddMs = 10 * 60 * 1000;
+      } else if (aiEntry === 'mid') {
+        rampageDelayAddMs = 20 * 60 * 1000;
+      } else if (aiEntry === 'late') {
+        rampageDelayAddMs = 30 * 60 * 1000;
+      } else if (aiEntry === 'custom') {
+        const customMin = this.settings.customAiEntryMin !== undefined ? parseFloat(this.settings.customAiEntryMin) : 5;
+        const customDelayMin = (isNaN(customMin) ? 5 : customMin) / 4;
+        rampageDelayAddMs = customDelayMin * 60 * 1000;
+      }
+    }
+    
+    this.nextRampageTime = this.rampageInterval + rampageDelayAddMs;
     this.nextRampageSelectionTime = Math.max(0, this.nextRampageTime - 180000);
     this.incubatingPlanet = null;
     this.rampageIncubationTimeRemaining = 0;
