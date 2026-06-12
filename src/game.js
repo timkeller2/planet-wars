@@ -519,6 +519,13 @@ export class Game {
 
     let targetPlanet = null;
 
+    // Helper to calculate distance from a position/planet to the 3rd closest non-homeworld planet
+    const getGroupDist = (pos) => {
+      const others = this.planets.filter(p => p !== pos && !p.homeworldOf);
+      const dists = others.map(p => Math.sqrt((p.x - pos.x)**2 + (p.y - pos.y)**2)).sort((a, b) => a - b);
+      return dists.length >= 3 ? dists[2] : (dists.length >= 2 ? dists[1] : (dists[0] || Infinity));
+    };
+
     if (!isNatural) {
       // Create a new homeworld planet!
       const parsedVal = parseInt(hwSizeSetting, 10);
@@ -555,22 +562,40 @@ export class Game {
         }
         
         if (candidates.length > 0) {
+          // Calculate groupDist for each candidate
+          const candidatesWithGroupDist = candidates.map(c => {
+            return { x: c.x, y: c.y, groupDist: getGroupDist(c) };
+          });
+
+          // Filter/sort candidates to be not too far from a group of 2-3 planets (groupDist <= 320)
+          let groupFiltered = candidatesWithGroupDist.filter(c => c.groupDist <= 320);
+          if (groupFiltered.length === 0) {
+            // Fallback: take top 10% closest to a group of planets
+            candidatesWithGroupDist.sort((a, b) => a.groupDist - b.groupDist);
+            groupFiltered = candidatesWithGroupDist.slice(0, Math.max(1, Math.floor(candidatesWithGroupDist.length * 0.1)));
+          }
+
           if (existingHomeworlds.length === 0) {
-            // First homeworld: pick a random valid candidate
-            bestPos = candidates[Math.floor(Math.random() * candidates.length)];
+            // First homeworld: pick the one closest to a group (minimizes groupDist)
+            groupFiltered.sort((a, b) => a.groupDist - b.groupDist);
+            bestPos = groupFiltered[0];
           } else {
             // Pick candidate that maximizes minimum distance to other homeworlds
-            for (const c of candidates) {
+            let bestCandidate = null;
+            let bestMinHwDist = -1;
+            for (const c of groupFiltered) {
               const minDist = Math.min(...existingHomeworlds.map(h => {
                 const dx = h.x - c.x;
                 const dy = h.y - c.y;
                 return Math.sqrt(dx * dx + dy * dy);
               }));
-              if (minDist > maxMinDist) {
-                maxMinDist = minDist;
-                bestPos = c;
+              if (minDist > bestMinHwDist) {
+                bestMinHwDist = minDist;
+                bestCandidate = c;
               }
             }
+            bestPos = bestCandidate;
+            maxMinDist = bestMinHwDist;
           }
           break; // Found a position, stop trying smaller spacings
         }
@@ -609,15 +634,24 @@ export class Game {
 
       if (player === this.monsterPlayer) {
         // Monster gets the smallest planet
-        availableCandidates.sort((a, b) => a.maxShips - b.maxShips);
-        targetPlanet = availableCandidates[0];
+        let candidates = [...availableCandidates];
+        const nearGroup = candidates.filter(p => getGroupDist(p) <= 320);
+        if (nearGroup.length > 0) {
+          candidates = nearGroup;
+        }
+        candidates.sort((a, b) => a.maxShips - b.maxShips);
+        targetPlanet = candidates[0];
       } else {
         const humanPlanets = this.planets.filter(p => p.owner && !p.owner.isAI);
         
         if (!player.isAI && humanPlanets.length > 0) {
           // Human player: prioritize candidates with maxShips > 115, sorted by distance to nearest human planet descending
-          const candidatePlanets = availableCandidates.filter(p => p.maxShips > 115);
+          let candidatePlanets = availableCandidates.filter(p => p.maxShips > 115);
           if (candidatePlanets.length > 0) {
+            const nearGroup = candidatePlanets.filter(p => getGroupDist(p) <= 320);
+            if (nearGroup.length > 0) {
+              candidatePlanets = nearGroup;
+            }
             candidatePlanets.sort((a, b) => {
               const distA = humanPlanets.reduce((min, hp) => Math.min(min, (a.x - hp.x)**2 + (a.y - hp.y)**2), Infinity);
               const distB = humanPlanets.reduce((min, hp) => Math.min(min, (b.x - hp.x)**2 + (b.y - hp.y)**2), Infinity);
@@ -628,25 +662,38 @@ export class Game {
         }
         
         if (!targetPlanet) {
-          const candidatePlanets = availableCandidates.filter(p => p.maxShips > 115 && humanPlanets.every(hp => {
+          let candidatePlanets = availableCandidates.filter(p => p.maxShips > 115 && humanPlanets.every(hp => {
             const dx = p.x - hp.x;
             const dy = p.y - hp.y;
             return dx*dx + dy*dy >= 40000; // 200^2
           }));
 
           if (candidatePlanets.length > 0) {
+            const nearGroup = candidatePlanets.filter(p => getGroupDist(p) <= 320);
+            if (nearGroup.length > 0) {
+              candidatePlanets = nearGroup;
+            }
             candidatePlanets.sort((a, b) => a.maxShips - b.maxShips); // smallest > 115
             targetPlanet = candidatePlanets[0];
           } else {
             // Fallback 1: smallest > 115 regardless of distance
-            const anyLarge = availableCandidates.filter(p => p.maxShips > 115);
+            let anyLarge = availableCandidates.filter(p => p.maxShips > 115);
             if (anyLarge.length > 0) {
+              const nearGroup = anyLarge.filter(p => getGroupDist(p) <= 320);
+              if (nearGroup.length > 0) {
+                anyLarge = nearGroup;
+              }
               anyLarge.sort((a, b) => a.maxShips - b.maxShips);
               targetPlanet = anyLarge[0];
             } else {
               // Fallback 2: highest maxShips overall
-              availableCandidates.sort((a, b) => b.maxShips - a.maxShips);
-              targetPlanet = availableCandidates[0];
+              let fallbackList = [...availableCandidates];
+              const nearGroup = fallbackList.filter(p => getGroupDist(p) <= 320);
+              if (nearGroup.length > 0) {
+                fallbackList = nearGroup;
+              }
+              fallbackList.sort((a, b) => b.maxShips - a.maxShips);
+              targetPlanet = fallbackList[0];
             }
           }
         }
