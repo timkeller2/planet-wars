@@ -2139,10 +2139,10 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   function getAnomalyColor(diff) {
-    if (diff <= 10) return '#00ff88';
-    if (diff <= 35) return '#ffcc00';
-    if (diff <= 60) return '#00e5ff';
-    if (diff <= 85) return '#ff6d00';
+    if (diff <= 0) return '#00ff88';
+    if (diff <= 12) return '#ffcc00';
+    if (diff <= 24) return '#00e5ff';
+    if (diff <= 48) return '#ff6d00';
     return '#ff00ff';
   }
 
@@ -9035,13 +9035,13 @@ function getPlanetTradeIncomePerMin(planet) {
             }
 
             let anomalyColor = '#00ff88';
-            if (diff <= 10) {
+            if (diff <= 0) {
               anomalyColor = '#00ff88';
-            } else if (diff <= 35) {
+            } else if (diff <= 12) {
               anomalyColor = '#ffcc00';
-            } else if (diff <= 60) {
+            } else if (diff <= 24) {
               anomalyColor = '#00e5ff';
-            } else if (diff <= 85) {
+            } else if (diff <= 48) {
               anomalyColor = '#ff6d00';
             } else {
               anomalyColor = '#ff00ff';
@@ -9049,20 +9049,23 @@ function getPlanetTradeIncomePerMin(planet) {
 
             ctx.save();
             
-            if (diff <= 10) {
+            if (diff <= 0) {
               const scale = 1.0 + Math.sin(Date.now() / 250) * 0.2;
               const lineLength = 2.5 * scale * twinkle;
               ctx.strokeStyle = anomalyColor;
               ctx.shadowColor = anomalyColor;
               ctx.shadowBlur = 3 * twinkle;
-              ctx.lineWidth = 0.8;
               
+              ctx.lineWidth = 0.8;
               ctx.beginPath();
               ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
               ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
               ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
               ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+              ctx.stroke();
               
+              ctx.lineWidth = 0.4;
+              ctx.beginPath();
               const xScale = 1.0 - Math.sin(Date.now() / 250) * 0.2;
               const xLineLength = 1.25 * xScale * twinkle;
               const offset = xLineLength * 0.7071;
@@ -9070,22 +9073,24 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(p.anomaly.x + offset, p.anomaly.y + offset);
               ctx.moveTo(p.anomaly.x - offset, p.anomaly.y + offset);
               ctx.lineTo(p.anomaly.x + offset, p.anomaly.y - offset);
-              
               ctx.stroke();
-            } else if (diff <= 35) {
+            } else if (diff <= 12) {
               const scale = 1.0 + Math.sin(Date.now() / 150) * 0.3;
               const lineLength = 2.75 * scale * twinkle;
               ctx.strokeStyle = anomalyColor;
               ctx.shadowColor = anomalyColor;
               ctx.shadowBlur = 4 * twinkle;
-              ctx.lineWidth = 1.0;
               
+              ctx.lineWidth = 1.0;
               ctx.beginPath();
               ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
               ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
               ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
               ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+              ctx.stroke();
               
+              ctx.lineWidth = 0.5;
+              ctx.beginPath();
               const xScale = 1.0 - Math.sin(Date.now() / 150) * 0.3;
               const xLineLength = 1.375 * xScale * twinkle;
               const offset = xLineLength * 0.7071;
@@ -9093,31 +9098,33 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(p.anomaly.x + offset, p.anomaly.y + offset);
               ctx.moveTo(p.anomaly.x - offset, p.anomaly.y + offset);
               ctx.lineTo(p.anomaly.x + offset, p.anomaly.y - offset);
-              
               ctx.stroke();
               
               ctx.fillStyle = anomalyColor;
               ctx.beginPath();
               ctx.arc(p.anomaly.x, p.anomaly.y, 0.75 * twinkle, 0, Math.PI * 2);
               ctx.fill();
-            } else if (diff <= 60) {
+            } else if (diff <= 24) {
               const scale = 1.0 + Math.sin(Date.now() / 120) * 0.35;
               const lineLength = 3.0 * scale * twinkle;
               ctx.strokeStyle = anomalyColor;
               ctx.shadowColor = anomalyColor;
               ctx.shadowBlur = 5 * twinkle;
-              ctx.lineWidth = 1.2;
               
               ctx.translate(p.anomaly.x, p.anomaly.y);
               const rotAngle = (Date.now() / 1000) % (Math.PI * 2);
               ctx.rotate(rotAngle * 0.2);
               
+              ctx.lineWidth = 1.2;
               ctx.beginPath();
               ctx.moveTo(-lineLength, 0);
               ctx.lineTo(lineLength, 0);
               ctx.moveTo(0, -lineLength);
               ctx.lineTo(0, lineLength);
+              ctx.stroke();
               
+              ctx.lineWidth = 0.6;
+              ctx.beginPath();
               const xScale = 1.0 - Math.sin(Date.now() / 120) * 0.35;
               const xLineLength = 1.5 * xScale * twinkle;
               const offset = xLineLength * 0.7071;
@@ -9125,22 +9132,24 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(offset, offset);
               ctx.moveTo(-offset, offset);
               ctx.lineTo(offset, -offset);
-              
               ctx.stroke();
-            } else if (diff <= 85) {
+            } else if (diff <= 48) {
               const scale = 1.0 + Math.sin(Date.now() / 80) * 0.4;
               const lineLength = 3.25 * scale * twinkle;
               ctx.strokeStyle = anomalyColor;
               ctx.shadowColor = anomalyColor;
               ctx.shadowBlur = 6 * twinkle;
-              ctx.lineWidth = 1.4;
               
+              ctx.lineWidth = 1.4;
               ctx.beginPath();
               ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
               ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
               ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
               ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+              ctx.stroke();
               
+              ctx.lineWidth = 0.7;
+              ctx.beginPath();
               const xScale = 1.0 - Math.sin(Date.now() / 80) * 0.4;
               const xLineLength = 1.625 * xScale * twinkle;
               const offset = xLineLength * 0.7071;
@@ -9148,10 +9157,10 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(p.anomaly.x + offset, p.anomaly.y + offset);
               ctx.moveTo(p.anomaly.x - offset, p.anomaly.y + offset);
               ctx.lineTo(p.anomaly.x + offset, p.anomaly.y - offset);
-              
               ctx.stroke();
               
               ctx.strokeStyle = `rgba(255, 109, 0, ${0.4 * twinkle})`;
+              ctx.lineWidth = 0.8;
               ctx.beginPath();
               ctx.arc(p.anomaly.x, p.anomaly.y, lineLength * 1.5, 0, Math.PI * 2);
               ctx.stroke();
@@ -9167,14 +9176,17 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.strokeStyle = anomalyColor;
               ctx.shadowColor = anomalyColor;
               ctx.shadowBlur = 8 * twinkle;
-              ctx.lineWidth = 1.5;
               
+              ctx.lineWidth = 1.5;
               ctx.beginPath();
               ctx.moveTo(ax - lineLength, ay);
               ctx.lineTo(ax + lineLength, ay);
               ctx.moveTo(ax, ay - lineLength);
               ctx.lineTo(ax, ay + lineLength);
+              ctx.stroke();
               
+              ctx.lineWidth = 0.75;
+              ctx.beginPath();
               const xScale = 1.0 - Math.sin(Date.now() / 50) * 0.45;
               const xLineLength = 1.75 * xScale * twinkle;
               const offset = xLineLength * 0.7071;
@@ -9182,7 +9194,6 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(ax + offset, ay + offset);
               ctx.moveTo(ax - offset, ay + offset);
               ctx.lineTo(ax + offset, ay - offset);
-              
               ctx.stroke();
               
               ctx.strokeStyle = `rgba(255, 0, 255, ${0.6 * twinkle})`;
