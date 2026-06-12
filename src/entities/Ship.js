@@ -749,6 +749,14 @@ export class Ship {
       return;
     }
 
+    if (this.isCruiser && !this.isAmoeba && this.owner) {
+      this.conversionTimer = (this.conversionTimer || 0) + deltaTime;
+      if (this.conversionTimer >= 5000) {
+        this.conversionTimer -= 5000;
+        this.tryAutoResourceConversion();
+      }
+    }
+
     // Cruiser Standby (Not Moved) Tracking
     if (this.maxHealth > 0 && !this.isAmoeba) {
       if (this.lastX === null || this.lastY === null) {
@@ -5229,13 +5237,6 @@ export class Ship {
     }
     this.currentSpeed = effectiveSpeed;
 
-    if (this.isCruiser && !this.isAmoeba && this.owner) {
-      this.conversionTimer = (this.conversionTimer || 0) + deltaTime;
-      if (this.conversionTimer >= 5000) {
-        this.conversionTimer -= 5000;
-        this.tryAutoResourceConversion();
-      }
-    }
   }
 
   tryAutoResourceConversion() {
