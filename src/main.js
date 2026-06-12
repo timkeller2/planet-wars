@@ -2687,14 +2687,26 @@ function getPlanetTradeIncomePerMin(planet) {
         } else {
           lines.push({ label: 'Status', value: 'Digesting', color: '#4f4' });
         }
-        lines.push({ label: 'Attack Range', value: (50 + (hs.bombs ? hs.bombs * 5 : 0)) + 'px', color: '#f88' });
-        const techBonus = hsOwner ? Math.sqrt(hsOwner.techScore || 0) : 0;
+        
+        const techBonus = hsOwner ? Math.floor(Math.sqrt(hsOwner.techScore || 0)) : 0;
+        const laserTechBonus = 0.01 * techBonus;
         const expBonus = hsOwner ? Math.sqrt(hsOwner.expScore || 0) : 0;
-        const shipExpBonus = Math.sqrt(hs.expScore || 0);
+        const shipExpBonusForRange = Math.sqrt(hs.expScore || 0) + (hs.commandPoints || 0);
+        const xpRangeBonus = (expBonus + shipExpBonusForRange) * 0.10;
+        const displayedMaxHealth = hs.maxHealth + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
+        let baseAmoebaRange = (40 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
+        let effectiveRange = baseAmoebaRange;
+        if (hs.bombs > 0) {
+          effectiveRange += baseAmoebaRange * 0.10;
+        }
+        const finalAmoebaRange = Math.floor(effectiveRange);
+        lines.push({ label: 'Attack Range', value: finalAmoebaRange + 'px', color: '#f88' });
+
+        const shipExpBonusOriginal = Math.sqrt(hs.expScore || 0);
         const bombBonus = (hs.bombs && hs.bombs > 0) ? (hs.bombs * 3) : 0;
-        const amoebaHitChance = Math.round(Math.min(100, 10 + techBonus + expBonus + shipExpBonus + hs.maxHealth * 5 + bombBonus)) + '%';
+        const amoebaHitChance = Math.round(Math.min(100, 10 + techBonus + expBonus + shipExpBonusOriginal + hs.maxHealth * 5 + bombBonus)) + '%';
         lines.push({ label: 'Accuracy', value: amoebaHitChance, color: '#f88' });
-        const shrugChance = Math.min(95, Math.floor(50 + hs.maxHealth * 1 + (techBonus + expBonus + shipExpBonus) * 1));
+        const shrugChance = Math.min(95, Math.floor(50 + hs.maxHealth * 1 + (techBonus + expBonus + shipExpBonusOriginal) * 1));
         lines.push({ label: 'Deflection', value: shrugChance + '%', color: '#ccc' });
       } else if (hs.isCruiser) {
         let shipClass = "Mammoth";
@@ -11004,7 +11016,15 @@ function getPlanetTradeIncomePerMin(planet) {
 
           let range = 40 * (1 + laserTechBonus);
           if (s.isAmoeba) {
-            range = 50;
+            const shipExpBonus = Math.sqrt(s.expScore || 0) + (s.commandPoints || 0);
+            const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+            const displayedMaxHealth = s.maxHealth + (s.maxHealth * (s.maxHealth - 1)) / 2;
+            const baseAmoebaRange = (40 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
+            range = baseAmoebaRange;
+            if (s.bombs > 0) {
+              range += baseAmoebaRange * 0.10;
+            }
+            range = Math.floor(range);
           } else if (s.maxHealth > 0) {
             const shipExpBonus = Math.sqrt(s.expScore || 0);
             const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;

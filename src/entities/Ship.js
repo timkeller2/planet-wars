@@ -567,7 +567,14 @@ export class Ship {
     
     let effectiveRange = 40 * (1 + laserTechBonus);
     if (this.isAmoeba) {
-      effectiveRange = 50;
+      const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+      const displayedMaxHealth = this.maxHealth + (this.maxHealth * (this.maxHealth - 1)) / 2;
+      const baseAmoebaRange = (40 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
+      effectiveRange = baseAmoebaRange;
+      if (this.bombs > 0) {
+        effectiveRange += baseAmoebaRange * 0.10;
+      }
+      effectiveRange = Math.floor(effectiveRange);
     } else if (this.maxHealth > 0) {
       const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
       const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
@@ -1552,7 +1559,14 @@ export class Ship {
     // Range Calculation
     let effectiveRange = 40 * (1 + laserTechBonus);
     if (this.isAmoeba) {
-      effectiveRange = 50;
+      const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+      const displayedMaxHealth = this.maxHealth + (this.maxHealth * (this.maxHealth - 1)) / 2;
+      const baseAmoebaRange = (40 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
+      effectiveRange = baseAmoebaRange;
+      if (this.bombs > 0) {
+        effectiveRange += baseAmoebaRange * 0.10;
+      }
+      effectiveRange = Math.floor(effectiveRange);
     } else if (this.maxHealth > 0) {
       const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
       const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
