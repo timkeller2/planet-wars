@@ -2,6 +2,7 @@ import { Player } from './entities/Player.js';
 import { Planet, getHabName } from './entities/Planet.js';
 import { Ship } from './entities/Ship.js';
 import { InputHandler } from './systems/InputHandler.js';
+import { SHIP_NAMES } from './entities/ShipNames.js';
 import { AIController } from './systems/AIController.js';
 
 export function getEffectiveSympathy(planet, playerId, allShips, player = null, game = null) {
@@ -258,6 +259,7 @@ export class Game {
     this.neutralTradeTimer = 0;
     this.nextNeutralTradeTime = 120000 + Math.random() * 60000;
     this.aiMarketTimer = 0;
+    this.usedShipNames = new Set();
   }
 
   spawnAmoebaCheat() {
@@ -272,6 +274,50 @@ export class Game {
     amoeba.health = 15;
     this.ships.push(amoeba);
     return amoeba;
+  }
+
+  assignRandomShipName(ship) {
+    if (!ship.isCruiser || ship.isAmoeba) return;
+
+    let race = ship.cruiserStyle || 'Federation';
+    const matchedRaceKey = Object.keys(SHIP_NAMES).find(
+      k => k.toLowerCase() === race.toLowerCase()
+    );
+    race = matchedRaceKey || 'Federation';
+
+    let size = 'small';
+    if (ship.classType) {
+      const ct = ship.classType.toLowerCase();
+      if (ct === 'corvette' || ct === 'destroyer') size = 'small';
+      else if (ct === 'battlecruiser') size = 'medium';
+      else if (ct === 'titan' || ct === 'mammoth') size = 'large';
+    } else {
+      const hp = ship.maxHealth || 15;
+      if (hp <= 29) size = 'small';
+      else if (hp <= 39) size = 'medium';
+      else size = 'large';
+    }
+
+    const candidates = SHIP_NAMES[race]?.[size] || [];
+    if (candidates.length === 0) return;
+
+    if (!this.usedShipNames) {
+      this.usedShipNames = new Set();
+    }
+
+    let unused = candidates.filter(name => !this.usedShipNames.has(name));
+
+    if (unused.length === 0) {
+      console.log(`[Ship Naming] All names for ${race} (${size}) have been used. Recycled name list.`);
+      for (const name of candidates) {
+        this.usedShipNames.delete(name);
+      }
+      unused = candidates;
+    }
+
+    const chosenName = unused[Math.floor(Math.random() * unused.length)];
+    ship.name = chosenName;
+    this.usedShipNames.add(chosenName);
   }
 
   getUpgradeCost(ship, type) {
@@ -1072,6 +1118,7 @@ export class Game {
 
     // Restore ships
     this.ships = new SpatialGridArray();
+    this.usedShipNames = new Set();
     if (state.ships) {
       for (const sData of state.ships) {
         const owner = sData.ownerId ? playersMap.get(sData.ownerId) : null;
@@ -1085,6 +1132,9 @@ export class Game {
         }
         s.owner = owner;
         s.targetPlanet = targetPlanet;
+        if (s.name) {
+          this.usedShipNames.add(s.name);
+        }
         this.ships.push(s);
       }
     }
@@ -1771,6 +1821,7 @@ export class Game {
             startingExp += (source.maxShips || 0) / 10;
           }
           ship.expScore = startingExp;
+          this.assignRandomShipName(ship);
           this.ships.push(ship);
           return;
         }
@@ -2065,6 +2116,7 @@ export class Game {
             startingExp += (source.maxShips || 0) / 10;
           }
           ship.expScore = startingExp;
+          this.assignRandomShipName(ship);
           this.ships.push(ship);
           return;
         }
@@ -2315,6 +2367,7 @@ export class Game {
         ship.buildCostShipsRemaining = remainingCostShips;
         ship.buildCostCreditsRemaining = creditsPaid;
 
+        this.assignRandomShipName(ship);
         this.ships.push(ship);
         console.log(`[Capital Ship Build Started] Spawning ${cfg.name} (HP: ${finalMaxHealth}) from Planet ${source.id} for Player ${source.owner.id}. Deducting ${remainingCostShips} ships and ${creditsPaid} credits over ${ship.materializeDuration}s`);
       }
@@ -3183,6 +3236,7 @@ export class Game {
           pirate.speed = Math.max(5, pirate.speed - 10);
           pirate.speedModifier = 1.0;
 
+          this.assignRandomShipName(pirate);
           this.ships.push(pirate);
           console.log(`[PIRATE SPAWN] Spawned pirate cruiser ${pirate.id} with style ${randomStyle} and maxHealth ${maxHealth} for Monsters player at (${Math.round(spawnX)}, ${Math.round(spawnY)}).`);
         }
