@@ -2732,10 +2732,9 @@ function getPlanetTradeIncomePerMin(planet) {
         const shipExpBonusForRange = Math.sqrt(hs.expScore || 0) + (hs.commandPoints || 0);
         const xpRangeBonus = (expBonus + shipExpBonusForRange) * 0.10;
         const displayedMaxHealth = hs.maxHealth + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
-        let baseAmoebaRange = (15 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
-        let effectiveRange = baseAmoebaRange;
+        let effectiveRange = 20 + displayedMaxHealth;
         if (hs.bombs > 0) {
-          effectiveRange += baseAmoebaRange * 0.10;
+          effectiveRange += 10;
         }
         const finalAmoebaRange = Math.floor(effectiveRange);
         lines.push({ label: 'Attack Range', value: finalAmoebaRange + 'px', color: '#f88' });
@@ -11628,13 +11627,10 @@ function getPlanetTradeIncomePerMin(planet) {
 
           let range = 40 * (1 + laserTechBonus);
           if (s.isAmoeba) {
-            const shipExpBonus = Math.sqrt(s.expScore || 0) + (s.commandPoints || 0);
-            const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
             const displayedMaxHealth = s.maxHealth + (s.maxHealth * (s.maxHealth - 1)) / 2;
-            const baseAmoebaRange = (15 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
-            range = baseAmoebaRange;
+            range = 20 + displayedMaxHealth;
             if (s.bombs > 0) {
-              range += baseAmoebaRange * 0.10;
+              range += 10;
             }
             range = Math.floor(range);
           } else if (s.maxHealth > 0) {

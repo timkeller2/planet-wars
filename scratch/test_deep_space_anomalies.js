@@ -433,6 +433,50 @@ const testMarketPricingMinimumConstraint = () => {
   console.log("-> Market Pricing Minimum Constraint PASSED!");
 };
 
+const testAmoebaRangeLocking = () => {
+  console.log("\n--- Part 9: Amoeba Range Locking ---");
+
+  const game = new Game();
+  const amoeba = game.spawnAmoebaCheat();
+  amoeba.maxHealth = 4;
+  amoeba.bombs = 0;
+
+  // 1. Without bombs
+  // displayedMaxHealth = 4 + (4 * 3)/2 = 10
+  // Expected range: 20 + 10 = 30
+  let range = amoeba.getWeaponRange();
+  console.log(`Amoeba range without bombs: ${range} (expected 30)`);
+  if (range !== 30) {
+    console.error(`FAILED: Amoeba range was ${range}, expected 30!`);
+    process.exit(1);
+  }
+
+  // 2. With bombs
+  // Expected range: 30 + 10 = 40
+  amoeba.bombs = 1;
+  range = amoeba.getWeaponRange();
+  console.log(`Amoeba range with bombs: ${range} (expected 40)`);
+  if (range !== 40) {
+    console.error(`FAILED: Amoeba range with bombs was ${range}, expected 40!`);
+    process.exit(1);
+  }
+
+  // 3. Verify tech/xp have no effect
+  amoeba.owner = game.monsterPlayer;
+  game.monsterPlayer.techScore = 10000; // huge tech score
+  game.monsterPlayer.expScore = 10000;  // huge exp score
+  amoeba.expScore = 10000;              // huge ship exp
+  
+  range = amoeba.getWeaponRange();
+  console.log(`Amoeba range with tech/xp: ${range} (expected 40)`);
+  if (range !== 40) {
+    console.error(`FAILED: Amoeba range was affected by tech/xp!`);
+    process.exit(1);
+  }
+
+  console.log("-> Amoeba Range Locking PASSED!");
+};
+
 testPlanetarySpawnChance();
 testDeepSpaceDiscovery();
 testDiscoveryCooldown();
@@ -441,6 +485,7 @@ testSpecialFuelConsumption();
 testSpecialDuraniumConsumption();
 testDiplomatTargetSelection();
 testMarketPricingMinimumConstraint();
+testAmoebaRangeLocking();
 
 console.log("\nALL NEW ANOMALY TESTS PASSED SUCCESSFULLY!");
 process.exit(0);
