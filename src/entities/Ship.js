@@ -5335,8 +5335,8 @@ export class Ship {
 
     if (this.isCruiser && !this.isAmoeba && this.owner) {
       this.conversionTimer = (this.conversionTimer || 0) + deltaTime;
-      if (this.conversionTimer >= 30000) {
-        this.conversionTimer -= 30000;
+      if (this.conversionTimer >= 5000) {
+        this.conversionTimer -= 5000;
         this.tryAutoResourceConversion();
       }
     }

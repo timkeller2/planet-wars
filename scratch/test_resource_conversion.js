@@ -39,7 +39,7 @@ function setupCruiser(style = 'Federation') {
   ship.armorPoints = 0;
   ship.specialduranium = 0;
 
-  ship.update(30000, [], [], [], [], [], 1920);
+  ship.update(5000, [], [], [], [], [], 1920);
 
   assert(ship.specialduranium === 0, "Should not convert armor when armorPoints <= specialduranium");
   assert(owner.resources.duranium === 1.0, "Should not consume resources when no conversion occurs");
@@ -53,7 +53,7 @@ function setupCruiser(style = 'Federation') {
   ship.specialduranium = 0;
   owner.resources.duranium = 0.01; // Less than 1/36 (0.0278)
 
-  ship.update(30000, [], [], [], [], [], 1920);
+  ship.update(5000, [], [], [], [], [], 1920);
 
   assert(ship.specialduranium === 0, "Should not convert armor when resources are insufficient");
   assert(owner.resources.duranium === 0.01, "Resources should remain unchanged");
@@ -67,7 +67,7 @@ function setupCruiser(style = 'Federation') {
   ship.specialduranium = 0;
   owner.resources.duranium = 1.0;
 
-  ship.update(30000, [], [], [], [], [], 1920);
+  ship.update(5000, [], [], [], [], [], 1920);
 
   assert(ship.specialduranium === 1, "Should convert 1 armor point to specialduranium");
   const expectedDuranium = 1.0 - (1/36);
@@ -83,17 +83,17 @@ function setupCruiser(style = 'Federation') {
   ship.specialfuel = 0;
   owner.resources.deuterium = 1.0;
 
-  // First check 15 seconds - no conversion should occur
-  ship.update(15000, [], [], [], [], [], 1920);
-  assert(ship.specialfuel === 0, "Should not convert after only 15 seconds");
+  // First check 2.5 seconds (half of the 5s cooldown) - no conversion should occur
+  ship.update(2500, [], [], [], [], [], 1920);
+  assert(ship.specialfuel === 0, "Should not convert after only 2.5 seconds");
 
-  // Next 15 seconds (total 30) - conversion should occur
-  ship.update(15000, [], [], [], [], [], 1920);
-  assert(ship.specialfuel === 1, "Should convert to special fuel after 30 seconds");
+  // Next 2.5 seconds (total 5s) - conversion should occur
+  ship.update(2500, [], [], [], [], [], 1920);
+  assert(ship.specialfuel === 1, "Should convert to special fuel after 5 seconds");
   const expectedDeuterium = 1.0 - (1/36);
   assert(Math.abs(owner.resources.deuterium - expectedDeuterium) < 1e-6, `Expected deuterium ${expectedDeuterium}, got ${owner.resources.deuterium}`);
   assert(ship.resourceConsumeEvents.deuterium === 1, "Should trigger the deuterium consume event");
-  console.log("-> Test 4 Passed: Fuel to Special Fuel conversion and 30-second interval check");
+  console.log("-> Test 4 Passed: Fuel to Special Fuel conversion and 5-second interval check");
 }
 
 // Test 5: Fuel -> Special Fuel with fuel_tanker discount costMultiplier
@@ -104,7 +104,7 @@ function setupCruiser(style = 'Federation') {
   ship.fuel_tanker = 2; // Discount = 0.50 + 0.10 * 2 = 0.70; costMultiplier = 0.30
   owner.resources.deuterium = 1.0;
 
-  ship.update(30000, [], [], [], [], [], 1920);
+  ship.update(5000, [], [], [], [], [], 1920);
 
   assert(ship.specialfuel === 1, "Should convert to special fuel");
   const costMultiplier = 0.30;
@@ -120,7 +120,7 @@ function setupCruiser(style = 'Federation') {
   ship.specialbombs = 0;
   owner.resources.merculite = 1.0;
 
-  ship.update(30000, [], [], [], [], [], 1920);
+  ship.update(5000, [], [], [], [], [], 1920);
 
   assert(ship.specialbombs === 1, "Should convert 1 bomb to specialbomb");
   const expectedMerculite = 1.0 - (1/36);
@@ -136,7 +136,7 @@ function setupCruiser(style = 'Federation') {
   ship.specialbombs = 0;
   owner.resources.antimatter = 1.0;
 
-  ship.update(30000, [], [], [], [], [], 1920);
+  ship.update(5000, [], [], [], [], [], 1920);
 
   assert(ship.specialbombs === 1, "Should convert 1 bomb to specialbomb");
   const expectedAntimatter = 1.0 - (1/36);
@@ -152,7 +152,7 @@ function setupCruiser(style = 'Federation') {
   ship.specialbombs = 0;
   owner.resources.dilithium = 1.0;
 
-  ship.update(30000, [], [], [], [], [], 1920);
+  ship.update(5000, [], [], [], [], [], 1920);
 
   assert(ship.specialbombs === 1, "Should convert 1 bomb to specialbomb");
   const expectedDilithium = 1.0 - (1/36);
@@ -161,7 +161,7 @@ function setupCruiser(style = 'Federation') {
   console.log("-> Test 8 Passed: Bombs to Special Bombs (Dilithium)");
 }
 
-// Test 9: Only 1 item upgraded per 30-second tick (Priority check: Armor, then Fuel, then Bombs)
+// Test 9: Only 1 item upgraded per 5-second tick (Priority check: Armor, then Fuel, then Bombs)
 {
   const { owner, ship } = setupCruiser('Federation');
   ship.armorPoints = 5;
@@ -175,7 +175,7 @@ function setupCruiser(style = 'Federation') {
   owner.resources.deuterium = 1.0;
   owner.resources.merculite = 1.0;
 
-  ship.update(30000, [], [], [], [], [], 1920);
+  ship.update(5000, [], [], [], [], [], 1920);
 
   // Since armor has higher priority in sequence, only armor should convert in the first tick
   assert(ship.specialduranium === 1, "Armor should convert");
@@ -185,23 +185,22 @@ function setupCruiser(style = 'Federation') {
   assert(owner.resources.deuterium === 1.0, "Deuterium should NOT be consumed");
   assert(owner.resources.merculite === 1.0, "Merculite should NOT be consumed");
 
-  // Run another 30 seconds. Now that specialduranium === armorPoints (no, wait! 1 < 5 so armorPoints > specialduranium is still true!)
-  // Since armorPoints (5) > specialduranium (1), armor should convert AGAIN!
-  ship.update(30000, [], [], [], [], [], 1920);
+  // Run another 5 seconds. Since armorPoints (5) > specialduranium (1), armor should convert AGAIN!
+  ship.update(5000, [], [], [], [], [], 1920);
   assert(ship.specialduranium === 2, "Armor should convert again");
   assert(ship.specialfuel === 0, "Fuel should still NOT convert");
 
   // Let's make armorPoints <= specialduranium by setting specialduranium to 5
   ship.specialduranium = 5;
   // Now armor is not eligible. Fuel should convert on the next tick!
-  ship.update(30000, [], [], [], [], [], 1920);
+  ship.update(5000, [], [], [], [], [], 1920);
   assert(ship.specialfuel === 1, "Fuel should convert now");
   assert(ship.specialbombs === 0, "Bombs should still NOT convert");
 
   // Let's make fuel <= specialfuel
   ship.specialfuel = 10;
   // Now only bombs should convert on the next tick!
-  ship.update(30000, [], [], [], [], [], 1920);
+  ship.update(5000, [], [], [], [], [], 1920);
   assert(ship.specialbombs === 1, "Bombs should convert now");
 
   console.log("-> Test 9 Passed: Priority and single-item-per-tick constraint checked successfully");
