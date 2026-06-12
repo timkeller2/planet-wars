@@ -1560,6 +1560,18 @@ async function bootstrap() {
         }
         game.pendingExplorationEvents = [];
       }
+
+      // Process pending anomaly completions
+      if (game.pendingAnomalyCompletions && game.pendingAnomalyCompletions.length > 0) {
+        for (const ev of game.pendingAnomalyCompletions) {
+          for (const [socketId, player] of connectedClients.entries()) {
+            if (player.id === ev.playerId) {
+              io.to(socketId).emit('anomalyCompleted', ev);
+            }
+          }
+        }
+        game.pendingAnomalyCompletions = [];
+      }
     } else if (game.isRunning && game.isPaused) {
       // Pause logic is not needed for AFK since AFK is removed
     }
@@ -1786,7 +1798,16 @@ async function bootstrap() {
           habitability: p.habitability || 0,
           diplomacyWarmupTimer: p.diplomacyWarmupTimer || 0,
           activeDiplomatId: p.activeDiplomatId || null,
-          useResources: p.useResources || false
+          useResources: p.useResources || false,
+          anomaly: p.anomaly ? {
+            id: p.anomaly.id,
+            x: p.anomaly.x,
+            y: p.anomaly.y,
+            difficulty: p.anomaly.difficulty,
+            progress: p.anomaly.progress,
+            researched: p.anomaly.researched,
+            beingResearched: p.anomaly.beingResearched || false
+          } : null
       };
     });
 
@@ -2124,14 +2145,69 @@ async function bootstrap() {
       for (let i = 0; i < game.planets.length; i++) {
         const p = game.planets[i];
         const hasSympathy = p.sympathy && p.sympathy[player.id] > 0;
+        let isDiscoveredNow = false;
+
+        const spawnAnomalyForPlanet = () => {
+          if (p.owner === null && p.anomalyAttempted === undefined) {
+            p.anomalyAttempted = true;
+            let maxLabs = 0;
+            const playerShips = game.ships.filter(s => s.active && s.owner && s.owner.id === player.id);
+            for (const ship of playerShips) {
+              const radar = ship.isCruiser ? (ship.cruiserRadarRange ? ship.cruiserRadarRange() : 150) : 50;
+              const pct = hazardSensorReductionPct(ship.x, ship.y, player.id);
+              const eff = Math.max(10, radar * pct);
+              const dx = ship.x - p.x;
+              const dy = ship.y - p.y;
+              if (dx*dx + dy*dy <= eff*eff) {
+                const labs = ship.labs || 0;
+                if (labs > maxLabs) {
+                  maxLabs = labs;
+                }
+              }
+            }
+            let spawnChance = 0.30 + 0.10 * maxLabs;
+            const discoveredByOthers = game.allPlayers.some(op => op.id !== player.id && op.discoveredPlanets && op.discoveredPlanets.has(p.id));
+            if (discoveredByOthers) {
+              spawnChance -= 0.25;
+            }
+            if (Math.random() < spawnChance) {
+              const dist = Math.random() * (p.radius - 5);
+              const angle = Math.random() * Math.PI * 2;
+              const ax = p.x + Math.cos(angle) * dist;
+              const ay = p.y + Math.sin(angle) * dist;
+              p.anomaly = {
+                id: Math.random().toString(36).substr(2, 9),
+                x: ax,
+                y: ay,
+                difficulty: Math.floor(Math.pow(Math.random(), 2) * 111) - 10,
+                progress: 0,
+                researched: false,
+                beingResearched: false
+              };
+            }
+          }
+        };
+
         if ((p.owner && p.owner.id === player.id) || isVisible(p.x, p.y) || hasSympathy) {
+          if (!player.discoveredPlanets.has(p.id)) {
+            isDiscoveredNow = true;
+          }
           player.discoveredPlanets.add(p.id);
+          if (isDiscoveredNow) {
+            spawnAnomalyForPlanet();
+          }
           const mappedPlanet = Object.assign({}, allPlanetsMapped[i]);
           if (player.spyRootedEvents && player.spyRootedEvents.has(p.id)) mappedPlanet.spyRootedOutEvent = true;
           visiblePlanets.push(mappedPlanet);
         } else if (isSilhouetteVisible(p.x, p.y) || player.discoveredPlanets.has(p.id) || p.rampageEvent) {
           if (isSilhouetteVisible(p.x, p.y)) {
+            if (!player.discoveredPlanets.has(p.id)) {
+              isDiscoveredNow = true;
+            }
             player.discoveredPlanets.add(p.id);
+            if (isDiscoveredNow) {
+              spawnAnomalyForPlanet();
+            }
           }
           const hasAttacked = player.attackedPlanets && player.attackedPlanets.has(p.id) && player.attackedPlanets.get(p.id) > 0;
           if (hasAttacked) {
@@ -2139,7 +2215,7 @@ async function bootstrap() {
             if (player.spyRootedEvents && player.spyRootedEvents.has(p.id)) mappedPlanet.spyRootedOutEvent = true;
             visiblePlanets.push(mappedPlanet);
           } else {
-              const spyRooted = player.spyRootedEvents && player.spyRootedEvents.has(p.id);
+            const spyRooted = player.spyRootedEvents && player.spyRootedEvents.has(p.id);
             visiblePlanets.push({
               id: p.id,
               x: p.x,
@@ -2162,7 +2238,16 @@ async function bootstrap() {
               sizeClass: p.sizeClass || 0,
               habitability: p.habitability || 0,
               inRevolt: p.inRevolt || false,
-              revoltTimer: p.revoltTimer || 0
+              revoltTimer: p.revoltTimer || 0,
+              anomaly: p.anomaly ? {
+                id: p.anomaly.id,
+                x: p.anomaly.x,
+                y: p.anomaly.y,
+                difficulty: p.anomaly.difficulty,
+                progress: p.anomaly.progress,
+                researched: p.anomaly.researched,
+                beingResearched: p.anomaly.beingResearched || false
+              } : null
             });
           }
         }

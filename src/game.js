@@ -1,5 +1,5 @@
 import { Player } from './entities/Player.js';
-import { Planet } from './entities/Planet.js';
+import { Planet, getHabName } from './entities/Planet.js';
 import { Ship } from './entities/Ship.js';
 import { InputHandler } from './systems/InputHandler.js';
 import { AIController } from './systems/AIController.js';
@@ -252,6 +252,7 @@ export class Game {
     this.upgradeEnhanceEvents = [];
     this.accuracyEvents = [];
     this.pendingChatMessages = [];
+    this.pendingAnomalyCompletions = [];
     this.sellOrders = [];
     this.fulfillOrders = [];
     this.neutralTradeTimer = 0;
@@ -3197,7 +3198,8 @@ export class Game {
 
               if (effectiveIntensity > 0) {
                 overlapCount += ship.labs;
-                const knowledgeGained = (ship.labs * deltaTime) / 120000;
+                const xpMultiplier = 1 + (ship.getLocalXpBonus() * 3) / 100;
+                const knowledgeGained = (ship.labs * deltaTime * xpMultiplier) / 120000;
                 player.techScore = (player.techScore || 0) + knowledgeGained;
                 ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
                 ship.isActivelyResearching = true;
@@ -3205,6 +3207,7 @@ export class Game {
                   const beakerCount = Math.floor(ship.accumulatedTech);
                   ship.accumulatedTech -= beakerCount;
                   ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + beakerCount;
+                  ship.gainXp(beakerCount, this, ship.x, ship.y);
                 }
               }
             }
@@ -3240,13 +3243,15 @@ export class Game {
                 overlapCount += ship.labs;
                 // Cruiser is actively researching minefield
                 ship.isActivelyResearching = true;
-                const knowledgeGained = (ship.labs * deltaTime) / 120000;
+                const xpMultiplier = 1 + (ship.getLocalXpBonus() * 3) / 100;
+                const knowledgeGained = (ship.labs * deltaTime * xpMultiplier) / 120000;
                 player.techScore = (player.techScore || 0) + knowledgeGained;
                 ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
                 
                 if (ship.accumulatedTech >= 1.0) {
                   const completions = Math.floor(ship.accumulatedTech);
                   ship.accumulatedTech -= completions;
+                  ship.gainXp(completions, this, ship.x, ship.y);
                   
                   if (ship.scoutAttackEnabled) {
                     for (let c = 0; c < completions; c++) {
@@ -3349,6 +3354,86 @@ export class Game {
         if (overlapCount > 0) {
           if (!storm.knowledge[player.id]) storm.knowledge[player.id] = 0;
           storm.knowledge[player.id] += (overlapCount * deltaTime) / 120000;
+        }
+      }
+    }
+
+    // Planet Anomalies research loop
+    for (const p of this.planets) {
+      if (p.anomaly && !p.anomaly.researched) {
+        p.anomaly.beingResearched = false;
+        
+        if (p.anomaly.difficulty <= 0) {
+          let triggered = false;
+          let triggeringOwner = null;
+          for (const ship of this.ships) {
+            if (ship.active && ship.isCruiser && ship.owner) {
+              const finalCruiserRadar = ship.cruiserRadarRange();
+              const red = hazardSensorReduction(ship.x, ship.y, ship.owner.id);
+              const effRadar = Math.max(10, finalCruiserRadar - red);
+              const dx = ship.x - p.anomaly.x;
+              const dy = ship.y - p.anomaly.y;
+              if (dx*dx + dy*dy <= effRadar * effRadar) {
+                triggered = true;
+                triggeringOwner = ship.owner;
+                break;
+              }
+            }
+          }
+          if (triggered && triggeringOwner) {
+            p.anomaly.researched = true;
+            this.triggerAnomalyCompletion(p, triggeringOwner);
+          }
+        } else {
+          for (const ship of this.ships) {
+            if (ship.active && ship.isCruiser && ship.owner && (ship.labs || 0) > 0) {
+              const finalCruiserRadar = ship.cruiserRadarRange();
+              const red = hazardSensorReduction(ship.x, ship.y, ship.owner.id);
+              const effRadar = Math.max(10, finalCruiserRadar - red);
+              const dx = ship.x - p.anomaly.x;
+              const dy = ship.y - p.anomaly.y;
+              
+              if (dx*dx + dy*dy <= effRadar * effRadar) {
+                p.anomaly.beingResearched = true;
+                ship.isActivelyResearching = true;
+                
+                const xpMultiplier = 1 + (ship.getLocalXpBonus() * 3) / 100;
+                const knowledgeGained = (ship.labs * deltaTime * xpMultiplier) / 120000;
+                
+                ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
+                
+                if (ship.accumulatedTech >= 1.0) {
+                  const completions = Math.floor(ship.accumulatedTech);
+                  ship.accumulatedTech -= completions;
+                  ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + completions;
+                  
+                  p.anomaly.progress = (p.anomaly.progress || 0) + completions;
+                  ship.gainXp(completions, this, ship.x, ship.y);
+                  
+                  const localShipXpBonus = ship.getLocalXpBonus();
+                  const playerXpBonus = Math.sqrt(ship.owner.expScore || 0);
+                  const playerTechBonus = Math.sqrt(ship.owner.techScore || 0);
+                  const chance = localShipXpBonus * 3 + playerXpBonus - playerTechBonus;
+                  
+                  let techGained = 0;
+                  for (let c = 0; c < completions; c++) {
+                    if (Math.random() * 100 < chance) {
+                      techGained += 1;
+                    }
+                  }
+                  if (techGained > 0) {
+                    ship.owner.techScore = (ship.owner.techScore || 0) + techGained;
+                  }
+                  
+                  if (p.anomaly.progress >= p.anomaly.difficulty) {
+                    p.anomaly.researched = true;
+                    this.triggerAnomalyCompletion(p, ship.owner);
+                    break;
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -4775,6 +4860,89 @@ export class Game {
       ship.diplomatFailureEvent = (ship.diplomatFailureEvent || 0) + 1;
       ship.diplomatFailureChance = Math.round(chancePercent);
     }
+  }
+
+  triggerAnomalyCompletion(planet, player) {
+    const difficulty = planet.anomaly ? planet.anomaly.difficulty : 0;
+    
+    // Choose a random reward from the 5 options:
+    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];
+    const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
+    
+    let text = '';
+    let floatText = '';
+    
+    const baseVal = 30 + difficulty;
+    const factor = 1.0 + Math.random(); // 100% to 200%
+    const creditsValueEquivalent = baseVal * factor;
+    
+    if (rewardType === 'discount') {
+      const numDiscounts = Math.max(1, 1 + Math.floor(difficulty / 20));
+      const categories = ['sensorarray', 'lab', 'armor', 'shield', 'engine', 'munitions', 'targeting', 'damagecontrol', 'fueltanker', 'diplomat', 'marines'];
+      const applied = [];
+      for (let d = 0; d < numDiscounts; d++) {
+        const eligible = categories.filter(cat => (player.upgradeModifiers[cat] || 0) > -0.50);
+        if (eligible.length > 0) {
+          const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+          player.upgradeModifiers[chosen] = Math.max(-0.50, (player.upgradeModifiers[chosen] || 0) - 0.15);
+          applied.push(chosen);
+        }
+      }
+      text = `ANOMALY RESOLVED on ${planet.name}: Received ${applied.length} upgrade discount(s)!`;
+      floatText = `DISCOUNTS!`;
+    } else if (rewardType === 'credits') {
+      const creditsReward = Math.round(creditsValueEquivalent);
+      player.credits = (player.credits || 0) + creditsReward;
+      text = `ANOMALY RESOLVED on ${planet.name}: Received +${creditsReward} Credits!`;
+      floatText = `+${creditsReward} 💲`;
+    } else if (rewardType === 'tech') {
+      const techReward = Math.round(creditsValueEquivalent / 10);
+      player.techScore = (player.techScore || 0) + techReward;
+      text = `ANOMALY RESOLVED on ${planet.name}: Received +${techReward} Tech Score!`;
+      floatText = `+${techReward} 🔬`;
+    } else if (rewardType === 'xp') {
+      const expReward = Math.round(creditsValueEquivalent / 10);
+      player.expScore = (player.expScore || 0) + expReward;
+      text = `ANOMALY RESOLVED on ${planet.name}: Received +${expReward} Player XP!`;
+      floatText = `+${expReward} XP`;
+    } else if (rewardType === 'hab') {
+      const habReward = Math.round(creditsValueEquivalent / 5);
+      const oldHab = planet.habitability || 0;
+      planet.habitability = (planet.habitability || 0) + habReward;
+      text = `ANOMALY RESOLVED on ${planet.name}: Habitability increased by +${habReward}%!`;
+      floatText = `+${habReward}% HABITABILITY!`;
+      
+      const oldClass = getHabName(oldHab);
+      const newClass = getHabName(planet.habitability);
+      if (oldClass !== newClass) {
+        this.pendingHabClassChanges = this.pendingHabClassChanges || [];
+        this.pendingHabClassChanges.push({
+          planetId: planet.id,
+          planetName: planet.name,
+          ownerId: planet.owner ? planet.owner.id : null,
+          oldClass: oldClass,
+          newClass: newClass,
+          x: planet.x,
+          y: planet.y
+        });
+      }
+    }
+    
+    // Add to pending chat messages for the player
+    this.pendingChatMessages = this.pendingChatMessages || [];
+    this.pendingChatMessages.push({
+      playerId: player.id,
+      text: text
+    });
+    
+    // Add to pending anomaly completions so the server broadcasts to the client
+    this.pendingAnomalyCompletions = this.pendingAnomalyCompletions || [];
+    this.pendingAnomalyCompletions.push({
+      playerId: player.id,
+      x: planet.anomaly ? planet.anomaly.x : planet.x,
+      y: planet.anomaly ? planet.anomaly.y : planet.y,
+      text: floatText
+    });
   }
 
   updateCustomCruiserSystems(dt) {

@@ -3213,7 +3213,8 @@ function getPlanetTradeIncomePerMin(planet) {
     hazards: '⚡ Hazards',
     monsters: '🧬 Space Amoebas',
     ai: '🤖 AI & Rampage',
-    other: '📡 Other'
+    other: '📡 Other',
+    anomalies: '🔬 Anomalies'
   };
 
   function showHelpIndex() {
@@ -3650,6 +3651,18 @@ function getPlanetTradeIncomePerMin(planet) {
       type: 'exploration_xp',
       age: 0,
       duration: 1.5
+    });
+  });
+
+  socket.on('anomalyCompleted', (data) => {
+    playSound('trumpet');
+    floatingAnimations.push({
+      x: data.x,
+      y: data.y,
+      text: data.text,
+      type: 'anomaly_completion',
+      age: 0,
+      duration: 2.0
     });
   });
 
@@ -8524,6 +8537,148 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.restore();
         }
 
+        if (p.anomaly && !p.anomaly.researched) {
+          const diff = p.anomaly.difficulty;
+          
+          ctx.save();
+          
+          if (diff <= 10) {
+            // Tier 1: Faint Spark (Green, Slow Pulse)
+            const scale = 1.0 + Math.sin(Date.now() / 250) * 0.2;
+            const lineLength = 5 * scale;
+            ctx.strokeStyle = '#00ff88';
+            ctx.shadowColor = '#00ff88';
+            ctx.shadowBlur = 4;
+            ctx.lineWidth = 1.5;
+            
+            ctx.beginPath();
+            ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
+            ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
+            ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
+            ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+            ctx.stroke();
+          } else if (diff <= 35) {
+            // Tier 2: Glowing Core (Yellow, Medium Pulse + static center dot)
+            const scale = 1.0 + Math.sin(Date.now() / 150) * 0.3;
+            const lineLength = 5.5 * scale;
+            ctx.strokeStyle = '#ffcc00';
+            ctx.shadowColor = '#ffcc00';
+            ctx.shadowBlur = 6;
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
+            ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
+            ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
+            ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+            ctx.stroke();
+            
+            // Draw center dot
+            ctx.fillStyle = '#ffcc00';
+            ctx.beginPath();
+            ctx.arc(p.anomaly.x, p.anomaly.y, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (diff <= 60) {
+            // Tier 3: Pulsing Nova (Cyan, Medium Pulse + slight rotation over time)
+            const scale = 1.0 + Math.sin(Date.now() / 120) * 0.35;
+            const lineLength = 6 * scale;
+            ctx.strokeStyle = '#00e5ff';
+            ctx.shadowColor = '#00e5ff';
+            ctx.shadowBlur = 8;
+            ctx.lineWidth = 2.5;
+            
+            // Apply slight rotation around anomaly center
+            ctx.translate(p.anomaly.x, p.anomaly.y);
+            const rotAngle = (Date.now() / 1000) % (Math.PI * 2);
+            ctx.rotate(rotAngle * 0.2); // Slow rotation
+            
+            ctx.beginPath();
+            ctx.moveTo(-lineLength, 0);
+            ctx.lineTo(lineLength, 0);
+            ctx.moveTo(0, -lineLength);
+            ctx.lineTo(0, lineLength);
+            ctx.stroke();
+          } else if (diff <= 85) {
+            // Tier 4: Radiant Star (Orange, Fast Pulse + outer ring)
+            const scale = 1.0 + Math.sin(Date.now() / 80) * 0.4;
+            const lineLength = 6.5 * scale;
+            ctx.strokeStyle = '#ff6d00';
+            ctx.shadowColor = '#ff6d00';
+            ctx.shadowBlur = 10;
+            ctx.lineWidth = 3;
+            
+            ctx.beginPath();
+            ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
+            ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
+            ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
+            ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+            ctx.stroke();
+            
+            // Outer ring
+            ctx.strokeStyle = 'rgba(255, 109, 0, 0.4)';
+            ctx.beginPath();
+            ctx.arc(p.anomaly.x, p.anomaly.y, lineLength * 1.5, 0, Math.PI * 2);
+            ctx.stroke();
+          } else {
+            // Tier 5: Quantum Rift (Magenta, Jittery + electric sparks)
+            const jitterX = (Math.random() - 0.5) * 1.5;
+            const jitterY = (Math.random() - 0.5) * 1.5;
+            const scale = 1.0 + Math.sin(Date.now() / 50) * 0.45;
+            const lineLength = 7 * scale;
+            
+            const ax = p.anomaly.x + jitterX;
+            const ay = p.anomaly.y + jitterY;
+            
+            ctx.strokeStyle = '#ff00ff';
+            ctx.shadowColor = '#ff00ff';
+            ctx.shadowBlur = 12;
+            ctx.lineWidth = 3;
+            
+            ctx.beginPath();
+            ctx.moveTo(ax - lineLength, ay);
+            ctx.lineTo(ax + lineLength, ay);
+            ctx.moveTo(ax, ay - lineLength);
+            ctx.lineTo(ax, ay + lineLength);
+            ctx.stroke();
+            
+            // Electric sparks/random rays
+            ctx.strokeStyle = 'rgba(255, 0, 255, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i < 4; i++) {
+              const rayAngle = Math.random() * Math.PI * 2;
+              const rayDist = (5 + Math.random() * 8) * scale;
+              ctx.moveTo(ax, ay);
+              ctx.lineTo(ax + Math.cos(rayAngle) * rayDist, ay + Math.sin(rayAngle) * rayDist);
+            }
+            ctx.stroke();
+          }
+          
+          ctx.restore();
+          
+          if (p.anomaly.beingResearched && p.anomaly.difficulty > 0) {
+            const barWidth = 24;
+            const barHeight = 4;
+            const barX = p.anomaly.x - barWidth / 2;
+            const barY = p.anomaly.y - 10;
+            const progressPct = Math.min(1.0, Math.max(0.0, p.anomaly.progress / p.anomaly.difficulty));
+            
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(barX, barY, barWidth, barHeight);
+            
+            ctx.fillStyle = '#00ffcc';
+            ctx.shadowColor = '#00ffcc';
+            ctx.shadowBlur = 4;
+            ctx.fillRect(barX, barY, barWidth * progressPct, barHeight);
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(barX, barY, barWidth, barHeight);
+            ctx.restore();
+          }
+        }
+
         ctx.shadowBlur = 0;
 
         if (p.focusTransition) {
@@ -12100,6 +12255,8 @@ function getPlanetTradeIncomePerMin(planet) {
           yOffset = progress * (8.0 * anim.duration); // float slower (8.0px/sec)
         } else if (anim.type === 'resource_wanted') {
           yOffset = progress * 60; // drifts up nicely
+        } else if (anim.type === 'anomaly_completion') {
+          yOffset = progress * 70; // drifts up nicely
         }
 
         // Grow font
@@ -12130,6 +12287,8 @@ function getPlanetTradeIncomePerMin(planet) {
            fontsize = 11 + (progress * 9); // grows from 11px to 20px
         } else if (anim.type === 'revolt') {
            fontsize = 18 + (progress * 22); // starts at 18px, grows to 40px
+        } else if (anim.type === 'anomaly_completion') {
+           fontsize = 14 + (progress * 12); // starts at 14px, grows to 26px
         }
 
         ctx.font = `bold ${fontsize}px Orbitron`; // growing font
@@ -12219,6 +12378,10 @@ function getPlanetTradeIncomePerMin(planet) {
           xOffset = (Math.random() - 0.5) * 12; // Jitter text slightly
           ctx.fillStyle = `rgba(255, 51, 51, ${alpha})`; // bright red
           ctx.shadowColor = `rgba(139, 0, 0, ${alpha})`; // deep red glow
+        } else if (anim.type === 'anomaly_completion') {
+          xOffset = 0;
+          ctx.fillStyle = `rgba(0, 255, 204, ${alpha})`; // glowing teal
+          ctx.shadowColor = `rgba(0, 255, 204, ${alpha})`;
         } else {
           xOffset = Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
