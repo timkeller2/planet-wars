@@ -95,7 +95,45 @@ const testCompletionReward = () => {
   console.log("-> Pre-generated reward completion PASSED!");
 };
 
+// 3. Scattered anomalies at map creation verification
+const testScatteredAnomalies = () => {
+  console.log("\n--- Part 3: Scattered Anomalies at Map Creation ---");
+  const game = new Game();
+  // Set width to 1600 so we expect exactly 16 scattered anomalies
+  game.width = 1600;
+  game.height = 1600;
+  game.settings = { planetCount: 10, aiCount: 0 };
+  
+  game.initMap();
+  
+  const deepSpaceAnomalies = game.planets.filter(p => p.isDeepSpaceAnomaly);
+  console.log(`Scattered anomalies count: ${deepSpaceAnomalies.length} (expected 16)`);
+  
+  if (deepSpaceAnomalies.length !== 16) {
+    console.error(`FAILED: Expected exactly 16 scattered anomalies, got ${deepSpaceAnomalies.length}`);
+    process.exit(1);
+  }
+  
+  for (const p of deepSpaceAnomalies) {
+    if (p.radius !== 0 || p.ships !== 0 || p.maxShips !== 0) {
+      console.error(`FAILED: Deep space anomaly planet has invalid radius/ships: radius=${p.radius}, ships=${p.ships}, maxShips=${p.maxShips}`);
+      process.exit(1);
+    }
+    if (!p.anomaly || p.anomaly.difficulty < -10 || p.anomaly.difficulty > 100) {
+      console.error(`FAILED: Anomaly difficulty out of range: ${p.anomaly ? p.anomaly.difficulty : 'none'}`);
+      process.exit(1);
+    }
+    if (!p.anomaly.rewardType) {
+      console.error("FAILED: Anomaly has no pre-generated rewardType");
+      process.exit(1);
+    }
+  }
+  
+  console.log("-> Scattered anomalies map creation PASSED!");
+};
+
 testExclusivity();
 testCompletionReward();
+testScatteredAnomalies();
 console.log("\nALL NEW TESTS PASSED SUCCESSFULLY!");
 process.exit(0);

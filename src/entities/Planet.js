@@ -145,6 +145,7 @@ export class Planet {
   }
 
   update(deltaTime, allPlanets, settings, game) {
+    if (this.isDeepSpaceAnomaly) return;
     this.prorateSympathiesIfNeeded();
 
     if (this.owner && this.focusMode === 'terraforming') {

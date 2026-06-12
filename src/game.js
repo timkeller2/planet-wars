@@ -1658,6 +1658,37 @@ export class Game {
       this.ionStormsCreated++;
     }
 
+    // Scatter ( map size / 100 ) anomalies randomly around the map at map creation
+    const numScattered = Math.floor(this.width / 100);
+    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];
+    for (let i = 0; i < numScattered; i++) {
+      const ax = Math.random() * this.width;
+      const ay = Math.random() * this.height;
+      const minDiff = -10;
+      const maxDiff = 100;
+      const difficulty = Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff;
+      const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
+
+      const planetId = 20000 + i;
+      const deepSpacePlanet = new Planet(planetId, ax, ay, 0, null, 0, this.width, this.height);
+      deepSpacePlanet.isDeepSpaceAnomaly = true;
+      deepSpacePlanet.radius = 0;
+      deepSpacePlanet.maxShips = 0;
+      deepSpacePlanet.ships = 0;
+      deepSpacePlanet.name = "Deep Space Anomaly";
+      deepSpacePlanet.anomaly = {
+        id: Math.random().toString(36).substr(2, 9),
+        x: ax,
+        y: ay,
+        difficulty: difficulty,
+        progress: 0,
+        researched: false,
+        beingResearched: false,
+        rewardType: rewardType
+      };
+      this.planets.push(deepSpacePlanet);
+    }
+
     this.recalculateResourceRarities();
   }
 

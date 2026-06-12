@@ -176,7 +176,7 @@ export class AIController {
     const sourcePlanet = validSources[Math.floor(Math.random() * validSources.length)];
 
     // Find targets (neutral or enemy planets)
-    const targets = this.game.planets.filter(p => p.owner !== this.aiPlayer);
+    const targets = this.game.planets.filter(p => p.owner !== this.aiPlayer && !p.isDeepSpaceAnomaly);
     const enemyCruisers = this.game.ships.filter(s => s.active && s.isCruiser && s.owner && s.owner !== this.aiPlayer);
     for (const ec of enemyCruisers) {
       const dx = ec.x - sourcePlanet.x;

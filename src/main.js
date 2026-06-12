@@ -2257,10 +2257,14 @@ function getPlanetTradeIncomePerMin(planet) {
       }
       
       const anomalyColor = getAnomalyColor(p.anomaly.difficulty);
-      titleHTML = `<span style="color: ${anomalyColor}">PLANETARY ANOMALY</span>`;
+      titleHTML = p.isDeepSpaceAnomaly ? `<span style="color: ${anomalyColor}">DEEP SPACE ANOMALY</span>` : `<span style="color: ${anomalyColor}">PLANETARY ANOMALY</span>`;
       
       const lines = [];
-      lines.push({ label: 'Location', value: p.name, color: '#fff' });
+      if (p.isDeepSpaceAnomaly) {
+        lines.push({ label: 'Location', value: 'Deep Space', color: '#888' });
+      } else {
+        lines.push({ label: 'Location', value: p.name, color: '#fff' });
+      }
       lines.push({ label: 'Research Progress', value: `${p.anomaly.progress || 0} / ${p.anomaly.difficulty}`, color: '#ffb74d' });
       lines.push({ label: 'Difficulty', value: `${p.anomaly.difficulty}`, color: anomalyColor });
       
@@ -5270,6 +5274,7 @@ function getPlanetTradeIncomePerMin(planet) {
     let bestPlanet = null;
     let bestSurfaceDist = Infinity;
     for (const planet of serverState.planets) {
+      if (planet.isDeepSpaceAnomaly) continue;
       const dx = planet.x - pos.x;
       const dy = planet.y - pos.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -8320,6 +8325,150 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       for (const p of serverState.planets) {
+        if (p.isDeepSpaceAnomaly) {
+          if (p.anomaly && !p.anomaly.researched) {
+            const diff = p.anomaly.difficulty;
+            const cycleTime = (Date.now() + (p.id ? p.id.toString().charCodeAt(0) * 100 : 0)) % 4000;
+            let twinkle = 1.0;
+            if (cycleTime < 250) {
+              twinkle = 1.0 + Math.sin(cycleTime * Math.PI / 250) * 0.8;
+            }
+
+            let anomalyColor = '#00ff88';
+            if (diff <= 10) {
+              anomalyColor = '#00ff88';
+            } else if (diff <= 35) {
+              anomalyColor = '#ffcc00';
+            } else if (diff <= 60) {
+              anomalyColor = '#00e5ff';
+            } else if (diff <= 85) {
+              anomalyColor = '#ff6d00';
+            } else {
+              anomalyColor = '#ff00ff';
+            }
+
+            ctx.save();
+            
+            if (diff <= 10) {
+              const scale = 1.0 + Math.sin(Date.now() / 250) * 0.2;
+              const lineLength = 2.5 * scale * twinkle;
+              ctx.strokeStyle = anomalyColor;
+              ctx.shadowColor = anomalyColor;
+              ctx.shadowBlur = 3 * twinkle;
+              ctx.lineWidth = 0.8;
+              
+              ctx.beginPath();
+              ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
+              ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
+              ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
+              ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+              ctx.stroke();
+            } else if (diff <= 35) {
+              const scale = 1.0 + Math.sin(Date.now() / 150) * 0.3;
+              const lineLength = 2.75 * scale * twinkle;
+              ctx.strokeStyle = anomalyColor;
+              ctx.shadowColor = anomalyColor;
+              ctx.shadowBlur = 4 * twinkle;
+              ctx.lineWidth = 1.0;
+              
+              ctx.beginPath();
+              ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
+              ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
+              ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
+              ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+              ctx.stroke();
+              
+              ctx.fillStyle = anomalyColor;
+              ctx.beginPath();
+              ctx.arc(p.anomaly.x, p.anomaly.y, 0.75 * twinkle, 0, Math.PI * 2);
+              ctx.fill();
+            } else if (diff <= 60) {
+              const scale = 1.0 + Math.sin(Date.now() / 120) * 0.35;
+              const lineLength = 3.0 * scale * twinkle;
+              ctx.strokeStyle = anomalyColor;
+              ctx.shadowColor = anomalyColor;
+              ctx.shadowBlur = 5 * twinkle;
+              ctx.lineWidth = 1.2;
+              
+              ctx.translate(p.anomaly.x, p.anomaly.y);
+              const rotAngle = (Date.now() / 1000) % (Math.PI * 2);
+              ctx.rotate(rotAngle * 0.2);
+              
+              ctx.beginPath();
+              ctx.moveTo(-lineLength, 0);
+              ctx.lineTo(lineLength, 0);
+              ctx.moveTo(0, -lineLength);
+              ctx.lineTo(0, lineLength);
+              ctx.stroke();
+            } else if (diff <= 85) {
+              const scale = 1.0 + Math.sin(Date.now() / 80) * 0.4;
+              const lineLength = 3.25 * scale * twinkle;
+              ctx.strokeStyle = anomalyColor;
+              ctx.shadowColor = anomalyColor;
+              ctx.shadowBlur = 6 * twinkle;
+              ctx.lineWidth = 1.4;
+              
+              ctx.beginPath();
+              ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
+              ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
+              ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
+              ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+              ctx.stroke();
+              
+              ctx.strokeStyle = `rgba(255, 109, 0, ${0.4 * twinkle})`;
+              ctx.beginPath();
+              ctx.arc(p.anomaly.x, p.anomaly.y, lineLength * 1.5, 0, Math.PI * 2);
+              ctx.stroke();
+            } else {
+              const jitterX = (Math.random() - 0.5) * 0.8;
+              const jitterY = (Math.random() - 0.5) * 0.8;
+              const scale = 1.0 + Math.sin(Date.now() / 50) * 0.45;
+              const lineLength = 3.5 * scale * twinkle;
+              
+              const ax = p.anomaly.x + jitterX;
+              const ay = p.anomaly.y + jitterY;
+              
+              ctx.strokeStyle = anomalyColor;
+              ctx.shadowColor = anomalyColor;
+              ctx.shadowBlur = 8 * twinkle;
+              ctx.lineWidth = 1.5;
+              
+              ctx.beginPath();
+              ctx.moveTo(ax - lineLength, ay);
+              ctx.lineTo(ax + lineLength, ay);
+              ctx.moveTo(ax, ay - lineLength);
+              ctx.lineTo(ax, ay + lineLength);
+              ctx.stroke();
+              
+              ctx.strokeStyle = `rgba(255, 0, 255, ${0.6 * twinkle})`;
+              ctx.lineWidth = 0.6;
+              ctx.beginPath();
+              for (let i = 0; i < 4; i++) {
+                const rayAngle = Math.random() * Math.PI * 2;
+                const rayDist = (2.5 + Math.random() * 4) * scale * twinkle;
+                ctx.moveTo(ax, ay);
+                ctx.lineTo(ax + Math.cos(rayAngle) * rayDist, ay + Math.sin(rayAngle) * rayDist);
+              }
+              ctx.stroke();
+            }
+            
+            ctx.restore();
+            
+            if (p.anomaly.difficulty > 0 && p.anomaly.progress > 0) {
+              const progressRatio = Math.max(0, Math.min(1.0, p.anomaly.progress / p.anomaly.difficulty));
+              ctx.save();
+              ctx.strokeStyle = anomalyColor;
+              ctx.lineWidth = 0.5;
+              ctx.shadowBlur = 0;
+              ctx.beginPath();
+              ctx.arc(p.anomaly.x, p.anomaly.y, 7.5, -Math.PI / 2, -Math.PI / 2 + progressRatio * Math.PI * 2);
+              ctx.stroke();
+              ctx.restore();
+            }
+          }
+          continue;
+        }
+
         const owner = serverState.players.find(pl => pl.id === p.ownerId);
         const isSelected = selectedPlanets.some(sp => sp.id === p.id);
 

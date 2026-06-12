@@ -1799,6 +1799,7 @@ async function bootstrap() {
           diplomacyWarmupTimer: p.diplomacyWarmupTimer || 0,
           activeDiplomatId: p.activeDiplomatId || null,
           useResources: p.useResources || false,
+          isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false,
           anomaly: p.anomaly ? {
             id: p.anomaly.id,
             x: p.anomaly.x,
