@@ -1800,16 +1800,21 @@ async function bootstrap() {
           activeDiplomatId: p.activeDiplomatId || null,
           useResources: p.useResources || false,
           isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false,
-          anomaly: p.anomaly ? {
-            id: p.anomaly.id,
-            x: p.anomaly.x,
-            y: p.anomaly.y,
-            difficulty: p.anomaly.difficulty,
-            progress: p.anomaly.progress,
-            researched: p.anomaly.researched,
-            beingResearched: p.anomaly.beingResearched || false,
-            rewardType: p.anomaly.rewardType
-          } : null
+           anomaly: p.anomaly ? {
+             id: p.anomaly.id,
+             x: p.anomaly.x,
+             y: p.anomaly.y,
+             difficulty: p.anomaly.difficulty,
+             progress: p.anomaly.progress,
+             researched: p.anomaly.researched,
+             beingResearched: p.anomaly.beingResearched || false,
+             rewardType: p.anomaly.rewardType,
+             completing: p.anomaly.completing || false,
+             completingTimeLeft: p.anomaly.completingTimeLeft || 0,
+             completingShipId: p.anomaly.completingShipId || null,
+             completingPlayerId: p.anomaly.completingPlayerId || null,
+             researchingShipId: p.anomaly.researchingShipId || null
+           } : null
       };
     });
 
@@ -2252,15 +2257,20 @@ async function bootstrap() {
               habitability: p.habitability || 0,
               inRevolt: p.inRevolt || false,
               revoltTimer: p.revoltTimer || 0,
-              anomaly: p.anomaly ? {
-                id: p.anomaly.id,
-                x: p.anomaly.x,
-                y: p.anomaly.y,
-                difficulty: p.anomaly.difficulty,
-                progress: p.anomaly.progress,
-                researched: p.anomaly.researched,
-                beingResearched: p.anomaly.beingResearched || false
-              } : null
+               anomaly: p.anomaly ? {
+                 id: p.anomaly.id,
+                 x: p.anomaly.x,
+                 y: p.anomaly.y,
+                 difficulty: p.anomaly.difficulty,
+                 progress: p.anomaly.progress,
+                 researched: p.anomaly.researched,
+                 beingResearched: p.anomaly.beingResearched || false,
+                 completing: p.anomaly.completing || false,
+                 completingTimeLeft: p.anomaly.completingTimeLeft || 0,
+                 completingShipId: p.anomaly.completingShipId || null,
+                 completingPlayerId: p.anomaly.completingPlayerId || null,
+                 researchingShipId: p.anomaly.researchingShipId || null
+               } : null
             });
           }
         }

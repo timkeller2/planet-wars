@@ -3430,77 +3430,117 @@ export class Game {
     for (const p of this.planets) {
       if (p.anomaly && !p.anomaly.researched) {
         p.anomaly.beingResearched = false;
-        
-        if (p.anomaly.difficulty <= 0) {
-          let triggered = false;
-          let triggeringOwner = null;
-          for (const ship of this.ships) {
-            if (ship.active && ship.isCruiser && ship.owner) {
-              const finalCruiserRadar = ship.cruiserRadarRange();
-              const red = hazardSensorReduction(ship.x, ship.y, ship.owner.id);
-              const effRadar = Math.max(10, finalCruiserRadar - red);
-              const dx = ship.x - p.anomaly.x;
-              const dy = ship.y - p.anomaly.y;
-              if (dx*dx + dy*dy <= effRadar * effRadar) {
-                triggered = true;
-                triggeringOwner = ship.owner;
-                break;
+        p.anomaly.researchingShipId = null;
+
+        if (p.anomaly.completing) {
+          const ship = this.ships.find(s => s.id === p.anomaly.completingShipId);
+          if (ship && ship.active && ship.isCruiser && ship.owner) {
+            const finalCruiserRadar = ship.cruiserRadarRange();
+            const red = hazardSensorReduction(ship.x, ship.y, ship.owner.id);
+            const effRadar = Math.max(10, finalCruiserRadar - red);
+            const dx = ship.x - p.anomaly.x;
+            const dy = ship.y - p.anomaly.y;
+
+            if (dx*dx + dy*dy <= effRadar * effRadar && !ship.isActivelyResearching) {
+              p.anomaly.beingResearched = true;
+              p.anomaly.researchingShipId = ship.id;
+              ship.isActivelyResearching = true;
+
+              p.anomaly.completingTimeLeft = (p.anomaly.completingTimeLeft || 0) - deltaTime;
+              if (p.anomaly.completingTimeLeft <= 0) {
+                p.anomaly.researched = true;
+                p.anomaly.completing = false;
+                this.triggerAnomalyCompletion(p, ship.owner);
               }
+            } else {
+              p.anomaly.completing = false;
+              p.anomaly.completingTimeLeft = 0;
+              p.anomaly.completingShipId = null;
+              p.anomaly.completingPlayerId = null;
             }
-          }
-          if (triggered && triggeringOwner) {
-            p.anomaly.researched = true;
-            this.triggerAnomalyCompletion(p, triggeringOwner);
+          } else {
+            p.anomaly.completing = false;
+            p.anomaly.completingTimeLeft = 0;
+            p.anomaly.completingShipId = null;
+            p.anomaly.completingPlayerId = null;
           }
         } else {
-          for (const ship of this.ships) {
-            if (ship.active && ship.isCruiser && ship.owner && (ship.labs || 0) > 0) {
-              const finalCruiserRadar = ship.cruiserRadarRange();
-              const red = hazardSensorReduction(ship.x, ship.y, ship.owner.id);
-              const effRadar = Math.max(10, finalCruiserRadar - red);
-              const dx = ship.x - p.anomaly.x;
-              const dy = ship.y - p.anomaly.y;
-              
-              if (dx*dx + dy*dy <= effRadar * effRadar) {
-                if (p.anomaly.beingResearched) {
-                  continue; // Only one research ship may work on an anomaly at a time
+          if (p.anomaly.difficulty <= 0) {
+            let triggered = false;
+            let triggeringShip = null;
+            for (const ship of this.ships) {
+              if (ship.active && ship.isCruiser && ship.owner && !ship.isActivelyResearching) {
+                const finalCruiserRadar = ship.cruiserRadarRange();
+                const red = hazardSensorReduction(ship.x, ship.y, ship.owner.id);
+                const effRadar = Math.max(10, finalCruiserRadar - red);
+                const dx = ship.x - p.anomaly.x;
+                const dy = ship.y - p.anomaly.y;
+                if (dx*dx + dy*dy <= effRadar * effRadar) {
+                  triggered = true;
+                  triggeringShip = ship;
+                  break;
                 }
-                p.anomaly.beingResearched = true;
-                ship.isActivelyResearching = true;
+              }
+            }
+            if (triggered && triggeringShip) {
+              p.anomaly.completing = true;
+              p.anomaly.completingTimeLeft = 3000;
+              p.anomaly.completingShipId = triggeringShip.id;
+              p.anomaly.completingPlayerId = triggeringShip.owner.id;
+              p.anomaly.beingResearched = true;
+              p.anomaly.researchingShipId = triggeringShip.id;
+              triggeringShip.isActivelyResearching = true;
+            }
+          } else {
+            for (const ship of this.ships) {
+              if (ship.active && ship.isCruiser && ship.owner && (ship.labs || 0) > 0 && !ship.isActivelyResearching) {
+                const finalCruiserRadar = ship.cruiserRadarRange();
+                const red = hazardSensorReduction(ship.x, ship.y, ship.owner.id);
+                const effRadar = Math.max(10, finalCruiserRadar - red);
+                const dx = ship.x - p.anomaly.x;
+                const dy = ship.y - p.anomaly.y;
                 
-                const xpMultiplier = 1 + (ship.getLocalXpBonus() * 3) / 100;
-                const knowledgeGained = (ship.labs * deltaTime * xpMultiplier) / 120000;
-                
-                ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
-                
-                if (ship.accumulatedTech >= 1.0) {
-                  const completions = Math.floor(ship.accumulatedTech);
-                  ship.accumulatedTech -= completions;
-                  ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + completions;
+                if (dx*dx + dy*dy <= effRadar * effRadar) {
+                  p.anomaly.beingResearched = true;
+                  p.anomaly.researchingShipId = ship.id;
+                  ship.isActivelyResearching = true;
                   
-                  p.anomaly.progress = (p.anomaly.progress || 0) + completions;
-                  ship.gainXp(completions, this, ship.x, ship.y);
+                  const xpMultiplier = 1 + (ship.getLocalXpBonus() * 3) / 100;
+                  const knowledgeGained = (ship.labs * deltaTime * xpMultiplier) / 120000;
                   
-                  const localShipXpBonus = ship.getLocalXpBonus();
-                  const playerXpBonus = Math.sqrt(ship.owner.expScore || 0);
-                  const playerTechBonus = Math.sqrt(ship.owner.techScore || 0);
-                  const chance = localShipXpBonus * 3 + playerXpBonus - playerTechBonus;
+                  ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
                   
-                  let techGained = 0;
-                  for (let c = 0; c < completions; c++) {
-                    if (Math.random() * 100 < chance) {
-                      techGained += 1;
+                  if (ship.accumulatedTech >= 1.0) {
+                    const completions = Math.floor(ship.accumulatedTech);
+                    ship.accumulatedTech -= completions;
+                    ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + completions;
+                    
+                    p.anomaly.progress = (p.anomaly.progress || 0) + completions;
+                    ship.gainXp(completions, this, ship.x, ship.y);
+                    
+                    const localShipXpBonus = ship.getLocalXpBonus();
+                    const playerXpBonus = Math.sqrt(ship.owner.expScore || 0);
+                    const playerTechBonus = Math.sqrt(ship.owner.techScore || 0);
+                    const chance = localShipXpBonus * 3 + playerXpBonus - playerTechBonus;
+                    
+                    let techGained = 0;
+                    for (let c = 0; c < completions; c++) {
+                      if (Math.random() * 100 < chance) {
+                        techGained += 1;
+                      }
+                    }
+                    if (techGained > 0) {
+                      ship.owner.techScore = (ship.owner.techScore || 0) + techGained;
+                    }
+                    
+                    if (p.anomaly.progress >= p.anomaly.difficulty) {
+                      p.anomaly.completing = true;
+                      p.anomaly.completingTimeLeft = 3000;
+                      p.anomaly.completingShipId = ship.id;
+                      p.anomaly.completingPlayerId = ship.owner.id;
                     }
                   }
-                  if (techGained > 0) {
-                    ship.owner.techScore = (ship.owner.techScore || 0) + techGained;
-                  }
-                  
-                  if (p.anomaly.progress >= p.anomaly.difficulty) {
-                    p.anomaly.researched = true;
-                    this.triggerAnomalyCompletion(p, ship.owner);
-                    break;
-                  }
+                  break;
                 }
               }
             }

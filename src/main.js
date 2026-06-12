@@ -3819,7 +3819,54 @@ function getPlanetTradeIncomePerMin(planet) {
     setTimeout(() => playSound('explosion'), 600);
   }
 
-  let audioCtx = null;
+  let lastScanningSoundTime = 0;
+  function playScanningSound(isCompleting) {
+    const nowTime = Date.now();
+    const interval = isCompleting ? 100 : 150;
+    if (nowTime - lastScanningSoundTime < interval) return; // limit rate
+    lastScanningSoundTime = nowTime;
+
+    try {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      osc.type = 'sine';
+      
+      const now = audioCtx.currentTime;
+      if (isCompleting) {
+        // Higher pitched upward sweep for beaming up
+        const baseFreq = 500 + Math.sin(nowTime / 20) * 200;
+        osc.frequency.setValueAtTime(baseFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.1);
+        gainNode.gain.setValueAtTime(0.06, now); // slightly louder
+        gainNode.gain.linearRampToValueAtTime(0.001, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+      } else {
+        // Lower pitched warble for scanning
+        const freq = 350 + Math.sin(nowTime / 40) * 100;
+        osc.frequency.setValueAtTime(freq, now);
+        osc.frequency.linearRampToValueAtTime(freq + 50, now + 0.15);
+        gainNode.gain.setValueAtTime(0.03, now); // low volume
+        gainNode.gain.linearRampToValueAtTime(0.001, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
   function playThudSound() {
     try {
       if (!audioCtx) {
@@ -8325,6 +8372,91 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.globalAlpha = 1.0;
           }
         }
+      }
+
+      let anyBeingResearched = false;
+      let anyCompleting = false;
+
+      // Draw scanning beams/cones for anomalies being researched/completed
+      for (const p of serverState.planets) {
+        if (p.anomaly && !p.anomaly.researched && p.anomaly.beingResearched) {
+          const shipId = p.anomaly.completingShipId || p.anomaly.researchingShipId;
+          if (shipId) {
+            const ship = serverState.ships.find(s => s.id === shipId);
+            if (ship) {
+              anyBeingResearched = true;
+              if (p.anomaly.completing) {
+                anyCompleting = true;
+              }
+              // Target coordinates (anomaly center)
+              const tx = p.anomaly.x;
+              const ty = p.anomaly.y;
+              // Source coordinates (cruiser center)
+              const sx = ship.x;
+              const sy = ship.y;
+              
+              // Angle from ship to anomaly
+              const angle = Math.atan2(ty - sy, tx - sx);
+              
+              ctx.save();
+              
+              // Draw translucent green scanning cone/ray
+              // Shimmery effect using a combination of random noise and sine wave over time
+              const shimmer = 0.5 + 0.3 * Math.sin(Date.now() / 50) + 0.2 * Math.random();
+              const alpha = (p.anomaly.completing ? 0.6 : 0.25) * shimmer;
+              
+              // Draw cone (a wedge from cruiser to anomaly)
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              // Width of the cone at the target end
+              const coneWidth = p.isDeepSpaceAnomaly ? 16 : (p.radius || 20);
+              const perpAngle = angle + Math.PI / 2;
+              
+              const tx1 = tx - Math.cos(perpAngle) * coneWidth;
+              const ty1 = ty - Math.sin(perpAngle) * coneWidth;
+              const tx2 = tx + Math.cos(perpAngle) * coneWidth;
+              const ty2 = ty + Math.sin(perpAngle) * coneWidth;
+              
+              ctx.lineTo(tx1, ty1);
+              ctx.lineTo(tx2, ty2);
+              ctx.closePath();
+              
+              const grad = ctx.createLinearGradient(sx, sy, tx, ty);
+              grad.addColorStop(0, `rgba(0, 255, 100, 0.05)`);
+              grad.addColorStop(0.3, `rgba(0, 255, 100, ${alpha * 0.7})`);
+              grad.addColorStop(1, `rgba(0, 255, 100, ${alpha})`);
+              ctx.fillStyle = grad;
+              ctx.fill();
+              
+              // Draw some shimmery lines/particles inside the cone
+              ctx.strokeStyle = `rgba(100, 255, 180, ${alpha * 0.8})`;
+              ctx.lineWidth = 1 + Math.random() * 1.5;
+              ctx.beginPath();
+              // Core beam line
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx, ty);
+              ctx.stroke();
+              
+              // Sparkly outer edges
+              ctx.strokeStyle = `rgba(0, 255, 100, ${alpha * 0.4})`;
+              ctx.lineWidth = 0.8;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx1, ty1);
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx2, ty2);
+              ctx.stroke();
+              
+              ctx.restore();
+            }
+          }
+        }
+      }
+
+      if (anyCompleting) {
+        playScanningSound(true);
+      } else if (anyBeingResearched) {
+        playScanningSound(false);
       }
 
       for (const p of serverState.planets) {
