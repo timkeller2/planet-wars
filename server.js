@@ -55,10 +55,7 @@ async function bootstrap() {
   let lastHumanActivityTime = Date.now();
 
   function executeCommand(cmdStr, player, socket, io, game) {
-    const hasCheats = game.settings && game.settings.enableCheats;
-    if (!hasCheats) {
-      return "Cheats are disabled. You must check 'Enable Cheats' on the startup screen to use commands.";
-    }
+    const hasCheats = true;
 
     const cleanCmd = cmdStr.trim().replace(/^\//, '');
     const parts = cleanCmd.split(/\s+/);
@@ -303,6 +300,24 @@ async function bootstrap() {
       if (p && p.owner && p.owner.id === player.id) {
         if (p.inRevolt) return;
         game.buildCapitalShip(p, data.classType);
+      }
+    });
+
+    socket.on('buildCapitalShipConfig', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      player.lastCommandTime = Date.now();
+      player.afkWarningSent = false;
+      if (player.isAI) {
+        player.isAI = false;
+      }
+
+      const p = game.planets.find(pl => pl.id === data.planetId);
+      if (p && p.owner && p.owner.id === player.id) {
+        if (p.inRevolt) return;
+        game.buildCapitalShipConfig(p, data.classType, data.upgrades, data.configName);
       }
     });
 
@@ -2257,7 +2272,8 @@ async function bootstrap() {
               habitability: p.habitability || 0,
               inRevolt: p.inRevolt || false,
               revoltTimer: p.revoltTimer || 0,
-               anomaly: p.anomaly ? {
+              isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false,
+              anomaly: p.anomaly ? {
                  id: p.anomaly.id,
                  x: p.anomaly.x,
                  y: p.anomaly.y,

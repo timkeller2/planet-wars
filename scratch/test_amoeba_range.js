@@ -26,8 +26,8 @@ monsterPlayer.expScore = 0;
   const range = amoeba.getWeaponRange();
   console.log("Scenario 1 Range:", range);
   // displayedMaxHealth = 4 + (4 * 3) / 2 = 10
-  // baseAmoebaRange = (40 + 10) * (1 + 0 + 0) = 50
-  assert(range === 50, "Expected range to be 50");
+  // baseAmoebaRange = (15 + 10) * (1 + 0 + 0) = 25
+  assert(range === 25, "Expected range to be 25");
 }
 
 // Scenario 2: Small newly spawned amoeba with 2 bombs
@@ -40,8 +40,8 @@ monsterPlayer.expScore = 0;
 
   const range = amoeba.getWeaponRange();
   console.log("Scenario 2 Range:", range);
-  // baseAmoebaRange = 50. effectiveRange = 50 + 50 * 0.1 = 55
-  assert(range === 55, "Expected range to be 55");
+  // baseAmoebaRange = 25. effectiveRange = 25 + 25 * 0.1 = 27.5
+  assert(range === 27, "Expected range to be 27");
 }
 
 // Scenario 3: Large cheat-spawned amoeba (maxHealth = 15), 0 tech, 0 exp, 0 bombs
@@ -55,8 +55,8 @@ monsterPlayer.expScore = 0;
   const range = amoeba.getWeaponRange();
   console.log("Scenario 3 Range:", range);
   // displayedMaxHealth = 15 + (15 * 14) / 2 = 120
-  // baseAmoebaRange = (40 + 120) * (1 + 0 + 0) = 160
-  assert(range === 160, "Expected range to be 160");
+  // baseAmoebaRange = (15 + 120) * (1 + 0 + 0) = 135
+  assert(range === 135, "Expected range to be 135");
 }
 
 // Scenario 4: Large cheat-spawned amoeba with 5 bombs and monster player with some tech & exp
@@ -77,9 +77,9 @@ monsterPlayer.expScore = 0;
   const range = amoeba.getWeaponRange();
   console.log("Scenario 4 Range:", range);
   // displayedMaxHealth = 15 + (15 * 14) / 2 = 120
-  // baseAmoebaRange = (40 + 120) * (1 + 0.10 + 0.90) = 160 * 2.0 = 320
-  // with bombs: 320 * 1.10 = 352
-  assert(range === 352, "Expected range to be 352");
+  // baseAmoebaRange = (15 + 120) * (1 + 0.10 + 0.90) = 135 * 2.0 = 270
+  // with bombs: 270 * 1.10 = 297
+  assert(range === 297, "Expected range to be 297");
 }
 
 console.log("All Space Amoeba range tests passed successfully!");

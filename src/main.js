@@ -1023,6 +1023,66 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   }
 
+  function drawShipClassOnCanvas(canvas, classType, style, playerColor, isCruiserBtn = true) {
+    if (!canvas) return;
+    const ctxBtn = canvas.getContext('2d');
+    ctxBtn.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctxBtn.save();
+    ctxBtn.translate(canvas.width / 2, canvas.height / 2);
+    
+    let cohort = 'scout_group';
+    if (classType === 'destroyer') {
+      cohort = 'destroyer_group';
+    } else if (classType === 'cruiser' || classType === 'battlecruiser') {
+      cohort = 'cruiser_group';
+    } else if (classType === 'battleship' || classType === 'titan') {
+      cohort = 'battleship_group';
+    } else if (classType === 'mammoth') {
+      cohort = 'mammoth_group';
+    }
+    
+    let drawnButtonImage = false;
+    if (graphicalMode && transparentShipsCanvas) {
+      let normalizedStyle = style;
+      if (normalizedStyle) {
+        normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
+      }
+      if (!FACTION_MAPPING[normalizedStyle]) {
+        normalizedStyle = 'Klingon';
+      }
+      const faction = FACTION_MAPPING[normalizedStyle];
+      const classRow = CLASS_MAPPING[classType];
+      if (faction && classRow) {
+        const maxDim = Math.max(faction.w, classRow.h);
+        const buttonScale = (isCruiserBtn ? 36 : 20) / maxDim;
+        const drawnW = faction.w * buttonScale;
+        const drawnH = classRow.h * buttonScale;
+        
+        ctxBtn.drawImage(
+          transparentShipsCanvas,
+          faction.x, classRow.y, faction.w, classRow.h,
+          -drawnW / 2, -drawnH / 2, drawnW, drawnH
+        );
+        drawnButtonImage = true;
+      }
+    }
+
+    if (!drawnButtonImage) {
+      const size = isCruiserBtn ? 14 : 8;
+      ctxBtn.fillStyle = playerColor;
+      drawRacialShipHull(ctxBtn, style, cohort, size);
+      ctxBtn.closePath();
+      ctxBtn.fill();
+      
+      ctxBtn.strokeStyle = '#000000';
+      ctxBtn.lineWidth = 1;
+      ctxBtn.stroke();
+    }
+    
+    ctxBtn.restore();
+  }
+
   function updateBuildButtonCanvases() {
     if (!localPlayer) return;
     const myPlayer = (serverState && serverState.players) ? serverState.players.find(p => p.id === localPlayer.id) : null;
@@ -1049,62 +1109,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
       
       if (canvas) {
-        const ctxBtn = canvas.getContext('2d');
-        ctxBtn.clearRect(0, 0, canvas.width, canvas.height);
-        
-        ctxBtn.save();
-        ctxBtn.translate(canvas.width / 2, canvas.height / 2);
-        
-        let cohort = 'scout_group';
-        if (classType === 'destroyer') {
-          cohort = 'destroyer_group';
-        } else if (classType === 'cruiser' || classType === 'battlecruiser') {
-          cohort = 'cruiser_group';
-        } else if (classType === 'battleship' || classType === 'titan') {
-          cohort = 'battleship_group';
-        } else if (classType === 'mammoth') {
-          cohort = 'mammoth_group';
-        }
-        
-        let drawnButtonImage = false;
-        if (graphicalMode && transparentShipsCanvas) {
-          let normalizedStyle = style;
-          if (normalizedStyle) {
-            normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
-          }
-          if (!FACTION_MAPPING[normalizedStyle]) {
-            normalizedStyle = 'Klingon';
-          }
-          const faction = FACTION_MAPPING[normalizedStyle];
-          const classRow = CLASS_MAPPING[classType];
-          if (faction && classRow) {
-            const maxDim = Math.max(faction.w, classRow.h);
-            const buttonScale = (isCruiserBtn ? 36 : 20) / maxDim;
-            const drawnW = faction.w * buttonScale;
-            const drawnH = classRow.h * buttonScale;
-            
-            ctxBtn.drawImage(
-              transparentShipsCanvas,
-              faction.x, classRow.y, faction.w, classRow.h,
-              -drawnW / 2, -drawnH / 2, drawnW, drawnH
-            );
-            drawnButtonImage = true;
-          }
-        }
-
-        if (!drawnButtonImage) {
-          const size = isCruiserBtn ? 14 : 8;
-          ctxBtn.fillStyle = playerColor;
-          drawRacialShipHull(ctxBtn, style, cohort, size);
-          ctxBtn.closePath();
-          ctxBtn.fill();
-          
-          ctxBtn.strokeStyle = '#000000';
-          ctxBtn.lineWidth = 1;
-          ctxBtn.stroke();
-        }
-        
-        ctxBtn.restore();
+        drawShipClassOnCanvas(canvas, classType, style, playerColor, isCruiserBtn);
       }
     }
   }
@@ -1129,6 +1134,7 @@ function getPlanetTradeIncomePerMin(planet) {
     mammoth: { name: 'Mammoth', key: 'm', hp: 55, costShips: 500, costCap: 20, btnId: 'btn-build-mammoth' }
   };
   let cruiserBuildModeActive = false;
+  let activeConfigClassType = null;
   let starfieldEnabled = true;
   let hoveredPlanet = null;
   let hoveredShip = null;
@@ -1920,6 +1926,37 @@ function getPlanetTradeIncomePerMin(planet) {
       for (const tile of tiles) {
         const type = tile.getAttribute('data-type');
         const id = parseInt(tile.getAttribute('data-id'), 10);
+
+        if (type === 'ship') {
+          const liveShip = serverState ? serverState.ships.find(ss => ss.id === id) : null;
+          if (liveShip && liveShip.isCruiser && !liveShip.isAmoeba) {
+            let pressTimer = null;
+            const startPress = (e) => {
+              if (e.button !== undefined && e.button !== 0) return;
+              pressTimer = setTimeout(() => {
+                triggerSaveConfig(id);
+              }, 500);
+            };
+            const endPress = () => {
+              if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+              }
+            };
+
+            tile.addEventListener('mousedown', startPress);
+            tile.addEventListener('touchstart', startPress);
+            tile.addEventListener('mouseup', endPress);
+            tile.addEventListener('touchend', endPress);
+            tile.addEventListener('mouseleave', endPress);
+            tile.addEventListener('touchcancel', endPress);
+
+            tile.addEventListener('contextmenu', (e) => {
+              e.preventDefault();
+              triggerSaveConfig(id);
+            });
+          }
+        }
         
         tile.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -2694,7 +2731,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const shipExpBonusForRange = Math.sqrt(hs.expScore || 0) + (hs.commandPoints || 0);
         const xpRangeBonus = (expBonus + shipExpBonusForRange) * 0.10;
         const displayedMaxHealth = hs.maxHealth + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
-        let baseAmoebaRange = (40 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
+        let baseAmoebaRange = (15 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
         let effectiveRange = baseAmoebaRange;
         if (hs.bombs > 0) {
           effectiveRange += baseAmoebaRange * 0.10;
@@ -3593,6 +3630,41 @@ function getPlanetTradeIncomePerMin(planet) {
   const chatMessages = document.getElementById('chat-messages');
   const chatContainer = document.getElementById('chat-container');
   let chatInteracted = false;
+
+  const configNameInput = document.getElementById('config-name-input');
+  if (configNameInput) {
+    configNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.stopPropagation();
+        const name = configNameInput.value.trim();
+        if (name && pendingShipConfig) {
+          const savedConfigs = JSON.parse(localStorage.getItem('planetwars_ship_configs') || '[]');
+          const newConfig = {
+            name: name.substring(0, 30),
+            classType: pendingShipConfig.classType,
+            upgrades: pendingShipConfig.upgrades
+          };
+          savedConfigs.push(newConfig);
+          localStorage.setItem('planetwars_ship_configs', JSON.stringify(savedConfigs));
+          
+          configNameInput.value = '';
+          configNameInput.classList.add('hidden');
+          configNameInput.blur();
+          pendingShipConfig = null;
+
+          const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+          const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
+          updateConfigBuildButtons(myPlayer, selectedPlanetBuild);
+        }
+      } else if (e.key === 'Escape') {
+        e.stopPropagation();
+        configNameInput.value = '';
+        configNameInput.classList.add('hidden');
+        configNameInput.blur();
+        pendingShipConfig = null;
+      }
+    });
+  }
 
   if (chatMessages) {
     chatMessages.addEventListener('mousedown', () => {
@@ -5464,6 +5536,380 @@ function getPlanetTradeIncomePerMin(planet) {
     return Math.max(1, Math.round(baseCost * (1 + modifier)));
   }
 
+  let pendingShipConfig = null;
+
+  function getConfigurationUpgradeCost(classType, upgrades, myPlayer) {
+    if (!serverState) return 0;
+    const baseCfg = SHIP_CLASSES[classType];
+    if (!baseCfg) return 0;
+    const hp = baseCfg.hp;
+
+    const upgradeProps = [
+      'sensorarrays', 'labs', 'armor', 'shields', 'engine', 
+      'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 
+      'diplomat', 'marines', 'command'
+    ];
+    let totalUpgradeCost = 0;
+    const levels = {};
+    let totalUpgradesCount = 0;
+    for (const prop of upgradeProps) {
+      levels[prop] = upgrades ? (parseInt(upgrades[prop], 10) || 0) : 0;
+      totalUpgradesCount += levels[prop];
+    }
+
+    let simulatedTotalUpgrades = 0;
+    const simulatedLevels = { ...levels };
+    while (totalUpgradesCount > 0) {
+      let foundProp = null;
+      for (const prop of upgradeProps) {
+        if (simulatedLevels[prop] > 0) {
+          foundProp = prop;
+          break;
+        }
+      }
+      if (!foundProp) break;
+
+      const prevSum = simulatedTotalUpgrades;
+      const baseCost = Math.min(150, Math.round(25 + hp * (3 + prevSum / 3)));
+
+      const typeKeyMap = {
+        sensorarrays: 'sensorarray',
+        labs: 'lab',
+        armor: 'armor',
+        shields: 'shield',
+        engine: 'engine',
+        munitions: 'munitions',
+        targeting: 'targeting',
+        damagecontrol: 'damagecontrol',
+        fuel_tanker: 'fueltanker',
+        diplomat: 'diplomat',
+        marines: 'marines',
+        command: 'command'
+      };
+      const normType = typeKeyMap[foundProp] || foundProp;
+      const globalMod = (serverState.globalUpgradeModifiers && serverState.globalUpgradeModifiers[normType] !== undefined)
+        ? Math.max(-0.35, serverState.globalUpgradeModifiers[normType])
+        : -0.25;
+      let playerMod = 0;
+      if (myPlayer && myPlayer.upgradeModifiers && myPlayer.upgradeModifiers[normType] !== undefined) {
+        playerMod = myPlayer.upgradeModifiers[normType];
+      }
+      const modifier = Math.max(-0.50, globalMod + playerMod);
+      const finalCostVal = Math.max(1, Math.round(baseCost * (1 + modifier)));
+      totalUpgradeCost += finalCostVal;
+
+      simulatedLevels[foundProp]--;
+      simulatedTotalUpgrades++;
+      totalUpgradesCount--;
+    }
+
+    return totalUpgradeCost;
+  }
+
+  function getCreditsAvailableForConfig(myPlayer) {
+    let minAllowedCredits = 0;
+    if (serverState && serverState.planets && myPlayer) {
+      const ownsHomeworld = serverState.planets.some(p => p.homeworldOf === myPlayer.id && p.ownerId === myPlayer.id);
+      if (ownsHomeworld) {
+        minAllowedCredits = -(1000 + Math.floor(myPlayer.totalShips || 0));
+      }
+    }
+    return (myPlayer && myPlayer.useCredits !== false) ? ((myPlayer.credits || 0) - minAllowedCredits) : 0;
+  }
+
+  function getUpgradeIconsHtml(upgrades) {
+    if (!upgrades) return '';
+    const emojiMap = {
+      sensorarrays: '📡',
+      labs: '🔬',
+      armor: '🛡️',
+      shields: '🌀',
+      engine: '🚀',
+      munitions: '💣',
+      targeting: '🎯',
+      damagecontrol: '🔧',
+      fuel_tanker: '⛽',
+      diplomat: '🤝',
+      marines: '🪖',
+      command: '👑'
+    };
+    
+    let html = '';
+    for (const [key, val] of Object.entries(upgrades)) {
+      const level = parseInt(val, 10) || 0;
+      if (level > 0) {
+        const emoji = emojiMap[key] || '⭐';
+        if (level > 1) {
+          html += `<span class="upgrade-icon-item" title="${key}: Level ${level}">${emoji}<sub style="font-size: 0.55rem; bottom: -0.2em; left: -0.1em; font-weight: bold; text-shadow: 1px 1px 1px #000;">${level}</sub></span>`;
+        } else {
+          html += `<span class="upgrade-icon-item" title="${key}: Level ${level}">${emoji}</span>`;
+        }
+      }
+    }
+    return html;
+  }
+
+  function updateConfigBuildButtons(myPlayer, selectedPlanetBuild) {
+    const container = document.getElementById('config-build-buttons');
+    if (!container) return;
+
+    if (!cruiserBuildModeActive || !selectedPlanetBuild || !activeConfigClassType) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      container.removeAttribute('data-class-type');
+      return;
+    }
+
+    const savedConfigs = JSON.parse(localStorage.getItem('planetwars_ship_configs') || '[]');
+    const activeConfigs = savedConfigs
+      .map((cfg, originalIdx) => ({ ...cfg, originalIdx }))
+      .filter(cfg => cfg.classType === activeConfigClassType);
+
+    if (activeConfigs.length === 0) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      container.removeAttribute('data-class-type');
+      return;
+    }
+
+    const existingButtons = container.querySelectorAll('.config-build-btn');
+    const containerClassType = container.getAttribute('data-class-type');
+    if (existingButtons.length !== activeConfigs.length || containerClassType !== activeConfigClassType) {
+      container.setAttribute('data-class-type', activeConfigClassType);
+      let html = '';
+      for (let i = 0; i < activeConfigs.length; i++) {
+        const cfg = activeConfigs[i];
+        const baseCfg = SHIP_CLASSES[cfg.classType];
+        if (!baseCfg) continue;
+
+        const iconsHtml = getUpgradeIconsHtml(cfg.upgrades);
+
+        html += `
+          <button class="cyber-btn action-btn-icon cruiser-build-btn config-build-btn" 
+                  data-index="${cfg.originalIdx}" style="position: relative !important;">
+            <span class="btn-icon"></span>
+            <span class="btn-name">${cfg.name}</span>
+            <span class="btn-cost"></span>
+            <div class="config-upgrade-icons" style="position: absolute; bottom: 4px; left: 6px; display: flex; gap: 4px; font-size: 0.75rem; pointer-events: none; line-height: 1;">
+              ${iconsHtml}
+            </div>
+          </button>
+        `;
+      }
+      container.innerHTML = html;
+
+      const buttons = container.querySelectorAll('.config-build-btn');
+      for (const btn of buttons) {
+        const idx = parseInt(btn.getAttribute('data-index'), 10);
+        const config = savedConfigs[idx];
+
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (selectedPlanetBuild) {
+            socket.emit('buildCapitalShipConfig', {
+              planetId: selectedPlanetBuild.id,
+              classType: config.classType,
+              upgrades: config.upgrades,
+              configName: config.name
+            });
+            activeConfigClassType = null;
+          }
+        });
+
+        let pressTimer = null;
+        const startPress = (e) => {
+          if (e.button !== undefined && e.button !== 0) return;
+          pressTimer = setTimeout(() => {
+            deleteConfig(idx);
+          }, 500);
+        };
+        const endPress = () => {
+          if (pressTimer) {
+            clearTimeout(pressTimer);
+            pressTimer = null;
+          }
+        };
+
+        btn.addEventListener('mousedown', startPress);
+        btn.addEventListener('touchstart', startPress);
+        btn.addEventListener('mouseup', endPress);
+        btn.addEventListener('touchend', endPress);
+        btn.addEventListener('mouseleave', endPress);
+        btn.addEventListener('touchcancel', endPress);
+
+        btn.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          deleteConfig(idx);
+        });
+      }
+    }
+
+    const buttons = container.querySelectorAll('.config-build-btn');
+    for (const btn of buttons) {
+      const idx = parseInt(btn.getAttribute('data-index'), 10);
+      const cfg = savedConfigs[idx];
+      if (!cfg) continue;
+      const baseCfg = SHIP_CLASSES[cfg.classType];
+      if (!baseCfg) continue;
+
+      let canvas = btn.querySelector('canvas');
+      if (!canvas) {
+        const iconSpan = btn.querySelector('.btn-icon');
+        if (iconSpan) {
+          iconSpan.innerHTML = '';
+          canvas = document.createElement('canvas');
+          canvas.width = 40;
+          canvas.height = 40;
+          canvas.style.verticalAlign = 'middle';
+          iconSpan.appendChild(canvas);
+        }
+      }
+
+      const style = myPlayer ? (myPlayer.cruiserStyle || 'Klingon') : (localPlayer.cruiserStyle || 'Klingon');
+      const playerColor = myPlayer ? (myPlayer.color || '#00ffff') : (localPlayer.color || '#00ffff');
+      if (canvas) {
+        drawShipClassOnCanvas(canvas, cfg.classType, style, playerColor, true);
+      }
+
+      const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
+      const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
+      const idxClass = keys.indexOf(cfg.classType);
+      let isUnlocked = true;
+      let lockReason = '';
+      if (idxClass > 0 && cfg.classType !== 'corvette') {
+        const prevClass = keys[idxClass - 1];
+        if (!builtClasses[prevClass]) {
+          isUnlocked = false;
+          lockReason = `Requires building a ${SHIP_CLASSES[prevClass].name} first`;
+        }
+      }
+
+      const isFirst = !builtClasses[cfg.classType];
+      let costMult = 1;
+      if (isFirst) {
+        const baseMultipliers = {
+          corvette: 1,
+          destroyer: 1.75,
+          battlecruiser: 2.5,
+          titan: 3.5,
+          mammoth: 4
+        };
+        const baseMult = baseMultipliers[cfg.classType] || 1;
+        costMult = baseMult;
+        if (myPlayer) {
+          const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
+          const idxKeys = keys.indexOf(cfg.classType);
+          if (idxKeys > 0) {
+            const prevClass = keys[idxKeys - 1];
+            const prevCount = (myPlayer.buildCounts && myPlayer.buildCounts[prevClass]) || 0;
+            const subsequentBuilds = Math.max(0, prevCount - 1);
+            costMult = Math.max(1.0, baseMult - subsequentBuilds * 0.5 * (baseMult - 1.0));
+          }
+        }
+      }
+      let baseCostShips = baseCfg.costShips * costMult;
+      if (selectedPlanetBuild && !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
+        baseCostShips *= 2;
+      }
+
+      const totalUpgradeCost = getConfigurationUpgradeCost(cfg.classType, cfg.upgrades, myPlayer);
+      const finalCost = Math.round((baseCostShips + totalUpgradeCost) * 0.8);
+      console.log(`[CLIENT-CONFIG-COST] Name: ${cfg.name}, upgrades:`, JSON.stringify(cfg.upgrades), `baseCostShips: ${baseCostShips}, totalUpgradeCost: ${totalUpgradeCost}, finalCost: ${finalCost}`);
+
+      const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
+      const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= finalCost && (selectedPlanetBuild.maxShips - baseCfg.costCap) >= 55;
+
+      if (costMult > 1) {
+        btn.style.borderColor = '#ffeb3b';
+        btn.style.color = '#ffeb3b';
+        btn.style.boxShadow = '0 0 10px rgba(255, 235, 59, 0.3), inset 0 0 10px rgba(255, 235, 59, 0.3)';
+      } else {
+        btn.style.borderColor = '';
+        btn.style.color = '';
+        btn.style.boxShadow = '';
+      }
+
+      if (!canAfford) {
+        btn.style.opacity = '0.5';
+        btn.style.pointerEvents = 'none';
+      } else {
+        btn.style.opacity = '1.0';
+        btn.style.pointerEvents = 'auto';
+      }
+
+      btn.style.display = isUnlocked ? 'inline-flex' : 'none';
+
+      const costSpan = btn.querySelector('.btn-cost');
+      if (costSpan) {
+        costSpan.textContent = `${finalCost}/${baseCfg.costCap}`;
+      }
+
+      let titleStr = '';
+      if (!isUnlocked) {
+        titleStr = `Build ${cfg.name} (LOCKED - ${lockReason})`;
+      } else {
+        titleStr = `Build ${isFirst ? 'Prototype ' : ''}${cfg.name} (Config of ${baseCfg.name}) (Cost: ${finalCost} ships/credits, Cap: ${baseCfg.costCap}). Right-click or long-press to delete configuration.`;
+      }
+      btn.setAttribute('title', titleStr);
+    }
+  }
+
+  function deleteConfig(idx) {
+    const savedConfigs = JSON.parse(localStorage.getItem('planetwars_ship_configs') || '[]');
+    savedConfigs.splice(idx, 1);
+    localStorage.setItem('planetwars_ship_configs', JSON.stringify(savedConfigs));
+    const container = document.getElementById('config-build-buttons');
+    if (container) {
+      container.innerHTML = '';
+    }
+    const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+    const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
+    updateConfigBuildButtons(myPlayer, selectedPlanetBuild);
+  }
+
+  const triggerSaveConfig = (shipId) => {
+    const liveShip = serverState ? serverState.ships.find(s => s.id === shipId) : null;
+    if (!liveShip || !liveShip.isCruiser || liveShip.isAmoeba) return;
+    const classType = liveShip.classType;
+    if (!classType || !SHIP_CLASSES[classType]) return;
+
+    const upgrades = {
+      sensorarrays: parseInt(liveShip.sensorarrays, 10) || 0,
+      labs: parseInt(liveShip.labs, 10) || 0,
+      armor: parseInt(liveShip.armor, 10) || 0,
+      shields: parseInt(liveShip.shields, 10) || 0,
+      engine: parseInt(liveShip.engine, 10) || 0,
+      munitions: parseInt(liveShip.munitions, 10) || 0,
+      targeting: parseInt(liveShip.targeting, 10) || 0,
+      damagecontrol: parseInt(liveShip.damagecontrol, 10) || 0,
+      fuel_tanker: parseInt(liveShip.fuel_tanker, 10) || 0,
+      diplomat: parseInt(liveShip.diplomat, 10) || 0,
+      marines: parseInt(liveShip.marines, 10) || 0,
+      command: parseInt(liveShip.command, 10) || 0
+    };
+
+    const savedConfigs = JSON.parse(localStorage.getItem('planetwars_ship_configs') || '[]');
+    const exists = savedConfigs.some(cfg => {
+      if (cfg.classType !== classType) return false;
+      for (const key of Object.keys(upgrades)) {
+        if ((cfg.upgrades?.[key] || 0) !== upgrades[key]) return false;
+      }
+      return true;
+    });
+
+    if (exists) {
+      return;
+    }
+
+    pendingShipConfig = { classType, upgrades };
+    const configNameInput = document.getElementById('config-name-input');
+    if (configNameInput) {
+      configNameInput.value = '';
+      configNameInput.classList.remove('hidden');
+      configNameInput.focus();
+    }
+  };
+
   function getPlayerSpecificDiscountForShip(ship, type) {
     if (!serverState) return 0;
     const typeKeyMap = {
@@ -6523,7 +6969,8 @@ function getPlanetTradeIncomePerMin(planet) {
   });
 
   window.addEventListener('keydown', (event) => {
-    if (document.activeElement === document.getElementById('chat-input')) {
+    if (document.activeElement === document.getElementById('chat-input') ||
+        document.activeElement === document.getElementById('config-name-input')) {
       return;
     }
     if (event.repeat) return;
@@ -6605,55 +7052,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
         if (typeToBuild) {
           event.preventDefault();
-          const cfg = SHIP_CLASSES[typeToBuild];
-          const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
-          const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
-          
-          // Check unlock requirement: except for corvettes, previous class must be built
-          const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
-          const idx = keys.indexOf(typeToBuild);
-          let isUnlocked = true;
-          if (idx > 0 && typeToBuild !== 'corvette') {
-            const prevClass = keys[idx - 1];
-            if (!builtClasses[prevClass]) {
-              isUnlocked = false;
-            }
-          }
-
-          if (isUnlocked) {
-            const isFirst = !builtClasses[typeToBuild];
-            let costMult = 1;
-            if (isFirst) {
-              const baseMultipliers = {
-                corvette: 1,
-                destroyer: 1.75,
-                battlecruiser: 2.5,
-                titan: 3.5,
-                mammoth: 4
-              };
-              const baseMult = baseMultipliers[typeToBuild] || 1;
-              costMult = baseMult;
-              if (myPlayer) {
-                const idx = keys.indexOf(typeToBuild);
-                if (idx > 0) {
-                  const prevClass = keys[idx - 1];
-                  const prevCount = (myPlayer.buildCounts && myPlayer.buildCounts[prevClass]) || 0;
-                  const subsequentBuilds = Math.max(0, prevCount - 1);
-                  costMult = Math.max(1.0, baseMult - subsequentBuilds * 0.5 * (baseMult - 1.0));
-                }
-              }
-            }
-            let costShips = cfg.costShips * costMult;
-            if (!(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
-              costShips *= 2;
-            }
-
-            const creditsAvailable = (isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
-            const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
-            if (canAfford) {
-              socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType: typeToBuild });
-            }
-          }
+          handleClassBuildTrigger(typeToBuild, selectedPlanetBuild);
           return;
         }
         return;
@@ -7059,13 +7458,140 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   });
   document.getElementById('btn-cruiser').addEventListener('click', () => { cruiserBuildModeActive = !cruiserBuildModeActive; });
+  const handleClassBuildTrigger = (classType, selectedPlanetBuild) => {
+    if (!selectedPlanetBuild) return;
+
+    // Check if there are saved configurations for this class
+    const savedConfigs = JSON.parse(localStorage.getItem('planetwars_ship_configs') || '[]');
+    const classConfigs = savedConfigs.filter(cfg => cfg.classType === classType);
+
+    if (classConfigs.length === 0) {
+      // Build basic immediately
+      const cfg = SHIP_CLASSES[classType];
+      if (cfg) {
+        const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+        const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
+        
+        const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
+        const idx = keys.indexOf(classType);
+        let isUnlocked = true;
+        if (idx > 0 && classType !== 'corvette') {
+          const prevClass = keys[idx - 1];
+          if (!builtClasses[prevClass]) {
+            isUnlocked = false;
+          }
+        }
+
+        if (isUnlocked) {
+          const isFirst = !builtClasses[classType];
+          let costMult = 1;
+          if (isFirst) {
+            const baseMultipliers = {
+              corvette: 1,
+              destroyer: 1.75,
+              battlecruiser: 2.5,
+              titan: 3.5,
+              mammoth: 4
+            };
+            const baseMult = baseMultipliers[classType] || 1;
+            costMult = baseMult;
+            if (myPlayer) {
+              const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
+              const idxKeys = keys.indexOf(classType);
+              if (idxKeys > 0) {
+                const prevClass = keys[idxKeys - 1];
+                const prevCount = (myPlayer.buildCounts && myPlayer.buildCounts[prevClass]) || 0;
+                const subsequentBuilds = Math.max(0, prevCount - 1);
+                costMult = Math.max(1.0, baseMult - subsequentBuilds * 0.5 * (baseMult - 1.0));
+              }
+            }
+          }
+          let costShips = cfg.costShips * costMult;
+          if (!(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
+            costShips *= 2;
+          }
+
+          const creditsAvailable = (isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+          const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+          if (canAfford) {
+            socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
+          }
+        }
+      } else {
+        socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
+      }
+      activeConfigClassType = null;
+    } else {
+      if (activeConfigClassType === classType) {
+        // Second press -> build basic (with afford validation)
+        const cfg = SHIP_CLASSES[classType];
+        if (cfg) {
+          const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+          const builtClasses = myPlayer ? (myPlayer.builtClasses || {}) : {};
+          
+          const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
+          const idx = keys.indexOf(classType);
+          let isUnlocked = true;
+          if (idx > 0 && classType !== 'corvette') {
+            const prevClass = keys[idx - 1];
+            if (!builtClasses[prevClass]) {
+              isUnlocked = false;
+            }
+          }
+
+          if (isUnlocked) {
+            const isFirst = !builtClasses[classType];
+            let costMult = 1;
+            if (isFirst) {
+              const baseMultipliers = {
+                corvette: 1,
+                destroyer: 1.75,
+                battlecruiser: 2.5,
+                titan: 3.5,
+                mammoth: 4
+              };
+              const baseMult = baseMultipliers[classType] || 1;
+              costMult = baseMult;
+              if (myPlayer) {
+                const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
+                const idxKeys = keys.indexOf(classType);
+                if (idxKeys > 0) {
+                  const prevClass = keys[idxKeys - 1];
+                  const prevCount = (myPlayer.buildCounts && myPlayer.buildCounts[prevClass]) || 0;
+                  const subsequentBuilds = Math.max(0, prevCount - 1);
+                  costMult = Math.max(1.0, baseMult - subsequentBuilds * 0.5 * (baseMult - 1.0));
+                }
+              }
+            }
+            let costShips = cfg.costShips * costMult;
+            if (!(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
+              costShips *= 2;
+            }
+
+            const creditsAvailable = (isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+            const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+            if (canAfford) {
+              socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
+            }
+          }
+        } else {
+          socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
+        }
+        activeConfigClassType = null;
+      } else {
+        // First press -> show configurations
+        activeConfigClassType = classType;
+      }
+    }
+  };
+
   const bindBuildButton = (btnId, classType) => {
     const el = document.getElementById(btnId);
     if (el) {
       el.addEventListener('click', () => {
         const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
         if (selectedPlanetBuild) {
-          socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
+          handleClassBuildTrigger(classType, selectedPlanetBuild);
         }
       });
     }
@@ -7754,6 +8280,9 @@ function getPlanetTradeIncomePerMin(planet) {
     if (!selectedPlanetBuild || selectedPlanetBuild.isSpeedPlanet || selectedPlanetBuild.ownerId !== localPlayer.id) {
       cruiserBuildModeActive = false;
     }
+    if (!cruiserBuildModeActive) {
+      activeConfigClassType = null;
+    }
 
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
     const actionButtonsLeft = document.getElementById('action-buttons-left');
@@ -8028,17 +8557,41 @@ function getPlanetTradeIncomePerMin(planet) {
           let titleStr = '';
           if (!isUnlocked) {
             titleStr = `Build ${baseName} (LOCKED - ${lockReason})`;
+          } else if (activeConfigClassType === classType) {
+            titleStr = `Build Basic ${baseName} (${shortcutKey}) (Cost: ${costShips} ships/credits, Cap: ${cfg.costCap})`;
           } else {
             titleStr = `Build ${isFirst ? 'Prototype ' : ''}${baseName} (${shortcutKey}) (Credits allowed if toggled)`;
           }
           el.setAttribute('title', titleStr);
-          el.style.display = isUnlocked ? 'inline-flex' : 'none';
+
+          let shouldShow = isUnlocked;
+          if (activeConfigClassType && classType !== activeConfigClassType) {
+            shouldShow = false;
+          }
+          el.style.display = shouldShow ? 'inline-flex' : 'none';
         }
       }
+      const configBuildButtonsContainer = document.getElementById('config-build-buttons');
+      if (configBuildButtonsContainer) {
+        if (activeConfigClassType) {
+          configBuildButtonsContainer.style.display = 'flex';
+          updateConfigBuildButtons(myPlayer, selectedPlanetBuild);
+        } else {
+          configBuildButtonsContainer.style.display = 'none';
+          configBuildButtonsContainer.innerHTML = '';
+          configBuildButtonsContainer.removeAttribute('data-class-type');
+        }
+      }
+
       const elBuildCancel = document.getElementById('btn-build-cancel');
       if (elBuildCancel) elBuildCancel.style.display = 'inline-flex';
 
     } else {
+      const configBuildButtonsContainer = document.getElementById('config-build-buttons');
+      if (configBuildButtonsContainer) {
+        configBuildButtonsContainer.style.display = 'none';
+      }
+
       if (actionButtonsLeft) actionButtonsLeft.style.display = 'flex';
       if (btnUpgradeMode) {
         btnUpgradeMode.style.display = 'none';
@@ -8420,8 +8973,8 @@ function getPlanetTradeIncomePerMin(planet) {
               // Draw cone (a wedge from cruiser to anomaly)
               ctx.beginPath();
               ctx.moveTo(sx, sy);
-              // Width of the cone at the target end
-              const coneWidth = p.isDeepSpaceAnomaly ? 16 : (p.radius || 20);
+              // Width of the cone at the target end (narrowed scan beam)
+              const coneWidth = p.isDeepSpaceAnomaly ? 4 : 8;
               const perpAngle = angle + Math.PI / 2;
               
               const tx1 = tx - Math.cos(perpAngle) * coneWidth;
@@ -8509,6 +9062,15 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
               ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
               ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+              
+              const xScale = 1.0 - Math.sin(Date.now() / 250) * 0.2;
+              const xLineLength = 1.25 * xScale * twinkle;
+              const offset = xLineLength * 0.7071;
+              ctx.moveTo(p.anomaly.x - offset, p.anomaly.y - offset);
+              ctx.lineTo(p.anomaly.x + offset, p.anomaly.y + offset);
+              ctx.moveTo(p.anomaly.x - offset, p.anomaly.y + offset);
+              ctx.lineTo(p.anomaly.x + offset, p.anomaly.y - offset);
+              
               ctx.stroke();
             } else if (diff <= 35) {
               const scale = 1.0 + Math.sin(Date.now() / 150) * 0.3;
@@ -8523,6 +9085,15 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
               ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
               ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+              
+              const xScale = 1.0 - Math.sin(Date.now() / 150) * 0.3;
+              const xLineLength = 1.375 * xScale * twinkle;
+              const offset = xLineLength * 0.7071;
+              ctx.moveTo(p.anomaly.x - offset, p.anomaly.y - offset);
+              ctx.lineTo(p.anomaly.x + offset, p.anomaly.y + offset);
+              ctx.moveTo(p.anomaly.x - offset, p.anomaly.y + offset);
+              ctx.lineTo(p.anomaly.x + offset, p.anomaly.y - offset);
+              
               ctx.stroke();
               
               ctx.fillStyle = anomalyColor;
@@ -8546,6 +9117,15 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(lineLength, 0);
               ctx.moveTo(0, -lineLength);
               ctx.lineTo(0, lineLength);
+              
+              const xScale = 1.0 - Math.sin(Date.now() / 120) * 0.35;
+              const xLineLength = 1.5 * xScale * twinkle;
+              const offset = xLineLength * 0.7071;
+              ctx.moveTo(-offset, -offset);
+              ctx.lineTo(offset, offset);
+              ctx.moveTo(-offset, offset);
+              ctx.lineTo(offset, -offset);
+              
               ctx.stroke();
             } else if (diff <= 85) {
               const scale = 1.0 + Math.sin(Date.now() / 80) * 0.4;
@@ -8560,6 +9140,15 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
               ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
               ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+              
+              const xScale = 1.0 - Math.sin(Date.now() / 80) * 0.4;
+              const xLineLength = 1.625 * xScale * twinkle;
+              const offset = xLineLength * 0.7071;
+              ctx.moveTo(p.anomaly.x - offset, p.anomaly.y - offset);
+              ctx.lineTo(p.anomaly.x + offset, p.anomaly.y + offset);
+              ctx.moveTo(p.anomaly.x - offset, p.anomaly.y + offset);
+              ctx.lineTo(p.anomaly.x + offset, p.anomaly.y - offset);
+              
               ctx.stroke();
               
               ctx.strokeStyle = `rgba(255, 109, 0, ${0.4 * twinkle})`;
@@ -8585,6 +9174,15 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(ax + lineLength, ay);
               ctx.moveTo(ax, ay - lineLength);
               ctx.lineTo(ax, ay + lineLength);
+              
+              const xScale = 1.0 - Math.sin(Date.now() / 50) * 0.45;
+              const xLineLength = 1.75 * xScale * twinkle;
+              const offset = xLineLength * 0.7071;
+              ctx.moveTo(ax - offset, ay - offset);
+              ctx.lineTo(ax + offset, ay + offset);
+              ctx.moveTo(ax - offset, ay + offset);
+              ctx.lineTo(ax + offset, ay - offset);
+              
               ctx.stroke();
               
               ctx.strokeStyle = `rgba(255, 0, 255, ${0.6 * twinkle})`;
@@ -11019,7 +11617,7 @@ function getPlanetTradeIncomePerMin(planet) {
             const shipExpBonus = Math.sqrt(s.expScore || 0) + (s.commandPoints || 0);
             const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
             const displayedMaxHealth = s.maxHealth + (s.maxHealth * (s.maxHealth - 1)) / 2;
-            const baseAmoebaRange = (40 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
+            const baseAmoebaRange = (15 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
             range = baseAmoebaRange;
             if (s.bombs > 0) {
               range += baseAmoebaRange * 0.10;

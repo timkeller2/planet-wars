@@ -569,7 +569,7 @@ export class Ship {
     if (this.isAmoeba) {
       const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
       const displayedMaxHealth = this.maxHealth + (this.maxHealth * (this.maxHealth - 1)) / 2;
-      const baseAmoebaRange = (40 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
+      const baseAmoebaRange = (15 + displayedMaxHealth) * (1 + laserTechBonus + xpRangeBonus);
       effectiveRange = baseAmoebaRange;
       if (this.bombs > 0) {
         effectiveRange += baseAmoebaRange * 0.10;
@@ -731,7 +731,14 @@ export class Ship {
           const creditsDeduction = (this.buildCostCreditsRemaining / (remainingProgressTime / dt));
           const actualDeduction = Math.min(this.buildCostCreditsRemaining, creditsDeduction);
           if (this.owner) {
-            this.owner.credits = Math.max(0, (this.owner.credits || 0) - actualDeduction);
+            let minAllowedCredits = 0;
+            if (typeof game !== 'undefined' && game && game.planets) {
+              const ownsHomeworld = game.planets.some(p => p.homeworldOf === this.owner.id && p.owner && p.owner.id === this.owner.id);
+              if (ownsHomeworld) {
+                minAllowedCredits = -(1000 + Math.floor(this.owner.totalShips || 0));
+              }
+            }
+            this.owner.credits = Math.max(minAllowedCredits, (this.owner.credits || 0) - actualDeduction);
           }
           this.buildCostCreditsRemaining = Math.max(0, this.buildCostCreditsRemaining - actualDeduction);
         }
@@ -744,12 +751,41 @@ export class Ship {
         }
         if (this.buildCostCreditsRemaining > 0) {
           if (this.owner) {
-            this.owner.credits = Math.max(0, (this.owner.credits || 0) - this.buildCostCreditsRemaining);
+            let minAllowedCredits = 0;
+            if (typeof game !== 'undefined' && game && game.planets) {
+              const ownsHomeworld = game.planets.some(p => p.homeworldOf === this.owner.id && p.owner && p.owner.id === this.owner.id);
+              if (ownsHomeworld) {
+                minAllowedCredits = -(1000 + Math.floor(this.owner.totalShips || 0));
+              }
+            }
+            this.owner.credits = Math.max(minAllowedCredits, (this.owner.credits || 0) - this.buildCostCreditsRemaining);
           }
           this.buildCostCreditsRemaining = 0;
         }
         this.health = this.maxHealth;
         this.isMaterializing = false;
+
+        // Apply configuration upgrades if present
+        if (this.configUpgrades) {
+          for (const key of Object.keys(this.configUpgrades)) {
+            const val = this.configUpgrades[key] || 0;
+            if (val > 0) {
+              this[key] = val;
+              if (key === 'armor') {
+                const bonus = (4 + 0.10 * this.maxHealth) * val;
+                this.maxArmor = (this.maxArmor || 0) + bonus;
+                this.armorPoints = (this.armorPoints || 0) + bonus;
+              } else if (key === 'munitions') {
+                this.splashDamage = val;
+              } else if (key === 'fuel_tanker') {
+                this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + 5 * val);
+                this.maxsupplies = val * 15;
+              }
+            }
+          }
+          delete this.configUpgrades;
+        }
+
         console.log(`[Capital Ship Materialized] ${this.id} finished construction. Final HP: ${this.health}`);
       }
       this.currentSpeed = 0;

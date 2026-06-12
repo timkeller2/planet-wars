@@ -2374,6 +2374,208 @@ export class Game {
     }
   }
 
+  buildCapitalShipConfig(source, classType, upgrades, configName) {
+    if (!source || !classType) return;
+    const cfg = SHIP_CLASSES[classType];
+    if (!cfg) return;
+
+    const owner = source.owner;
+    if (source.owner && !source.isSpeedPlanet) {
+      if (owner) {
+        owner.builtClasses = owner.builtClasses || {};
+      }
+
+      // Check unlock requirement: except for corvettes, previous class must be built
+      const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
+      const idx = keys.indexOf(classType);
+      if (idx > 0 && classType !== 'corvette') {
+        const prevClass = keys[idx - 1];
+        const builtClasses = owner ? (owner.builtClasses || {}) : {};
+        if (!builtClasses[prevClass]) {
+          return; // Locked!
+        }
+      }
+
+      const isFirst = owner ? !owner.builtClasses[classType] : true;
+      let costMult = 1;
+      if (isFirst) {
+        const baseMultipliers = {
+          corvette: 1,
+          destroyer: 1.75,
+          battlecruiser: 2.5,
+          titan: 3.5,
+          mammoth: 4
+        };
+        const baseMult = baseMultipliers[classType] || 1;
+        costMult = baseMult;
+        if (owner) {
+          const keys = ['corvette', 'destroyer', 'battlecruiser', 'titan', 'mammoth'];
+          const idx = keys.indexOf(classType);
+          if (idx > 0) {
+            const prevClass = keys[idx - 1];
+            const prevCount = (owner.buildCounts && owner.buildCounts[prevClass]) || 0;
+            const subsequentBuilds = Math.max(0, prevCount - 1);
+            costMult = Math.max(1.0, baseMult - subsequentBuilds * 0.5 * (baseMult - 1.0));
+          }
+        }
+      }
+      let baseCostShips = cfg.costShips * costMult;
+      if (!(source.isMilitary || source.homeworldOf)) {
+        baseCostShips *= 2;
+      }
+      const costCap = cfg.costCap;
+      const maxHealth = cfg.hp;
+
+      // Calculate configuration upgrade costs
+      const upgradeProps = [
+        'sensorarrays', 'labs', 'armor', 'shields', 'engine', 
+        'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 
+        'diplomat', 'marines', 'command'
+      ];
+      let totalUpgradeCost = 0;
+      const levels = {};
+      let totalUpgradesCount = 0;
+      for (const prop of upgradeProps) {
+        levels[prop] = upgrades ? (parseInt(upgrades[prop], 10) || 0) : 0;
+        totalUpgradesCount += levels[prop];
+      }
+      
+      const totalUpgradesCountOriginal = totalUpgradesCount;
+
+      let simulatedTotalUpgrades = 0;
+      const simulatedLevels = { ...levels };
+      while (totalUpgradesCount > 0) {
+        let foundProp = null;
+        for (const prop of upgradeProps) {
+          if (simulatedLevels[prop] > 0) {
+            foundProp = prop;
+            break;
+          }
+        }
+        if (!foundProp) break;
+
+        const prevSum = simulatedTotalUpgrades;
+        const baseCost = Math.min(150, Math.round(25 + cfg.hp * (3 + prevSum / 3)));
+
+        const typeKeyMap = {
+          sensorarrays: 'sensorarray',
+          labs: 'lab',
+          armor: 'armor',
+          shields: 'shield',
+          engine: 'engine',
+          munitions: 'munitions',
+          targeting: 'targeting',
+          damagecontrol: 'damagecontrol',
+          fuel_tanker: 'fueltanker',
+          diplomat: 'diplomat',
+          marines: 'marines',
+          command: 'command'
+        };
+        const normType = typeKeyMap[foundProp] || foundProp;
+        const globalMod = (this.globalUpgradeModifiers && this.globalUpgradeModifiers[normType] !== undefined)
+          ? Math.max(-0.35, this.globalUpgradeModifiers[normType])
+          : -0.25;
+        let playerMod = 0;
+        if (owner && owner.upgradeModifiers && owner.upgradeModifiers[normType] !== undefined) {
+          playerMod = owner.upgradeModifiers[normType];
+        }
+        const modifier = Math.max(-0.50, globalMod + playerMod);
+        const finalCostVal = Math.max(1, Math.round(baseCost * (1 + modifier)));
+        totalUpgradeCost += finalCostVal;
+
+        simulatedLevels[foundProp]--;
+        simulatedTotalUpgrades++;
+        totalUpgradesCount--;
+      }
+
+      const finalCost = Math.round((baseCostShips + totalUpgradeCost) * 0.8);
+      console.log(`[SERVER-CONFIG-COST] Name: ${configName}, classType: ${classType}, upgrades:`, JSON.stringify(upgrades), `baseCostShips: ${baseCostShips}, totalUpgradeCost: ${totalUpgradeCost}, finalCost: ${finalCost}`);
+
+      let minAllowedCredits = 0;
+      const ownsHomeworld = this.planets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id);
+      if (ownsHomeworld) {
+        minAllowedCredits = -(1000 + Math.floor(owner.totalShips || 0));
+      }
+
+      const creditsAvailable = (owner && owner.useCredits !== false) ? (owner.credits - minAllowedCredits) : 0;
+
+      if ((source.ships + creditsAvailable) >= finalCost && (source.maxShips - costCap) >= 55) {
+        const creditsPaid = Math.min(creditsAvailable, finalCost);
+        const remainingCostShips = finalCost - creditsPaid;
+        const extraShips = source.ships - remainingCostShips;
+        const bonusHp = Math.min(4, Math.floor(Math.max(0, extraShips) / 25));
+        const finalMaxHealth = maxHealth + bonusHp;
+
+        if (owner) {
+          owner.builtClasses[classType] = true;
+          owner.buildCounts = owner.buildCounts || {};
+          owner.buildCounts[classType] = (owner.buildCounts[classType] || 0) + 1;
+        }
+        source.decreaseMaxShips(costCap);
+
+        const angle = Math.random() * Math.PI * 2;
+        const spawnDist = source.radius + 20;
+        const sx = source.x + Math.cos(angle) * spawnDist;
+        const sy = source.y + Math.sin(angle) * spawnDist;
+
+        const ship = new Ship(this.nextShipId++, sx, sy, null, source.owner, sx, sy);
+        ship.speed = 22; // Cruisers default to speed 22 before reductions
+        ship.classType = classType;
+        ship.maxHealth = finalMaxHealth;
+        ship.health = 1;
+        ship.crew = 2 * finalMaxHealth;
+        
+        const basePower = Math.floor(finalMaxHealth / 5);
+        ship.fuel = basePower * 5;
+        ship.speed = Math.max(5, ship.speed - 5 - basePower);
+        if (ship.owner && ship.owner.id === 'monsters') {
+          ship.speed = Math.max(5, ship.speed - 10);
+        }
+        ship.speedModifier = 1.0;
+        
+        let startingXp = 0;
+        if (source.homeworldOf) {
+          startingXp += source.ships / 10;
+        }
+        if (source.isMilitary) {
+          startingXp += source.ships / 10;
+        }
+        if (source.focusMode === 'garrison') {
+          startingXp += source.ships / 10;
+        }
+        startingXp += (source.expScore || 0);
+        startingXp += (owner ? (owner.expScore || 0) : 0);
+
+        ship.expScore = startingXp;
+
+        ship.cruiserStyle = source.racialAffinity;
+        ship.isCruiser = true;
+        ship.count = 1;
+
+        ship.isMaterializing = true;
+        ship.materializeProgress = 0.0;
+        
+        let duration = finalMaxHealth / 2;
+        if (totalUpgradesCountOriginal > 2) {
+          duration *= 2;
+        }
+        ship.materializeDuration = duration;
+        
+        ship.sourcePlanet = source;
+        ship.buildCostShipsTotal = remainingCostShips;
+        ship.buildCostCreditsTotal = creditsPaid;
+        ship.buildCostShipsRemaining = remainingCostShips;
+        ship.buildCostCreditsRemaining = creditsPaid;
+
+        ship.configUpgrades = upgrades;
+
+        this.assignRandomShipName(ship);
+        this.ships.push(ship);
+        console.log(`[Config Build Started] Spawning config ${configName || classType} (HP: ${finalMaxHealth}) from Planet ${source.id} for Player ${source.owner.id}. Deducting ${remainingCostShips} ships and ${creditsPaid} credits over ${ship.materializeDuration}s`);
+      }
+    }
+  }
+
   moveShipsToSpace(player, shipIds, targetX, targetY, isWarp = false, speedModifier = null, isShift = false) {
     const shipMap = new Map();
     for (let i = 0; i < this.ships.length; i++) {
