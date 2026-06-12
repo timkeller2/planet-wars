@@ -3713,7 +3713,7 @@ export class Game {
 
       player.commandLimit = 5 + (player.planetCount || 0) + (garrisonWorlds * 2) + (fullGarrisonWorlds * 2) + (controlledHomeworlds * 2) + (controlsOwnHomeworld ? 3 : 0);
       player.tradeCapacity = Math.ceil((player.planetCount || 0) / 5) + commerceWorlds;
-      player.stockpileCapacity = ((player.commandLimit || 0) + (player.tradeCapacity || 0)) * 2;
+      player.stockpileCapacity = (player.commandLimit || 0) + (player.tradeCapacity || 0);
 
       player.storageFeeAccumulator = (player.storageFeeAccumulator || 0) + deltaTime;
       while (player.storageFeeAccumulator >= 1000) {
