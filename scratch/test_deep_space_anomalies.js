@@ -386,6 +386,53 @@ const testDiplomatTargetSelection = () => {
   console.log("-> Diplomat Target Selection PASSED!");
 };
 
+const testMarketPricingMinimumConstraint = () => {
+  console.log("\n--- Part 8: Market Pricing Minimum Constraint ---");
+
+  const game = new Game();
+  game.isRunning = true;
+  game.nextNeutralTradeTime = 120000;
+  
+  // 1. Record market sales for 'dilithium'
+  game.recordMarketSale('dilithium', 10);
+  game.recordMarketSale('dilithium', 20); // max sold price is 20
+  
+  // 2. Validate max sold price logic
+  const maxSold = game.getMaxSoldPriceInLast5Minutes('dilithium');
+  console.log(`Max sold price in last 5 mins: ${maxSold} (expected 20)`);
+  if (maxSold !== 20) {
+    console.error("FAILED: Max sold price calculation incorrect!");
+    process.exit(1);
+  }
+
+  // 3. Trigger neutral trade post
+  // Mock random to select 'dilithium' (index 0 in resourcesList)
+  const originalRandom = Math.random;
+  let callCount = 0;
+  Math.random = () => {
+    callCount++;
+    if (callCount === 1) return 0; // nextNeutralTradeTime random offset in update loop
+    if (callCount === 2) return 0.001; // resourcesList index for 'dilithium'
+    if (callCount === 3) return 0.001; // d3 = 1
+    return 0.5;
+  };
+
+  game.neutralTradeTimer = 120000;
+  game.update(100);
+
+  Math.random = originalRandom;
+
+  // Expected price: max(basePrice, 20 * 1.35) -> max(8, 27) = 27
+  const postedOrder = game.sellOrders.find(o => o.ownerId === 'neutral' && o.resource === 'dilithium');
+  console.log(`Posted neutral order price: ${postedOrder ? postedOrder.price : 'none'} (expected 27)`);
+  if (!postedOrder || postedOrder.price !== 27) {
+    console.error("FAILED: Market starting price constraint not applied correctly!");
+    process.exit(1);
+  }
+
+  console.log("-> Market Pricing Minimum Constraint PASSED!");
+};
+
 testPlanetarySpawnChance();
 testDeepSpaceDiscovery();
 testDiscoveryCooldown();
@@ -393,6 +440,7 @@ testDiplomacyLinkBreak();
 testSpecialFuelConsumption();
 testSpecialDuraniumConsumption();
 testDiplomatTargetSelection();
+testMarketPricingMinimumConstraint();
 
 console.log("\nALL NEW ANOMALY TESTS PASSED SUCCESSFULLY!");
 process.exit(0);

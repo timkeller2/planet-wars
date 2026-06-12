@@ -260,6 +260,25 @@ export class Game {
     this.nextNeutralTradeTime = 120000 + Math.random() * 60000;
     this.aiMarketTimer = 0;
     this.usedShipNames = new Set();
+    this.marketSalesHistory = [];
+  }
+
+  recordMarketSale(resource, price) {
+    this.marketSalesHistory = this.marketSalesHistory || [];
+    this.marketSalesHistory.push({
+      resource: resource,
+      price: price,
+      timestamp: Date.now()
+    });
+  }
+
+  getMaxSoldPriceInLast5Minutes(resource) {
+    if (!this.marketSalesHistory) return 0;
+    const now = Date.now();
+    const cutoff = now - 5 * 60 * 1000; // 5 minutes in ms
+    const sales = this.marketSalesHistory.filter(s => s.resource === resource && s.timestamp >= cutoff);
+    if (sales.length === 0) return 0;
+    return Math.max(...sales.map(s => s.price));
   }
 
   spawnAmoebaCheat() {
@@ -5012,6 +5031,12 @@ export class Game {
         else if (rarity === 'common') startPrice = Math.round(startPrice * 0.75);
       }
 
+      const maxSoldPrice = this.getMaxSoldPriceInLast5Minutes(randomRes);
+      if (maxSoldPrice > 0) {
+        const minStartPrice = Math.round(maxSoldPrice * 1.35);
+        startPrice = Math.max(startPrice, minStartPrice);
+      }
+
       // Post the new neutral order
       const orderId = "order_" + Math.random().toString(36).substring(2, 9);
       this.sellOrders.push({
@@ -5082,6 +5107,12 @@ export class Game {
             else if (rarity === 'rare') startPrice = Math.round(startPrice * 2);
             else if (rarity === 'common') startPrice = Math.round(startPrice * 0.75);
           }
+
+          const maxSoldPrice = this.getMaxSoldPriceInLast5Minutes(mostNumerousRes);
+          if (maxSoldPrice > 0) {
+            const minStartPrice = Math.round(maxSoldPrice * 1.35);
+            startPrice = Math.max(startPrice, minStartPrice);
+          }
           
           this.sellOrders.push({
             id: orderId,
@@ -5147,6 +5178,7 @@ export class Game {
                 }
               }
 
+              this.recordMarketSale(order.resource, order.price);
               console.log(`[Auto Buy Success] Player ${player.id} automatically purchased 1 ${order.resource} from ${order.ownerId} for ${order.price} credits using Auto Buy Order ${abo.id}.`);
               this.sellOrders.splice(bestOrderIdx, 1);
               purchasedAny = true;

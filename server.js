@@ -1159,16 +1159,23 @@ async function bootstrap() {
           
           if (!game.sellOrders) game.sellOrders = [];
           const orderId = "order_" + Math.random().toString(36).substring(2, 9);
+          let startPrice = player.sellPriceSetting || 1;
+          const maxSoldPrice = game.getMaxSoldPriceInLast5Minutes(data.resource);
+          if (maxSoldPrice > 0) {
+            const minStartPrice = Math.round(maxSoldPrice * 1.35);
+            startPrice = Math.max(startPrice, minStartPrice);
+          }
+
           game.sellOrders.push({
             id: orderId,
             ownerId: player.id,
             ownerName: player.name,
             resource: data.resource,
-            price: player.sellPriceSetting || 1,
+            price: startPrice,
             createdAt: Date.now(),
             expiresAt: Date.now() + 15 * 60000 // 15 minutes
           });
-          console.log(`[Market Post] Player ${player.id} posted 1 ${data.resource} for ${player.sellPriceSetting || 1} credits.`);
+          console.log(`[Market Post] Player ${player.id} posted 1 ${data.resource} for ${startPrice} credits.`);
         }
       }
     });
@@ -1246,6 +1253,7 @@ async function bootstrap() {
               }
             }
             
+            game.recordMarketSale(order.resource, order.price);
             game.sellOrders.splice(idx, 1);
             socket.emit('purchaseSuccess');
             console.log(`[Market Buy] Player ${player.id} bought 1 ${order.resource} from ${order.ownerId} for ${order.price} credits.`);
@@ -1279,6 +1287,7 @@ async function bootstrap() {
                 owner.credits = (owner.credits || 0) - order.price;
                 player.credits = (player.credits || 0) + order.price;
                 
+                game.recordMarketSale(order.resource, order.price);
                 game.fulfillOrders.splice(idx, 1);
                 console.log(`[Fulfill Order Fulfilling] Player ${player.id} fulfilled player ${owner.id}'s order ${order.id} for ${order.price} credits.`);
               }
