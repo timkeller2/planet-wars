@@ -4495,8 +4495,13 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           for (let b = 0; b < s.diplomatSuccessEvent; b++) {
             floatingAnimations.push({
+              startX: targetX,
+              startY: targetY,
+              endX: s.x,
+              endY: s.y,
               x: targetX,
               y: targetY,
+              shipId: s.id,
               text: '💖',
               type: 'diplomacy_success',
               age: b * 0.15,
@@ -13229,7 +13234,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
         let drawX = anim.x;
         let drawY = anim.y;
-        if (anim.shipId && serverState && serverState.ships) {
+        if (anim.shipId && anim.type !== 'diplomacy_success' && serverState && serverState.ships) {
           const ship = serverState.ships.find(s => s.id === anim.shipId);
           if (ship) {
             drawX = ship.x;
@@ -13284,7 +13289,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const alpha = progress < 0.8 ? 1 : 1 - ((progress - 0.8) * 5);
 
         let yOffset = progress * 50; // default drift up by 50px
-        if (anim.type === 'pref_resource_diplomacy') {
+        if (anim.type === 'pref_resource_diplomacy' || anim.type === 'diplomacy_success') {
           yOffset = 0; // strictly moves from start position to target position
         } else if (anim.type === 'beaker') {
           yOffset = progress * 30; // ascends much slower
@@ -13304,7 +13309,7 @@ function getPlanetTradeIncomePerMin(planet) {
           yOffset = 0; // stationary
         } else if (anim.type === 'enhance') {
           yOffset = progress * 60; // drifts up nicely
-        } else if (anim.type === 'diplomacy_success' || anim.type === 'diplomacy_failure') {
+        } else if (anim.type === 'diplomacy_failure') {
           const mult = anim.driftYMult !== undefined ? anim.driftYMult : 1.0;
           yOffset = progress * 40 * mult; // float up nicely
         } else if (anim.type === 'outbreak') {
@@ -13447,7 +13452,14 @@ function getPlanetTradeIncomePerMin(planet) {
         }
 
         ctx.shadowBlur = 10;
-        if (anim.type === 'pref_resource_diplomacy') {
+        if (anim.type === 'pref_resource_diplomacy' || anim.type === 'diplomacy_success') {
+          if (anim.type === 'diplomacy_success' && anim.shipId && serverState && serverState.ships) {
+            const ship = serverState.ships.find(s => s.id === anim.shipId);
+            if (ship) {
+              anim.endX = ship.x;
+              anim.endY = ship.y;
+            }
+          }
           drawX = anim.startX + (anim.endX - anim.startX) * progress;
           drawY = anim.startY + (anim.endY - anim.startY) * progress;
         }
