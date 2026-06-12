@@ -3128,8 +3128,8 @@ function getPlanetTradeIncomePerMin(planet) {
         let left = selectionTileMouseX + 15;
         let top = selectionTileMouseY - 150;
 
-        const width = 380;
-        const height = 450;
+        const width = container.offsetWidth || 380;
+        const height = container.offsetHeight || 450;
 
         if (left + width > window.innerWidth) {
           left = selectionTileMouseX - width - 15;
@@ -3154,8 +3154,8 @@ function getPlanetTradeIncomePerMin(planet) {
         let left = screenPos.x + 25;
 
         // Retrieve container dimensions. Use standard fallbacks if container is not fully rendered yet.
-        const width = 380;
-        const height = 450;
+        const width = container.offsetWidth || 380;
+        const height = container.offsetHeight || 450;
 
         if (left + width > window.innerWidth) {
           left = screenPos.x - width - 25;
@@ -4528,7 +4528,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let limitHtml = "";
         const ownsHw = serverState.planets.some(p => p.homeworldOf === localPlayer.id && p.ownerId === localPlayer.id);
         if (ownsHw) {
-          const limitVal = 1000 + (myPlayer.totalShips || 0);
+          const limitVal = 1000 + Math.floor(myPlayer.totalShips || 0);
           limitHtml = `
             <div style="font-size: 0.75rem; color: #ff3333; margin-top: 8px; text-align: center; border-top: 1px dashed rgba(255, 51, 51, 0.2); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
               Debt Limit: -${limitVal} credits (1000 + total ships)<br>
@@ -5015,7 +5015,7 @@ function getPlanetTradeIncomePerMin(planet) {
               let minAllowedCredits = 0;
               const ownsHomeworld = serverState.planets.some(p => p.homeworldOf === localPlayer.id && p.ownerId === localPlayer.id);
               if (ownsHomeworld) {
-                minAllowedCredits = -(1000 + (myPlayer.totalShips || 0));
+                minAllowedCredits = -(1000 + Math.floor(myPlayer.totalShips || 0));
               }
               const hasCredits = (myCredits - minAllowedCredits) >= order.price;
               if (!hasOptions || !hasCredits) {

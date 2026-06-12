@@ -4578,7 +4578,7 @@ export class Game {
         let minAllowedCredits = 0;
         const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
         if (ownsHomeworld) {
-          minAllowedCredits = -(1000 + (player.totalShips || 0));
+          minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
         }
 
         let purchasedAny = true;
@@ -5003,7 +5003,7 @@ export class Game {
       const isTargetingPlanet = (ship.cruiserTargetType === 'planet' && ship.cruiserTargetId !== null);
       const hasEnoughMarines = maxMarinesCapacity > 0 && ship.marineCount > 0.5 * maxMarinesCapacity && ship.scoutAttackEnabled === true && isTargetingPlanet;
 
-      if ((ship.marineCount || 0) > 0 && hasEnoughMarines) {
+      if ((ship.marineCount || 0) > 0 && hasEnoughMarines && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
         let targetPlanet = null;
         if (ship.cruiserTargetType === 'planet' && ship.cruiserTargetId !== null) {
           const p = this.planets.find(p => p.id === ship.cruiserTargetId);
@@ -5036,12 +5036,13 @@ export class Game {
 
           console.log(`[MARINE PLANET INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to attack target planet ${targetPlanet.name}.`);
           ship.marineCount = 0;
+          ship.marineLaunchCooldown = 15.0;
         }
       }
 
       // Direct ship targeting launch check (Moved outside of hasEnoughMarines block to fix logic contradiction)
       let targetShip = null;
-      if ((ship.marineCount || 0) > 0 && ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null) {
+      if ((ship.marineCount || 0) > 0 && ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
         const enemy = this.ships.find(s => s.id === ship.cruiserTargetId && s.active);
         if (enemy && enemy.owner && (enemy.owner.id !== ship.owner.id || enemy.isAmoeba)) {
           targetShip = enemy;
@@ -5073,10 +5074,11 @@ export class Game {
 
         console.log(`[MARINE SHIP INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to target ship ${targetShip.id}.`);
         ship.marineCount = Math.max(0, ship.marineCount - count);
+        ship.marineLaunchCooldown = 15.0;
       }
 
       // 5. Boarding Trigger Checks
-      if ((ship.marineCount || 0) > 0 && (ship.marines || 0) > 0) {
+      if ((ship.marineCount || 0) > 0 && (ship.marines || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
         // Find enemy cruiser in full scan range of attacking cruiser
         for (const enemy of cruisers) {
           if (enemy.owner.id !== ship.owner.id && !enemy.isAmoeba) {
@@ -5100,6 +5102,7 @@ export class Game {
 
                 console.log(`[BOARDING] Ship ${ship.id} launched pod targeting Ship ${enemy.id} carrying ${launchCount} marines.`);
                 ship.marineCount = Math.max(0, ship.marineCount - launchCount);
+                ship.marineLaunchCooldown = 15.0;
                 break;
               }
             }

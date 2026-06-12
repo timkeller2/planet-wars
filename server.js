@@ -382,7 +382,7 @@ async function bootstrap() {
           let minAllowedCredits = 0;
           const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
           if (ownsHomeworld) {
-            minAllowedCredits = -(1000 + (player.totalShips || 0));
+            minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
           }
 
           let closestPlanet = null;
@@ -1214,7 +1214,7 @@ async function bootstrap() {
           let minAllowedCredits = 0;
           const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
           if (ownsHomeworld) {
-            minAllowedCredits = -(1000 + (player.totalShips || 0));
+            minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
           }
           const buyerCredits = player.credits || 0;
           // Buyer must have >= 1 option and enough credits

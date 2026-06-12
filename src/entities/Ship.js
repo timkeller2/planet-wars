@@ -125,6 +125,8 @@ export class Ship {
     this.patrolReloadTargetPlanetId = null;
     this.planetBombardTimer = 0;
     this.combatCooldown = 0;
+    this.playerMoveOrderRetreatCooldown = 0;
+    this.marineLaunchCooldown = 0;
     this.name = null;
     this.expScore = 0;
     this.cruiserTargetOffsetX = 0;
@@ -363,161 +365,38 @@ export class Ship {
     if (!this.isCruiser) return;
     this.flightTime = 0;
 
-    // Determine target coordinates and planet
-    let tx = this.x;
-    let ty = this.y;
-    let targetPlanet = null;
+    // Reset all retreat states and flags
+    this.isRetreating = false;
+    this.retreatTargetPlanetId = null;
+    this.retreatTargetShipId = null;
+    this.patrolReloading = false;
+    this.patrolFuelRetreating = false;
+    this.patrolFuelRetreatTargetPlanetId = null;
+    this.bombardRearming = false;
+    this.bombardRearmTargetPlanetId = null;
+    this.savedBombardPlanetId = null;
+    this.scoutFuelRetreating = false;
+    this.scoutFuelRetreatTargetPlanetId = null;
+    this.researchFuelRetreating = false;
+    this.researchFuelRetreatTargetPlanetId = null;
+    this.researchRearming = false;
+    this.researchRearmTargetPlanetId = null;
+    this.diplomacyFuelRetreating = false;
+    this.diplomacyFuelRetreatTargetPlanetId = null;
+    this.diplomacyFleeing = false;
+    this.diplomacyFleeTargetPlanetId = null;
 
-    if (destination) {
-      if (destination.id !== undefined && typeof destination.getGravityRadius === 'function') {
-        // It's a planet object
-        targetPlanet = destination;
-        tx = destination.x;
-        ty = destination.y;
-      } else {
-        // It's a coordinate/target object
-        tx = destination.x !== undefined ? destination.x : this.x;
-        ty = destination.y !== undefined ? destination.y : this.y;
-        if (destination.planet) {
-          targetPlanet = destination.planet;
-        } else if (destination.targetId !== undefined && destination.targetType === 'planet') {
-          targetPlanet = game ? game.planets.find(p => p.id === destination.targetId) : null;
-        }
-      }
-    }
+    // Put auto-retreat triggers on a 15-second cooldown
+    this.playerMoveOrderRetreatCooldown = 15.0;
 
-    // Check if targetPlanet is a friendly, safe planet
-    let isSafe = false;
-    if (targetPlanet && targetPlanet.owner && this.owner && targetPlanet.owner.id === this.owner.id) {
-      // 1. Check active ion storms or minefields with effective intensity >= 15
-      let hazardIntensityVal = 0;
-      if (game && game.ionStorms) {
-        for (const h of game.ionStorms) {
-          if (h.type !== 'nebula') {
-            const hdx = tx - h.x;
-            const hdy = ty - h.y;
-            if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
-              const knowledge = h.knowledge[this.owner ? this.owner.id : ''] || 0;
-              const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
-              const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
-              const sRed = this.getLocalXpBonus();
-              const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
-              if (effectiveIntensity > hazardIntensityVal) {
-                hazardIntensityVal = effectiveIntensity;
-              }
-            }
-          }
-        }
-      }
-
-      // 2. Check distance from active enemies
-      let noEnemiesNearby = true;
-      if (game && game.ships) {
-        for (const other of game.ships) {
-          if (other.active && other.id !== this.id) {
-            const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
-            if (isEnemy) {
-              const edx = other.x - tx;
-              const edy = other.y - ty;
-              if (edx * edx + edy * edy < 300 * 300) {
-                noEnemiesNearby = false;
-                break;
-              }
-            }
-          }
-        }
-      }
-
-      if (hazardIntensityVal < 15 && noEnemiesNearby) {
-        isSafe = true;
-      }
-    }
-
-    const isRetreatingNow = this.isRetreating ||
-                            this.patrolFuelRetreating ||
-                            this.bombardRearming ||
-                            this.scoutFuelRetreating ||
-                            this.researchFuelRetreating ||
-                            this.researchRearming ||
-                            this.diplomacyFuelRetreating ||
-                            this.diplomacyFleeing;
-
-    if (isRetreatingNow) {
-      if (!isSafe) {
-        // Exit whichever mode it is in
-        this.isPatrolling = false;
-        this.isScouting = false;
-        this.isResearching = false;
-        this.isDiplomacy = false;
-
-        // Exit retreat entirely
-        this.isRetreating = false;
-        this.retreatTargetPlanetId = null;
-        this.retreatTargetShipId = null;
-        this.patrolReloading = false;
-        this.patrolFuelRetreating = false;
-        this.patrolFuelRetreatTargetPlanetId = null;
-        this.bombardRearming = false;
-        this.bombardRearmTargetPlanetId = null;
-        this.savedBombardPlanetId = null;
-        this.scoutFuelRetreating = false;
-        this.scoutFuelRetreatTargetPlanetId = null;
-        this.researchFuelRetreating = false;
-        this.researchFuelRetreatTargetPlanetId = null;
-        this.researchRearming = false;
-        this.researchRearmTargetPlanetId = null;
-        this.diplomacyFuelRetreating = false;
-        this.diplomacyFuelRetreatTargetPlanetId = null;
-        this.diplomacyFleeing = false;
-        this.diplomacyFleeTargetPlanetId = null;
-      } else {
-        // Safe destination: Make it the new retreat destination
-        this.targetPlanet = null;
-        this.targetX = tx;
-        this.targetY = ty;
-        this.cruiserTargetType = null;
-        this.cruiserTargetId = null;
-
-        // Assign to active retreat variable(s)
-        if (this.isRetreating) {
-          this.retreatTargetPlanetId = targetPlanet.id;
-          this.retreatTargetShipId = null;
-        }
-        if (this.patrolFuelRetreating) {
-          this.patrolFuelRetreatTargetPlanetId = targetPlanet.id;
-        }
-        if (this.bombardRearming) {
-          this.bombardRearmTargetPlanetId = targetPlanet.id;
-        }
-        if (this.scoutFuelRetreating) {
-          this.scoutFuelRetreatTargetPlanetId = targetPlanet.id;
-        }
-        if (this.researchFuelRetreating) {
-          this.researchFuelRetreatTargetPlanetId = targetPlanet.id;
-        }
-        if (this.researchRearming) {
-          this.researchRearmTargetPlanetId = targetPlanet.id;
-        }
-        if (this.diplomacyFuelRetreating) {
-          this.diplomacyFuelRetreatTargetPlanetId = targetPlanet.id;
-        }
-        if (this.diplomacyFleeing) {
-          this.diplomacyFleeTargetPlanetId = targetPlanet.id;
-        }
-      }
-    } else {
-      // Not currently retreating.
-      // If it is in any autonomous mode (patrolling, scouting, researching, diplomacy, bombard), exit those modes so it obeys the move order.
-      this.isPatrolling = false;
-      this.patrolReloading = false;
-      this.patrolFuelRetreating = false;
-      this.patrolFuelRetreatTargetPlanetId = null;
-      this.isScouting = false;
-      this.isResearching = false;
-      this.savedBombardPlanetId = null;
-      this.cruiserTargetType = null;
-      this.cruiserTargetId = null;
-    }
+    // Exit autonomous modes so the cruiser obeys the move order immediately
+    this.isPatrolling = false;
+    this.isScouting = false;
+    this.isResearching = false;
+    this.isDiplomacy = false;
+    this.cruiserTargetType = null;
+    this.cruiserTargetId = null;
+  }
   }
 
   executeNextOrder(allPlanets, allShips, game = null) {
@@ -908,7 +787,7 @@ export class Ship {
                        (Date.now() - (this.lastTimeAttacking || 0) < 10000);
 
       // Trigger condition
-      if (!this.isRetreating) {
+      if (!this.isRetreating && (!this.playerMoveOrderRetreatCooldown || this.playerMoveOrderRetreatCooldown <= 0)) {
         const specialModeActive = this.isPatrolling || this.isScouting || this.isResearching || this.isDiplomacy || isBombingPlanet;
         if (specialModeActive || isStandby) {
           const combatTrigger = inCombat && (emptyBombs || lowHealth);
@@ -1584,6 +1463,14 @@ export class Ship {
     if (this.combatCooldown && this.combatCooldown > 0) {
       this.combatCooldown -= deltaTime / 1000;
       if (this.combatCooldown < 0) this.combatCooldown = 0;
+    }
+    if (this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0) {
+      this.playerMoveOrderRetreatCooldown -= deltaTime / 1000;
+      if (this.playerMoveOrderRetreatCooldown < 0) this.playerMoveOrderRetreatCooldown = 0;
+    }
+    if (this.marineLaunchCooldown && this.marineLaunchCooldown > 0) {
+      this.marineLaunchCooldown -= deltaTime / 1000;
+      if (this.marineLaunchCooldown < 0) this.marineLaunchCooldown = 0;
     }
 
     this.flightTime += deltaTime / 1000;
@@ -2495,7 +2382,7 @@ export class Ship {
     // Cruiser Patrol Mode Decision Engine
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isPatrolling && !this.isRetreating) {
       // Check if fuel is 1 or less while patrolling
-      if (this.fuel <= 1) {
+      if (this.fuel <= 1 && (!this.playerMoveOrderRetreatCooldown || this.playerMoveOrderRetreatCooldown <= 0)) {
         this.patrolFuelRetreating = true;
         this.patrolReloading = false;
         this.patrolReloadTargetPlanetId = null;
@@ -2626,7 +2513,8 @@ export class Ship {
         const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
         const needsHealthRetreat = this.health < this.maxHealth * 0.5;
         const needsHealthFinish = this.health < this.maxHealth;
-        if (needsHealthRetreat || (this.bombs <= 0 && !hasNearbySupply) || (this.patrolReloading && (this.bombs < this.getMaxBombs() || needsHealthFinish))) {
+        const coolingReload = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
+        if (!coolingReload && (needsHealthRetreat || (this.bombs <= 0 && !hasNearbySupply) || (this.patrolReloading && (this.bombs < this.getMaxBombs() || needsHealthFinish)))) {
         const wasReloading = this.patrolReloading;
         this.patrolReloading = true;
         
@@ -2840,7 +2728,8 @@ export class Ship {
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
       const needsRearm = this.scoutAttackEnabled && this.bombs <= 0 && !hasNearbySupply;
       const needsHealthRetreat = this.health < this.maxHealth * 0.5;
-      if (needsRefuel || needsRearm || needsHealthRetreat) {
+      const coolingScout = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
+      if (!coolingScout && (needsRefuel || needsRearm || needsHealthRetreat)) {
         this.scoutFuelRetreating = true;
         this.scoutTargetX = null;
         this.scoutTargetY = null;
@@ -3300,7 +3189,8 @@ export class Ship {
     // Cruiser Research Mode Decision Engine
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isResearching && this.labs > 0 && !this.isRetreating) {
       // 1. Refueling Retreat Check: if fuel is less than 2
-      if (this.fuel < 2) {
+      const coolingResearch = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
+      if (this.fuel < 2 && !coolingResearch) {
         this.researchFuelRetreating = true;
       }
       
@@ -3407,7 +3297,8 @@ export class Ship {
         const supplyShip = this.findNearbySupplyShip(allShips);
         const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
         const needsRearm = this.scoutAttackEnabled && this.bombs <= 0 && !hasNearbySupply;
-        if (needsRearm || this.researchRearming) {
+        const coolingResearchRearm = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
+        if (!coolingResearchRearm && (needsRearm || this.researchRearming)) {
           this.researchRearming = true;
           if (this.bombs >= this.getMaxBombs()) {
             this.researchRearming = false;
@@ -3635,7 +3526,8 @@ export class Ship {
       // If out of bombs and not in a friendly gravity well, enter rearming retreat mode
       const supplyShip = this.findNearbySupplyShip(allShips);
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
-      if (this.bombs <= 0 && !this.inFriendlyWell && !hasNearbySupply) {
+      const coolingBombard = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
+      if (!coolingBombard && this.bombs <= 0 && !this.inFriendlyWell && !hasNearbySupply) {
         if (isTargetingPlanet) {
           this.savedBombardPlanetId = this.cruiserTargetId;
           this.cruiserTargetType = null;
@@ -4802,7 +4694,7 @@ export class Ship {
 
             if (this.isBomber) {
               // Bombers deal gradual eco/ship damage and deactivate
-              const rate = Math.max(10, this.count / 4);
+              const rate = this.isMarineFleet ? Math.max(10, this.count / 4) : Math.sqrt(this.count);
               const expectedToConsume = rate * dt;
               
               const baseConsume = Math.floor(expectedToConsume);
@@ -4871,7 +4763,7 @@ export class Ship {
             }
 
             // Main assault attack rate
-            const rate = Math.max(10, this.count / 4);
+            const rate = this.isMarineFleet ? Math.max(10, this.count / 4) : Math.sqrt(this.count);
             let N_att = rate * dt;
             N_att = Math.min(this.count, N_att);
 
