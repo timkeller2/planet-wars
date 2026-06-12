@@ -8540,16 +8540,23 @@ function getPlanetTradeIncomePerMin(planet) {
         if (p.anomaly && !p.anomaly.researched) {
           const diff = p.anomaly.difficulty;
           
+          // Occasional twinkle: every 4 seconds, flash brightly for 250ms, offset by planet ID
+          const cycleTime = (Date.now() + (p.id ? p.id.toString().charCodeAt(0) * 100 : 0)) % 4000;
+          let twinkle = 1.0;
+          if (cycleTime < 250) {
+            twinkle = 1.0 + Math.sin(cycleTime * Math.PI / 250) * 0.8;
+          }
+          
           ctx.save();
           
           if (diff <= 10) {
             // Tier 1: Faint Spark (Green, Slow Pulse)
             const scale = 1.0 + Math.sin(Date.now() / 250) * 0.2;
-            const lineLength = 5 * scale;
+            const lineLength = 2.5 * scale * twinkle;
             ctx.strokeStyle = '#00ff88';
             ctx.shadowColor = '#00ff88';
-            ctx.shadowBlur = 4;
-            ctx.lineWidth = 1.5;
+            ctx.shadowBlur = 3 * twinkle;
+            ctx.lineWidth = 0.8;
             
             ctx.beginPath();
             ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
@@ -8560,11 +8567,11 @@ function getPlanetTradeIncomePerMin(planet) {
           } else if (diff <= 35) {
             // Tier 2: Glowing Core (Yellow, Medium Pulse + static center dot)
             const scale = 1.0 + Math.sin(Date.now() / 150) * 0.3;
-            const lineLength = 5.5 * scale;
+            const lineLength = 2.75 * scale * twinkle;
             ctx.strokeStyle = '#ffcc00';
             ctx.shadowColor = '#ffcc00';
-            ctx.shadowBlur = 6;
-            ctx.lineWidth = 2;
+            ctx.shadowBlur = 4 * twinkle;
+            ctx.lineWidth = 1.0;
             
             ctx.beginPath();
             ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
@@ -8576,16 +8583,16 @@ function getPlanetTradeIncomePerMin(planet) {
             // Draw center dot
             ctx.fillStyle = '#ffcc00';
             ctx.beginPath();
-            ctx.arc(p.anomaly.x, p.anomaly.y, 1.5, 0, Math.PI * 2);
+            ctx.arc(p.anomaly.x, p.anomaly.y, 0.75 * twinkle, 0, Math.PI * 2);
             ctx.fill();
           } else if (diff <= 60) {
             // Tier 3: Pulsing Nova (Cyan, Medium Pulse + slight rotation over time)
             const scale = 1.0 + Math.sin(Date.now() / 120) * 0.35;
-            const lineLength = 6 * scale;
+            const lineLength = 3.0 * scale * twinkle;
             ctx.strokeStyle = '#00e5ff';
             ctx.shadowColor = '#00e5ff';
-            ctx.shadowBlur = 8;
-            ctx.lineWidth = 2.5;
+            ctx.shadowBlur = 5 * twinkle;
+            ctx.lineWidth = 1.2;
             
             // Apply slight rotation around anomaly center
             ctx.translate(p.anomaly.x, p.anomaly.y);
@@ -8601,11 +8608,11 @@ function getPlanetTradeIncomePerMin(planet) {
           } else if (diff <= 85) {
             // Tier 4: Radiant Star (Orange, Fast Pulse + outer ring)
             const scale = 1.0 + Math.sin(Date.now() / 80) * 0.4;
-            const lineLength = 6.5 * scale;
+            const lineLength = 3.25 * scale * twinkle;
             ctx.strokeStyle = '#ff6d00';
             ctx.shadowColor = '#ff6d00';
-            ctx.shadowBlur = 10;
-            ctx.lineWidth = 3;
+            ctx.shadowBlur = 6 * twinkle;
+            ctx.lineWidth = 1.4;
             
             ctx.beginPath();
             ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
@@ -8615,24 +8622,24 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.stroke();
             
             // Outer ring
-            ctx.strokeStyle = 'rgba(255, 109, 0, 0.4)';
+            ctx.strokeStyle = `rgba(255, 109, 0, ${0.4 * twinkle})`;
             ctx.beginPath();
             ctx.arc(p.anomaly.x, p.anomaly.y, lineLength * 1.5, 0, Math.PI * 2);
             ctx.stroke();
           } else {
             // Tier 5: Quantum Rift (Magenta, Jittery + electric sparks)
-            const jitterX = (Math.random() - 0.5) * 1.5;
-            const jitterY = (Math.random() - 0.5) * 1.5;
+            const jitterX = (Math.random() - 0.5) * 0.8;
+            const jitterY = (Math.random() - 0.5) * 0.8;
             const scale = 1.0 + Math.sin(Date.now() / 50) * 0.45;
-            const lineLength = 7 * scale;
+            const lineLength = 3.5 * scale * twinkle;
             
             const ax = p.anomaly.x + jitterX;
             const ay = p.anomaly.y + jitterY;
             
             ctx.strokeStyle = '#ff00ff';
             ctx.shadowColor = '#ff00ff';
-            ctx.shadowBlur = 12;
-            ctx.lineWidth = 3;
+            ctx.shadowBlur = 8 * twinkle;
+            ctx.lineWidth = 1.5;
             
             ctx.beginPath();
             ctx.moveTo(ax - lineLength, ay);
@@ -8642,12 +8649,12 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.stroke();
             
             // Electric sparks/random rays
-            ctx.strokeStyle = 'rgba(255, 0, 255, 0.6)';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = `rgba(255, 0, 255, ${0.6 * twinkle})`;
+            ctx.lineWidth = 0.6;
             ctx.beginPath();
             for (let i = 0; i < 4; i++) {
               const rayAngle = Math.random() * Math.PI * 2;
-              const rayDist = (5 + Math.random() * 8) * scale;
+              const rayDist = (2.5 + Math.random() * 4) * scale * twinkle;
               ctx.moveTo(ax, ay);
               ctx.lineTo(ax + Math.cos(rayAngle) * rayDist, ay + Math.sin(rayAngle) * rayDist);
             }
