@@ -1388,7 +1388,9 @@ async function bootstrap() {
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
           startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250,
           graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
-          enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false
+          enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false,
+          aiEntry: options && options.aiEntry !== undefined ? options.aiEntry : 'mid',
+          customAiEntryMin: options && options.customAiEntryMin !== undefined ? parseFloat(options.customAiEntryMin) : 5
         };
         if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
           game.timeRemaining = parseFloat(game.settings.timedGameLimit);
@@ -1428,7 +1430,9 @@ async function bootstrap() {
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
           startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250,
           graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
-          enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false
+          enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false,
+          aiEntry: options && options.aiEntry !== undefined ? options.aiEntry : 'mid',
+          customAiEntryMin: options && options.customAiEntryMin !== undefined ? parseFloat(options.customAiEntryMin) : 5
       };
       
       if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {

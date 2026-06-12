@@ -3554,20 +3554,43 @@ export class Game {
       }
     }
 
-    if (this.pendingAIs && this.pendingAIs.length > 0) {
-      this.aiSpawnTimer += deltaTime;
-      if (this.aiSpawnTimer >= this.aiSpawnInterval) {
-        this.aiSpawnTimer -= this.aiSpawnInterval;
-        const aiToSpawn = this.pendingAIs.shift();
-        if (this.assignPlanet(aiToSpawn)) {
-          const aiHomeworld = this.planets.find(p => p.owner === aiToSpawn);
-          if (aiHomeworld) {
-            for (const storm of this.ionStorms) {
-              if (storm.type === 'minefield') {
-                const dx = aiHomeworld.x - storm.x;
-                const dy = aiHomeworld.y - storm.y;
-                if (dx * dx + dy * dy <= storm.radius * storm.radius) {
-                  storm.knowledge[aiToSpawn.id] = (storm.knowledge[aiToSpawn.id] || 0) + 20;
+    let cooldownMs = 0;
+    if (this.settings) {
+      const aiEntry = this.settings.aiEntry || 'mid';
+      const gameLimit = (this.settings.timedGameLimit && this.settings.timedGameLimit !== 'unlimited')
+        ? parseFloat(this.settings.timedGameLimit)
+        : null;
+
+      if (aiEntry === 'start') {
+        cooldownMs = 0;
+      } else if (aiEntry === 'early') {
+        cooldownMs = (gameLimit !== null ? 0.20 * gameLimit : 20 * 60) * 1000;
+      } else if (aiEntry === 'mid') {
+        cooldownMs = (gameLimit !== null ? 0.40 * gameLimit : 40 * 60) * 1000;
+      } else if (aiEntry === 'late') {
+        cooldownMs = (gameLimit !== null ? 0.60 * gameLimit : 60 * 60) * 1000;
+      } else if (aiEntry === 'custom') {
+        const customMin = this.settings.customAiEntryMin !== undefined ? parseFloat(this.settings.customAiEntryMin) : 5;
+        cooldownMs = (isNaN(customMin) ? 5 : customMin) * 60 * 1000;
+      }
+    }
+
+    if (this.gameTime >= cooldownMs) {
+      if (this.pendingAIs && this.pendingAIs.length > 0) {
+        this.aiSpawnTimer += deltaTime;
+        if (this.aiSpawnTimer >= this.aiSpawnInterval) {
+          this.aiSpawnTimer -= this.aiSpawnInterval;
+          const aiToSpawn = this.pendingAIs.shift();
+          if (this.assignPlanet(aiToSpawn)) {
+            const aiHomeworld = this.planets.find(p => p.owner === aiToSpawn);
+            if (aiHomeworld) {
+              for (const storm of this.ionStorms) {
+                if (storm.type === 'minefield') {
+                  const dx = aiHomeworld.x - storm.x;
+                  const dy = aiHomeworld.y - storm.y;
+                  if (dx * dx + dy * dy <= storm.radius * storm.radius) {
+                    storm.knowledge[aiToSpawn.id] = (storm.knowledge[aiToSpawn.id] || 0) + 20;
+                  }
                 }
               }
             }

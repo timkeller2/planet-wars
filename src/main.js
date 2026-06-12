@@ -3285,6 +3285,20 @@ function getPlanetTradeIncomePerMin(planet) {
   const customStartingCreditsContainer = document.getElementById('custom-starting-credits-container');
   const startingCreditsInput = document.getElementById('starting-credits-input');
 
+  const aiEntrySelect = document.getElementById('ai-entry-select');
+  const customAiEntryContainer = document.getElementById('custom-ai-entry-container');
+  const customAiEntryInput = document.getElementById('custom-ai-entry-input');
+
+  if (aiEntrySelect) {
+    aiEntrySelect.addEventListener('change', () => {
+      if (aiEntrySelect.value === 'custom') {
+        if (customAiEntryContainer) customAiEntryContainer.style.display = 'flex';
+      } else {
+        if (customAiEntryContainer) customAiEntryContainer.style.display = 'none';
+      }
+    });
+  }
+
   if (prodMultipleSelect) {
     prodMultipleSelect.addEventListener('change', () => {
       if (prodMultipleSelect.value === 'custom') {
@@ -7427,7 +7441,12 @@ function getPlanetTradeIncomePerMin(planet) {
     if (raceSelect) {
       localStorage.setItem('planetWarsPlayerRace', selectedRace);
     }
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, enableCheats, race: selectedRace };
+    const aiEntrySel = document.getElementById('ai-entry-select');
+    const aiEntry = aiEntrySel ? aiEntrySel.value : 'mid';
+    const customAiEntryIn = document.getElementById('custom-ai-entry-input');
+    const customAiEntryMin = customAiEntryIn ? parseFloat(customAiEntryIn.value) : 5;
+
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, enableCheats, race: selectedRace, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
@@ -7483,10 +7502,15 @@ function getPlanetTradeIncomePerMin(planet) {
       const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 500;
       startingCreditsVal = isNaN(customCredits) ? "500" : String(customCredits);
     }
+    const aiEntrySel = document.getElementById('ai-entry-select');
+    const aiEntry = aiEntrySel ? aiEntrySel.value : 'mid';
+    const customAiEntryIn = document.getElementById('custom-ai-entry-input');
+    const customAiEntryMin = customAiEntryIn ? parseFloat(customAiEntryIn.value) : 5;
+
     hasCenteredOnHomeworld = false;
     serverState = null;
     lastKnownPlanets = {}; // Clear cached planet details
-    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode });
+    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin });
   });
 
   function draw() {
