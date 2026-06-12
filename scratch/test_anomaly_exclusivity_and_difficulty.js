@@ -178,8 +178,12 @@ const testDeepSpaceHabReward = () => {
     console.error("FAILED: Planet far unexpectedly received the hab reward!");
     process.exit(1);
   }
+  if (game.planets.includes(dsPlanet)) {
+    console.error("FAILED: Deep space anomaly planet was not removed/destroyed after resolution!");
+    process.exit(1);
+  }
 
-  console.log("-> Deep Space Hab Reward nearest planet PASSED!");
+  console.log("-> Deep Space Hab Reward nearest planet and planet destruction PASSED!");
 };
 
 testExclusivity();

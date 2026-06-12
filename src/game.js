@@ -5005,6 +5005,15 @@ export class Game {
       y: planet.anomaly ? planet.anomaly.y : planet.y,
       text: floatText
     });
+
+    if (planet.isDeepSpaceAnomaly) {
+      this.planets = this.planets.filter(p => p !== planet);
+      for (const ship of this.ships) {
+        if (ship.targetPlanet === planet) {
+          ship.targetPlanet = null;
+        }
+      }
+    }
   }
 
   updateCustomCruiserSystems(dt) {
