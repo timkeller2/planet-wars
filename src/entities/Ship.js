@@ -397,7 +397,6 @@ export class Ship {
     this.cruiserTargetType = null;
     this.cruiserTargetId = null;
   }
-  }
 
   executeNextOrder(allPlanets, allShips, game = null) {
     if (!this.orderQueue || this.orderQueue.length === 0) {
