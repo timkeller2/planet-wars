@@ -2477,10 +2477,11 @@ function getPlanetTradeIncomePerMin(planet) {
           if (dispVal !== undefined) {
             const dVal = Math.round(dispVal);
             let emoji = '';
-            if (dVal < -30) emoji = '😠';
-            else if (dVal < -10) emoji = '😢';
-            else if (dVal < 10) emoji = '😐';
-            else if (dVal < 30) emoji = '🙂';
+            if (dVal < -35) emoji = '😠';
+            else if (dVal < -15) emoji = '😢';
+            else if (dVal < 1) emoji = '😐';
+            else if (dVal < 20) emoji = '🙂';
+            else if (dVal < 40) emoji = '😀';
             else emoji = '😍';
 
             let scoreColor = '#ff3333';
@@ -9466,10 +9467,11 @@ function getPlanetTradeIncomePerMin(planet) {
                 if (hasDisp) {
                   const dVal = Math.round(p.disposition[diplomatOwner.id]);
                   let dispEmoji = '';
-                  if (dVal < -30) dispEmoji = '😠';
-                  else if (dVal < -10) dispEmoji = '😢';
-                  else if (dVal < 10) dispEmoji = '😐';
-                  else if (dVal < 30) dispEmoji = '🙂';
+                  if (dVal < -35) dispEmoji = '😠';
+                  else if (dVal < -15) dispEmoji = '😢';
+                  else if (dVal < 1) dispEmoji = '😐';
+                  else if (dVal < 20) dispEmoji = '🙂';
+                  else if (dVal < 40) dispEmoji = '😀';
                   else dispEmoji = '😍';
                   prefix += dispEmoji + ' ';
                 }
@@ -10699,10 +10701,11 @@ function getPlanetTradeIncomePerMin(planet) {
                 const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
                 const dVal = Math.round(dispVal);
                 let emoji = '';
-                if (dVal < -30) emoji = '😠';
-                else if (dVal < -10) emoji = '😢';
-                else if (dVal < 10) emoji = '😐';
-                else if (dVal < 30) emoji = '🙂';
+                if (dVal < -35) emoji = '😠';
+                else if (dVal < -15) emoji = '😢';
+                else if (dVal < 1) emoji = '😐';
+                else if (dVal < 20) emoji = '🙂';
+                else if (dVal < 40) emoji = '😀';
                 else emoji = '😍';
 
                 let scoreColor = '#ff3333';
