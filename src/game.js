@@ -1665,7 +1665,9 @@ export class Game {
       const ax = Math.random() * this.width;
       const ay = Math.random() * this.height;
       const minDiff = -10;
-      const maxDiff = 100;
+      const isUnlimited = !this.settings || !this.settings.timedGameLimit || this.settings.timedGameLimit === 'unlimited';
+      const timedLimitSecs = !isUnlimited ? parseFloat(this.settings.timedGameLimit) : null;
+      const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
       const difficulty = Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff;
       const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
 

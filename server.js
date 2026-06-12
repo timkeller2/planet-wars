@@ -2180,7 +2180,8 @@ async function bootstrap() {
               const elapsedMinutes = (Date.now() - (game.gameStartTime || Date.now())) / 60000;
               const isUnlimited = !game.settings || !game.settings.timedGameLimit || game.settings.timedGameLimit === 'unlimited';
               const minDiff = isUnlimited ? Math.floor(-10 - elapsedMinutes / 2) : -10;
-              const maxDiff = 100;
+              const timedLimitSecs = !isUnlimited ? parseFloat(game.settings.timedGameLimit) : null;
+              const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
               const difficulty = Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff;
               
               const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];

@@ -186,9 +186,49 @@ const testDeepSpaceHabReward = () => {
   console.log("-> Deep Space Hab Reward nearest planet and planet destruction PASSED!");
 };
 
+// 5. Test Anomaly Difficulty Capping based on Game Length settings
+const testDifficultyScalingWithGameLimit = () => {
+  console.log("\n--- Part 5: Difficulty Capping by Game Length ---");
+  
+  // Test case 1: Unlimited Game
+  const gameUnlimited = new Game();
+  gameUnlimited.width = 1000;
+  gameUnlimited.height = 1000;
+  gameUnlimited.settings = { planetCount: 5, aiCount: 0, timedGameLimit: 'unlimited' };
+  gameUnlimited.initMap();
+  const dsAnomsUnlimited = gameUnlimited.planets.filter(p => p.isDeepSpaceAnomaly);
+  let foundHighDiff = false;
+  for (const p of dsAnomsUnlimited) {
+    if (p.anomaly.difficulty > 10) {
+      foundHighDiff = true;
+    }
+  }
+  console.log(`Unlimited Game: Found difficulty > 10? ${foundHighDiff}`);
+
+  // Test case 2: Timed Game (5 minutes = 300 seconds)
+  const gameTimed = new Game();
+  gameTimed.width = 20000; // Large width to spawn many anomalies (200 anomalies) to ensure statistical coverage
+  gameTimed.height = 1000;
+  gameTimed.settings = { planetCount: 5, aiCount: 0, timedGameLimit: '300' };
+  gameTimed.initMap();
+  const dsAnomsTimed = gameTimed.planets.filter(p => p.isDeepSpaceAnomaly);
+  
+  console.log(`Timed Game (5m): Spawned ${dsAnomsTimed.length} anomalies.`);
+  for (const p of dsAnomsTimed) {
+    const diff = p.anomaly.difficulty;
+    // max difficulty should be Math.min(300 / 120, 100) = Math.min(2.5, 100) = 2
+    if (diff > 2) {
+      console.error(`FAILED: Anomaly difficulty ${diff} is greater than 2 in a 5-minute timed game!`);
+      process.exit(1);
+    }
+  }
+  console.log("-> Difficulty Capping by Game Length PASSED!");
+};
+
 testExclusivity();
 testCompletionReward();
 testScatteredAnomalies();
 testDeepSpaceHabReward();
+testDifficultyScalingWithGameLimit();
 console.log("\nALL NEW TESTS PASSED SUCCESSFULLY!");
 process.exit(0);
