@@ -11098,6 +11098,77 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.stroke();
             ctx.restore();
           }
+
+          // Draw special resources indicators (bombs: red, fuel: yellow, duranium: gray)
+          if (s.specialbombs > 0 || s.specialfuel > 0 || s.specialduranium > 0) {
+            ctx.save();
+            ctx.translate(s.x, s.y);
+            ctx.rotate(angle + Math.PI / 2);
+
+            const dotRadius = Math.max(1.2, size * 0.08);
+
+            // 1. Special Bombs -> Tiny red dots at laser originating points
+            if (s.specialbombs > 0) {
+              ctx.fillStyle = '#ff0000';
+              ctx.strokeStyle = '#000000';
+              ctx.lineWidth = dotRadius * 0.3;
+              ctx.beginPath();
+              ctx.arc(size * 0.75, size * 0.15, dotRadius, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.arc(-size * 0.75, size * 0.15, dotRadius, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+            }
+
+            // 2. Special Fuel -> Tiny yellow dots on engine(s)
+            if (s.specialfuel > 0) {
+              let engines = [];
+              if (style === 'Federation') {
+                engines = [
+                  { x: size * 0.8, y: size * 0.8 },
+                  { x: -size * 0.8, y: size * 0.8 }
+                ];
+              } else if (style === 'Romulan') {
+                engines = [
+                  { x: size * 0.5, y: size * 0.25 },
+                  { x: -size * 0.5, y: size * 0.25 }
+                ];
+              } else if (style === 'Gorn') {
+                engines = [{ x: 0, y: size * 0.8 }];
+              } else if (style === 'Tholian') {
+                engines = [{ x: 0, y: size * 0.6 }];
+              } else if (style === 'Lyran') {
+                engines = [{ x: 0, y: size * 0.9 }];
+              } else { // Klingon or default
+                engines = [{ x: 0, y: size * 0.6 }];
+              }
+
+              ctx.fillStyle = '#ffff00';
+              ctx.strokeStyle = '#000000';
+              ctx.lineWidth = dotRadius * 0.3;
+              for (const engine of engines) {
+                ctx.beginPath();
+                ctx.arc(engine.x, engine.y, dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+              }
+            }
+
+            // 3. Special Duranium -> Tiny gray dot in the middle of hull
+            if (s.specialduranium > 0) {
+              ctx.fillStyle = '#aaaaaa';
+              ctx.strokeStyle = '#000000';
+              ctx.lineWidth = dotRadius * 0.3;
+              ctx.beginPath();
+              ctx.arc(0, 0, dotRadius * 1.2, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+            }
+
+            ctx.restore();
+          }
           
           // Draw research warmup indicator around the ship
           if (s.isActivelyResearching && s.accumulatedTech !== undefined) {
