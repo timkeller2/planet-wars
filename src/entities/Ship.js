@@ -63,6 +63,7 @@ export class Ship {
     this.scoutTargetIsUnexplored = false;
     this.scoutFuelRetreatTargetPlanetId = null;
     this.scoutAttackEnabled = false;
+    this.useResources = false;
     this.isResearching = false;
     this.researchFuelRetreating = false;
     this.researchFuelRetreatTargetPlanetId = null;
@@ -1401,7 +1402,8 @@ export class Ship {
             const upgradeCost = this.upgradeShipsPaid || 0;
             const duraniumThreshold = upgradeCost / 50;
             let bonus = 4 + 0.10 * this.maxHealth;
-            if (this.owner && this.owner.resources && (this.owner.resources.duranium || 0) > duraniumThreshold) {
+            const canUseRes = !!(this.useResources || (this.owner && this.owner.tradeLimitToggle !== false));
+            if (canUseRes && this.owner && this.owner.resources && (this.owner.resources.duranium || 0) > duraniumThreshold) {
               this.owner.resources.duranium = Math.max(0, (this.owner.resources.duranium || 0) - duraniumThreshold);
               bonus *= 1.5;
               console.log(`[Armor Upgrade Boosted] Consumed ${duraniumThreshold} duranium. Boosted bonus by 50% to ${bonus}`);
@@ -4268,7 +4270,8 @@ export class Ship {
 
       if (this.health < this.maxHealth) {
         const owner = this.owner;
-        const hasExcessDuranium = owner && owner.resources && (owner.resources.duranium || 0) >= 0.1;
+        const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle !== false));
+        const hasExcessDuranium = canUseRes && owner && owner.resources && (owner.resources.duranium || 0) >= 0.1;
         const duraniumSellPrice = owner ? (owner.offerPrice?.duranium ?? 3) : 3;
 
         // Check for nearby supply ship first!
@@ -4398,7 +4401,8 @@ export class Ship {
           const oldFuel = this.fuel || 0;
 
           const owner = this.owner;
-          const hasExcessDeuterium = owner && owner.resources && (owner.resources.deuterium || 0) >= 0.1;
+          const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle !== false));
+          const hasExcessDeuterium = canUseRes && owner && owner.resources && (owner.resources.deuterium || 0) >= 0.1;
           const deuteriumSellPrice = owner ? (owner.offerPrice?.deuterium ?? 3) : 3;
 
           let canAffordRefuel = false;
@@ -4500,7 +4504,8 @@ export class Ship {
                 bombResource = 'dilithium';
               }
 
-              const hasExcessResource = owner && owner.resources && (owner.resources[bombResource] || 0) >= 0.1;
+              const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle !== false));
+              const hasExcessResource = canUseRes && owner && owner.resources && (owner.resources[bombResource] || 0) >= 0.1;
               const resourceSellPrice = owner ? (owner.offerPrice?.[bombResource] ?? 3) : 3;
 
               let canAffordReload = false;
@@ -5338,6 +5343,8 @@ export class Ship {
   }
 
   tryAutoResourceConversion() {
+    const canUseRes = !!(this.useResources || (this.owner && this.owner.tradeLimitToggle !== false));
+    if (!canUseRes) return;
     if (!this.owner || !this.owner.resources) return;
 
     const initEvents = () => {

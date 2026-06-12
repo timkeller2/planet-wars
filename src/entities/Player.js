@@ -25,6 +25,7 @@ export class Player {
     this.atWarWith = {};
     this.tradingBonus = 0;
     this.useCredits = true;
+    this.tradeLimitToggle = true;
     this.builtClasses = {};
     this.buildCounts = {
       corvette: 0,

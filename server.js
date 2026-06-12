@@ -886,6 +886,27 @@ async function bootstrap() {
       }
     });
 
+    socket.on('toggleTradeLimit', () => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+      player.tradeLimitToggle = (player.tradeLimitToggle !== false) ? false : true;
+    });
+
+    socket.on('toggleCruiserUseResources', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const { shipId, enabled } = data;
+      if (shipId === undefined || enabled === undefined) return;
+
+      const ship = game.ships.find(s => s.id === shipId);
+      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+        ship.useResources = !!enabled;
+      }
+    });
+
 
 
 
@@ -1864,6 +1885,7 @@ async function bootstrap() {
           accumulatedTech: s.accumulatedTech || 0,
           isDiplomacy: s.isDiplomacy || false,
           scoutAttackEnabled: s.scoutAttackEnabled || false,
+          useResources: s.useResources || false,
           isMaterializing: s.isMaterializing || false,
           materializeProgress: s.materializeProgress !== undefined ? s.materializeProgress : 1.0,
           cruiserStyle: s.cruiserStyle || null,

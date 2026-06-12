@@ -3756,6 +3756,18 @@ function getPlanetTradeIncomePerMin(planet) {
       const tradeCapacity = myPlayer.tradeCapacity !== undefined ? Math.floor(myPlayer.tradeCapacity) : 5;
       tradeOptionsDisplay.style.display = 'block';
       tradeOptionsDisplay.textContent = `⚖️: ${tradeOptions}/${tradeCapacity}`;
+      
+      if (myPlayer.tradeLimitToggle !== false) {
+        tradeOptionsDisplay.style.color = '#ff9800';
+        tradeOptionsDisplay.style.textShadow = '0 0 5px #ff9800';
+        tradeOptionsDisplay.style.background = 'rgba(255, 152, 0, 0.15)';
+        tradeOptionsDisplay.style.borderColor = '#ff9800';
+      } else {
+        tradeOptionsDisplay.style.color = '#888';
+        tradeOptionsDisplay.style.textShadow = 'none';
+        tradeOptionsDisplay.style.background = 'rgba(255, 255, 255, 0.05)';
+        tradeOptionsDisplay.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+      }
     }
 
     const stockpileCapacityDisplay = document.getElementById('player-stockpile-capacity-display');
@@ -5733,6 +5745,18 @@ function getPlanetTradeIncomePerMin(planet) {
         event.preventDefault();
         upgradeModeActive = true;
         return;
+      } else {
+        const selectedCruisers = getSelectedCruisers();
+        if (selectedCruisers.length > 0) {
+          event.preventDefault();
+          const anyNotUsing = selectedCruisers.some(c => !c.useResources);
+          const nextState = anyNotUsing;
+          for (const ship of selectedCruisers) {
+            ship.useResources = nextState;
+            socket.emit('toggleCruiserUseResources', { shipId: ship.id, enabled: nextState });
+          }
+          return;
+        }
       }
     }
     if (event.key.toLowerCase() === 'o') {
@@ -5999,6 +6023,21 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   }
 
+  const btnCruiserUseResourcesEl = document.getElementById('btn-cruiser-use-resources');
+  if (btnCruiserUseResourcesEl) {
+    btnCruiserUseResourcesEl.addEventListener('click', () => {
+      const selectedCruisers = getSelectedCruisers();
+      if (selectedCruisers.length > 0) {
+        const anyNotUsing = selectedCruisers.some(c => !c.useResources);
+        const nextState = anyNotUsing;
+        for (const ship of selectedCruisers) {
+          ship.useResources = nextState;
+          socket.emit('toggleCruiserUseResources', { shipId: ship.id, enabled: nextState });
+        }
+      }
+    });
+  }
+
 
   const btnDismantleEl = document.getElementById('btn-dismantle');
   if (btnDismantleEl) {
@@ -6164,14 +6203,18 @@ function getPlanetTradeIncomePerMin(planet) {
   if (tradeOptionsDisplayBtn) {
     tradeOptionsDisplayBtn.style.cursor = 'pointer';
     tradeOptionsDisplayBtn.style.pointerEvents = 'auto';
+    tradeOptionsDisplayBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      socket.emit('toggleTradeLimit');
+    });
     tradeOptionsDisplayBtn.addEventListener('mouseenter', () => {
       const tooltipPanel = document.getElementById('credits-tooltip-panel');
       if (tooltipPanel) {
         tooltipPanel.dataset.source = 'trade';
         tooltipPanel.innerHTML = `
-          <div style="font-weight: bold; font-size: 0.85rem; color: #ff9800; border-bottom: 1px solid rgba(255, 152, 0, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Trade Capacity</div>
+          <div style="font-weight: bold; font-size: 0.85rem; color: #ff9800; border-bottom: 1px solid rgba(255, 152, 0, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Trade Options</div>
           <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.3;">
-            Trades availabe. Homeworlds + Commerce planets.
+            Toggles auto-resource usage for cruisers. Must be ON to automatically consume resources for special bonuses/costs.
           </div>
         `;
         const rect = tradeOptionsDisplayBtn.getBoundingClientRect();
@@ -6958,6 +7001,15 @@ function getPlanetTradeIncomePerMin(planet) {
         if (selectedCruisers.length > 0) {
           const anyAttacking = selectedCruisers.some(c => c.scoutAttackEnabled);
           btnCruiserAttack.classList.toggle('action-btn-active', anyAttacking);
+        }
+      }
+
+      const btnCruiserUseResources = document.getElementById('btn-cruiser-use-resources');
+      if (btnCruiserUseResources) {
+        btnCruiserUseResources.style.display = selectedCruisers.length > 0 ? 'inline-flex' : 'none';
+        if (selectedCruisers.length > 0) {
+          const anyUseRes = selectedCruisers.some(c => c.useResources);
+          btnCruiserUseResources.classList.toggle('action-btn-active', anyUseRes);
         }
       }
 
