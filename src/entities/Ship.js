@@ -4563,7 +4563,11 @@ export class Ship {
           fuelDrain *= 0.25;
         }
         const sizeModifier = (this.maxHealth || 25) / 25;
-        this.fuel = (this.fuel || 0) - sizeModifier * (deltaTime / 1000) / (60 / fuelDrain);
+        const fuelConsumed = sizeModifier * (deltaTime / 1000) / (60 / fuelDrain);
+        this.fuel = (this.fuel || 0) - fuelConsumed;
+        if (this.specialfuel && this.specialfuel > 0) {
+          this.specialfuel = Math.max(0, this.specialfuel - fuelConsumed * 0.5);
+        }
         if (this.fuel <= 0) {
           this.fuel = 0;
           if (this.isWarp) {

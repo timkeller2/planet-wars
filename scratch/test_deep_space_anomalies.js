@@ -144,6 +144,7 @@ const testDiscoveryCooldown = () => {
   cruiser.x = 1200;
   cruiser.y = 1200;
   cruiser.update(100, game.ships, [], game.planets, [], [], 2000, game);
+  console.log("After 100ms update:", { active: cruiser.active, health: cruiser.health, fuel: cruiser.fuel, cooldown: cruiser.anomalyDiscoveryCooldown });
 
   Math.random = originalRandom;
 
@@ -155,7 +156,10 @@ const testDiscoveryCooldown = () => {
   }
 
   // Tick down cooldown by 30000ms
+  Math.random = () => 1.0;
   cruiser.update(30000, game.ships, [], game.planets, [], [], 2000, game);
+  Math.random = originalRandom;
+  console.log("After 30s update:", { active: cruiser.active, health: cruiser.health, fuel: cruiser.fuel, cooldown: cruiser.anomalyDiscoveryCooldown });
   console.log(`Cruiser cooldown after 30s update: ${cruiser.anomalyDiscoveryCooldown}ms (expected 0)`);
   if (cruiser.anomalyDiscoveryCooldown !== 0) {
     console.error("FAILED: Cooldown did not decrement correctly!");
@@ -213,10 +217,72 @@ const testDiplomacyLinkBreak = () => {
   console.log("-> Diplomacy Link Break PASSED!");
 };
 
+const testSpecialFuelConsumption = () => {
+  console.log("\n--- Part 5: Special Fuel Consumption Rate ---");
+
+  const game = new Game();
+  const human = new Player('human', '#0ff', false);
+  game.allPlayers = [human];
+
+  // 1. Test movement fuel consumption
+  const cruiser = new Ship('c1', 100, 100, null, human);
+  cruiser.isCruiser = true;
+  cruiser.maxHealth = 20;
+  cruiser.health = 20;
+  cruiser.fuel = 10;
+  cruiser.specialfuel = 5;
+  cruiser.checkSurvivalRoll = () => true;
+  game.ships.push(cruiser);
+
+  // Trigger movement update (cruiser not in friendly well, so it drains fuel)
+  // Let's run a 10s (10000ms) update
+  const oldFuel = cruiser.fuel;
+  const oldSpecialFuel = cruiser.specialfuel;
+  
+  cruiser.update(10000, game.ships, [], [], [], [], 2000, game);
+
+  const fuelConsumed = oldFuel - cruiser.fuel;
+  const specialFuelConsumed = oldSpecialFuel - cruiser.specialfuel;
+
+  console.log(`Fuel consumed in 10s movement: ${fuelConsumed.toFixed(6)}`);
+  console.log(`Special fuel consumed in 10s movement: ${specialFuelConsumed.toFixed(6)}`);
+
+  if (fuelConsumed <= 0) {
+    console.error("FAILED: No fuel was consumed during movement!");
+    process.exit(1);
+  }
+
+  // Expect special fuel consumed to be exactly half of normal fuel consumed
+  const ratio = specialFuelConsumed / fuelConsumed;
+  console.log(`Consumption ratio: ${ratio.toFixed(4)} (expected 0.5000)`);
+  if (Math.abs(ratio - 0.5) > 1e-4) {
+    console.error("FAILED: Special fuel was not consumed at half the rate of standard fuel!");
+    process.exit(1);
+  }
+
+  // 2. Test warp jump consumption
+  cruiser.fuel = 10;
+  cruiser.specialfuel = 5;
+
+  // Warp jump consumes 1 standard fuel
+  game.applyWarpToShip(cruiser, human);
+
+  console.log(`Fuel after warp jump: ${cruiser.fuel} (expected 9)`);
+  console.log(`Special fuel after warp jump: ${cruiser.specialfuel} (expected 4.5)`);
+
+  if (cruiser.fuel !== 9 || cruiser.specialfuel !== 4.5) {
+    console.error("FAILED: Warp jump fuel/special fuel consumption incorrect!");
+    process.exit(1);
+  }
+
+  console.log("-> Special Fuel Consumption PASSED!");
+};
+
 testPlanetarySpawnChance();
 testDeepSpaceDiscovery();
 testDiscoveryCooldown();
 testDiplomacyLinkBreak();
+testSpecialFuelConsumption();
 
 console.log("\nALL NEW ANOMALY TESTS PASSED SUCCESSFULLY!");
 process.exit(0);
