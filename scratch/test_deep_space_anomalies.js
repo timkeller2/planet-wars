@@ -369,6 +369,20 @@ const testDiplomatTargetSelection = () => {
     process.exit(1);
   }
 
+  // 2. Both planets have disposition: A=40, B=20.
+  // Should prioritize Planet 1 (A) because we don't sort by lower disposition once set (defaults to higher/original).
+  planet1.disposition = { human: 40 };
+  planet2.disposition = { human: 20 };
+  diplomat.diplomatTargetPlanetId = null;
+
+  game.update(100);
+
+  console.log(`Diplomat target planet ID (both set): ${diplomat.diplomatTargetPlanetId} (expected 1)`);
+  if (diplomat.diplomatTargetPlanetId !== 1) {
+    console.error("FAILED: Diplomat prioritized lower disposition when both were set!");
+    process.exit(1);
+  }
+
   console.log("-> Diplomat Target Selection PASSED!");
 };
 

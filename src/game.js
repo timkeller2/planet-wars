@@ -5638,11 +5638,19 @@ export class Game {
                   return tierB - tierA; // Higher tier first
                 }
 
-                const dispA = a.planet.disposition ? (a.planet.disposition[ship.owner.id] || 0) : 0;
-                const dispB = b.planet.disposition ? (b.planet.disposition[ship.owner.id] || 0) : 0;
+                const hasDispA = a.planet.disposition && a.planet.disposition[ship.owner.id] !== undefined;
+                const hasDispB = b.planet.disposition && b.planet.disposition[ship.owner.id] !== undefined;
 
-                if (dispA !== dispB) {
-                  return dispA - dispB; // Lower/no disposition first
+                if (hasDispA !== hasDispB) {
+                  return hasDispA ? 1 : -1; // No disposition first
+                }
+
+                if (hasDispA && hasDispB) {
+                  const dispValA = a.planet.disposition[ship.owner.id];
+                  const dispValB = b.planet.disposition[ship.owner.id];
+                  if (dispValA !== dispValB) {
+                    return dispValB - dispValA; // Higher disposition first
+                  }
                 }
 
                 return a.dist - b.dist; // Closer first
