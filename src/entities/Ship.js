@@ -5488,10 +5488,10 @@ export class Ship {
       }
 
       const cruiserCheck = this.maxHealth > 0 && !this.isAmoeba;
-      if (this.isCruiser && (this.specialduranium || 0) > 0) {
-        this.specialduranium = Math.max(0, this.specialduranium - 1);
-      }
       let damageAmt = (cruiserCheck && isHazard) ? (Math.floor(Math.random() * 6) + 1) : 1;
+      if (this.isCruiser && (this.specialduranium || 0) > 0) {
+        this.specialduranium = Math.max(0, this.specialduranium - damageAmt * 0.5);
+      }
       if (cruiserCheck && (this.armorPoints || 0) > 0) {
         if (this.armorPoints >= damageAmt) {
           this.armorPoints -= damageAmt;

@@ -278,11 +278,61 @@ const testSpecialFuelConsumption = () => {
   console.log("-> Special Fuel Consumption PASSED!");
 };
 
+const testSpecialDuraniumConsumption = () => {
+  console.log("\n--- Part 6: Special Duranium Consumption Rate ---");
+
+  const game = new Game();
+  const human = new Player('human', '#0ff', false);
+  game.allPlayers = [human];
+
+  const cruiser = new Ship('c1', 100, 100, null, human);
+  cruiser.isCruiser = true;
+  cruiser.maxHealth = 20;
+  cruiser.health = 20;
+  cruiser.armorPoints = 10;
+  cruiser.specialduranium = 5;
+  cruiser.checkSurvivalRoll = () => true;
+  game.ships.push(cruiser);
+
+  const originalRandom = Math.random;
+  // Mock Math.random to return 1.0 (fails shrug check)
+  Math.random = () => 1.0;
+
+  // 1. Normal hit: damage = 1
+  cruiser.takeDamage([], null, false, 'front');
+
+  console.log(`Special Duranium after normal hit: ${cruiser.specialduranium} (expected 4.5)`);
+  if (cruiser.specialduranium !== 4.5) {
+    console.error("FAILED: Normal hit did not consume 0.5 Special Duranium!");
+    process.exit(1);
+  }
+
+  // 2. Hazard hit: mock Math.random to return 0.5 (so Math.floor(Math.random() * 6) + 1 = 4)
+  let callCount = 0;
+  Math.random = () => {
+    callCount++;
+    if (callCount === 1) return 1.0; // Shrug check (fail shrug)
+    return 0.5; // Hazard damage: Math.floor(0.5 * 6) + 1 = 4
+  };
+
+  cruiser.takeDamage([], null, true, 'front');
+
+  console.log(`Special Duranium after hazard hit: ${cruiser.specialduranium} (expected 2.5)`);
+  if (cruiser.specialduranium !== 2.5) {
+    console.error("FAILED: Hazard hit did not consume 2.0 (4 * 0.5) Special Duranium!");
+    process.exit(1);
+  }
+
+  Math.random = originalRandom;
+  console.log("-> Special Duranium Consumption PASSED!");
+};
+
 testPlanetarySpawnChance();
 testDeepSpaceDiscovery();
 testDiscoveryCooldown();
 testDiplomacyLinkBreak();
 testSpecialFuelConsumption();
+testSpecialDuraniumConsumption();
 
 console.log("\nALL NEW ANOMALY TESTS PASSED SUCCESSFULLY!");
 process.exit(0);
