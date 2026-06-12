@@ -5446,6 +5446,8 @@ export class Game {
             p.diplomacyWarmupTimer = 0;
             diplomat.parley = Math.max(0, (diplomat.parley || 0) - 1);
             this.triggerDiplomacyEvent(diplomat, p);
+            p.activeDiplomatId = null;
+            diplomat.diplomatTargetPlanetId = null;
           }
         }
       } else {

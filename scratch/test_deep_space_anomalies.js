@@ -165,9 +165,58 @@ const testDiscoveryCooldown = () => {
   console.log("-> Discovery Cooldown PASSED!");
 };
 
+const testDiplomacyLinkBreak = () => {
+  console.log("\n--- Part 4: Break Diplomat Planet Link On Parley Consumption ---");
+
+  const game = new Game();
+  game.isRunning = true;
+  const human = new Player('human', '#0ff', false);
+  game.allPlayers = [human];
+
+  const planet = new Planet(1, 100, 100, 30, null, 10, 2000, 2000);
+  planet.disposition = { human: 50 };
+  game.planets = [planet];
+
+  const cruiser = new Ship('c1', 100, 100, null, human);
+  cruiser.isCruiser = true;
+  cruiser.diplomat = 1;
+  cruiser.parley = 1.5;
+  cruiser.isDiplomacy = true;
+  cruiser.cruiserRadarRange = () => 150;
+  cruiser.checkSurvivalRoll = () => true;
+  game.ships.push(cruiser);
+
+  // First update sets targetPlanet.activeDiplomatId = ship.id and ship.diplomatTargetPlanetId = targetPlanet.id
+  // and starts the timer
+  game.update(100);
+
+  console.log(`Active diplomat target ID: ${cruiser.diplomatTargetPlanetId} (expected 1)`);
+  console.log(`Planet active diplomat ID: ${planet.activeDiplomatId} (expected c1)`);
+  if (cruiser.diplomatTargetPlanetId !== 1 || planet.activeDiplomatId !== 'c1') {
+    console.error("FAILED: Did not establish diplomat link initially!");
+    process.exit(1);
+  }
+
+  // Set the warmup timer near completion (29.9 seconds)
+  planet.diplomacyWarmupTimer = 29.9;
+
+  // Next update (100ms) will push timer to 30.0s, trigger consumption, and break link
+  game.update(100);
+
+  console.log(`Active diplomat target ID after parley consumed: ${cruiser.diplomatTargetPlanetId} (expected null)`);
+  console.log(`Planet active diplomat ID after parley consumed: ${planet.activeDiplomatId} (expected null)`);
+  if (cruiser.diplomatTargetPlanetId !== null || planet.activeDiplomatId !== null) {
+    console.error("FAILED: Link was not broken after parley consumption!");
+    process.exit(1);
+  }
+
+  console.log("-> Diplomacy Link Break PASSED!");
+};
+
 testPlanetarySpawnChance();
 testDeepSpaceDiscovery();
 testDiscoveryCooldown();
+testDiplomacyLinkBreak();
 
 console.log("\nALL NEW ANOMALY TESTS PASSED SUCCESSFULLY!");
 process.exit(0);
