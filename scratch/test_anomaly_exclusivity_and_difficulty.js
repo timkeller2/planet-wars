@@ -132,8 +132,59 @@ const testScatteredAnomalies = () => {
   console.log("-> Scattered anomalies map creation PASSED!");
 };
 
+// 4. Deep Space Anomaly Hab Reward nearest planet logic verification
+const testDeepSpaceHabReward = () => {
+  console.log("\n--- Part 4: Deep Space Anomaly Hab Reward Nearest Planet ---");
+  const game = new Game();
+  const human = new Player('human', '#0ff', false);
+  game.allPlayers = [human];
+
+  // Create two regular planets
+  const planetFar = new Planet(1, 100, 100, 30, null, 10, 1600, 1200);
+  planetFar.habitability = 50;
+  const planetNear = new Planet(2, 500, 500, 30, null, 10, 1600, 1200);
+  planetNear.habitability = 50;
+  
+  // Create a deep space anomaly close to planetNear
+  const dsPlanet = new Planet(3, 510, 510, 0, null, 0, 1600, 1200);
+  dsPlanet.isDeepSpaceAnomaly = true;
+  dsPlanet.radius = 0;
+  dsPlanet.maxShips = 0;
+  dsPlanet.ships = 0;
+  dsPlanet.anomaly = {
+    id: 'ds_a',
+    x: 510,
+    y: 510,
+    difficulty: 50,
+    progress: 50,
+    researched: false,
+    beingResearched: false,
+    rewardType: 'hab'
+  };
+
+  game.planets = [planetFar, planetNear, dsPlanet];
+
+  // Trigger anomaly completion
+  game.triggerAnomalyCompletion(dsPlanet, human);
+
+  console.log(`Planet Near Hab: ${planetNear.habitability} (expected > 50)`);
+  console.log(`Planet Far Hab: ${planetFar.habitability} (expected 50)`);
+
+  if (planetNear.habitability <= 50) {
+    console.error("FAILED: Planet near did not receive the hab reward!");
+    process.exit(1);
+  }
+  if (planetFar.habitability !== 50) {
+    console.error("FAILED: Planet far unexpectedly received the hab reward!");
+    process.exit(1);
+  }
+
+  console.log("-> Deep Space Hab Reward nearest planet PASSED!");
+};
+
 testExclusivity();
 testCompletionReward();
 testScatteredAnomalies();
+testDeepSpaceHabReward();
 console.log("\nALL NEW TESTS PASSED SUCCESSFULLY!");
 process.exit(0);

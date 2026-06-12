@@ -4910,6 +4910,9 @@ export class Game {
     const factor = 1.0 + Math.random(); // 100% to 200%
     const creditsValueEquivalent = baseVal * factor;
     
+    const locationName = planet.isDeepSpaceAnomaly ? 'Deep Space' : planet.name;
+    const preposition = planet.isDeepSpaceAnomaly ? 'in' : 'on';
+
     if (rewardType === 'discount') {
       const numDiscounts = Math.max(1, 1 + Math.floor(difficulty / 20));
       const categories = ['sensorarray', 'lab', 'armor', 'shield', 'engine', 'munitions', 'targeting', 'damagecontrol', 'fueltanker', 'diplomat', 'marines'];
@@ -4922,42 +4925,67 @@ export class Game {
           applied.push(chosen);
         }
       }
-      text = `ANOMALY RESOLVED on ${planet.name}: Received ${applied.length} upgrade discount(s)!`;
+      text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received ${applied.length} upgrade discount(s)!`;
       floatText = `DISCOUNTS!`;
     } else if (rewardType === 'credits') {
       const creditsReward = Math.round(creditsValueEquivalent);
       player.credits = (player.credits || 0) + creditsReward;
-      text = `ANOMALY RESOLVED on ${planet.name}: Received +${creditsReward} Credits!`;
+      text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received +${creditsReward} Credits!`;
       floatText = `+${creditsReward} 💲`;
     } else if (rewardType === 'tech') {
       const techReward = Math.round(creditsValueEquivalent / 10);
       player.techScore = (player.techScore || 0) + techReward;
-      text = `ANOMALY RESOLVED on ${planet.name}: Received +${techReward} Tech Score!`;
+      text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received +${techReward} Tech Score!`;
       floatText = `+${techReward} 🔬`;
     } else if (rewardType === 'xp') {
       const expReward = Math.round(creditsValueEquivalent / 10);
       player.expScore = (player.expScore || 0) + expReward;
-      text = `ANOMALY RESOLVED on ${planet.name}: Received +${expReward} Player XP!`;
+      text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received +${expReward} Player XP!`;
       floatText = `+${expReward} XP`;
     } else if (rewardType === 'hab') {
       const habReward = Math.round(creditsValueEquivalent / 5);
-      const oldHab = planet.habitability || 0;
-      planet.habitability = (planet.habitability || 0) + habReward;
-      text = `ANOMALY RESOLVED on ${planet.name}: Habitability increased by +${habReward}%!`;
+      
+      let targetPlanet = planet;
+      if (planet.isDeepSpaceAnomaly) {
+        let nearest = null;
+        let minDist = Infinity;
+        for (const p of this.planets) {
+          if (p.isDeepSpaceAnomaly || p === planet) continue;
+          const dx = p.x - planet.x;
+          const dy = p.y - planet.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < minDist) {
+            minDist = dist;
+            nearest = p;
+          }
+        }
+        if (nearest) {
+          targetPlanet = nearest;
+        }
+      }
+
+      const oldHab = targetPlanet.habitability || 0;
+      targetPlanet.habitability = (targetPlanet.habitability || 0) + habReward;
+      
+      if (planet.isDeepSpaceAnomaly) {
+        text = `ANOMALY RESOLVED in Deep Space: Nearest planet ${targetPlanet.name} habitability increased by +${habReward}%!`;
+      } else {
+        text = `ANOMALY RESOLVED on ${planet.name}: Habitability increased by +${habReward}%!`;
+      }
       floatText = `+${habReward}% HABITABILITY!`;
       
       const oldClass = getHabName(oldHab);
-      const newClass = getHabName(planet.habitability);
+      const newClass = getHabName(targetPlanet.habitability);
       if (oldClass !== newClass) {
         this.pendingHabClassChanges = this.pendingHabClassChanges || [];
         this.pendingHabClassChanges.push({
-          planetId: planet.id,
-          planetName: planet.name,
-          ownerId: planet.owner ? planet.owner.id : null,
+          planetId: targetPlanet.id,
+          planetName: targetPlanet.name,
+          ownerId: targetPlanet.owner ? targetPlanet.owner.id : null,
           oldClass: oldClass,
           newClass: newClass,
-          x: planet.x,
-          y: planet.y
+          x: targetPlanet.x,
+          y: targetPlanet.y
         });
       }
     }
