@@ -4264,9 +4264,6 @@ export class Ship {
 
       if (this.health < this.maxHealth) {
         const owner = this.owner;
-        const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle === true));
-        const hasExcessDuranium = canUseRes && owner && owner.resources && (owner.resources.duranium || 0) >= 0.1;
-        const duraniumSellPrice = owner ? (owner.offerPrice?.duranium ?? 3) : 3;
 
         // Check for nearby supply ship first!
         const supplyShip = this.findNearbySupplyShip(allShips);
@@ -4278,8 +4275,6 @@ export class Ship {
 
         let canAffordHeal = false;
         if (supplyShip && (supplyShip.supplies || 0) > 0) {
-          canAffordHeal = true;
-        } else if (hasExcessDuranium && duraniumSellPrice < 12) {
           canAffordHeal = true;
         } else if (owner && owner.useCredits !== false) {
           canAffordHeal = true;
@@ -4311,36 +4306,14 @@ export class Ship {
               } else {
                 const remainingHeal = suppliesUsed - supplyShip.supplies;
                 supplyShip.supplies = 0;
-                if (hasExcessDuranium && duraniumSellPrice < 12) {
-                  const consumed = (1/12) * remainingHeal;
-                  owner.resources.duranium = (owner.resources.duranium || 0) - consumed;
-                  this.specialduranium = (this.specialduranium || 0) + remainingHeal;
-                  if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
-                  if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
-                  this.resourceAccumulators.duranium = (this.resourceAccumulators.duranium || 0) + consumed;
-                  if (this.resourceAccumulators.duranium >= 0.0833) {
-                    this.resourceConsumeEvents.duranium = (this.resourceConsumeEvents.duranium || 0) + 1;
-                    this.resourceAccumulators.duranium -= 0.0833;
-                  }
-                } else if (owner.useCredits !== false) {
+                if (owner.useCredits !== false) {
                   owner.credits = (owner.credits || 0) - 1.0 * remainingHeal;
                 } else if (friendlyWellPlanet) {
                   friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * remainingHeal);
                 }
               }
             } else {
-              if (hasExcessDuranium && duraniumSellPrice < 12) {
-                const consumed = (1/12) * amountHealed;
-                owner.resources.duranium = (owner.resources.duranium || 0) - consumed;
-                this.specialduranium = (this.specialduranium || 0) + amountHealed;
-                if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
-                if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
-                this.resourceAccumulators.duranium = (this.resourceAccumulators.duranium || 0) + consumed;
-                if (this.resourceAccumulators.duranium >= 0.0833) {
-                  this.resourceConsumeEvents.duranium = (this.resourceConsumeEvents.duranium || 0) + 1;
-                  this.resourceAccumulators.duranium -= 0.0833;
-                }
-              } else if (owner.useCredits !== false) {
+              if (owner.useCredits !== false) {
                 owner.credits = (owner.credits || 0) - 1.0 * amountHealed;
               } else if (friendlyWellPlanet) {
                 friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * amountHealed);
