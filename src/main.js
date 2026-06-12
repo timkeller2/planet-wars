@@ -10865,7 +10865,12 @@ function getPlanetTradeIncomePerMin(planet) {
             } else {
               lines.push({ label: 'Status', value: 'Digesting', color: '#4f4' });
             }
-            lines.push({ label: 'Attack Range', value: (50 + (hs.bombs ? hs.bombs * 5 : 0)) + 'px', color: '#f88' });
+            const displayedMaxHealth = hs.maxHealth + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
+            let effectiveRange = 20 + displayedMaxHealth;
+            if (hs.bombs > 0) {
+              effectiveRange += 10;
+            }
+            lines.push({ label: 'Attack Range', value: Math.floor(effectiveRange) + 'px', color: '#f88' });
             const techBonus = Math.sqrt(hsOwner.techScore || 0);
             const expBonus = Math.sqrt(hsOwner.expScore || 0);
             const shipExpBonus = Math.sqrt(hs.expScore || 0);
