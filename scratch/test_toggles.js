@@ -180,4 +180,41 @@ function setupCruiser() {
   console.log("-> Test 3 Passed: Cruiser override toggle allows resource usage even if global trade toggle is off");
 }
 
+// Test 4: Cruiser is OUTSIDE a friendly gravity well, tradeLimitToggle is ON - Resource conversion should NOT occur!
+{
+  const { owner, ship, planet } = setupCruiser();
+  owner.tradeLimitToggle = true; // ON
+  ship.useResources = false;
+  
+  // Move ship far away from the planet so it is outside gravity well
+  ship.x = 2000;
+  ship.y = 2000;
+
+  const initialDuranium = owner.resources.duranium;
+
+  console.log("Test 4 Initial:", {
+    health: ship.health,
+    fuel: ship.fuel,
+    bombs: ship.bombs,
+    duranium: owner.resources.duranium,
+    inFriendlyWell: ship.inFriendlyWell
+  });
+
+  ship.update(30000, [], [], [planet], [], [], 1920);
+
+  console.log("Test 4 Final:", {
+    health: ship.health,
+    fuel: ship.fuel,
+    bombs: ship.bombs,
+    duranium: owner.resources.duranium,
+    inFriendlyWell: ship.inFriendlyWell
+  });
+
+  // Auto-resource conversion should NOT occur because ship is outside friendly gravity well
+  assert(ship.specialduranium === 0, "Should NOT auto-convert when outside friendly gravity well");
+  assert(owner.resources.duranium === initialDuranium, "Duranium should not change when outside friendly gravity well");
+
+  console.log("-> Test 4 Passed: Cruiser outside friendly gravity well does not convert resources");
+}
+
 console.log("\nAll Cruiser/Player Toggle tests PASSED!");

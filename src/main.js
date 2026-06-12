@@ -1130,6 +1130,900 @@ function getPlanetTradeIncomePerMin(planet) {
   let starfieldEnabled = true;
   let hoveredPlanet = null;
   let hoveredShip = null;
+  let isHoveringSelectionTile = false;
+  let selectionTileMouseX = 0;
+  let selectionTileMouseY = 0;
+  let isShiftSelectingInHUD = false;
+  const hudSelectedSet = new Set();
+
+  const getPlanetSVG = (p) => {
+    const color = p.ownerId ? (serverState ? serverState.players.find(pl => pl.id === p.ownerId)?.color : null) || '#888' : '#555';
+    return `
+      <svg width="28" height="28" viewBox="0 0 32 32">
+        <defs>
+          <radialGradient id="grad-${p.id}" cx="35%" cy="35%" r="65%">
+            <stop offset="0%" stop-color="#fff" stop-opacity="0.5"/>
+            <stop offset="40%" stop-color="${color}"/>
+            <stop offset="100%" stop-color="#000" stop-opacity="0.8"/>
+          </radialGradient>
+          <filter id="glow-${p.id}">
+            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+        <circle cx="16" cy="16" r="12" fill="url(#grad-${p.id})" filter="url(#glow-${p.id})" />
+      </svg>
+    `;
+  };
+
+  const getShipSVG = (s, color) => {
+    if (s.isAmoeba) {
+      return `
+        <svg width="28" height="28" viewBox="0 0 32 32">
+          <circle cx="16" cy="16" r="10" fill="rgba(15, 255, 15, 0.2)" stroke="#0f0" stroke-width="2" />
+          <circle cx="12" cy="14" r="2" fill="#0f0" />
+          <circle cx="20" cy="14" r="2" fill="#0f0" />
+          <path d="M 10,20 Q 16,24 22,20" fill="none" stroke="#0f0" stroke-width="1.5" />
+        </svg>
+      `;
+    }
+    let path = 'M 16,4 L 28,24 L 16,18 L 4,24 Z';
+    if (s.isCruiser) {
+      const style = s.cruiserStyle || 'Federation';
+      if (style === 'Federation') {
+        path = 'M 16,4 A 8,8 0 0,1 24,12 L 22,14 L 28,14 L 28,26 L 24,26 L 24,18 L 16,18 L 8,18 L 8,26 L 4,26 L 4,14 L 10,14 L 8,12 A 8,8 0 0,1 16,4 Z';
+      } else if (style === 'Romulan') {
+        path = 'M 16,4 L 24,10 L 28,20 L 22,22 L 20,16 L 16,18 L 12,16 L 10,22 L 4,20 L 8,10 Z';
+      } else if (style === 'Klingon') {
+        path = 'M 16,4 L 19,10 L 28,12 L 24,16 L 26,26 L 16,20 L 6,26 L 8,16 L 4,12 L 13,10 Z';
+      } else {
+        path = 'M 16,2 L 30,22 L 22,22 L 16,14 L 10,22 L 2,22 Z';
+      }
+    } else if (s.isMarineFleet) {
+      path = 'M 16,4 Q 26,4 26,18 L 22,18 L 22,24 L 10,24 L 10,18 L 6,18 Q 6,4 16,4 Z';
+    }
+    return `
+      <svg width="28" height="28" viewBox="0 0 32 32" style="filter: drop-shadow(0 0 3px ${color});">
+        <path d="${path}" fill="${color}" stroke="#fff" stroke-width="1" stroke-linejoin="round" />
+      </svg>
+    `;
+  };
+
+  const drawUnitOnTileCanvas = (ctxTile, width, height, unit, type) => {
+    ctxTile.clearRect(0, 0, width, height);
+    
+    // 1. Calculate the ideal scale to center the unit and its labels
+    let scale = 1.0;
+    if (type === 'planet') {
+      scale = (width * 0.23) / unit.radius;
+    } else if (type === 'ship') {
+      if (unit.isCruiser) {
+        const size = (6 + (unit.maxHealth || 0)) / 3;
+        scale = (width * 0.23) / size;
+      } else if (unit.isAmoeba) {
+        const size = 6 + (unit.maxHealth || 0) * 1.5;
+        scale = (width * 0.23) / size;
+      } else {
+        scale = 1.6;
+      }
+    }
+
+    // 2. Set up centered coordinate system
+    ctxTile.save();
+    ctxTile.translate(width / 2, height / 2);
+    ctxTile.scale(scale, scale);
+    ctxTile.translate(-unit.x, -unit.y);
+
+    const cameraZoom = 1.2; // Mock cameraZoom to force labels/upgrade drawings
+
+    if (type === 'planet') {
+      const p = unit;
+      const owner = serverState.players.find(pl => pl.id === p.ownerId);
+
+      let drawnPlanetImage = false;
+      if (graphicalMode && transparentPlanetsCanvas) {
+        const spriteIdx = 2 + (p.id % 78);
+        const col = spriteIdx % 8;
+        const row = Math.floor(spriteIdx / 8);
+        const sx = 12 + col * 94;
+        const sy = 26 + row * 94;
+
+        ctxTile.save();
+        ctxTile.beginPath();
+        ctxTile.arc(p.x, p.y, p.radius - 1, 0, Math.PI * 2);
+        ctxTile.clip();
+        ctxTile.drawImage(
+          transparentPlanetsCanvas,
+          sx, sy, 94, 94,
+          p.x - p.radius, p.y - p.radius, p.radius * 2, p.radius * 2
+        );
+        ctxTile.restore();
+        
+        drawnPlanetImage = true;
+      }
+
+      if (!drawnPlanetImage) {
+        ctxTile.beginPath();
+        ctxTile.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        if (owner) {
+          ctxTile.fillStyle = owner.color;
+          ctxTile.shadowColor = owner.color;
+          ctxTile.shadowBlur = 15;
+        } else {
+          ctxTile.fillStyle = '#555';
+          ctxTile.shadowColor = 'transparent';
+          ctxTile.shadowBlur = 0;
+        }
+        ctxTile.fill();
+      }
+
+      // Soft cap and current maxships filled circles
+      const isLastKnownPlanet = p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id] ? true : false;
+      if (!p.inFog || p.permanentlyTracked || isLastKnownPlanet) {
+        const techBonus = owner ? Math.sqrt(owner.techScore || 0) : 0;
+        const threshold = p.sizeClass * ((p.habitability + techBonus) / 100);
+        if (threshold > 0) {
+          ctxTile.save();
+          
+          const planetColor = owner ? owner.color : '#555555';
+          let r = 85, g = 85, b = 85;
+          let clean = planetColor.replace('#', '');
+          if (clean.length === 3) {
+            clean = clean[0] + clean[0] + clean[1] + clean[1] + clean[2] + clean[2];
+          }
+          const num = parseInt(clean, 16);
+          if (!isNaN(num)) {
+            r = (num >> 16) & 255;
+            g = (num >> 8) & 255;
+            b = num & 255;
+          }
+
+          const lightR = Math.floor(r + (255 - r) * 0.6);
+          const lightG = Math.floor(g + (255 - g) * 0.6);
+          const lightB = Math.floor(b + (255 - b) * 0.6);
+          const softCapFillColor = `rgba(${lightR}, ${lightG}, ${lightB}, 0.25)`;
+          const softCapStrokeColor = `rgba(${lightR}, ${lightG}, ${lightB}, 0.4)`;
+
+          const darkR = Math.floor(r * 0.55);
+          const darkG = Math.floor(g * 0.55);
+          const darkB = Math.floor(b * 0.55);
+          const currentMaxShipsFillColor = `rgba(${darkR}, ${darkG}, ${darkB}, 0.35)`;
+          const currentMaxShipsStrokeColor = `rgba(${darkR}, ${darkG}, ${darkB}, 0.55)`;
+
+          ctxTile.beginPath();
+          ctxTile.arc(p.x, p.y, threshold / 4, 0, Math.PI * 2);
+          ctxTile.fillStyle = softCapFillColor;
+          ctxTile.fill();
+          ctxTile.strokeStyle = softCapStrokeColor;
+          ctxTile.lineWidth = 1;
+          ctxTile.stroke();
+
+          if (p.maxShips > 0) {
+            ctxTile.beginPath();
+            ctxTile.arc(p.x, p.y, p.maxShips / 4, 0, Math.PI * 2);
+            ctxTile.fillStyle = currentMaxShipsFillColor;
+            ctxTile.fill();
+            ctxTile.strokeStyle = currentMaxShipsStrokeColor;
+            ctxTile.lineWidth = 1;
+            ctxTile.stroke();
+          }
+
+          if (p.habitability < 100 && p.sizeClass > 0) {
+            ctxTile.beginPath();
+            ctxTile.arc(p.x, p.y, p.sizeClass / 4, 0, Math.PI * 2);
+            ctxTile.strokeStyle = 'rgba(150, 150, 150, 0.3)';
+            ctxTile.lineWidth = 1;
+            ctxTile.stroke();
+          }
+
+          ctxTile.restore();
+        }
+      }
+
+      // Revolt warmup counter red ring
+      if (p.revoltWarmup && p.revoltWarmup > 0 && p.revoltWarmupMax) {
+        ctxTile.save();
+        ctxTile.beginPath();
+        const progress = Math.min(1.0, p.revoltWarmup / p.revoltWarmupMax);
+        ctxTile.arc(p.x, p.y, p.radius + 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+        ctxTile.strokeStyle = 'rgba(255, 50, 50, 0.85)';
+        ctxTile.lineWidth = 2;
+        ctxTile.stroke();
+        ctxTile.restore();
+      }
+
+      if (planetShields[p.id] > 0) {
+        ctxTile.beginPath();
+        ctxTile.arc(p.x, p.y, p.radius + 6, 0, Math.PI * 2);
+        ctxTile.strokeStyle = `rgba(255, 255, 0, ${Math.min(1, planetShields[p.id])})`;
+        ctxTile.lineWidth = 3;
+        ctxTile.shadowColor = '#ff0';
+        ctxTile.shadowBlur = 10;
+        ctxTile.stroke();
+      }
+
+      if (serverState.players) {
+        let currentAngle = -Math.PI / 2;
+        const ringRadius = p.radius + 6;
+        for (const player of serverState.players) {
+          const symLevel = getEffectiveSympathyClient(p, player.id);
+          if (symLevel > 0) {
+            const angleSize = (Math.PI * 2 * symLevel) / p.maxShips;
+            ctxTile.beginPath();
+            ctxTile.arc(p.x, p.y, ringRadius, currentAngle, currentAngle + angleSize);
+            ctxTile.strokeStyle = player.color;
+            ctxTile.lineWidth = 2;
+            ctxTile.stroke();
+            currentAngle += angleSize;
+          }
+        }
+      }
+
+      if (p.inRevolt) {
+        ctxTile.save();
+        ctxTile.beginPath();
+        const pulseRadius = p.radius + 10 + Math.sin(Date.now() / 100) * 2;
+        ctxTile.arc(p.x, p.y, pulseRadius, 0, Math.PI * 2);
+        ctxTile.strokeStyle = '#ff3333';
+        ctxTile.lineWidth = 2;
+        ctxTile.stroke();
+
+        ctxTile.font = 'bold 8px Orbitron';
+        ctxTile.textAlign = 'center';
+        ctxTile.textBaseline = 'bottom';
+        const alpha = 0.5 + Math.sin(Date.now() / 150) * 0.5;
+        ctxTile.fillStyle = `rgba(255, 51, 51, ${alpha})`;
+        ctxTile.fillText('✊ REVOLTING', p.x, p.y - p.radius - 16);
+        ctxTile.restore();
+      }
+
+      ctxTile.shadowBlur = 0;
+
+      if (p.focusTransition) {
+        const progress = p.focusTransition.progress || 0;
+        const target = p.focusTransition.targetMode;
+        const emoji = target === 'research' ? '🔬' : (target === 'garrison' ? '🛡️' : (target === 'commerce' ? '💲' : (target === 'mining' ? '⛏️' : (target === 'terraforming' ? '🌱' : '📈'))));
+        
+        ctxTile.save();
+        ctxTile.beginPath();
+        const ringRadius = p.radius + 12;
+        ctxTile.arc(p.x, p.y, ringRadius, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * progress));
+        ctxTile.strokeStyle = '#39ff14';
+        ctxTile.lineWidth = 2;
+        ctxTile.stroke();
+        ctxTile.restore();
+      }
+
+      if (!p.inFog || p.permanentlyTracked || isLastKnownPlanet) {
+        const displayShips = isLastKnownPlanet ? lastKnownPlanets[p.id].ships : p.ships;
+        const displayMaxShips = isLastKnownPlanet ? lastKnownPlanets[p.id].maxShips : p.maxShips;
+        const displayOwnerId = isLastKnownPlanet ? lastKnownPlanets[p.id].ownerId : p.ownerId;
+        const displayOwner = serverState.players.find(pl => pl.id === displayOwnerId);
+
+        let pName = (isLastKnownPlanet ? lastKnownPlanets[p.id].name : p.name) || 'Unknown';
+        const nameY = p.y - p.radius - 10;
+        let displayName = `${pName} (${Math.floor(displayShips)}/${Math.round(displayMaxShips)})`;
+        const displayHomeworldOf = isLastKnownPlanet ? lastKnownPlanets[p.id].homeworldOf : p.homeworldOf;
+        if (displayHomeworldOf) {
+          displayName = `👑 ${displayName}`;
+        }
+
+        if (isLastKnownPlanet) {
+          ctxTile.fillStyle = '#888';
+        } else if (owner) {
+          ctxTile.fillStyle = owner.color;
+        } else {
+          ctxTile.fillStyle = '#ffffff';
+        }
+        ctxTile.font = 'bold 8px Orbitron';
+        ctxTile.textAlign = 'center';
+        ctxTile.textBaseline = 'middle';
+        ctxTile.fillText(displayName, p.x, nameY);
+
+        if (!isLastKnownPlanet && p.finalRateExceedsOne) {
+          const nameWidth = ctxTile.measureText(displayName).width;
+          ctxTile.save();
+          ctxTile.font = '8px sans-serif';
+          ctxTile.textAlign = 'left';
+          ctxTile.textBaseline = 'middle';
+          ctxTile.fillStyle = '#fff';
+          ctxTile.fillText('🏭', p.x + nameWidth / 2 + 4, nameY);
+          ctxTile.restore();
+        }
+
+        const myPlayer = (serverState && serverState.players && localPlayer) ? (serverState.players.find(pl => pl.id === localPlayer.id) || localPlayer) : localPlayer;
+        if (myPlayer && !p.dead) {
+          const isOwn = (p.ownerId === myPlayer.id);
+          let isNotAtWar = true;
+          if (p.ownerId) {
+            if (p.ownerId === 'monsters') {
+              isNotAtWar = false;
+            } else {
+              const isAtWar = !!(myPlayer.atWarWith && myPlayer.atWarWith[p.ownerId] && Date.now() < myPlayer.atWarWith[p.ownerId]);
+              if (isAtWar) isNotAtWar = false;
+            }
+          }
+          if (!isOwn && isNotAtWar) {
+            const tradingShips = Math.floor(getPlanetTradeIncomePerMin(p) * 25);
+            if (tradingShips > 0) {
+              const nameWidth = ctxTile.measureText(displayName).width;
+              let rightOffset = nameWidth / 2 + 4;
+              if (!isLastKnownPlanet && p.finalRateExceedsOne) {
+                rightOffset += 16;
+              }
+              ctxTile.save();
+              ctxTile.font = '8px sans-serif';
+              ctxTile.textAlign = 'left';
+              ctxTile.textBaseline = 'middle';
+              ctxTile.fillText(`🚢${tradingShips}`, p.x + rightOffset, nameY);
+              ctxTile.restore();
+            }
+          }
+        }
+      }
+    } else if (type === 'ship') {
+      const s = unit;
+      const owner = serverState.players.find(pl => pl.id === s.ownerId);
+
+      ctxTile.fillStyle = owner ? owner.color : '#fff';
+      
+      if (s.count > 1 && !s.isCruiser && !s.isAmoeba) {
+        const maxSpread = Math.min(60, 10 + Math.sqrt(s.count || 1) * 2.5);
+        let maxRender = 40;
+        const renderCount = Math.min(maxRender, s.count);
+        for (let i = 0; i < renderCount; i++) {
+          const { lx, ly } = getFormationOffset(s.formation, i, renderCount, maxSpread, s.isInterceptor, s.isBomber);
+          const cos = Math.cos(s.angle || 0);
+          const sin = Math.sin(s.angle || 0);
+          const drawX = s.x + lx * cos - ly * sin;
+          const drawY = s.y + lx * sin + ly * cos;
+          
+          if (s.isBomber) {
+            let angle = 0;
+            if (s.targetX !== undefined && s.targetY !== undefined) {
+              angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
+            }
+            const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
+            const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
+            if (sheet) {
+              ctxTile.drawImage(sheet, angleDeg * 16, 16, 16, 16, drawX - 8, drawY - 8, 16, 16);
+            } else {
+              ctxTile.save();
+              ctxTile.translate(drawX, drawY);
+              ctxTile.rotate(angle + Math.PI / 2);
+              ctxTile.beginPath();
+              ctxTile.moveTo(0, -4);
+              ctxTile.lineTo(4, 4);
+              ctxTile.lineTo(-4, 4);
+              ctxTile.closePath();
+              ctxTile.fill();
+              ctxTile.restore();
+            }
+          } else if (s.isInterceptor) {
+            let angle = 0;
+            if (s.targetX !== undefined && s.targetY !== undefined) {
+              angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
+            }
+            const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
+            const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
+            if (sheet) {
+              ctxTile.drawImage(sheet, angleDeg * 16, 32, 16, 16, drawX - 8, drawY - 8, 16, 16);
+            } else {
+              ctxTile.save();
+              ctxTile.translate(drawX, drawY);
+              ctxTile.rotate(angle + Math.PI / 2);
+              ctxTile.beginPath();
+              ctxTile.moveTo(0, -3);
+              ctxTile.lineTo(3, 3);
+              ctxTile.lineTo(-3, 3);
+              ctxTile.closePath();
+              ctxTile.fill();
+              ctxTile.restore();
+            }
+          } else {
+            const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
+            if (sheet) {
+              ctxTile.drawImage(sheet, 0, 0, 16, 16, drawX - 8, drawY - 8, 16, 16);
+            } else {
+              ctxTile.beginPath();
+              ctxTile.arc(drawX, drawY, 1.5, 0, Math.PI * 2);
+              ctxTile.fill();
+            }
+          }
+        }
+
+        if (s.count > renderCount) {
+          ctxTile.save();
+          ctxTile.font = 'bold 8px Orbitron';
+          ctxTile.fillStyle = owner ? owner.color : '#ffffff';
+          ctxTile.textAlign = 'center';
+          ctxTile.textBaseline = 'bottom';
+          ctxTile.fillText(`+${Math.round(s.count - renderCount)}`, s.x, s.y - maxSpread - 4);
+          ctxTile.restore();
+        }
+      } else {
+        if (s.isBomber) {
+          let angle = 0;
+          if (s.targetX !== undefined && s.targetY !== undefined) {
+            angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
+          }
+          const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
+          const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
+          if (sheet) {
+            ctxTile.drawImage(sheet, angleDeg * 16, 16, 16, 16, s.x - 8, s.y - 8, 16, 16);
+          } else {
+            ctxTile.save();
+            ctxTile.translate(s.x, s.y);
+            ctxTile.rotate(angle + Math.PI / 2);
+            ctxTile.beginPath();
+            ctxTile.moveTo(0, -5);
+            ctxTile.lineTo(5, 5);
+            ctxTile.lineTo(-5, 5);
+            ctxTile.closePath();
+            ctxTile.fill();
+            ctxTile.restore();
+          }
+        } else if (s.isInterceptor) {
+          let angle = 0;
+          if (s.targetX !== undefined && s.targetY !== undefined) {
+            angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
+          }
+          const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
+          const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
+          if (sheet) {
+            ctxTile.drawImage(sheet, angleDeg * 16, 32, 16, 16, s.x - 8, s.y - 8, 16, 16);
+          } else {
+            ctxTile.save();
+            ctxTile.translate(s.x, s.y);
+            ctxTile.rotate(angle + Math.PI / 2);
+            ctxTile.beginPath();
+            ctxTile.moveTo(0, -3);
+            ctxTile.lineTo(3, 3);
+            ctxTile.lineTo(-3, 3);
+            ctxTile.closePath();
+            ctxTile.fill();
+            ctxTile.restore();
+          }
+        } else if (s.isAmoeba) {
+          const size = (6 + (s.maxHealth || 0) * 1.5);
+          const time = Date.now() / 500 + s.id;
+          ctxTile.beginPath();
+          for (let i = 0; i < 8; i++) {
+            const r = size + Math.sin(time + i) * (size * 0.2);
+            const px = s.x + AMOEBA_COS[i] * r;
+            const py = s.y + AMOEBA_SIN[i] * r;
+            if (i === 0) ctxTile.moveTo(px, py);
+            else ctxTile.lineTo(px, py);
+          }
+          ctxTile.closePath();
+          
+          ctxTile.save();
+          ctxTile.fillStyle = "rgba(0, 100, 0, 0.7)";
+          ctxTile.strokeStyle = "#0f0";
+          ctxTile.lineWidth = 1.5;
+          ctxTile.fill();
+          ctxTile.stroke();
+          ctxTile.restore();
+        } else if (s.isCruiser) {
+          ctxTile.save();
+          if (s.isMaterializing && s.materializeProgress !== undefined) {
+            ctxTile.globalAlpha = s.materializeProgress;
+          } else if (s.isDismantling && s.dismantleTimer !== undefined && s.dismantleDuration) {
+            ctxTile.globalAlpha = Math.max(0, Math.min(1.0, s.dismantleTimer / s.dismantleDuration));
+          }
+          const size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0);
+          let angle = s.angle || 0;
+          let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
+          let style = s.cruiserStyle || (ownerPlayer ? ownerPlayer.cruiserStyle : 'Klingon');
+
+          let cohort = 'scout_group';
+          if (s.classType === 'destroyer') {
+            cohort = 'destroyer_group';
+          } else if (s.classType === 'cruiser' || s.classType === 'battlecruiser') {
+            cohort = 'cruiser_group';
+          } else if (s.classType === 'battleship' || s.classType === 'titan') {
+            cohort = 'battleship_group';
+          } else if (s.classType === 'mammoth') {
+            cohort = 'mammoth_group';
+          }
+
+          let drawnShipImage = false;
+          if (graphicalMode && transparentShipsCanvas) {
+            let normalizedStyle = style;
+            if (normalizedStyle) {
+              normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
+            }
+            if (!FACTION_MAPPING[normalizedStyle]) {
+              normalizedStyle = 'Klingon';
+            }
+            const faction = FACTION_MAPPING[normalizedStyle];
+            const classRow = CLASS_MAPPING[s.classType || 'corvette'];
+            if (faction && classRow) {
+              let drawScale = (6 + (s.maxHealth || 0)) / 240;
+              if (s.classType === 'corvette') {
+                drawScale *= 1.6;
+              } else if (s.classType === 'frigate') {
+                drawScale *= 1.4;
+              }
+              const drawnW = faction.w * drawScale;
+              const drawnH = classRow.h * drawScale;
+              
+              ctxTile.save();
+              ctxTile.translate(s.x, s.y);
+              ctxTile.rotate(angle + Math.PI / 2);
+              ctxTile.drawImage(
+                transparentShipsCanvas,
+                faction.x, classRow.y, faction.w, classRow.h,
+                -drawnW / 2, -drawnH / 2, drawnW, drawnH
+              );
+              ctxTile.restore();
+              drawnShipImage = true;
+            }
+          }
+
+          if (!drawnShipImage) {
+            ctxTile.save();
+            ctxTile.translate(s.x, s.y);
+            ctxTile.rotate(angle + Math.PI / 2);
+            ctxTile.beginPath();
+            drawRacialShipHull(ctxTile, style, cohort, size);
+            ctxTile.closePath();
+            ctxTile.fill();
+            ctxTile.strokeStyle = '#000';
+            ctxTile.lineWidth = 1;
+            ctxTile.stroke();
+            ctxTile.restore();
+          }
+
+          if (s.isActivelyResearching && s.accumulatedTech !== undefined) {
+            ctxTile.save();
+            ctxTile.beginPath();
+            const progress = Math.max(0.0, Math.min(1.0, s.accumulatedTech));
+            ctxTile.arc(s.x, s.y, size + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+            ctxTile.strokeStyle = 'rgba(0, 76, 255, 0.95)';
+            ctxTile.lineWidth = 1.5;
+            ctxTile.stroke();
+            ctxTile.restore();
+          }
+
+          const activeUpgrades = [];
+          if ((s.sensorarrays || 0) > 0) activeUpgrades.push({ symbol: '📡', count: s.sensorarrays });
+          if ((s.labs || 0) > 0) activeUpgrades.push({ symbol: '🔬', count: s.labs });
+          if ((s.shields || 0) > 0) activeUpgrades.push({ symbol: '🌀', count: s.shields });
+          if ((s.armor || 0) > 0) activeUpgrades.push({ symbol: '🛡️', count: s.armor });
+          if ((s.engine || 0) > 0) activeUpgrades.push({ symbol: '🚀', count: s.engine });
+          if ((s.munitions || 0) > 0) activeUpgrades.push({ symbol: '💣', count: s.munitions });
+          if ((s.targeting || 0) > 0) activeUpgrades.push({ symbol: '🎯', count: s.targeting });
+          if ((s.damagecontrol || 0) > 0) activeUpgrades.push({ symbol: '🔧', count: s.damagecontrol });
+          if ((s.fuel_tanker || 0) > 0) activeUpgrades.push({ symbol: '⛽', count: s.fuel_tanker });
+          if ((s.diplomat || 0) > 0) activeUpgrades.push({ symbol: '🤝', count: s.diplomat });
+          if ((s.marines || 0) > 0) activeUpgrades.push({ symbol: '🪖', count: s.marines });
+          if ((s.command || 0) > 0) activeUpgrades.push({ symbol: '👑', count: s.command });
+
+          let upgradesHeight = 0;
+          if (activeUpgrades.length > 0) {
+            const iconSize = 4;
+            const spacingX = 5;
+            const yOffset = size + 4;
+            upgradesHeight = 6;
+            
+            ctxTile.save();
+            ctxTile.font = `${iconSize}px Orbitron`;
+            ctxTile.textAlign = 'center';
+            ctxTile.textBaseline = 'middle';
+            
+            const startX = s.x - ((activeUpgrades.length - 1) * spacingX) / 2;
+            for (let j = 0; j < activeUpgrades.length; j++) {
+              const item = activeUpgrades[j];
+              const x = startX + j * spacingX;
+              const y = s.y + yOffset;
+              ctxTile.fillText(item.symbol, x, y);
+              if (item.count > 1) {
+                ctxTile.fillStyle = '#39ff14';
+                ctxTile.font = 'bold 2px Orbitron';
+                ctxTile.fillText(item.count.toString(), x + 2.5, y - 2.0);
+                ctxTile.font = `${iconSize}px Orbitron`;
+              }
+            }
+            ctxTile.restore();
+          }
+
+          if (s.name) {
+            ctxTile.save();
+            ctxTile.font = 'bold 5px Orbitron';
+            ctxTile.fillStyle = ownerPlayer ? ownerPlayer.color : '#fff';
+            ctxTile.textAlign = 'center';
+            ctxTile.textBaseline = 'top';
+            ctxTile.fillText(s.name, s.x, s.y + size + 3 + upgradesHeight);
+            ctxTile.restore();
+          }
+
+          // Status bars
+          if (s.maxHealth > 0) {
+            const barW = size * 1.5;
+            const barH = 2;
+            let currentY = s.y - size - 4;
+            
+            const maxFuel = getMaxFuel(s);
+            if (s.fuel !== undefined && s.fuel < maxFuel) {
+              currentY -= barH;
+              ctxTile.fillStyle = '#555';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctxTile.fillStyle = '#ffa500';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.fuel) / maxFuel), barH);
+              currentY -= 1;
+            }
+            
+            if (s.bombs !== undefined) {
+              const maxBombs = getMaxBombs(s);
+              if (s.bombs < maxBombs) {
+                currentY -= barH;
+                ctxTile.fillStyle = '#3a3a3a';
+                ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
+                ctxTile.fillStyle = '#a0a0a0';
+                ctxTile.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.bombs) / maxBombs), barH);
+                currentY -= 1;
+              }
+            }
+            
+            const shipExpBonus = Math.sqrt(s.expScore || 0);
+            if ((s.expScore || 0) >= 1) {
+              currentY -= barH;
+              ctxTile.fillStyle = '#1a3344';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctxTile.fillStyle = '#00d5ff';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW * Math.min(1.0, shipExpBonus / 20), barH);
+              currentY -= 1;
+            }
+            
+            if (s.health < s.maxHealth) {
+              currentY -= barH;
+              ctxTile.fillStyle = 'red';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctxTile.fillStyle = '#0f0';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.health) / s.maxHealth), barH);
+            }
+          }
+
+          let modeText = '';
+          let modeColor = '';
+          if (s.isPatrolling) {
+            modeText = '⚔️';
+            modeColor = '#0ff';
+          } else if (s.isScouting) {
+            modeText = '🔭';
+            modeColor = '#0ff';
+          } else if (s.isResearching) {
+            modeText = '🔬';
+            modeColor = '#0f0';
+          } else if (s.isDiplomacy) {
+            modeText = '🤝';
+            modeColor = '#ff00ff';
+          }
+
+          if (modeText) {
+            ctxTile.save();
+            ctxTile.font = 'bold 8px Orbitron';
+            ctxTile.fillStyle = modeColor;
+            ctxTile.textAlign = 'left';
+            ctxTile.textBaseline = 'middle';
+            ctxTile.shadowBlur = 6;
+            ctxTile.shadowColor = modeColor;
+            ctxTile.fillText(modeText, s.x + size * 1.6 + 2, s.y);
+            ctxTile.restore();
+          }
+
+          let groupNum = null;
+          for (let g = 0; g <= 9; g++) {
+            if (controlGroups[g] && controlGroups[g].shipIds && controlGroups[g].shipIds.includes(s.id)) {
+              groupNum = g;
+              break;
+            }
+          }
+          if (groupNum !== null) {
+            ctxTile.save();
+            ctxTile.font = 'bold 7px Orbitron';
+            ctxTile.fillStyle = '#ffffff';
+            ctxTile.textAlign = 'right';
+            ctxTile.textBaseline = 'bottom';
+            ctxTile.fillText(groupNum.toString(), s.x - size * 1.6 - 2, s.y);
+            ctxTile.restore();
+          }
+          ctxTile.restore();
+        }
+      }
+    }
+
+    ctxTile.restore();
+  };
+
+  let lastSelectionIdsStr = "";
+
+  const updateSelectionTiles = () => {
+    const container = document.getElementById('selection-tiles-container');
+    if (!container) return;
+
+    if (selectedShips.length === 0 && selectedPlanets.length === 0) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      lastSelectionIdsStr = "";
+      return;
+    }
+    container.style.display = 'flex';
+
+    const currentSelectionIdsStr = "P:" + selectedPlanets.map(p => p.id).sort().join(",") + 
+                                  "|S:" + selectedShips.map(s => s.id).sort().join(",") +
+                                  "|Shift:" + isShiftSelectingInHUD +
+                                  "|Set:" + Array.from(hudSelectedSet).sort().join(",");
+    
+    if (currentSelectionIdsStr !== lastSelectionIdsStr) {
+      let html = '';
+      
+      for (const p of selectedPlanets) {
+        const livePlanet = serverState ? serverState.planets.find(sp => sp.id === p.id) : p;
+        if (!livePlanet) continue;
+        
+        const key = `planet-${livePlanet.id}`;
+        const activeClass = isShiftSelectingInHUD && hudSelectedSet.has(key) ? ' active-selected' : '';
+        const opacityStyle = isShiftSelectingInHUD && !hudSelectedSet.has(key) ? ' style="opacity: 0.5;"' : '';
+        
+        html += `
+          <div class="selection-tile${activeClass}" data-type="planet" data-id="${livePlanet.id}"${opacityStyle} title="${livePlanet.name}">
+            <canvas class="selection-tile-canvas" width="120" height="120" style="width: 56px; height: 56px;"></canvas>
+          </div>
+        `;
+      }
+
+      for (const s of selectedShips) {
+        const liveShip = serverState ? serverState.ships.find(ss => ss.id === s.id) : s;
+        if (!liveShip || !liveShip.active) continue;
+        
+        let shipClass = "Fleet";
+        if (liveShip.isCruiser) {
+          if (liveShip.classType && SHIP_CLASSES[liveShip.classType]) {
+            shipClass = SHIP_CLASSES[liveShip.classType].name;
+          } else {
+            const hpMax = liveShip.maxHealth || 1;
+            if (hpMax <= 19) shipClass = "Corvette";
+            else if (hpMax <= 24) shipClass = "Frigate";
+            else if (hpMax <= 29) shipClass = "Destroyer";
+            else if (hpMax <= 34) shipClass = "Cruiser";
+            else if (hpMax <= 39) shipClass = "Battlecruiser";
+            else if (hpMax <= 44) shipClass = "Battleship";
+            else if (hpMax <= 49) shipClass = "Titan";
+            else shipClass = "Mammoth";
+          }
+        }
+
+        const key = `ship-${liveShip.id}`;
+        const activeClass = isShiftSelectingInHUD && hudSelectedSet.has(key) ? ' active-selected' : '';
+        const opacityStyle = isShiftSelectingInHUD && !hudSelectedSet.has(key) ? ' style="opacity: 0.5;"' : '';
+
+        html += `
+          <div class="selection-tile${activeClass}" data-type="ship" data-id="${liveShip.id}"${opacityStyle} title="${liveShip.name || shipClass}">
+            <canvas class="selection-tile-canvas" width="120" height="120" style="width: 56px; height: 56px;"></canvas>
+          </div>
+        `;
+      }
+
+      container.innerHTML = html;
+      lastSelectionIdsStr = currentSelectionIdsStr;
+
+      const tiles = container.querySelectorAll('.selection-tile');
+      for (const tile of tiles) {
+        const type = tile.getAttribute('data-type');
+        const id = parseInt(tile.getAttribute('data-id'), 10);
+        
+        tile.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const key = `${type}-${id}`;
+          
+          if (e.shiftKey) {
+            if (!isShiftSelectingInHUD) {
+              isShiftSelectingInHUD = true;
+              hudSelectedSet.clear();
+              hudSelectedSet.add(key);
+            } else {
+              if (hudSelectedSet.has(key)) {
+                hudSelectedSet.delete(key);
+              } else {
+                hudSelectedSet.add(key);
+              }
+            }
+            updateSelectionTiles();
+          } else {
+            isShiftSelectingInHUD = false;
+            hudSelectedSet.clear();
+            
+            if (type === 'planet') {
+              const planet = serverState ? serverState.planets.find(p => p.id === id) : null;
+              if (planet) {
+                selectedPlanets = [planet];
+                selectedShips = [];
+                const mapWidth = serverState.width || 1920;
+                const mapHeight = serverState.height || 1620;
+                cameraPanX = mapWidth / 2 - planet.x;
+                cameraPanY = mapHeight / 2 - planet.y;
+              }
+            } else if (type === 'ship') {
+              const ship = serverState ? serverState.ships.find(s => s.id === id) : null;
+              if (ship) {
+                selectedShips = [ship];
+                selectedPlanets = [];
+                const mapWidth = serverState.width || 1920;
+                const mapHeight = serverState.height || 1620;
+                cameraPanX = mapWidth / 2 - ship.x;
+                cameraPanY = mapHeight / 2 - ship.y;
+              }
+            }
+          }
+        });
+        
+        tile.addEventListener('mouseenter', (e) => {
+          isHoveringSelectionTile = true;
+          selectionTileMouseX = e.clientX;
+          selectionTileMouseY = e.clientY;
+          if (infoPanelTimer) {
+            clearTimeout(infoPanelTimer);
+            infoPanelTimer = null;
+          }
+          openInfoPanel(type, id);
+        });
+        
+        tile.addEventListener('mousemove', (e) => {
+          isHoveringSelectionTile = true;
+          selectionTileMouseX = e.clientX;
+          selectionTileMouseY = e.clientY;
+          updateInfoPanelContent();
+        });
+        
+        tile.addEventListener('mouseleave', () => {
+          isHoveringSelectionTile = false;
+          checkInfoPanelDismiss();
+        });
+      }
+    }
+
+    const tiles = container.querySelectorAll('.selection-tile');
+    for (const tile of tiles) {
+      const type = tile.getAttribute('data-type');
+      const id = parseInt(tile.getAttribute('data-id'), 10);
+      const canvasEl = tile.querySelector('.selection-tile-canvas');
+      if (!canvasEl) continue;
+
+      const ctxTile = canvasEl.getContext('2d');
+      if (type === 'planet') {
+        const livePlanet = serverState ? serverState.planets.find(sp => sp.id === id) : null;
+        if (!livePlanet) continue;
+        drawUnitOnTileCanvas(ctxTile, canvasEl.width, canvasEl.height, livePlanet, 'planet');
+      } else if (type === 'ship') {
+        const liveShip = serverState ? serverState.ships.find(ss => ss.id === id) : null;
+        if (!liveShip || !liveShip.active) continue;
+        drawUnitOnTileCanvas(ctxTile, canvasEl.width, canvasEl.height, liveShip, 'ship');
+      }
+
+      let isMapHovered = false;
+      if (type === 'planet') {
+        if (hoveredPlanet && hoveredPlanet.id === id) {
+          isMapHovered = true;
+        }
+      } else if (type === 'ship' || type === 'fleet') {
+        if (hoveredShip && hoveredShip.id === id) {
+          isMapHovered = true;
+        }
+      }
+
+      if (isMapHovered) {
+        tile.classList.add('map-hovered');
+      } else {
+        tile.classList.remove('map-hovered');
+      }
+    }
+  };
+
   let activeInfoPanel = null;
   let infoPanelTimer = null;
   let mouseMovedSinceOpen = false;
@@ -1148,6 +2042,7 @@ function getPlanetTradeIncomePerMin(planet) {
   const infoPanelImageHologram = document.querySelector('.info-panel-image-hologram');
 
   function isMouseOverActiveEntity() {
+    if (isHoveringSelectionTile) return true;
     if (!activeInfoPanel) return false;
     if (lastCanvasMouseX === undefined || lastCanvasMouseY === undefined) return false;
 
@@ -2227,7 +3122,31 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
 
-    if (hasTargetCoords) {
+    if (isHoveringSelectionTile) {
+      const container = document.querySelector('.info-panel-container');
+      if (container) {
+        let left = selectionTileMouseX + 15;
+        let top = selectionTileMouseY - 150;
+
+        const width = 380;
+        const height = 450;
+
+        if (left + width > window.innerWidth) {
+          left = selectionTileMouseX - width - 15;
+        }
+        if (left < 10) left = 10;
+
+        if (top + height > window.innerHeight) {
+          top = window.innerHeight - height - 10;
+        }
+        if (top < 10) top = 10;
+
+        container.style.position = 'fixed';
+        container.style.left = `${left}px`;
+        container.style.top = `${top}px`;
+        container.style.margin = '0';
+      }
+    } else if (hasTargetCoords) {
       const screenPos = getServerToScreenPos(targetX, targetY);
       const container = document.querySelector('.info-panel-container');
       if (container) {
@@ -2618,7 +3537,7 @@ function getPlanetTradeIncomePerMin(planet) {
   socket.on('chatMessage', (msg) => {
     if (chatMessages) {
       const div = document.createElement('div');
-      div.className = 'chat-msg';
+      div.className = msg.isAnimated ? 'chat-msg chat-msg-animated' : 'chat-msg';
       div.style.color = msg.color || '#fff';
       div.innerHTML = `<span style="opacity: 0.7">[${msg.sender}]</span> ${msg.text}`;
       chatMessages.appendChild(div);
@@ -3757,7 +4676,7 @@ function getPlanetTradeIncomePerMin(planet) {
       tradeOptionsDisplay.style.display = 'block';
       tradeOptionsDisplay.textContent = `⚖️: ${tradeOptions}/${tradeCapacity}`;
       
-      if (myPlayer.tradeLimitToggle !== false) {
+      if (myPlayer.tradeLimitToggle === true) {
         tradeOptionsDisplay.style.color = '#ff9800';
         tradeOptionsDisplay.style.textShadow = '0 0 5px #ff9800';
         tradeOptionsDisplay.style.background = 'rgba(255, 152, 0, 0.15)';
@@ -4880,7 +5799,7 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   function handlePointerMove(x, y, isTouchInput = false) {
-    if (isTouchInput) {
+    if (isTouchInput || isHoveringSelectionTile) {
       hoveredPlanet = null;
       hoveredShip = null;
       return;
@@ -5370,6 +6289,20 @@ function getPlanetTradeIncomePerMin(planet) {
       handlePointerUp();
     }
   });
+
+  window.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift') {
+      if (isShiftSelectingInHUD) {
+        selectedPlanets = selectedPlanets.filter(p => hudSelectedSet.has(`planet-${p.id}`));
+        selectedShips = selectedShips.filter(s => hudSelectedSet.has(`ship-${s.id}`));
+        isShiftSelectingInHUD = false;
+        hudSelectedSet.clear();
+        updateSelectionTiles();
+        updateButtonHighlights();
+      }
+    }
+  });
+
   window.addEventListener('keydown', (event) => {
     if (document.activeElement === document.getElementById('chat-input')) {
       return;
@@ -5756,6 +6689,15 @@ function getPlanetTradeIncomePerMin(planet) {
             socket.emit('toggleCruiserUseResources', { shipId: ship.id, enabled: nextState });
           }
           return;
+        } else if (selectedPlanets.length > 0) {
+          event.preventDefault();
+          const anyNotUsing = selectedPlanets.some(p => !p.useResources);
+          const nextState = anyNotUsing;
+          for (const p of selectedPlanets) {
+            p.useResources = nextState;
+            socket.emit('togglePlanetUseResources', { planetId: p.id, enabled: nextState });
+          }
+          return;
         }
       }
     }
@@ -6033,6 +6975,13 @@ function getPlanetTradeIncomePerMin(planet) {
         for (const ship of selectedCruisers) {
           ship.useResources = nextState;
           socket.emit('toggleCruiserUseResources', { shipId: ship.id, enabled: nextState });
+        }
+      } else if (selectedPlanets.length > 0) {
+        const anyNotUsing = selectedPlanets.some(p => !p.useResources);
+        const nextState = anyNotUsing;
+        for (const p of selectedPlanets) {
+          p.useResources = nextState;
+          socket.emit('togglePlanetUseResources', { planetId: p.id, enabled: nextState });
         }
       }
     });
@@ -7006,9 +7955,13 @@ function getPlanetTradeIncomePerMin(planet) {
 
       const btnCruiserUseResources = document.getElementById('btn-cruiser-use-resources');
       if (btnCruiserUseResources) {
-        btnCruiserUseResources.style.display = selectedCruisers.length > 0 ? 'inline-flex' : 'none';
+        const showUse = selectedCruisers.length > 0 || (selectedPlanets.length > 0 && selectedPlanets.some(p => p.ownerId === localPlayer.id));
+        btnCruiserUseResources.style.display = showUse ? 'inline-flex' : 'none';
         if (selectedCruisers.length > 0) {
           const anyUseRes = selectedCruisers.some(c => c.useResources);
+          btnCruiserUseResources.classList.toggle('action-btn-active', anyUseRes);
+        } else if (selectedPlanets.length > 0) {
+          const anyUseRes = selectedPlanets.some(p => p.useResources);
           btnCruiserUseResources.classList.toggle('action-btn-active', anyUseRes);
         }
       }
@@ -7298,6 +8251,22 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.stroke();
         }
 
+        const isPlanetHovered = (hoveredPlanet && hoveredPlanet.id === p.id) ||
+                                (isHoveringSelectionTile && activeInfoPanel && activeInfoPanel.type === 'planet' && activeInfoPanel.id === p.id);
+        if (isPlanetHovered) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius + 6, 0, Math.PI * 2);
+          ctx.strokeStyle = '#ffeb3b'; // Glowing gold
+          ctx.lineWidth = 2.5;
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = '#ffeb3b';
+          ctx.setLineDash([4, 4]);
+          ctx.lineDashOffset = -Date.now() / 150;
+          ctx.stroke();
+          ctx.restore();
+        }
+
         // Soft cap and current maxships filled circles (only for known planets)
         const isLastKnownPlanet = p.inFog && !p.permanentlyTracked && lastKnownPlanets[p.id] ? true : false;
         if (!p.inFog || p.permanentlyTracked || isLastKnownPlanet) {
@@ -7534,7 +8503,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (p.focusTransition) {
           const progress = p.focusTransition.progress || 0;
           const target = p.focusTransition.targetMode;
-          const emoji = target === 'research' ? '🔬' : (target === 'garrison' ? '🛡️' : '📈');
+          const emoji = target === 'research' ? '🔬' : (target === 'garrison' ? '🛡️' : (target === 'commerce' ? '💲' : (target === 'mining' ? '⛏️' : (target === 'terraforming' ? '🌱' : '📈'))));
           
           // 1. Draw glowing rotating progress ring
           ctx.save();
@@ -7631,6 +8600,38 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.fillStyle = '#fff';
             ctx.fillText('🏭', p.x + nameWidth / 2 + 4, nameY);
             ctx.restore();
+          }
+
+          // Trade ships indicator for neutral/enemy worlds not at war
+          const myPlayer = (serverState && serverState.players && localPlayer) ? (serverState.players.find(pl => pl.id === localPlayer.id) || localPlayer) : localPlayer;
+          if (myPlayer && !p.dead) {
+            const isOwn = (p.ownerId === myPlayer.id);
+            let isNotAtWar = true;
+            if (p.ownerId) {
+              if (p.ownerId === 'monsters') {
+                isNotAtWar = false;
+              } else {
+                const isAtWar = !!(myPlayer.atWarWith && myPlayer.atWarWith[p.ownerId] && Date.now() < myPlayer.atWarWith[p.ownerId]);
+                if (isAtWar) isNotAtWar = false;
+              }
+            }
+            if (!isOwn && isNotAtWar) {
+              const tradingShips = Math.floor(getPlanetTradeIncomePerMin(p) * 25);
+              if (tradingShips > 0) {
+                const nameWidth = ctx.measureText(displayName).width;
+                let rightOffset = nameWidth / 2 + 4;
+                if (!isLastKnown && p.finalRateExceedsOne) {
+                  rightOffset += 16;
+                }
+                ctx.save();
+                ctx.font = 'bold 3.67px Orbitron';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#ffd700'; // Gold color
+                ctx.fillText(tradingShips.toString(), p.x + rightOffset, nameY);
+                ctx.restore();
+              }
+            }
           }
 
           // 2. Draw special role badges (homeworld, military, research, speed, revolt, rampage) higher up
@@ -7805,7 +8806,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
             if (isHuman) {
               const focus = p.focusMode || 'economy';
-              const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : '📈')));
+              const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))));
               const badgeRadius = pillHeight / 2;
               const badgeX = p.x + textWidth / 2 + 8 + badgeRadius + 2;
 
@@ -7844,7 +8845,7 @@ function getPlanetTradeIncomePerMin(planet) {
             // In graphical mode, draw focus mode badge directly to the right of the planet graphic
             if (isHuman) {
               const focus = p.focusMode || 'economy';
-              const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : '📈')));
+              const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))));
               const badgeRadius = 10;
               const badgeX = p.x + p.radius + badgeRadius + 4;
               const badgeY = p.y;
@@ -9818,6 +10819,34 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.stroke();
         }
 
+        const isShipHovered = (hoveredShip && hoveredShip.id === s.id) ||
+                              (isHoveringSelectionTile && activeInfoPanel && (activeInfoPanel.type === 'ship' || activeInfoPanel.type === 'fleet') && activeInfoPanel.id === s.id);
+        if (isShipHovered) {
+          ctx.save();
+          ctx.beginPath();
+          let hoverRadius = 15;
+          if (s.isCruiser) {
+            hoverRadius = 24;
+          } else if (s.count > 1) {
+            hoverRadius = maxSpread + 8;
+          } else if (s.isBomber) {
+            hoverRadius = 10;
+          } else if (s.isInterceptor) {
+            hoverRadius = 8;
+          } else {
+            hoverRadius = 6;
+          }
+          ctx.arc(s.x, s.y, hoverRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = '#ffeb3b'; // Golden yellow
+          ctx.lineWidth = 2;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#ffeb3b';
+          ctx.setLineDash([4, 4]);
+          ctx.lineDashOffset = -Date.now() / 150;
+          ctx.stroke();
+          ctx.restore();
+        }
+
         ctx.fillStyle = owner ? owner.color : '#fff';
         
         if (s.count > 1 && !s.isCruiser && !s.isAmoeba) {
@@ -10407,11 +11436,11 @@ function getPlanetTradeIncomePerMin(planet) {
           const progress = laser.age / laser.duration;
           
           if (laser.isBombAttack) {
-            const delay = (laser.index || 0) * 0.08;
+            const delay = (laser.index || 0) * 0.24;
             if (laser.age < delay) {
               continue;
             }
-            const travelDuration = 0.35;
+            const travelDuration = 1.05;
             if (laser.age > delay + travelDuration) {
               continue;
             }
@@ -11129,6 +12158,7 @@ function getPlanetTradeIncomePerMin(planet) {
     try {
       draw();
       updateInfoPanelContent();
+      updateSelectionTiles();
       checkMusicRotation();
     } catch (e) {
       console.error('[PlanetWars] draw() error:', e);

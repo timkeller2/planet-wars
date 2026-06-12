@@ -507,11 +507,16 @@ export class Ship {
       }
     } else {
       // Not currently retreating.
-      // If it is in any autonomous mode (scouting, researching, diplomacy, bombard), exit those modes so it obeys the move order.
-      // Patrol mode is preserved since it updates patrol station.
+      // If it is in any autonomous mode (patrolling, scouting, researching, diplomacy, bombard), exit those modes so it obeys the move order.
+      this.isPatrolling = false;
+      this.patrolReloading = false;
+      this.patrolFuelRetreating = false;
+      this.patrolFuelRetreatTargetPlanetId = null;
       this.isScouting = false;
       this.isResearching = false;
       this.savedBombardPlanetId = null;
+      this.cruiserTargetType = null;
+      this.cruiserTargetId = null;
     }
   }
 
@@ -1402,7 +1407,7 @@ export class Ship {
             const upgradeCost = this.upgradeShipsPaid || 0;
             const duraniumThreshold = upgradeCost / 50;
             let bonus = 4 + 0.10 * this.maxHealth;
-            const canUseRes = !!(this.useResources || (this.owner && this.owner.tradeLimitToggle !== false));
+            const canUseRes = !!(this.useResources || (this.owner && this.owner.tradeLimitToggle === true));
             if (canUseRes && this.owner && this.owner.resources && (this.owner.resources.duranium || 0) > duraniumThreshold) {
               this.owner.resources.duranium = Math.max(0, (this.owner.resources.duranium || 0) - duraniumThreshold);
               bonus *= 1.5;
@@ -2272,7 +2277,7 @@ export class Ship {
               endY: enemyShip.y,
               color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
               age: 0,
-              duration: Math.max(0.8, 0.4 + (shotsPerVolley * 0.08)),
+              duration: usedBomb ? 3 * Math.max(0.8, 0.4 + (shotsPerVolley * 0.08)) : Math.max(0.8, 0.4 + (shotsPerVolley * 0.08)),
               width: usedBomb ? 8 : undefined,
               isBombAttack: usedBomb,
               cruiserStyle: this.cruiserStyle || (this.owner ? this.owner.cruiserStyle : 'Klingon'),
@@ -2412,7 +2417,7 @@ export class Ship {
                   endX: p.x + (Math.random() - 0.5) * p.radius, 
                   endY: p.y + (Math.random() - 0.5) * p.radius,
                   color: 'cruiser-projectile',
-                  age: 0, duration: 1.0, width: 8,
+                  age: 0, duration: 3.0, width: 8,
                   isBombAttack: true,
                   cruiserStyle: this.cruiserStyle || (this.owner ? this.owner.cruiserStyle : 'Klingon'),
                   sourceMaxHealth: this.maxHealth,
@@ -4270,7 +4275,7 @@ export class Ship {
 
       if (this.health < this.maxHealth) {
         const owner = this.owner;
-        const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle !== false));
+        const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle === true));
         const hasExcessDuranium = canUseRes && owner && owner.resources && (owner.resources.duranium || 0) >= 0.1;
         const duraniumSellPrice = owner ? (owner.offerPrice?.duranium ?? 3) : 3;
 
@@ -4401,7 +4406,7 @@ export class Ship {
           const oldFuel = this.fuel || 0;
 
           const owner = this.owner;
-          const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle !== false));
+          const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle === true));
           const hasExcessDeuterium = canUseRes && owner && owner.resources && (owner.resources.deuterium || 0) >= 0.1;
           const deuteriumSellPrice = owner ? (owner.offerPrice?.deuterium ?? 3) : 3;
 
@@ -4504,7 +4509,7 @@ export class Ship {
                 bombResource = 'dilithium';
               }
 
-              const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle !== false));
+              const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle === true));
               const hasExcessResource = canUseRes && owner && owner.resources && (owner.resources[bombResource] || 0) >= 0.1;
               const resourceSellPrice = owner ? (owner.offerPrice?.[bombResource] ?? 3) : 3;
 
@@ -5343,7 +5348,8 @@ export class Ship {
   }
 
   tryAutoResourceConversion() {
-    const canUseRes = !!(this.useResources || (this.owner && this.owner.tradeLimitToggle !== false));
+    if (!this.inFriendlyWell) return;
+    const canUseRes = !!(this.useResources || (this.owner && this.owner.tradeLimitToggle === true));
     if (!canUseRes) return;
     if (!this.owner || !this.owner.resources) return;
 

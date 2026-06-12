@@ -54,6 +54,7 @@ export class Planet {
     this.expProgress = 0;
     this.diplomacyWarmupTimer = 0;
     this.activeDiplomatId = null;
+    this.useResources = false;
 
     this.sizeClass = Math.floor(Math.random() * 91) + 60;
     this.habitability = Math.round(10 + Math.pow(Math.random(), 2) * 140);
@@ -223,7 +224,9 @@ export class Planet {
             effectiveRate = 1.0 + ((effectiveRate - 1.0) / 3);
           }
         }
-        if (this.preferredResource && this.owner.resources) {
+        const canUseRes = !!(this.useResources || (this.owner && this.owner.tradeLimitToggle === true));
+
+        if (canUseRes && this.preferredResource && this.owner.resources) {
           const qty = this.owner.resources[this.preferredResource] || 0;
           if (qty > 0) {
             let mult = 1;
@@ -331,14 +334,26 @@ export class Planet {
             this.habitability += 1;
             
             const oldName = getHabName(oldHab);
-            const newName = getHabName(this.habitability);
-            
-            if (oldName === 'Jungle' && newName === 'Ocean') {
+            if (oldName === 'Jungle' && getHabName(this.habitability) === 'Ocean') {
               this.habitability = 100; // Terran
-            } else if (oldName === 'Desert' && newName === 'Tundra') {
+            } else if (oldName === 'Desert' && getHabName(this.habitability) === 'Tundra') {
               this.habitability = 90; // Arid
-            } else if (oldName === 'Ocean' && newName === 'Arid') {
+            } else if (oldName === 'Ocean' && getHabName(this.habitability) === 'Arid') {
               this.habitability = 100; // Terran
+            }
+
+            const newName = getHabName(this.habitability);
+            if (oldName !== newName && game) {
+              game.pendingHabClassChanges = game.pendingHabClassChanges || [];
+              game.pendingHabClassChanges.push({
+                planetId: this.id,
+                planetName: this.name,
+                ownerId: this.owner ? this.owner.id : null,
+                oldClass: oldName,
+                newClass: newName,
+                x: this.x,
+                y: this.y
+              });
             }
 
             // Decay ships back to maxShips
@@ -358,14 +373,26 @@ export class Planet {
               this.habitability += 1;
               
               const oldName = getHabName(oldHab);
-              const newName = getHabName(this.habitability);
-              
-              if (oldName === 'Jungle' && newName === 'Ocean') {
+              if (oldName === 'Jungle' && getHabName(this.habitability) === 'Ocean') {
                 this.habitability = 100; // Terran
-              } else if (oldName === 'Desert' && newName === 'Tundra') {
+              } else if (oldName === 'Desert' && getHabName(this.habitability) === 'Tundra') {
                 this.habitability = 90; // Arid
-              } else if (oldName === 'Ocean' && newName === 'Arid') {
+              } else if (oldName === 'Ocean' && getHabName(this.habitability) === 'Arid') {
                 this.habitability = 100; // Terran
+              }
+
+              const newName = getHabName(this.habitability);
+              if (oldName !== newName && game) {
+                game.pendingHabClassChanges = game.pendingHabClassChanges || [];
+                game.pendingHabClassChanges.push({
+                  planetId: this.id,
+                  planetName: this.name,
+                  ownerId: this.owner ? this.owner.id : null,
+                  oldClass: oldName,
+                  newClass: newName,
+                  x: this.x,
+                  y: this.y
+                });
               }
             } else {
               const increaseAmount = this.homeworldOf ? 2 : 1;

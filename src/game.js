@@ -1723,7 +1723,7 @@ export class Game {
     shipsToSend = Math.min(250, shipsToSend);
 
     const tritaniumCost = 0.01 * shipsToSend;
-    const payWithTritanium = source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0;
+    const payWithTritanium = source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0 && (source.useResources || source.owner.tradeLimitToggle === true);
 
     let finalShipsToSend = shipsToSend;
     let finalLaunchCost = 0;
@@ -1986,7 +1986,7 @@ export class Game {
     shipsToSend = Math.min(250, shipsToSend);
 
     const tritaniumCost = 0.01 * shipsToSend;
-    const payWithTritanium = source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0;
+    const payWithTritanium = source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0 && (source.useResources || source.owner.tradeLimitToggle === true);
 
     let finalShipsToSend = shipsToSend;
     let finalLaunchCost = 0;
@@ -3213,9 +3213,10 @@ export class Game {
                        const rangeOfFire = ship.getWeaponRange();
  
                        for (let v = 0; v < volleySize; v++) {
-                         let tx = storm.x;
-                         let ty = storm.y;
-                         for (let attempt = 0; attempt < 30; attempt++) {
+                         let tx = 0;
+                         let ty = 0;
+                         let found = false;
+                         for (let attempt = 0; attempt < 100; attempt++) {
                            const angle = Math.random() * Math.PI * 2;
                            const r = Math.random() * storm.radius;
                            const px = storm.x + Math.cos(angle) * r;
@@ -3225,8 +3226,13 @@ export class Game {
                            if (sDx * sDx + sDy * sDy <= rangeOfFire * rangeOfFire) {
                              tx = px;
                              ty = py;
+                             found = true;
                              break;
                            }
+                         }
+ 
+                         if (!found) {
+                           continue;
                          }
  
                          const isHit = (storm.mines > 0) && (Math.random() < hitChance);
@@ -3235,7 +3241,7 @@ export class Game {
                            minesDestroyed += 1;
                          }
  
-                         const delayMs = Math.random() * 2000;
+                         const delayMs = v * 500;
                          const shipId = ship.id;
                          const finalTx = tx;
                          const finalTy = ty;
@@ -5020,7 +5026,8 @@ export class Game {
           let startingExp = ship.expScore || 0;
           const tritaniumCost = 0.01 * (count / 3);
           const owner = ship.owner;
-          if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && count > 0) {
+          const canUseRes = !!(ship.useResources || (owner && owner.tradeLimitToggle === true));
+          if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && count > 0 && canUseRes) {
             owner.resources.tritanium -= tritaniumCost;
             startingExp += 400;
           }
@@ -5056,7 +5063,8 @@ export class Game {
         let startingExp = ship.expScore || 0;
         const tritaniumCost = 0.01 * (count / 3);
         const owner = ship.owner;
-        if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && count > 0) {
+        const canUseRes = !!(ship.useResources || (owner && owner.tradeLimitToggle === true));
+        if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && count > 0 && canUseRes) {
           owner.resources.tritanium -= tritaniumCost;
           startingExp += 400;
         }

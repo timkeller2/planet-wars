@@ -348,7 +348,7 @@ canvas {
 
 #chat-container {
   position: absolute;
-  bottom: 80px;
+  bottom: 130px;
   left: 20px;
   width: 350px;
   display: flex;
@@ -916,6 +916,90 @@ canvas {
   background: #00ffcc;
   box-shadow: 0 0 4px #00ffcc;
 }
+
+#selection-tiles-container {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  z-index: 101;
+  pointer-events: auto;
+  display: flex;
+  gap: 6px;
+  max-width: calc(100% - 350px);
+  flex-wrap: wrap;
+  align-content: flex-end;
+}
+
+.selection-tile {
+  background: rgba(10, 25, 35, 0.85);
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.15), inset 0 0 5px rgba(0, 229, 255, 0.05);
+  border-radius: 4px;
+  backdrop-filter: blur(8px);
+  padding: 2px;
+  width: 60px;
+  height: 60px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.selection-tile:hover {
+  border-color: rgba(255, 235, 59, 0.6);
+  box-shadow: 0 0 12px rgba(255, 235, 59, 0.3), inset 0 0 5px rgba(255, 235, 59, 0.1);
+  transform: translateY(-2px);
+}
+
+.selection-tile.active-selected {
+  border-color: #ffeb3b;
+  box-shadow: 0 0 15px rgba(255, 235, 59, 0.5), inset 0 0 5px rgba(255, 235, 59, 0.2);
+}
+
+.selection-tile.map-hovered {
+  border-color: #ffeb3b;
+  box-shadow: 0 0 15px rgba(255, 235, 59, 0.6), inset 0 0 6px rgba(255, 235, 59, 0.2);
+  transform: translateY(-4px) scale(1.05);
+}
+
+
+.selection-tile-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+@keyframes chat-message-pop {
+  0% {
+    transform: translateX(-30px) scale(0.85);
+    opacity: 0;
+    filter: brightness(2) drop-shadow(0 0 10px #39ff14);
+  }
+  50% {
+    filter: brightness(1.5) drop-shadow(0 0 15px #39ff14);
+  }
+  100% {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+    filter: none;
+  }
+}
+
+.chat-msg-animated {
+  animation: chat-message-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  text-shadow: 0 0 8px rgba(57, 255, 20, 0.6), 0 0 15px rgba(57, 255, 20, 0.3);
+  font-weight: 700;
+  border-left: 3px solid #39ff14;
+  padding-left: 6px;
+  margin: 4px 0;
+  background: rgba(57, 255, 20, 0.08);
+  border-radius: 0 4px 4px 0;
+}
+
+
 
 
 

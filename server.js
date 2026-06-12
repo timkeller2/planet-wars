@@ -890,7 +890,7 @@ async function bootstrap() {
       if (!game.isRunning || game.isPaused) return;
       const player = connectedClients.get(socket.id);
       if (!player) return;
-      player.tradeLimitToggle = (player.tradeLimitToggle !== false) ? false : true;
+      player.tradeLimitToggle = !player.tradeLimitToggle;
     });
 
     socket.on('toggleCruiserUseResources', (data) => {
@@ -904,6 +904,20 @@ async function bootstrap() {
       const ship = game.ships.find(s => s.id === shipId);
       if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
         ship.useResources = !!enabled;
+      }
+    });
+
+    socket.on('togglePlanetUseResources', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const { planetId, enabled } = data;
+      if (planetId === undefined || enabled === undefined) return;
+
+      const planet = game.planets.find(p => p.id === planetId);
+      if (planet && planet.owner && planet.owner.id === player.id) {
+        planet.useResources = !!enabled;
       }
     });
 
@@ -1767,7 +1781,8 @@ async function bootstrap() {
           sizeClass: p.sizeClass || 0,
           habitability: p.habitability || 0,
           diplomacyWarmupTimer: p.diplomacyWarmupTimer || 0,
-          activeDiplomatId: p.activeDiplomatId || null
+          activeDiplomatId: p.activeDiplomatId || null,
+          useResources: p.useResources || false
       };
     });
 
@@ -2286,12 +2301,31 @@ async function bootstrap() {
         exploredCells: playerExploredCells
       };
       
+      if (game.pendingHabClassChanges && game.pendingHabClassChanges.length > 0) {
+        for (const ev of game.pendingHabClassChanges) {
+          const planet = game.planets.find(p => p.id === ev.planetId);
+          if (planet) {
+            const hasSympathy = planet.sympathy && planet.sympathy[player.id] > 0;
+            const hasVis = (planet.owner && planet.owner.id === player.id) || isVisible(planet.x, planet.y) || hasSympathy;
+            if (hasVis) {
+              io.to(socketId).emit('chatMessage', {
+                sender: 'System',
+                color: '#39ff14',
+                text: `${ev.planetName} has class-changed from ${ev.oldClass} to ${ev.newClass}!`,
+                isAnimated: true
+              });
+            }
+          }
+        }
+      }
+
       io.to(socketId).emit('gameStateUpdate', state);
     }
 
     // Clear upgrade enhancement events after broadcasting to all clients
     game.upgradeEnhanceEvents = [];
     game.accuracyEvents = [];
+    game.pendingHabClassChanges = [];
     
   }, TICK_RATE);
 
