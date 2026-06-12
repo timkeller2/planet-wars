@@ -4769,7 +4769,8 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       creditsDisplay.style.display = 'block';
-      creditsDisplay.innerHTML = `💲 ${Math.floor(creditsVal)}<span style="font-size: 33.33%; font-weight: normal; margin-left: 4px; opacity: 0.85;">${incomeInt >= 0 ? '+' : ''}${incomeInt}</span>`;
+      const hasMoneyBags = myPlayer.otherEffectiveShips !== undefined && myPlayer.playerEffectiveShips !== undefined && myPlayer.otherEffectiveShips >= myPlayer.playerEffectiveShips && myPlayer.playerEffectiveShips > 0;
+      creditsDisplay.innerHTML = `💲 ${Math.floor(creditsVal)}<span style="font-size: 33.33%; font-weight: normal; margin-left: 4px; opacity: 0.85;">${incomeInt >= 0 ? '+' : ''}${incomeInt}${hasMoneyBags ? '💰' : ''}</span>`;
       creditsDisplay.removeAttribute('title');
 
       if (creditsVal < 0) {

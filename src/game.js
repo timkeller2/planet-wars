@@ -4162,9 +4162,13 @@ export class Game {
             });
           }
         }
+        player.playerEffectiveShips = playerEffectiveShips;
+        player.otherEffectiveShips = otherEffectiveShips;
       } else {
         player.passiveIncomeRate = 0;
         player.tradingPartners = [];
+        player.playerEffectiveShips = 0;
+        player.otherEffectiveShips = 0;
       }
     }
     
