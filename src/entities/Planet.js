@@ -1,6 +1,6 @@
 import { getEffectiveSympathy } from '../game.js';
 
-function getHabName(habitability) {
+export function getHabName(habitability) {
   const hab = habitability || 0;
   if (hab < 20) return 'Toxic';
   if (hab < 30) return 'Radiated';
@@ -11,7 +11,7 @@ function getHabName(habitability) {
   if (hab < 80) return 'Jungle';
   if (hab < 90) return 'Ocean';
   if (hab < 100) return 'Arid';
-  if (hab < 120) return 'Terran';
+  if (hab < 141) return 'Terran';
   return 'Gaia';
 }
 
@@ -55,8 +55,8 @@ export class Planet {
     this.diplomacyWarmupTimer = 0;
     this.activeDiplomatId = null;
 
-    this.sizeClass = randomWeightedMiddle(60, 150);
-    this.habitability = randomWeightedMiddle(15, 150);
+    this.sizeClass = Math.floor(Math.random() * 91) + 60;
+    this.habitability = Math.round(10 + Math.pow(Math.random(), 2) * 140);
 
     // Cap initial radius to sizeClass
     this.radius = Math.min(this.sizeClass, this.maxShips) / 4;
@@ -213,6 +213,9 @@ export class Planet {
         const prodDivisor = 100 / (settings?.productionMultiple || 1.0);
         let effectiveRate = (Math.max(10, effectiveMaxShips - this.ships) / prodDivisor) * (1 + techBonus) * lowPopMultiplier;
         if (this.homeworldOf === this.owner.id) {
+          effectiveRate *= 2;
+        }
+        if (this.habitability > 140) {
           effectiveRate *= 2;
         }
         if (!this.owner.isAI) {

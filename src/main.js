@@ -30,7 +30,7 @@ function getHabName(habitability) {
   if (hab < 80) return 'Jungle';
   if (hab < 90) return 'Ocean';
   if (hab < 100) return 'Arid';
-  if (hab < 120) return 'Terran';
+  if (hab < 141) return 'Terran';
   return 'Gaia';
 }
 
