@@ -9971,7 +9971,7 @@ function getPlanetTradeIncomePerMin(planet) {
           } else if (displayIsMilitary) {
             ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
             ctx.font = '14px Arial';
-            ctx.fillText("💀", p.x, nameY - 14);
+            ctx.fillText("🏭", p.x, nameY - 14);
             ctx.font = 'bold 11px Orbitron'; // Restore font
           } else if (displayIsSpeedPlanet) {
             ctx.fillStyle = isLastKnown ? '#888' : (displayOwner ? displayOwner.color : '#fff');
@@ -10484,7 +10484,7 @@ function getPlanetTradeIncomePerMin(planet) {
             if (hwOwner) nameLabel += ` (👑 ${hwOwner.name})`;
           }
           if (hp.isResearch) nameLabel += ' 🔬';
-          if (hp.isMilitary) nameLabel += ' 💀';
+          if (hp.isMilitary) nameLabel += ' 🏭';
           
           if (hp.isSpeedPlanet) nameLabel += ' ⚡';
           
