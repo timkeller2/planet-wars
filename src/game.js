@@ -627,115 +627,143 @@ export class Game {
     };
 
     if (hwSizeSetting === 'pioneers') {
-      // Find a safe starting position away from existing homeworlds and not in a hazard
       const existingHomeworlds = this.planets.filter(p => p.homeworldOf !== undefined && p.homeworldOf !== null);
       
       let bestPos = null;
-      let maxMinDist = -1;
       
-      // Try with different spacing values in case map is very crowded
-      const spacings = [40, 25, 10];
-      for (const spacing of spacings) {
-        const candidates = [];
-        for (let attempt = 0; attempt < 200; attempt++) {
-          const x = 30 + 50 + Math.random() * (this.width - 30 * 2 - 100);
-          const y = 30 + 50 + Math.random() * (this.height - 30 * 2 - 100);
-          
-          // Check collision with existing planets
-          let collision = false;
-          for (const p of this.planets) {
-            const dx = p.x - x;
-            const dy = p.y - y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < p.radius + 30 + spacing) {
-              collision = true;
-              break;
+      // Spacing and economy-distance levels to gradually relax if we cannot find a suitable spot
+      const spacingOptions = [300, 200, 100, 50];
+      const ecoDistanceOptions = [500, 300, 150, 0];
+      
+      // Calculate high economy planets
+      const highEcoThreshold = 3 * avgEconomy;
+      const highEcoPlanets = this.planets.filter(p => !p.homeworldOf && getEconomyWithin400(p.x, p.y) > highEcoThreshold);
+      
+      let found = false;
+      for (const planetSpacing of spacingOptions) {
+        for (const ecoDist of ecoDistanceOptions) {
+          const candidates = [];
+          for (let attempt = 0; attempt < 500; attempt++) {
+            // Pick a point near the map edge: between 50px and 300px from any border
+            const edgeZone = Math.floor(Math.random() * 4);
+            let x, y;
+            if (edgeZone === 0) { // Left
+              x = 50 + Math.random() * 250;
+              y = 50 + Math.random() * (this.height - 100);
+            } else if (edgeZone === 1) { // Right
+              x = this.width - 300 + Math.random() * 250;
+              y = 50 + Math.random() * (this.height - 100);
+            } else if (edgeZone === 2) { // Top
+              x = 50 + Math.random() * (this.width - 100);
+              y = 50 + Math.random() * 250;
+            } else { // Bottom
+              x = 50 + Math.random() * (this.width - 100);
+              y = this.height - 300 + Math.random() * 250;
             }
-          }
-          
-          // Check hazard
-          const isWithinHazard = (px, py) => {
-            for (const storm of this.ionStorms) {
-              const dx = storm.x - px;
-              const dy = storm.y - py;
+            
+            // Boundary enforcement
+            x = Math.max(50, Math.min(this.width - 50, x));
+            y = Math.max(50, Math.min(this.height - 50, y));
+
+            // Check distance from existing planets
+            let tooCloseToPlanet = false;
+            for (const p of this.planets) {
+              const dx = p.x - x;
+              const dy = p.y - y;
               const dist = Math.sqrt(dx * dx + dy * dy);
-              if (dist <= storm.radius) {
-                return true;
+              if (dist < Math.max(p.radius + 30, planetSpacing)) {
+                tooCloseToPlanet = true;
+                break;
               }
             }
-            return false;
-          };
+            if (tooCloseToPlanet) continue;
 
-          if (!collision && !isWithinHazard(x, y)) {
+            // Check distance from high economy planets
+            if (ecoDist > 0 && highEcoPlanets.length > 0) {
+              let tooCloseToHighEco = false;
+              for (const p of highEcoPlanets) {
+                const dx = p.x - x;
+                const dy = p.y - y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < ecoDist) {
+                  tooCloseToHighEco = true;
+                  break;
+                }
+              }
+              if (tooCloseToHighEco) continue;
+            }
+
+            // Check hazard
+            const isWithinHazard = (px, py) => {
+              for (const storm of this.ionStorms) {
+                const dx = storm.x - px;
+                const dy = storm.y - py;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist <= storm.radius) {
+                  return true;
+                }
+              }
+              return false;
+            };
+            if (isWithinHazard(x, y)) continue;
+
             candidates.push({ x, y });
           }
-        }
-        
-        if (candidates.length > 0) {
-          // Calculate groupDist for each candidate
-          const candidatesWithGroupDist = candidates.map(c => {
-            return { x: c.x, y: c.y, groupDist: getGroupDist(c) };
-          });
 
-          // Filter/sort candidates to be not too far from a group of 2-3 planets (groupDist <= 320)
-          let groupFiltered = candidatesWithGroupDist.filter(c => c.groupDist <= 320);
-          if (groupFiltered.length === 0) {
-            candidatesWithGroupDist.sort((a, b) => a.groupDist - b.groupDist);
-            groupFiltered = candidatesWithGroupDist.slice(0, Math.max(1, Math.floor(candidatesWithGroupDist.length * 0.1)));
-          }
+          if (candidates.length > 0) {
+            // Score candidates based on player spacing and economy
+            const candidatesWithInfo = candidates.map(c => {
+              const minDist = existingHomeworlds.length > 0 ? Math.min(...existingHomeworlds.map(h => {
+                const dx = h.x - c.x;
+                const dy = h.y - c.y;
+                return Math.sqrt(dx * dx + dy * dy);
+              })) : Infinity;
+              return {
+                x: c.x,
+                y: c.y,
+                minHwDist: minDist,
+                economy: getEconomyWithin400(c.x, c.y)
+              };
+            });
 
-          // Honey hole avoidance filter metered by starting credits
-          const startingCredits = (this.settings && this.settings.startingCredits !== undefined) ? this.settings.startingCredits : 0;
-          const maxAllowedEconomy = avgEconomy * (2 + startingCredits / 250);
-
-          const candidatesWithInfo = groupFiltered.map(c => {
-            const minDist = existingHomeworlds.length > 0 ? Math.min(...existingHomeworlds.map(h => {
-              const dx = h.x - c.x;
-              const dy = h.y - c.y;
-              return Math.sqrt(dx * dx + dy * dy);
-            })) : Infinity;
-            return {
-              x: c.x,
-              y: c.y,
-              groupDist: c.groupDist,
-              economy: getEconomyWithin400(c.x, c.y),
-              minHwDist: minDist
-            };
-          });
-
-          // Filter for "not near another player" (distance >= 250px)
-          let notNear = candidatesWithInfo;
-          if (existingHomeworlds.length > 0) {
-            notNear = candidatesWithInfo.filter(c => c.minHwDist >= 250);
-            if (notNear.length === 0) {
-              candidatesWithInfo.sort((a, b) => b.minHwDist - a.minHwDist);
-              notNear = candidatesWithInfo.slice(0, Math.max(1, Math.floor(candidatesWithInfo.length / 2)));
+            // Filter for distance from other players (at least 250px)
+            let notNear = candidatesWithInfo;
+            if (existingHomeworlds.length > 0) {
+              notNear = candidatesWithInfo.filter(c => c.minHwDist >= 250);
+              if (notNear.length === 0) {
+                candidatesWithInfo.sort((a, b) => b.minHwDist - a.minHwDist);
+                notNear = candidatesWithInfo.slice(0, Math.max(1, Math.floor(candidatesWithInfo.length / 2)));
+              }
             }
-          }
 
-          // Filter for economy <= maxAllowedEconomy
-          let economyFiltered = notNear.filter(c => c.economy <= maxAllowedEconomy);
-          if (economyFiltered.length === 0) {
+            // Sort by lowest economy area (further from high economy points)
             notNear.sort((a, b) => a.economy - b.economy);
-            economyFiltered = notNear.slice(0, Math.max(1, Math.floor(notNear.length / 2)));
+            bestPos = notNear[0];
+            found = true;
+            break;
           }
-
-          economyFiltered.sort((a, b) => b.economy - a.economy);
-          bestPos = economyFiltered[0];
-          
-          if (bestPos && existingHomeworlds.length > 0) {
-            maxMinDist = bestPos.minHwDist;
-          }
-          break;
         }
+        if (found) break;
       }
 
-      // If we couldn't find a safe spot after checking spacing, fallback to any random point
       if (!bestPos) {
-        bestPos = {
-          x: 30 + 50 + Math.random() * (this.width - 30 * 2 - 100),
-          y: 30 + 50 + Math.random() * (this.height - 30 * 2 - 100)
-        };
+        // Fallback to a random edge location
+        const edgeZone = Math.floor(Math.random() * 4);
+        let x, y;
+        if (edgeZone === 0) {
+          x = 75;
+          y = 50 + Math.random() * (this.height - 100);
+        } else if (edgeZone === 1) {
+          x = this.width - 75;
+          y = 50 + Math.random() * (this.height - 100);
+        } else if (edgeZone === 2) {
+          x = 50 + Math.random() * (this.width - 100);
+          y = 75;
+        } else {
+          x = 50 + Math.random() * (this.width - 100);
+          y = this.height - 75;
+        }
+        bestPos = { x, y };
       }
 
       // Assign player cruiserStyle if not already set
