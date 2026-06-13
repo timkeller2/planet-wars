@@ -9122,10 +9122,183 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
+      // Draw scanning beams/cones for wreckages being scanned
+      if (serverState.wreckages) {
+        for (const w of serverState.wreckages) {
+          if (w.beingScanned && w.scanningShipId) {
+            const ship = serverState.ships.find(s => s.id === w.scanningShipId);
+            if (ship) {
+              anyBeingResearched = true;
+              anyCompleting = true;
+              const tx = w.x;
+              const ty = w.y;
+              const sx = ship.x;
+              const sy = ship.y;
+              
+              const angle = Math.atan2(ty - sy, tx - sx);
+              
+              ctx.save();
+              
+              const shimmer = 0.5 + 0.3 * Math.sin(Date.now() / 50) + 0.2 * Math.random();
+              const alpha = 0.6 * shimmer;
+              
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              const coneWidth = 4;
+              const perpAngle = angle + Math.PI / 2;
+              
+              const tx1 = tx - Math.cos(perpAngle) * coneWidth;
+              const ty1 = ty - Math.sin(perpAngle) * coneWidth;
+              const tx2 = tx + Math.cos(perpAngle) * coneWidth;
+              const ty2 = ty + Math.sin(perpAngle) * coneWidth;
+              
+              ctx.lineTo(tx1, ty1);
+              ctx.lineTo(tx2, ty2);
+              ctx.closePath();
+              
+              const grad = ctx.createLinearGradient(sx, sy, tx, ty);
+              grad.addColorStop(0, `rgba(0, 255, 100, 0.05)`);
+              grad.addColorStop(0.3, `rgba(0, 255, 100, ${alpha * 0.7})`);
+              grad.addColorStop(1, `rgba(0, 255, 100, ${alpha})`);
+              ctx.fillStyle = grad;
+              ctx.fill();
+              
+              ctx.strokeStyle = `rgba(100, 255, 180, ${alpha * 0.8})`;
+              ctx.lineWidth = 1 + Math.random() * 1.5;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx, ty);
+              ctx.stroke();
+              
+              ctx.strokeStyle = `rgba(0, 255, 100, ${alpha * 0.4})`;
+              ctx.lineWidth = 0.8;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx1, ty1);
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx2, ty2);
+              ctx.stroke();
+              
+              ctx.restore();
+            }
+          }
+        }
+      }
+
       if (anyCompleting) {
         playScanningSound(true);
       } else if (anyBeingResearched) {
         playScanningSound(false);
+      }
+
+      // Draw wreckages
+      if (serverState.wreckages) {
+        for (const w of serverState.wreckages) {
+          ctx.save();
+          
+          // Floating/drifting effect: slight translation and rotation using sine waves
+          const timeOffset = w.x + w.y;
+          const driftX = Math.sin(Date.now() / 1000 + timeOffset) * 2;
+          const driftY = Math.cos(Date.now() / 1200 + timeOffset) * 2;
+          const driftAngle = (Date.now() / 5000 + timeOffset) % (Math.PI * 2);
+          
+          ctx.translate(w.x + driftX, w.y + driftY);
+          
+          // 1. Draw combat cooldown lock indicator (red dotted outline & countdown)
+          const nowTimestamp = Date.now();
+          const isLocked = (nowTimestamp - w.lastFightingTime) < 30000;
+          if (isLocked) {
+            const timeLeft = Math.ceil((30000 - (nowTimestamp - w.lastFightingTime)) / 1000);
+            
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 68, 68, 0.6)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 2]);
+            ctx.beginPath();
+            ctx.arc(0, 0, 14, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            ctx.fillStyle = 'rgba(255, 100, 100, 0.9)';
+            ctx.font = '8px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(timeLeft + 's', 0, -14);
+            ctx.restore();
+          }
+
+          // 2. Draw circular scanning progress ring
+          if (w.beingScanned && w.scanTimeLeft > 0 && w.scanTimeLeft < 3000) {
+            const progressRatio = Math.max(0, Math.min(1.0, (3000 - w.scanTimeLeft) / 3000));
+            ctx.save();
+            ctx.strokeStyle = '#00ff88';
+            ctx.lineWidth = 1.5;
+            ctx.shadowColor = '#00ff88';
+            ctx.shadowBlur = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, 10.0, -Math.PI / 2, -Math.PI / 2 + progressRatio * Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+          }
+          
+          ctx.rotate(driftAngle);
+          
+          // Draw wreckage debris pieces
+          // Piece 1: Large jagged fragment
+          ctx.fillStyle = '#4a5568';
+          ctx.strokeStyle = '#718096';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(-6, -4);
+          ctx.lineTo(2, -8);
+          ctx.lineTo(8, -2);
+          ctx.lineTo(3, 4);
+          ctx.lineTo(-4, 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          
+          // Piece 2: Smaller fragment
+          ctx.fillStyle = '#2d3748';
+          ctx.strokeStyle = '#4a5568';
+          ctx.beginPath();
+          ctx.moveTo(-8, 3);
+          ctx.lineTo(-3, 8);
+          ctx.lineTo(-1, 5);
+          ctx.lineTo(-5, 1);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Piece 3: Tiny shard
+          ctx.fillStyle = '#1a202c';
+          ctx.beginPath();
+          ctx.moveTo(5, 4);
+          ctx.lineTo(8, 7);
+          ctx.lineTo(9, 3);
+          ctx.closePath();
+          ctx.fill();
+          
+          // Reactor glow / Amoeba residue in the center
+          // If a lot of amoeba damage, make it green/slime glow. Otherwise orange core glow.
+          const hasAmoebaResidue = w.amoebaDamage > 0;
+          const glowColor = hasAmoebaResidue ? 'rgba(0, 255, 100, 0.8)' : 'rgba(255, 100, 0, 0.8)';
+          const glowColorInner = hasAmoebaResidue ? '#b3ffb3' : '#ffcc80';
+          
+          ctx.shadowColor = hasAmoebaResidue ? '#00ff66' : '#ff6600';
+          ctx.shadowBlur = 4 + 2 * Math.sin(Date.now() / 150);
+          
+          ctx.fillStyle = glowColor;
+          ctx.beginPath();
+          ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+          
+          ctx.fillStyle = glowColorInner;
+          ctx.beginPath();
+          ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+          
+          ctx.restore();
+        }
       }
 
       for (const p of serverState.planets) {

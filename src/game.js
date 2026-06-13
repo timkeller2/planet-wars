@@ -268,6 +268,7 @@ export class Game {
     this.usedShipNames = new Set();
     this.marketSalesHistory = [];
     this.highestSpeedMilestoneTriggered = 0;
+    this.wreckages = [];
   }
 
   recordMarketSale(resource, price) {
@@ -3557,6 +3558,33 @@ export class Game {
   }
 
   update(deltaTime) {
+    if (!this.wreckages) this.wreckages = [];
+    
+    // Store/initialize current total health for all cruisers and amoebas
+    for (const ship of this.ships) {
+      if (ship.isCruiser || ship.isAmoeba) {
+        const isTargetCruiser = ship.isCruiser && !ship.isAmoeba;
+        const isTargetAmoeba = ship.isAmoeba;
+        let totalHealth = 0;
+        if (ship.active) {
+          if (isTargetCruiser) {
+            totalHealth = (ship.health || 0) + (ship.shieldPoints || 0) + (ship.armorPoints || 0) + (ship.specialduranium || 0);
+          } else if (isTargetAmoeba) {
+            totalHealth = Math.floor(ship.health || 0) + ((ship.maxHealth || 0) * ((ship.maxHealth || 0) - 1)) / 2;
+          }
+        }
+        if (ship.lastTotalHealth === undefined) {
+          if (ship.isDismantling) {
+            ship.lastTotalHealth = 0;
+          } else {
+            ship.lastTotalHealth = totalHealth;
+          }
+        } else if (ship.isDismantling) {
+          ship.lastTotalHealth = 0;
+        }
+      }
+    }
+
     this.ships.updateGrid();
 
     // Update Command Points for all ships based on nearby Command-upgraded friendly cruisers
@@ -4208,6 +4236,115 @@ export class Game {
             }
           }
         }
+      }
+    }
+
+    // Wreckage Scanning and Retrieval Loop
+    if (!this.wreckages) this.wreckages = [];
+    
+    // 1. Reset scan status of all wreckages for this frame
+    for (const w of this.wreckages) {
+      w.beingScanned = false;
+      w.scanningShipId = null;
+      w.scanningPlayerId = null;
+    }
+    
+    // 2. Lockout checking: if there is combat within 200px, update lastFightingTime
+    const wreckageNow = Date.now();
+    for (const w of this.wreckages) {
+      let fightingNearby = false;
+      for (const ship of this.ships) {
+        if (ship.active) {
+          const dx = ship.x - w.x;
+          const dy = ship.y - w.y;
+          if (dx * dx + dy * dy <= 200 * 200) {
+            const timeSinceAttack = wreckageNow - (ship.lastTimeAttacking || 0);
+            const timeSinceAttacked = wreckageNow - (ship.lastTimeAttacked || 0);
+            if (timeSinceAttack < 10000 || timeSinceAttacked < 10000) {
+              fightingNearby = true;
+              break;
+            }
+          }
+        }
+      }
+      if (fightingNearby) {
+        w.lastFightingTime = wreckageNow;
+      }
+    }
+    
+    // 3. Check for cruisers retrieving wreckage
+    for (const ship of this.ships) {
+      if (ship.active && ship.isCruiser && ship.owner && !ship.isActivelyResearching) {
+        const finalCruiserRadar = ship.cruiserRadarRange();
+        const red = hazardSensorReduction(ship.x, ship.y, ship.owner.id);
+        const effRadar = Math.max(10, finalCruiserRadar - red);
+        
+        let closestW = null;
+        let minDistSq = Infinity;
+        for (const w of this.wreckages) {
+          const dx = ship.x - w.x;
+          const dy = ship.y - w.y;
+          const distSq = dx * dx + dy * dy;
+          if (distSq <= effRadar * effRadar) {
+            const isLocked = (wreckageNow - w.lastFightingTime) < 30000;
+            if (!isLocked && !w.beingScanned && distSq < minDistSq) {
+              minDistSq = distSq;
+              closestW = w;
+            }
+          }
+        }
+        
+        if (closestW) {
+          closestW.beingScanned = true;
+          closestW.scanningShipId = ship.id;
+          closestW.scanningPlayerId = ship.owner.id;
+          ship.isActivelyResearching = true;
+          
+          closestW.scanTimeLeft = (closestW.scanTimeLeft !== undefined ? closestW.scanTimeLeft : 3000) - deltaTime;
+        }
+      }
+    }
+    
+    // 4. Resolve completed wreckage scans
+    for (let i = this.wreckages.length - 1; i >= 0; i--) {
+      const w = this.wreckages[i];
+      if (w.scanTimeLeft !== undefined && w.scanTimeLeft <= 0) {
+        const player = this.allPlayers.find(p => p.id === w.scanningPlayerId);
+        const ship = this.ships.find(s => s.id === w.scanningShipId);
+        if (player) {
+          if (w.amoebaDamage > 10) {
+            // Spawn Deep Space Anomaly
+            const difficulty = Math.floor(w.amoebaDamage / 10);
+            this.spawnNewDeepSpaceAnomaly(w.x, w.y, player, ship ? ship.name : 'Cruiser', difficulty);
+            
+            this.pendingChatMessages = this.pendingChatMessages || [];
+            this.pendingChatMessages.push({
+              playerId: player.id,
+              text: `Wreckage salvage triggered a new Deep Space Anomaly due to concentrated Amoeba residue!`
+            });
+          } else {
+            // Reward credits: (amoebaDamage * 2 + cruiserDamage) * (1 + random 100%)
+            const randMultiplier = 1.0 + Math.random();
+            const baseVal = w.amoebaDamage * 2 + w.cruiserDamage;
+            const rewardCredits = Math.round(baseVal * randMultiplier);
+            player.credits = (player.credits || 0) + rewardCredits;
+            
+            this.pendingChatMessages = this.pendingChatMessages || [];
+            this.pendingChatMessages.push({
+              playerId: player.id,
+              text: `Wreckage successfully salvaged: Received +${rewardCredits} Credits!`
+            });
+            
+            this.pendingAnomalyCompletions = this.pendingAnomalyCompletions || [];
+            this.pendingAnomalyCompletions.push({
+              playerId: player.id,
+              x: w.x,
+              y: w.y,
+              text: `+${rewardCredits} Credits`
+            });
+          }
+        }
+        this.wreckages.splice(i, 1);
       }
     }
 
@@ -5288,6 +5425,33 @@ export class Game {
       }
     }
 
+    // Wreckage accumulation check
+    for (const ship of this.ships) {
+      if (ship.isCruiser || ship.isAmoeba) {
+        if (ship.isDismantling) continue;
+        
+        const isTargetCruiser = ship.isCruiser && !ship.isAmoeba;
+        const isTargetAmoeba = ship.isAmoeba;
+        
+        let currentTotal = 0;
+        if (ship.active) {
+          if (isTargetCruiser) {
+            currentTotal = (ship.health || 0) + (ship.shieldPoints || 0) + (ship.armorPoints || 0) + (ship.specialduranium || 0);
+          } else if (isTargetAmoeba) {
+            currentTotal = Math.floor(ship.health || 0) + ((ship.maxHealth || 0) * ((ship.maxHealth || 0) - 1)) / 2;
+          }
+        }
+        
+        if (ship.lastTotalHealth !== undefined) {
+          const dmg = ship.lastTotalHealth - currentTotal;
+          if (dmg > 0) {
+            this.handleWreckageDamage(ship.x, ship.y, isTargetAmoeba ? dmg : 0, isTargetCruiser ? dmg : 0);
+          }
+        }
+        ship.lastTotalHealth = currentTotal;
+      }
+    }
+
     // Remove inactive ships and dead planets
     this.ships = this.ships.filter(s => s.active);
     
@@ -5752,13 +5916,46 @@ export class Game {
     }
   }
 
-  spawnNewDeepSpaceAnomaly(x, y, player, shipName) {
+  handleWreckageDamage(x, y, amoebaDamage, cruiserDamage) {
+    if (!this.wreckages) this.wreckages = [];
+    
+    // Find an existing wreckage within 200px
+    let closestW = null;
+    let minDistSq = Infinity;
+    for (const w of this.wreckages) {
+      const dx = w.x - x;
+      const dy = w.y - y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq <= 200 * 200 && distSq < minDistSq) {
+        minDistSq = distSq;
+        closestW = w;
+      }
+    }
+    
+    if (closestW) {
+      closestW.amoebaDamage += amoebaDamage;
+      closestW.cruiserDamage += cruiserDamage;
+      closestW.lastFightingTime = Date.now();
+    } else {
+      const wreckage = {
+        id: 'wreck_' + Math.random().toString(36).substr(2, 9),
+        x: x,
+        y: y,
+        amoebaDamage: amoebaDamage,
+        cruiserDamage: cruiserDamage,
+        lastFightingTime: Date.now()
+      };
+      this.wreckages.push(wreckage);
+    }
+  }
+
+  spawnNewDeepSpaceAnomaly(x, y, player, shipName, customDifficulty = null) {
     const elapsedMinutes = (Date.now() - (this.gameStartTime || Date.now())) / 60000;
     const isUnlimited = !this.settings || !this.settings.timedGameLimit || this.settings.timedGameLimit === 'unlimited';
     const minDiff = isUnlimited ? Math.floor(-10 - elapsedMinutes / 2) : -10;
     const timedLimitSecs = !isUnlimited ? parseFloat(this.settings.timedGameLimit) : null;
     const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
-    const difficulty = Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff;
+    const difficulty = customDifficulty !== null ? customDifficulty : (Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff);
 
     const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache'];
     const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];

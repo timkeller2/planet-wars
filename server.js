@@ -2465,6 +2465,25 @@ async function bootstrap() {
         }
       }
 
+      // Wreckage visibility filtering
+      const visibleWreckages = [];
+      for (const w of (game.wreckages || [])) {
+        if (isVisible(w.x, w.y)) {
+          visibleWreckages.push({
+            id: w.id,
+            x: w.x,
+            y: w.y,
+            amoebaDamage: w.amoebaDamage,
+            cruiserDamage: w.cruiserDamage,
+            lastFightingTime: w.lastFightingTime,
+            beingScanned: w.beingScanned || false,
+            scanningShipId: w.scanningShipId || null,
+            scanningPlayerId: w.scanningPlayerId || null,
+            scanTimeLeft: w.scanTimeLeft || 0
+          });
+        }
+      }
+
       const state = {
         planets: visiblePlanets,
         ships: visibleShips,
@@ -2473,6 +2492,7 @@ async function bootstrap() {
         explosions: visibleExplosions,
         lasers: visibleLasers,
         storms: visibleStorms,
+        wreckages: visibleWreckages,
         players: game.allPlayers.map(p => {
           const pObj = Object.assign({}, p);
           pObj.discoveredPlanetsArray = p.discoveredPlanets ? Array.from(p.discoveredPlanets) : [];
