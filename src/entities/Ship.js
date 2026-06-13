@@ -1698,10 +1698,27 @@ export class Ship {
       if (this.health <= 2) {
         maxShots = 0;
       } else {
-        maxShots = Math.max(1, Math.floor((this.maxHealth + this.health) / 6));
+        const maxShotsFull = Math.max(1, Math.floor((this.maxHealth + this.maxHealth) / 6));
+        let baseMaxShots = Math.max(1, Math.floor((this.maxHealth + this.health) / 6));
         const cap = Math.floor(this.health - 2);
-        if (maxShots > cap) {
-          maxShots = cap;
+        if (baseMaxShots > cap) {
+          baseMaxShots = cap;
+        }
+
+        const lostShots = Math.max(0, maxShotsFull - baseMaxShots);
+        let penaltyFactor = 1.0;
+        if (this.damagecontrol > 0) {
+          penaltyFactor = 1 / (1 + this.damagecontrol);
+        }
+        const finalLostShots = Math.round(lostShots * penaltyFactor);
+        maxShots = Math.max(1, maxShotsFull - finalLostShots);
+        
+        if (maxShots > maxShotsFull) {
+          maxShots = maxShotsFull;
+        }
+        const absoluteCap = Math.max(1, Math.floor(this.health - 1));
+        if (maxShots > absoluteCap) {
+          maxShots = absoluteCap;
         }
       }
     } else if (this.maxHealth > 0) {
@@ -4262,7 +4279,7 @@ export class Ship {
       const inCombat = this.combatCooldown && this.combatCooldown > 0;
       let finalHealRate = 0;
 
-      if (this.inFriendlyWell && !inCombat) {
+      if (this.inFriendlyWell && (!inCombat || (this.damagecontrol || 0) > 0)) {
         finalHealRate = 6 * (1 + 0.50 * (this.damagecontrol || 0));
       } else {
         finalHealRate = 6 * (0.20 * (this.damagecontrol || 0));
@@ -4274,8 +4291,8 @@ export class Ship {
         // Check for nearby supply ship first!
         const supplyShip = this.findNearbySupplyShip(allShips);
 
-        // If there is a supply ship and not in combat, allow healing at the full rate even in deep space!
-        if (supplyShip && !inCombat) {
+        // If there is a supply ship and not in combat (or has damage control), allow healing at the full rate even in deep space!
+        if (supplyShip && (!inCombat || (this.damagecontrol || 0) > 0)) {
           finalHealRate = Math.max(finalHealRate, 6 * (1 + 0.50 * (this.damagecontrol || 0)));
         }
 
