@@ -191,6 +191,20 @@ async function bootstrap() {
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
     
+    // Send initial list of save games on connection
+    try {
+      if (fs.existsSync(savesDir)) {
+        const initialSaves = fs.readdirSync(savesDir)
+          .filter(file => file.endsWith('.json'))
+          .map(file => file.slice(0, -5));
+        socket.emit('saveGamesList', initialSaves);
+      } else {
+        socket.emit('saveGamesList', []);
+      }
+    } catch (e) {
+      console.error('[Save Games List Error]', e);
+    }
+    
     lastHumanActivityTime = Date.now();
     if (game.isPaused && game.pausedForAFK) {
       game.isPaused = false;
@@ -599,6 +613,14 @@ async function bootstrap() {
               color: '#00ff00',
               text: `Game successfully saved as '${sanitized}'.`
             });
+            try {
+              const updatedSaves = fs.readdirSync(savesDir)
+                .filter(file => file.endsWith('.json'))
+                .map(file => file.slice(0, -5));
+              io.emit('saveGamesList', updatedSaves);
+            } catch (e) {
+              console.error('[Save Broadcast Error]', e);
+            }
             console.log(`[Save Game] Game successfully saved as '${sanitized}' by player ${player.name} (${player.id})`);
           } catch (err) {
             console.error('[Save Game Error]', err);
@@ -1416,6 +1438,87 @@ async function bootstrap() {
       if (player) {
         player.lastCommandTime = Date.now();
         player.afkWarningSent = false;
+      }
+    });
+
+    socket.on('deleteSaveGame', (saveName) => {
+      if (!saveName || typeof saveName !== 'string') return;
+      const sanitized = saveName.replace(/[^a-zA-Z0-9_\-]/g, '');
+      const filePath = path.join(savesDir, `${sanitized}.json`);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          console.log(`[Delete Save] File '${sanitized}.json' deleted by client request.`);
+          // Broadcast updated list to all clients
+          const updatedSaves = fs.readdirSync(savesDir)
+            .filter(file => file.endsWith('.json'))
+            .map(file => file.slice(0, -5));
+          io.emit('saveGamesList', updatedSaves);
+        } catch (e) {
+          console.error('[Delete Save Error]', e);
+        }
+      }
+    });
+
+    socket.on('loadSaveGame', (saveName) => {
+      if (!saveName || typeof saveName !== 'string') return;
+      const sanitized = saveName.replace(/[^a-zA-Z0-9_\-]/g, '');
+      const filePath = path.join(savesDir, `${sanitized}.json`);
+      if (!fs.existsSync(filePath)) {
+        socket.emit('chatMessage', {
+          sender: 'System',
+          color: '#ff3333',
+          text: `Save game '${sanitized}' not found.`
+        });
+        return;
+      }
+      try {
+        const fileData = fs.readFileSync(filePath, 'utf-8');
+        const state = JSON.parse(fileData);
+        
+        if (!state.version || state.version !== GAME_VERSION) {
+          socket.emit('chatMessage', {
+            sender: 'System',
+            color: '#ff3333',
+            text: `Save game is incompatible (save version: ${state.version || 'unknown'}, current: ${GAME_VERSION}).`
+          });
+          return;
+        }
+
+        game.loadState(state);
+
+        // Assign current sockets to players in the loaded state
+        for (const [socketId, oldPlayer] of connectedClients.entries()) {
+          const newPlayer = game.allPlayers.find(p => p.id === oldPlayer.id);
+          if (newPlayer) {
+            newPlayer.clientPlayerId = oldPlayer.clientPlayerId;
+            if (oldPlayer.name) {
+              newPlayer.name = oldPlayer.name;
+            }
+            connectedClients.set(socketId, newPlayer);
+          }
+        }
+
+        for (const [socketId, activePlayer] of connectedClients.entries()) {
+          io.to(socketId).emit('assignedPlayer', activePlayer);
+        }
+
+        // Notify all clients that a game has successfully loaded
+        io.emit('gameLoadedAndStarted', sanitized);
+        
+        io.emit('chatMessage', {
+          sender: 'System',
+          color: '#00ff00',
+          text: `Game state '${sanitized}' loaded successfully.`
+        });
+        console.log(`[Load Game Event] Game successfully loaded '${sanitized}'`);
+      } catch (err) {
+        console.error('[Load Game Event Error]', err);
+        socket.emit('chatMessage', {
+          sender: 'System',
+          color: '#ff3333',
+          text: `Failed to load game: ${err.message}`
+        });
       }
     });
 

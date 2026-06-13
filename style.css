@@ -318,6 +318,48 @@ canvas {
   box-shadow: 0 0 15px rgba(255, 0, 255, 0.5);
 }
 
+.save-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(0, 229, 255, 0.05);
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.9rem;
+  color: #0ff;
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+  user-select: none;
+  text-shadow: 0 0 2px rgba(0, 229, 255, 0.5);
+}
+
+.save-item:hover {
+  background: rgba(0, 229, 255, 0.16);
+  border-color: #0ff;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.4), inset 0 0 5px rgba(0, 255, 255, 0.2);
+  text-shadow: 0 0 4px #0ff;
+}
+
+.save-item:active {
+  transform: scale(0.98);
+  background: rgba(0, 229, 255, 0.25);
+}
+
+#saves-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+#saves-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 229, 255, 0.4);
+  border-radius: 2px;
+}
+
+#saves-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 229, 255, 0.7);
+}
+
 .player-names {
   position: absolute;
   top: 20px;

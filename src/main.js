@@ -3877,6 +3877,71 @@ function getPlanetTradeIncomePerMin(planet) {
     localPlayer = player;
   });
 
+  socket.on('saveGamesList', (saves) => {
+    const savesList = document.getElementById('saves-list');
+    if (!savesList) return;
+    
+    savesList.innerHTML = '';
+    
+    if (!saves || saves.length === 0) {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.style.color = '#888';
+      emptyMsg.style.fontFamily = "'Rajdhani', sans-serif";
+      emptyMsg.style.fontSize = '0.95rem';
+      emptyMsg.style.textAlign = 'center';
+      emptyMsg.style.padding = '10px';
+      emptyMsg.textContent = 'No saved missions found. Start a new game below.';
+      savesList.appendChild(emptyMsg);
+      return;
+    }
+    
+    saves.forEach(save => {
+      const item = document.createElement('div');
+      item.className = 'save-item';
+      item.textContent = save;
+      
+      // Left click to load
+      item.addEventListener('click', (e) => {
+        const nameInput = document.getElementById('player-name-input');
+        if (nameInput && nameInput.value.trim() !== '') {
+          socket.emit('setName', nameInput.value.trim());
+          localStorage.setItem('planetWarsPlayerName', nameInput.value.trim());
+        }
+        
+        socket.emit('loadSaveGame', save);
+      });
+      
+      // Right click to delete
+      item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        socket.emit('deleteSaveGame', save);
+      });
+      
+      savesList.appendChild(item);
+    });
+  });
+
+  socket.on('gameLoadedAndStarted', (saveName) => {
+    megalovaniaPlayed = false;
+    const musicCheckbox = document.getElementById('music-checkbox');
+    const bgMusic = document.getElementById('bg-music');
+    if (musicCheckbox && musicCheckbox.checked && bgMusic) {
+      playRandomIntroTrack();
+    } else if (bgMusic) {
+      bgMusic.pause();
+    }
+    
+    const starfieldCheckbox = document.getElementById('starfield-checkbox');
+    starfieldEnabled = starfieldCheckbox ? starfieldCheckbox.checked : false;
+
+    startScreen.classList.add('hidden');
+    gameUI.classList.remove('hidden');
+    
+    hasCenteredOnHomeworld = false;
+    resetClientModeFlags();
+    lastKnownPlanets = {};
+  });
+
   socket.on('spectator', () => {
     console.log("Joined as spectator");
   });
