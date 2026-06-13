@@ -627,21 +627,23 @@ export class Game {
     };
 
     if (hwSizeSetting === 'pioneers') {
-      const existingHomeworlds = this.planets.filter(p => p.homeworldOf !== undefined && p.homeworldOf !== null);
-      
       let bestPos = null;
       
-      // Spacing and economy-distance levels to gradually relax if we cannot find a suitable spot
-      const spacingOptions = [300, 200, 100, 50];
-      const ecoDistanceOptions = [500, 300, 150, 0];
+      // Spacing options to gradually relax if we cannot find a suitable spot
+      const playerSpacingOptions = [600, 400, 200, 0];
+      const planetSpacingOptions = [300, 200, 100, 50];
       
-      // Calculate high economy planets
-      const highEcoThreshold = 3 * avgEconomy;
-      const highEcoPlanets = this.planets.filter(p => !p.homeworldOf && getEconomyWithin400(p.x, p.y) > highEcoThreshold);
+      // Get starting positions of already spawned players from their active ships
+      const otherPlayersPositions = [];
+      for (const ship of this.ships) {
+        if (ship.active && ship.owner && ship.owner.id !== player.id) {
+          otherPlayersPositions.push({ x: ship.x, y: ship.y });
+        }
+      }
       
       let found = false;
-      for (const planetSpacing of spacingOptions) {
-        for (const ecoDist of ecoDistanceOptions) {
+      for (const playerSpacing of playerSpacingOptions) {
+        for (const planetSpacing of planetSpacingOptions) {
           const candidates = [];
           for (let attempt = 0; attempt < 500; attempt++) {
             // Pick a point near the map edge: between 50px and 300px from any border
@@ -678,22 +680,22 @@ export class Game {
             }
             if (tooCloseToPlanet) continue;
 
-            // Check distance from high economy planets
-            if (ecoDist > 0 && highEcoPlanets.length > 0) {
-              let tooCloseToHighEco = false;
-              for (const p of highEcoPlanets) {
-                const dx = p.x - x;
-                const dy = p.y - y;
+            // Check distance from other players' positions
+            if (playerSpacing > 0 && otherPlayersPositions.length > 0) {
+              let tooCloseToPlayer = false;
+              for (const pos of otherPlayersPositions) {
+                const dx = pos.x - x;
+                const dy = pos.y - y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist < ecoDist) {
-                  tooCloseToHighEco = true;
+                if (dist < playerSpacing) {
+                  tooCloseToPlayer = true;
                   break;
                 }
               }
-              if (tooCloseToHighEco) continue;
+              if (tooCloseToPlayer) continue;
             }
 
-            // Check hazard
+            // Check hazard (must not be inside any hazard)
             const isWithinHazard = (px, py) => {
               for (const storm of this.ionStorms) {
                 const dx = storm.x - px;
@@ -711,34 +713,20 @@ export class Game {
           }
 
           if (candidates.length > 0) {
-            // Score candidates based on player spacing and economy
+            // Score candidates based on closeness to avgEconomy
             const candidatesWithInfo = candidates.map(c => {
-              const minDist = existingHomeworlds.length > 0 ? Math.min(...existingHomeworlds.map(h => {
-                const dx = h.x - c.x;
-                const dy = h.y - c.y;
-                return Math.sqrt(dx * dx + dy * dy);
-              })) : Infinity;
+              const localEco = getEconomyWithin400(c.x, c.y);
+              const ecoDiff = Math.abs(localEco - avgEconomy);
               return {
                 x: c.x,
                 y: c.y,
-                minHwDist: minDist,
-                economy: getEconomyWithin400(c.x, c.y)
+                ecoDiff: ecoDiff
               };
             });
 
-            // Filter for distance from other players (at least 250px)
-            let notNear = candidatesWithInfo;
-            if (existingHomeworlds.length > 0) {
-              notNear = candidatesWithInfo.filter(c => c.minHwDist >= 250);
-              if (notNear.length === 0) {
-                candidatesWithInfo.sort((a, b) => b.minHwDist - a.minHwDist);
-                notNear = candidatesWithInfo.slice(0, Math.max(1, Math.floor(candidatesWithInfo.length / 2)));
-              }
-            }
-
-            // Sort by lowest economy area (further from high economy points)
-            notNear.sort((a, b) => a.economy - b.economy);
-            bestPos = notNear[0];
+            // Sort by closest economy difference ascending
+            candidatesWithInfo.sort((a, b) => a.ecoDiff - b.ecoDiff);
+            bestPos = candidatesWithInfo[0];
             found = true;
             break;
           }
@@ -832,50 +820,36 @@ export class Game {
         }
 
         if (i < 3) {
-          // first 3 corvettes: diplomat level 1, lab level 1, one other random upgrade
+          // first 3 corvettes: diplomat level 1, lab level 1, and fuel_tanker level 1
           ship.diplomat = 1;
           ship.labs = 1;
-          // select a random upgrade excluding diplomat and labs
-          const otherUpgrades = potentialUpgrades.filter(u => u !== 'diplomat' && u !== 'labs');
-          const randomUp = otherUpgrades[Math.floor(Math.random() * otherUpgrades.length)];
-          ship[randomUp] = 1;
-
-          // Apply upgrade side effects
-          if (randomUp === 'armor') {
-            const bonus = 4 + 0.10 * 15; // 5.5
-            ship.maxArmor = (ship.maxArmor || 0) + bonus;
-            ship.armorPoints = (ship.armorPoints || 0) + bonus;
-          } else if (randomUp === 'munitions') {
-            ship.splashDamage = 1;
-          } else if (randomUp === 'fuel_tanker') {
-            ship.maxsupplies = 15;
-          } else if (randomUp === 'shields') {
-            ship.shieldPoints = 3;
-          }
+          ship.fuel_tanker = 1;
+          ship.maxsupplies = 15;
 
           // Load full supplies/marines/bombs/fuel first
           ship.fuel = ship.getMaxFuel();
           ship.bombs = ship.getMaxBombs();
-          ship.marineCount = ship.marines * ship.maxHealth;
+          ship.marineCount = (ship.marines || 0) * ship.maxHealth;
           ship.supplies = ship.maxsupplies;
           ship.shieldPoints = 3 * (ship.shields || 0);
 
           // After this add 30 supplies to the first 3 corvettes
           ship.supplies += 30;
         } else {
-          // Then also 2 others (5 in all) with a munitions upgrade, armor and marines.
+          // Then also 2 others (5 in all) with a munitions upgrade, armor, and fuel_tanker.
           ship.munitions = 1;
           ship.splashDamage = 1;
           ship.armor = 1;
           const armorBonus = 4 + 0.10 * 15; // 5.5
           ship.maxArmor = (ship.maxArmor || 0) + armorBonus;
           ship.armorPoints = (ship.armorPoints || 0) + armorBonus;
-          ship.marines = 1;
+          ship.fuel_tanker = 1;
+          ship.maxsupplies = 15;
 
           // Load full supplies/marines/bombs/fuel/shields
           ship.fuel = ship.getMaxFuel();
           ship.bombs = ship.getMaxBombs();
-          ship.marineCount = ship.marines * ship.maxHealth;
+          ship.marineCount = (ship.marines || 0) * ship.maxHealth;
           ship.supplies = ship.maxsupplies;
           ship.shieldPoints = 3 * (ship.shields || 0);
         }
