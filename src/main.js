@@ -1064,7 +1064,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
     
     let drawnButtonImage = false;
-    if (graphicalMode && transparentShipsCanvas) {
+    if (graphicalMode && transparentShipsCanvas && !(style === 'Romulan' && classType === 'corvette')) {
       let normalizedStyle = style;
       if (normalizedStyle) {
         normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
@@ -1662,7 +1662,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           let drawnShipImage = false;
-          if (graphicalMode && transparentShipsCanvas) {
+          if (graphicalMode && transparentShipsCanvas && !(style === 'Romulan' && s.classType === 'corvette')) {
             let normalizedStyle = style;
             if (normalizedStyle) {
               normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
@@ -12529,7 +12529,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           let drawnShipImage = false;
-          if (graphicalMode && transparentShipsCanvas) {
+          if (graphicalMode && transparentShipsCanvas && !(style === 'Romulan' && s.classType === 'corvette')) {
             let normalizedStyle = style;
             if (normalizedStyle) {
               normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
