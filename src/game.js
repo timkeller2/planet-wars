@@ -799,13 +799,16 @@ export class Game {
       }
       upgrades['fuel_tanker'] = 2;
       upgrades['diplomat'] = 2;
+      upgrades['sensorarrays'] = 1;
+      upgrades['labs'] = 1;
+      upgrades['damagecontrol'] = 1;
 
       this.pendingPioneerSpawns.push({
         ownerId: player.id,
         x: bestPos.x,
         y: bestPos.y,
         classType: 'battlecruiser',
-        upgradeTokens: 3,
+        upgradeTokens: 0,
         upgrades: upgrades,
         timer: 0,
         isAdditional: false,
