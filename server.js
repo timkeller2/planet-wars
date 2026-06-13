@@ -1422,6 +1422,37 @@ async function bootstrap() {
           game.timeRemaining = null;
         }
       }
+
+      if (!game.isRunning) {
+        game.initMap();
+        game.gameStartTime = Date.now();
+        game.isRunning = true;
+        game.isPaused = false;
+        game.gameSpeed = 1.0;
+        game.highestSpeedMilestoneTriggered = 0;
+        
+        // Ensure all connected clients are assigned to the new players in the new map
+        for (const [socketId, oldPlayer] of connectedClients.entries()) {
+          const newPlayer = game.allPlayers.find(p => p.id === oldPlayer.id);
+          if (newPlayer) {
+            newPlayer.clientPlayerId = oldPlayer.clientPlayerId;
+            connectedClients.set(socketId, newPlayer);
+          }
+        }
+        for (const p of connectedClients.values()) {
+          p.isAI = false;
+          p.isAlive = true;
+          p.needsPlanet = true;
+          p.lastCommandTime = Date.now();
+          p.discoveredPlanets = new Set();
+          p.attackedPlanets = new Map();
+          p.credits = game.settings && game.settings.startingCredits !== undefined ? game.settings.startingCredits : 250;
+        }
+        for (const [socketId, activePlayer] of connectedClients.entries()) {
+          io.to(socketId).emit('assignedPlayer', activePlayer);
+        }
+      }
+
       const p = connectedClients.get(socket.id);
       if (p) {
         p.lastCommandTime = Date.now();
@@ -1472,6 +1503,7 @@ async function bootstrap() {
       game.isRunning = true;
       game.isPaused = false;
       game.gameSpeed = 1.0;
+      game.highestSpeedMilestoneTriggered = 0;
       
       for (const [socketId, oldPlayer] of connectedClients.entries()) {
         const newPlayer = game.allPlayers.find(p => p.id === oldPlayer.id);
@@ -1514,6 +1546,9 @@ async function bootstrap() {
         console.log(`RESTART: Assigning planet for ${p.id}`);
         game.tryAssignPlanet(p);
       }
+      for (const [socketId, activePlayer] of connectedClients.entries()) {
+        io.to(socketId).emit('assignedPlayer', activePlayer);
+      }
     });
 
     socket.on('disconnect', () => {
@@ -1555,13 +1590,21 @@ async function bootstrap() {
       // Process pending game chat messages
       if (game.pendingChatMessages && game.pendingChatMessages.length > 0) {
         for (const msg of game.pendingChatMessages) {
-          for (const [socketId, player] of connectedClients.entries()) {
-            if (player.id === msg.playerId) {
-              io.to(socketId).emit('chatMessage', {
-                sender: 'System',
-                color: '#ffb74d',
-                text: msg.text
-              });
+          if (msg.playerId === 'all') {
+            io.emit('chatMessage', {
+              sender: 'System',
+              color: '#ffb74d',
+              text: msg.text
+            });
+          } else {
+            for (const [socketId, player] of connectedClients.entries()) {
+              if (player.id === msg.playerId) {
+                io.to(socketId).emit('chatMessage', {
+                  sender: 'System',
+                  color: '#ffb74d',
+                  text: msg.text
+                });
+              }
             }
           }
         }
@@ -2219,7 +2262,7 @@ async function bootstrap() {
               const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
               const difficulty = Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff;
               
-              const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];
+              const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache'];
               const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
               
               p.anomaly = {
@@ -2227,7 +2270,7 @@ async function bootstrap() {
                 x: ax,
                 y: ay,
                 difficulty: difficulty,
-                progress: 0,
+                progress: {},
                 researched: false,
                 beingResearched: false,
                 rewardType: rewardType
@@ -2245,6 +2288,11 @@ async function bootstrap() {
             spawnAnomalyForPlanet();
           }
           const mappedPlanet = Object.assign({}, allPlanetsMapped[i]);
+          if (mappedPlanet.anomaly) {
+            mappedPlanet.anomaly = Object.assign({}, mappedPlanet.anomaly, {
+              progress: (p.anomaly.progress && typeof p.anomaly.progress === 'object') ? (p.anomaly.progress[player.id] || 0) : 0
+            });
+          }
           if (player.spyRootedEvents && player.spyRootedEvents.has(p.id)) mappedPlanet.spyRootedOutEvent = true;
           visiblePlanets.push(mappedPlanet);
         } else if (isSilhouetteVisible(p.x, p.y) || player.discoveredPlanets.has(p.id) || p.rampageEvent) {
@@ -2260,6 +2308,11 @@ async function bootstrap() {
           const hasAttacked = player.attackedPlanets && player.attackedPlanets.has(p.id) && player.attackedPlanets.get(p.id) > 0;
           if (hasAttacked) {
             const mappedPlanet = Object.assign({}, allPlanetsMapped[i], { inFog: true, permanentlyTracked: true });
+            if (mappedPlanet.anomaly) {
+              mappedPlanet.anomaly = Object.assign({}, mappedPlanet.anomaly, {
+                progress: (p.anomaly.progress && typeof p.anomaly.progress === 'object') ? (p.anomaly.progress[player.id] || 0) : 0
+              });
+            }
             if (player.spyRootedEvents && player.spyRootedEvents.has(p.id)) mappedPlanet.spyRootedOutEvent = true;
             visiblePlanets.push(mappedPlanet);
           } else {
@@ -2293,7 +2346,7 @@ async function bootstrap() {
                  x: p.anomaly.x,
                  y: p.anomaly.y,
                  difficulty: p.anomaly.difficulty,
-                 progress: p.anomaly.progress,
+                 progress: (p.anomaly.progress && typeof p.anomaly.progress === 'object') ? (p.anomaly.progress[player.id] || 0) : 0,
                  researched: p.anomaly.researched,
                  beingResearched: p.anomaly.beingResearched || false,
                  completing: p.anomaly.completing || false,

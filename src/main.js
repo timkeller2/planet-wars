@@ -72,7 +72,8 @@ function checkMusicRotation() {
 }
 
 function getEffectiveSympathyClient(pl, playerId) {
-  let sympathyVal = pl.sympathy?.[playerId] || 0;
+  const baseSympathy = pl.sympathy?.[playerId] || 0;
+  let extraSympathy = 0;
   if (serverState && serverState.ships && (!pl.ownerId || pl.ownerId === 'neutral' || pl.ownerId !== playerId)) {
     let isKnown = false;
     if (!serverState.settings || !serverState.settings.fogOfWar) {
@@ -131,13 +132,18 @@ function getEffectiveSympathyClient(pl, playerId) {
           const dy = ship.y - pl.y;
           if (dx * dx + dy * dy <= maxDistSq) {
             const shipHp = (ship.isCruiser || (ship.maxHealth && ship.maxHealth > 0)) ? ((ship.maxHealth || ship.health || 0) * 0.5) : ((ship.count || 1) * 0.5);
-            sympathyVal += shipHp;
+            extraSympathy += shipHp;
           }
         }
       }
     }
   }
-  return sympathyVal;
+
+  let finalExtraSympathy = extraSympathy;
+  if (extraSympathy > baseSympathy * 2) {
+    finalExtraSympathy = baseSympathy * 2 + (extraSympathy - baseSympathy * 2) / 3;
+  }
+  return baseSympathy + finalExtraSympathy;
 }
 
 function getPlanetTradeIncomePerMin(planet) {
@@ -294,6 +300,21 @@ function getPlanetTradeIncomePerMin(planet) {
   let warpOrderNext = false;
   let controlGroups = {}; // RTS control groups for fleets/cruisers
   let lastKnownPlanets = {}; // Cache of last-known states for planets under Fog of War
+
+  function resetClientModeFlags() {
+    selectedPlanets = [];
+    selectedShips = [];
+    warpOrderNext = false;
+    bombOrderNext = false;
+    scoutModeNext = false;
+    upgradeModeActive = false;
+    focusModeActive = false;
+    cruiserBuildModeActive = false;
+    activeConfigClassType = null;
+    confirmingDismantle = false;
+    speedModifierNext = null;
+  }
+
   let transparentPlanetsCanvas = null;
   const planetSpriteSheet = new Image();
   planetSpriteSheet.onload = () => {
@@ -2320,7 +2341,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const hashVal = getDeterministicProgressAccuracy(p.anomaly.id);
       const isAccurate = hashVal < accuracyChance;
       
-      const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];
+      const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache'];
       const trueType = p.anomaly.rewardType || 'credits';
       let displayedType = trueType;
       
@@ -2335,7 +2356,8 @@ function getPlanetTradeIncomePerMin(planet) {
         credits: 'Credits Reward',
         tech: 'Tech Score Reward',
         xp: 'Player XP Reward',
-        hab: 'Habitability Increase'
+        hab: 'Habitability Increase',
+        rare_resource_cache: 'Rare Resource Cache'
       };
       
       const displayLabel = rewardLabels[displayedType] || 'Unknown';
@@ -3342,6 +3364,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
   const startBtn = document.getElementById('start-btn');
   const restartBtn = document.getElementById('restart-btn');
+  const lobbyBtn = document.getElementById('lobby-btn');
   const endTitle = document.getElementById('end-title');
 
   const leaderboardContent = document.getElementById('leaderboard-content');
@@ -4123,8 +4146,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (state.gameStartTime !== undefined && state.gameStartTime !== lastGameStartTime) {
       lastGameStartTime = state.gameStartTime;
       hasCenteredOnHomeworld = false;
-      selectedShips = [];
-      selectedPlanets = [];
+      resetClientModeFlags();
       lastKnownPlanets = {};
     }
 
@@ -4675,6 +4697,9 @@ function getPlanetTradeIncomePerMin(planet) {
     if (state.isRunning) {
       if (!endScreen.classList.contains('hidden')) {
         endScreen.classList.add('hidden');
+      }
+      if (startScreen.classList.contains('hidden') && gameUI.classList.contains('hidden')) {
+        gameUI.classList.remove('hidden');
       }
       if (scoreBoard && scoreBoard.parentNode !== gameUI) {
         const chatContainer = document.getElementById('chat-container');
@@ -7417,7 +7442,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
     if (event.key.toLowerCase() === 'c') {
-      const hasCruiserBase = selectedPlanets.some(p => p.ownerId === localPlayer.id && !p.isSpeedPlanet && p.ships >= 50 && p.maxShips >= 57);
+      const hasCruiserBase = selectedPlanets.some(p => p.ownerId === localPlayer.id && !p.isSpeedPlanet && (p.isMilitary || (p.ships >= 50 && p.maxShips >= 57)));
       if (hasCruiserBase) {
         event.preventDefault();
         cruiserBuildModeActive = !cruiserBuildModeActive;
@@ -7522,7 +7547,11 @@ function getPlanetTradeIncomePerMin(planet) {
             costShips *= 2;
           }
 
-          const creditsAvailable = (isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+          const creditsAvailable = selectedPlanetBuild.isMilitary
+            ? getCreditsAvailableForConfig(myPlayer)
+            : ((isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf))
+              ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0)
+              : 0);
           const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
           if (canAfford) {
             socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
@@ -7579,7 +7608,11 @@ function getPlanetTradeIncomePerMin(planet) {
               costShips *= 2;
             }
 
-            const creditsAvailable = (isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+            const creditsAvailable = selectedPlanetBuild.isMilitary
+              ? getCreditsAvailableForConfig(myPlayer)
+              : ((isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf))
+                ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0)
+                : 0);
             const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
             if (canAfford) {
               socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
@@ -8201,7 +8234,7 @@ function getPlanetTradeIncomePerMin(planet) {
   });
 
   restartBtn.addEventListener('click', () => {
-    console.log('startBtn clicked!');
+    console.log('restartBtn clicked!');
     endScreen.classList.add('hidden');
     gameUI.classList.remove('hidden');
     if (serverState) serverState.isRunning = true;
@@ -8250,10 +8283,26 @@ function getPlanetTradeIncomePerMin(planet) {
     const customAiEntryMin = customAiEntryIn ? parseFloat(customAiEntryIn.value) : 5;
 
     hasCenteredOnHomeworld = false;
+    resetClientModeFlags();
     serverState = null;
     lastKnownPlanets = {}; // Clear cached planet details
     socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin });
   });
+
+  if (lobbyBtn) {
+    lobbyBtn.addEventListener('click', () => {
+      endScreen.classList.add('hidden');
+      startScreen.classList.remove('hidden');
+      lockedSettings = false;
+      const fogCheck = document.getElementById('fog-of-war-checkbox');
+      const aiInput = document.getElementById('ai-count-input');
+      if (fogCheck) fogCheck.disabled = false;
+      if (aiInput) aiInput.disabled = false;
+      startBtn.textContent = 'ENTER GAME';
+      if (setupOptionsContainer) setupOptionsContainer.style.display = 'none';
+      if (setupNewGameBtn) setupNewGameBtn.style.display = 'block';
+    });
+  }
 
   function draw() {
     if (keysDown['ArrowUp']) cameraPanY += 40 / cameraZoom;
@@ -8548,7 +8597,11 @@ function getPlanetTradeIncomePerMin(planet) {
             el.style.boxShadow = '';
           }
 
-          const creditsAvailable = (isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0) : 0;
+          const creditsAvailable = selectedPlanetBuild.isMilitary
+            ? getCreditsAvailableForConfig(myPlayer)
+            : ((isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf))
+              ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0)
+              : 0);
           const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
 
           if (!canAfford) {
@@ -8637,7 +8690,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (elFocusCancel) elFocusCancel.style.display = 'none';
 
       const hasMilitary = selectedPlanets.some(p => p.isMilitary);
-      const hasCruiserBase = selectedPlanets.some(p => p.ownerId === localPlayer.id && !p.isSpeedPlanet && p.ships >= 50 && p.maxShips >= 57);
+      const hasCruiserBase = selectedPlanets.some(p => p.ownerId === localPlayer.id && !p.isSpeedPlanet && (p.isMilitary || (p.ships >= 50 && p.maxShips >= 57)));
       if (!hasCruiserBase) {
         cruiserBuildModeActive = false;
       }

@@ -6,7 +6,8 @@ import { SHIP_NAMES } from './entities/ShipNames.js';
 import { AIController } from './systems/AIController.js';
 
 export function getEffectiveSympathy(planet, playerId, allShips, player = null, game = null) {
-  let sympathyVal = planet.sympathy ? (planet.sympathy[playerId] || 0) : 0;
+  const baseSympathy = planet.sympathy ? (planet.sympathy[playerId] || 0) : 0;
+  let extraSympathy = 0;
   if (allShips && (!planet.owner || planet.owner.id !== playerId)) {
     let isKnown = false;
     if (game && (!game.settings || !game.settings.fogOfWar)) {
@@ -51,13 +52,18 @@ export function getEffectiveSympathy(planet, playerId, allShips, player = null, 
           const dy = ship.y - planet.y;
           if (dx * dx + dy * dy <= maxDistSq) {
             const shipHp = (ship.isCruiser || ship.maxHealth > 0) ? (ship.maxHealth * 0.5) : ((ship.count || 1) * 0.5);
-            sympathyVal += shipHp;
+            extraSympathy += shipHp;
           }
         }
       }
     }
   }
-  return sympathyVal;
+
+  let finalExtraSympathy = extraSympathy;
+  if (extraSympathy > baseSympathy * 2) {
+    finalExtraSympathy = baseSympathy * 2 + (extraSympathy - baseSympathy * 2) / 3;
+  }
+  return baseSympathy + finalExtraSympathy;
 }
 
 const SHIP_CLASSES = {
@@ -261,6 +267,7 @@ export class Game {
     this.aiMarketTimer = 0;
     this.usedShipNames = new Set();
     this.marketSalesHistory = [];
+    this.highestSpeedMilestoneTriggered = 0;
   }
 
   recordMarketSale(resource, price) {
@@ -808,24 +815,31 @@ export class Game {
         targetPlanet.preferredResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
       }
 
-      // All homeworlds must begin with a resource (the accuracy resource for the player's race/style)
-      const style = player.cruiserStyle || targetPlanet.racialAffinity;
-      let accuracyResource = 'merculite';
-      if (style === 'Romulan' || style === 'Gorn') {
-        accuracyResource = 'antimatter';
-      } else if (style === 'Tholian' || style === 'Lyran') {
-        accuracyResource = 'dilithium';
-      }
-      targetPlanet.resources = [accuracyResource];
+      // Ensure homeworld has a random starting resource
+      const startingResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
+      targetPlanet.resources = [startingResource];
 
-      // Ensure preferred resource is not the same as the mined accuracy resource
-      if (targetPlanet.preferredResource === accuracyResource) {
-        const otherPreferredList = resourcesList.filter(r => r !== accuracyResource);
+      // Ensure preferred resource is not the same as the mined starting resource
+      if (targetPlanet.preferredResource === startingResource) {
+        const otherPreferredList = resourcesList.filter(r => r !== startingResource);
         targetPlanet.preferredResource = otherPreferredList[Math.floor(Math.random() * otherPreferredList.length)];
       }
 
-      // Player stockpiles start at 0
-      // (resources object is already initialized to all zeros in Player constructor)
+      // Give each player 3 of their bomb resource in their stockpile starting out
+      if (player.id !== 'monsters') {
+        const bombResource = (player.cruiserStyle === 'Romulan' || player.cruiserStyle === 'Gorn') ? 'antimatter' :
+                             ((player.cruiserStyle === 'Tholian' || player.cruiserStyle === 'Lyran') ? 'dilithium' : 'merculite');
+        player.resources = player.resources || {
+          dilithium: 0,
+          merculite: 0,
+          duranium: 0,
+          tritanium: 0,
+          antimatter: 0,
+          deuterium: 0,
+          latinum: 0
+        };
+        player.resources[bombResource] = 3;
+      }
       
       // Clear hazards from newly assigned planet
       for (const storm of this.ionStorms) {
@@ -1748,7 +1762,7 @@ export class Game {
 
     // Scatter ( map size / 100 ) anomalies randomly around the map at map creation
     const numScattered = Math.floor(this.width / 100);
-    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];
+    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache'];
     for (let i = 0; i < numScattered; i++) {
       const ax = Math.random() * this.width;
       const ay = Math.random() * this.height;
@@ -1771,7 +1785,7 @@ export class Game {
         x: ax,
         y: ay,
         difficulty: difficulty,
-        progress: 0,
+        progress: {},
         researched: false,
         beingResearched: false,
         rewardType: rewardType
@@ -2327,11 +2341,28 @@ export class Game {
       const costCap = cfg.costCap;
       const maxHealth = cfg.hp;
 
-      const creditsAvailable = (owner && owner.useCredits !== false) ? (owner.credits || 0) : 0;
-      const creditsAvailableForAffordability = (isFirst || !(source.isMilitary || source.homeworldOf)) ? creditsAvailable : 0;
+      let creditsAvailableForAffordability = 0;
+      let creditsAvailableForPayment = 0;
+
+      let minAllowedCredits = 0;
+      if (owner) {
+        const ownsHomeworld = this.planets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id);
+        if (ownsHomeworld) {
+          minAllowedCredits = -(1000 + Math.floor(owner.totalShips || 0));
+        }
+      }
+
+      if (source.isMilitary) {
+        creditsAvailableForAffordability = (owner && owner.useCredits !== false) ? (owner.credits - minAllowedCredits) : 0;
+        creditsAvailableForPayment = creditsAvailableForAffordability;
+      } else {
+        const standardCredits = (owner && owner.useCredits !== false) ? (owner.credits || 0) : 0;
+        creditsAvailableForAffordability = (isFirst || !source.homeworldOf) ? standardCredits : 0;
+        creditsAvailableForPayment = standardCredits;
+      }
 
       if ((source.ships + creditsAvailableForAffordability) >= costShips && (source.maxShips - costCap) >= 55) {
-        const creditsPaid = Math.min(creditsAvailable, costShips);
+        const creditsPaid = Math.min(creditsAvailableForPayment, costShips);
         const remainingCostShips = costShips - creditsPaid;
         const extraShips = source.ships - remainingCostShips;
         const bonusHp = Math.min(4, Math.floor(Math.max(0, extraShips) / 25));
@@ -3784,8 +3815,28 @@ export class Game {
                   p.anomaly.researchingShipId = ship.id;
                   ship.isActivelyResearching = true;
                   
+                  const labs = ship.labs || 0;
+                  const shipXp = ship.expScore || 0;
+                  const playerTech = ship.owner.techScore || 0;
+                  const playerXp = ship.owner.expScore || 0;
+                  const threshold = (labs + shipXp + playerTech + playerXp) * 3;
+                  
+                  let currentProgress = 0;
+                  if (p.anomaly.progress && typeof p.anomaly.progress === 'object') {
+                    currentProgress = p.anomaly.progress[ship.owner.id] || 0;
+                  } else if (typeof p.anomaly.progress === 'number') {
+                    currentProgress = p.anomaly.progress;
+                  } else {
+                    p.anomaly.progress = {};
+                  }
+                  
+                  let rateMultiplier = 1;
+                  if (p.anomaly.difficulty - currentProgress < threshold) {
+                    rateMultiplier = 3;
+                  }
+                  
                   const xpMultiplier = 1 + (ship.getLocalXpBonus() * 3) / 100;
-                  const knowledgeGained = (ship.labs * deltaTime * xpMultiplier) / 120000;
+                  const knowledgeGained = (ship.labs * deltaTime * xpMultiplier * rateMultiplier) / 120000;
                   
                   ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
                   
@@ -3794,7 +3845,17 @@ export class Game {
                     ship.accumulatedTech -= completions;
                     ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + completions;
                     
-                    p.anomaly.progress = (p.anomaly.progress || 0) + completions;
+                    if (p.anomaly.progress && typeof p.anomaly.progress === 'object') {
+                      p.anomaly.progress[ship.owner.id] = (p.anomaly.progress[ship.owner.id] || 0) + completions;
+                      currentProgress = p.anomaly.progress[ship.owner.id];
+                    } else if (typeof p.anomaly.progress === 'number') {
+                      p.anomaly.progress = (p.anomaly.progress || 0) + completions;
+                      currentProgress = p.anomaly.progress;
+                    } else {
+                      p.anomaly.progress = { [ship.owner.id]: completions };
+                      currentProgress = completions;
+                    }
+                    
                     ship.gainXp(completions, this, ship.x, ship.y);
                     
                     const localShipXpBonus = ship.getLocalXpBonus();
@@ -3812,7 +3873,7 @@ export class Game {
                       ship.owner.techScore = (ship.owner.techScore || 0) + techGained;
                     }
                     
-                    if (p.anomaly.progress >= p.anomaly.difficulty) {
+                    if (currentProgress >= p.anomaly.difficulty) {
                       p.anomaly.completing = true;
                       p.anomaly.completingTimeLeft = 3000;
                       p.anomaly.completingShipId = ship.id;
@@ -4171,6 +4232,28 @@ export class Game {
       player.commandCount = this.ships
         .filter(s => s.active && s.owner === player && s.isCruiser)
         .reduce((sum, s) => sum + Math.floor((s.maxHealth || 0) / 10), 0);
+    }
+
+    // Reduce game speed based on successful human players (more than 10 planets + cruisers, then 20, etc.)
+    for (const player of this.allPlayers) {
+      if (player && !player.isAI) {
+        const score = (player.planetCount || 0) + (player.cruiserCount || 0);
+        if (score > 10) {
+          const milestone = 10 + 10 * Math.floor((score - 10) / 10);
+          this.highestSpeedMilestoneTriggered = this.highestSpeedMilestoneTriggered || 0;
+          if (milestone > this.highestSpeedMilestoneTriggered) {
+            this.highestSpeedMilestoneTriggered = milestone;
+            const newSpeed = Math.max(0.1, 1.0 - 0.1 * (milestone / 10));
+            this.gameSpeed = newSpeed;
+            
+            this.pendingChatMessages = this.pendingChatMessages || [];
+            this.pendingChatMessages.push({
+              playerId: 'all',
+              text: `⚠️ Game speed has been reduced to ${Math.round(newSpeed * 100)}% because of a successful player (${player.name || player.id} is controlling ${score} planets + cruisers)!`
+            });
+          }
+        }
+      }
     }
 
     // Calculate Pirate Activity and Pirate Income for all players
@@ -5277,7 +5360,7 @@ export class Game {
     const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
     const difficulty = Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff;
 
-    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];
+    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache'];
     const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
 
     const planetId = 30000 + this.planets.length;
@@ -5292,7 +5375,7 @@ export class Game {
       x: x,
       y: y,
       difficulty: difficulty,
-      progress: 0,
+      progress: {},
       researched: false,
       beingResearched: false,
       rewardType: rewardType
@@ -5311,22 +5394,37 @@ export class Game {
     const difficulty = planet.anomaly ? planet.anomaly.difficulty : 0;
     
     // Choose a random reward from the 5 options:
-    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab'];
+    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache'];
     const rewardType = (planet.anomaly && planet.anomaly.rewardType) ? planet.anomaly.rewardType : rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
     
     let text = '';
     let floatText = '';
     
-    const baseVal = 30 + difficulty;
+    const baseVal = 40 + difficulty * 3;
     const factor = 1.0 + Math.random(); // 100% to 200%
     const creditsValueEquivalent = baseVal * factor;
     
     const locationName = planet.isDeepSpaceAnomaly ? 'Deep Space' : planet.name;
     const preposition = planet.isDeepSpaceAnomaly ? 'in' : 'on';
 
+    this.recalculateResourceRarities();
+
     if (rewardType === 'discount') {
       const numDiscounts = Math.max(1, 1 + Math.floor(difficulty / 20));
       const categories = ['sensorarray', 'lab', 'armor', 'shield', 'engine', 'munitions', 'targeting', 'damagecontrol', 'fueltanker', 'diplomat', 'marines'];
+      const categoryNames = {
+        sensorarray: 'Sensor Array',
+        lab: 'Science Lab',
+        armor: 'Armor',
+        shield: 'Shields',
+        engine: 'Engine',
+        munitions: 'Munitions',
+        targeting: 'Targeting',
+        damagecontrol: 'Damage Control',
+        fueltanker: 'Fuel Tanker',
+        diplomat: 'Diplomat',
+        marines: 'Marines'
+      };
       const applied = [];
       for (let d = 0; d < numDiscounts; d++) {
         const eligible = categories.filter(cat => (player.upgradeModifiers[cat] || 0) > -0.50);
@@ -5336,7 +5434,8 @@ export class Game {
           applied.push(chosen);
         }
       }
-      text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received ${applied.length} upgrade discount(s)!`;
+      const appliedNames = applied.map(cat => categoryNames[cat] || cat);
+      text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received upgrade discount(s) for ${appliedNames.join(', ')}!`;
       floatText = `DISCOUNTS!`;
     } else if (rewardType === 'credits') {
       const creditsReward = Math.round(creditsValueEquivalent);
@@ -5399,6 +5498,24 @@ export class Game {
           y: targetPlanet.y
         });
       }
+    } else if (rewardType === 'rare_resource_cache') {
+      const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+      let rareResources = resourcesList.filter(r => this.resourceRarities && (this.resourceRarities[r] === 'rare' || this.resourceRarities[r] === 'exotic'));
+      if (rareResources.length === 0) {
+        rareResources = resourcesList.filter(r => this.resourceRarities && this.resourceRarities[r] === 'normal');
+      }
+      if (rareResources.length === 0) {
+        rareResources = resourcesList;
+      }
+      const chosenRes = rareResources[Math.floor(Math.random() * rareResources.length)];
+      const qty = (Math.floor(Math.random() * 6) + 1) + Math.floor(creditsValueEquivalent / 20);
+      
+      player.resources = player.resources || {};
+      player.resources[chosenRes] = (player.resources[chosenRes] || 0) + qty;
+      
+      const resName = chosenRes.charAt(0).toUpperCase() + chosenRes.slice(1);
+      text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received +${qty} ${resName}!`;
+      floatText = `+${qty} ${resName}!`;
     }
     
     // Add to pending chat messages for the player
