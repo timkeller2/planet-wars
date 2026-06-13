@@ -823,7 +823,8 @@ export class Game {
           x: sx,
           y: sy,
           upgrades: upgrades,
-          timer: i * 10000 // 10 seconds apart: 0s, 10s, 20s, 30s, 40s
+          timer: i * 30000, // 30 seconds apart: 0s, 30s, 60s, 90s, 120s
+          isAdditional: i > 0
         });
       }
 
@@ -3541,7 +3542,28 @@ export class Game {
         if (pSpawn.timer <= 0) {
           const player = this.allPlayers.find(p => p.id === pSpawn.ownerId);
           if (player) {
-            const ship = new Ship(this.nextShipId++, pSpawn.x, pSpawn.y, null, player, pSpawn.x, pSpawn.y);
+            let spawnX = pSpawn.x;
+            let spawnY = pSpawn.y;
+
+            if (pSpawn.isAdditional) {
+              const distLeft = pSpawn.x;
+              const distRight = this.width - pSpawn.x;
+              const distTop = pSpawn.y;
+              const distBottom = this.height - pSpawn.y;
+              const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+              if (minDist === distLeft) {
+                spawnX = -200;
+              } else if (minDist === distRight) {
+                spawnX = this.width + 200;
+              } else if (minDist === distTop) {
+                spawnY = -200;
+              } else {
+                spawnY = this.height + 200;
+              }
+            }
+
+            const ship = new Ship(this.nextShipId++, spawnX, spawnY, null, player, pSpawn.x, pSpawn.y);
             ship.isCruiser = true;
             ship.classType = 'corvette';
             ship.maxHealth = 15;
@@ -3550,6 +3572,13 @@ export class Game {
             ship.speed = 14;
             if (player.id === 'monsters') {
               ship.speed = Math.max(5, ship.speed - 10);
+            }
+            if (pSpawn.isAdditional) {
+              ship.pioneerWarpIn = true;
+              ship.pioneerWarpX = pSpawn.x;
+              ship.pioneerWarpY = pSpawn.y;
+              ship.isWarp = true;
+              ship.speed = 70;
             }
             ship.speedModifier = 1.0;
             ship.expScore = 0;

@@ -67,7 +67,7 @@ const runTests = () => {
 
   // Process update loop ticks to spawn ships staggeredly (10 seconds apart)
   const humanShips = [];
-  const timeSteps = [0, 10000, 10000, 10000, 10000];
+  const timeSteps = [0, 30000, 30000, 30000, 30000];
 
   for (let step = 0; step < 5; step++) {
     // Tick game by the step duration
@@ -75,7 +75,7 @@ const runTests = () => {
     
     // Check if new ship spawned
     const activeHumanShips = game.ships.filter(s => s.owner && s.owner.id === 'human');
-    console.log(`After step ${step + 1} (${(step * 10)}s elapsed), active ships: ${activeHumanShips.length}`);
+    console.log(`After step ${step + 1} (${(step * 30)}s elapsed), active ships: ${activeHumanShips.length}`);
     if (activeHumanShips.length !== step + 1) {
       console.error(`FAILED: Expected ${step + 1} spawned ships, got ${activeHumanShips.length}!`);
       process.exit(1);

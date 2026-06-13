@@ -696,6 +696,26 @@ export class Ship {
 
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
+
+    if (this.pioneerWarpIn) {
+      const dx = this.pioneerWarpX - this.x;
+      const dy = this.pioneerWarpY - this.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 15) {
+        this.pioneerWarpIn = false;
+        this.isWarp = false;
+        this.speed = 14;
+        this.x = this.pioneerWarpX;
+        this.y = this.pioneerWarpY;
+        this.targetX = this.pioneerWarpX;
+        this.targetY = this.pioneerWarpY;
+      } else {
+        this.targetX = this.pioneerWarpX;
+        this.targetY = this.pioneerWarpY;
+        this.angle = Math.atan2(dy, dx);
+      }
+    }
+
     if (this.isCruiser) {
       this.shieldShowTimer = Math.max(0, (this.shieldShowTimer || 0) - deltaTime / 1000);
     }
@@ -5375,6 +5395,10 @@ export class Ship {
           effectiveSpeed = 0;
         }
       }
+    }
+
+    if (this.pioneerWarpIn) {
+      effectiveSpeed = 70;
     }
 
     if (this.isUpgrading || this.isDismantling) {
