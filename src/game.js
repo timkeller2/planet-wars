@@ -3598,7 +3598,7 @@ export class Game {
           const dx = w.x - c.x;
           const dy = w.y - c.y;
           const distSq = dx * dx + dy * dy;
-          if (distSq <= 200 * 200 && distSq < minDistSq) {
+          if (distSq <= 300 * 300 && distSq < minDistSq) {
             minDistSq = distSq;
             closestW = w;
           }
@@ -5331,6 +5331,9 @@ export class Game {
           const halfSize = Math.max(1, Math.floor(triggerMax / 2));
           ship.maxHealth = halfSize;
           ship.health = halfSize;
+          // Recalculate and set parent's lastTotalHealth to prevent mitosis wreckage
+          ship.lastTotalHealth = Math.floor(ship.health) + (ship.maxHealth * (ship.maxHealth - 1)) / 2;
+          
           const newAmoeba = new Ship(this.nextShipId++, ship.x, ship.y, null, this.monsterPlayer, ship.x + (Math.random() - 0.5) * 400, ship.y + (Math.random() - 0.5) * 400);
           newAmoeba.isAmoeba = true;
           newAmoeba.cruiserStyle = ship.cruiserStyle;
