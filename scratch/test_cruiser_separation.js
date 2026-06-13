@@ -39,8 +39,8 @@ assert.strictEqual(initialDist, 0, "Ships must be perfectly stacked initially");
 
 // 2. Call game.update(1000) (deltaTime = 1000ms = 1s) multiple times to verify gradual separation
 // With speed = 3, each moves 3px per second. Total separation rate is 6px per second.
-// It should take 5 seconds to reach 30px distance.
-for (let tick = 1; tick <= 5; tick++) {
+// It should take 4 seconds to reach 20px distance.
+for (let tick = 1; tick <= 3; tick++) {
   game.update(1000);
   const dist = Math.sqrt((ship1.x - ship2.x)**2 + (ship1.y - ship2.y)**2);
   console.log(`[Second ${tick}] ship1: (${ship1.x.toFixed(2)}, ${ship1.y.toFixed(2)}), ship2: (${ship2.x.toFixed(2)}, ${ship2.y.toFixed(2)}), dist: ${dist.toFixed(2)}px`);
@@ -50,9 +50,11 @@ for (let tick = 1; tick <= 5; tick++) {
   assert.ok(Math.abs(dist - expectedDist) < 0.2, `At second ${tick}, expected distance close to ${expectedDist}px, got ${dist.toFixed(2)}px`);
 }
 
-// Verify that it is now fully separated (>= 29.99px to account for float inaccuracy)
-const distAfter5s = Math.sqrt((ship1.x - ship2.x)**2 + (ship1.y - ship2.y)**2);
-assert.ok(distAfter5s >= 29.99, "Cruisers must be separated by at least 30px after 5 seconds");
+// Tick 4: should reach 24px (fully separated since 24 >= 20)
+game.update(1000);
+const distAfter4s = Math.sqrt((ship1.x - ship2.x)**2 + (ship1.y - ship2.y)**2);
+console.log(`[Second 4] ship1: (${ship1.x.toFixed(2)}, ${ship1.y.toFixed(2)}), ship2: (${ship2.x.toFixed(2)}, ${ship2.y.toFixed(2)}), dist: ${distAfter4s.toFixed(2)}px`);
+assert.ok(distAfter4s >= 19.99, "Cruisers must be separated by at least 20px after 4 seconds");
 console.log("✓ Cruisers successfully separated gradually!");
 
 // 3. Verify that updating again does not keep moving them away infinitely

@@ -5242,7 +5242,7 @@ export class Game {
     }
 
     if (nonMovingCruisers.length > 1) {
-      const minDistance = 30; // minimum distance between cruiser centers
+      const minDistance = 20; // minimum distance between cruiser centers
       const minDistanceSq = minDistance * minDistance;
       let anyMoved = false;
       
