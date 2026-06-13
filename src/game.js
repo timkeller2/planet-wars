@@ -790,39 +790,32 @@ export class Game {
         player.resources[bombResource] = 3;
       }
 
-      // Spawn 1 Destroyer immediately and 2 Corvettes staggered by 30s
-      const angles = [0, 120, 240];
+      // Spawn 1 Battlecruiser immediately
       const potentialUpgrades = ['sensorarrays', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 'marines', 'command', 'labs', 'diplomat'];
 
-      for (let i = 0; i < 3; i++) {
-        const angleRad = (angles[i] * Math.PI) / 180;
-        const sx = bestPos.x + Math.cos(angleRad) * 20;
-        const sy = bestPos.y + Math.sin(angleRad) * 20;
-
-        let upgrades = {};
-        for (const up of potentialUpgrades) {
-          upgrades[up] = 0;
-        }
-
-        const isDestroyer = (i === 0);
-        this.pendingPioneerSpawns.push({
-          ownerId: player.id,
-          x: sx,
-          y: sy,
-          classType: isDestroyer ? 'destroyer' : 'corvette',
-          upgradeTokens: isDestroyer ? 5 : 3,
-          upgrades: upgrades,
-          timer: i * 30000, // 30 seconds apart: 0s, 30s, 60s
-          isAdditional: i > 0
-        });
+      let upgrades = {};
+      for (const up of potentialUpgrades) {
+        upgrades[up] = 0;
       }
+      upgrades['fuel_tanker'] = 2;
+      upgrades['diplomat'] = 2;
+
+      this.pendingPioneerSpawns.push({
+        ownerId: player.id,
+        x: bestPos.x,
+        y: bestPos.y,
+        classType: 'battlecruiser',
+        upgradeTokens: 3,
+        upgrades: upgrades,
+        timer: 0,
+        isAdditional: false,
+        Pioneer: true
+      });
 
       player.builtClasses = player.builtClasses || {};
-      player.builtClasses['destroyer'] = true;
-      player.builtClasses['corvette'] = true;
+      player.builtClasses['battlecruiser'] = true;
       player.buildCounts = player.buildCounts || {};
-      player.buildCounts['destroyer'] = (player.buildCounts['destroyer'] || 0) + 1;
-      player.buildCounts['corvette'] = (player.buildCounts['corvette'] || 0) + 2;
+      player.buildCounts['battlecruiser'] = (player.buildCounts['battlecruiser'] || 0) + 1;
 
       player.planetCount = 0;
       player.needsPlanet = false;
@@ -3555,7 +3548,7 @@ export class Game {
             }
 
             const classType = pSpawn.classType || 'corvette';
-            const hp = (classType === 'destroyer') ? 25 : 15;
+            const hp = SHIP_CLASSES[classType] ? SHIP_CLASSES[classType].hp : 15;
             const ship = new Ship(this.nextShipId++, spawnX, spawnY, null, player, pSpawn.x, pSpawn.y);
             ship.isCruiser = true;
             ship.classType = classType;
@@ -3581,6 +3574,8 @@ export class Game {
             ship.cruiserStyle = player.cruiserStyle;
             ship.count = 1;
             ship.upgradeTokens = pSpawn.upgradeTokens || 0;
+            ship.Pioneer = pSpawn.Pioneer || false;
+            ship.isPioneer = pSpawn.Pioneer || false;
             this.assignRandomShipName(ship);
 
             // Assign upgrades
@@ -3611,6 +3606,20 @@ export class Game {
             this.ships.push(ship);
           }
           this.pendingPioneerSpawns.splice(i, 1);
+        }
+      }
+    }
+
+    // Pioneer auto-dismantle check when a player gains a homeworld
+    for (const player of this.allPlayers) {
+      if (!player.isAlive) continue;
+      const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
+      if (ownsHomeworld) {
+        for (const ship of this.ships) {
+          if (ship.active && ship.owner && ship.owner.id === player.id && (ship.Pioneer || ship.isPioneer) && !ship.isDismantling) {
+            console.log(`[Pioneer auto-dismantle] Dismantling Pioneer ship ${ship.id} for player ${player.id} because they gained a homeworld.`);
+            ship.startDismantle(this);
+          }
         }
       }
     }
