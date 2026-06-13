@@ -4658,6 +4658,7 @@ export class Ship {
                 friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * amountRefueled * costMultiplier);
               }
             }
+          }
         }
       } else {
         let fuelDrain = this.isWarp ? 8 : 4;
