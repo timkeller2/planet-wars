@@ -5391,7 +5391,7 @@ export class Ship {
         const tdx = targetObj.x - this.x;
         const tdy = targetObj.y - this.y;
         const dist = Math.sqrt(tdx * tdx + tdy * tdy);
-        if (dist <= 20 && !this.isMovingBackward) {
+        if (dist <= 23 && !this.isMovingBackward) {
           effectiveSpeed = 0;
         }
       }

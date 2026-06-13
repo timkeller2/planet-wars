@@ -18,7 +18,7 @@ const runTests = () => {
   ship1.maxHealth = 100;
   ship1.health = 100;
   ship1.speed = 15;
-  ship1.package = 'brute'; // Forces shouldCloseIn = true so it attempts to close within 20px
+  ship1.package = 'brute'; // Forces shouldCloseIn = true so it attempts to close within 23px
   ship1.angle = Math.PI / 2; // point directly down at ship2
   ship1.active = true;
   game.ships.push(ship1);
@@ -51,8 +51,8 @@ const runTests = () => {
     
     if (ship1.currentSpeed === 0) {
       console.log(`Stopped at tick ${tick}. Distance: ${dist.toFixed(2)}px`);
-      if (dist < 10 || dist > 21.0) {
-        console.error(`FAILED: Expected stop distance close to 20px, got ${dist.toFixed(2)}px`);
+      if (dist < 15 || dist > 24.0) {
+        console.error(`FAILED: Expected stop distance close to 23px, got ${dist.toFixed(2)}px`);
         process.exit(1);
       }
       stopped = true;
