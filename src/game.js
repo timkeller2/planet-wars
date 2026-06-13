@@ -269,6 +269,7 @@ export class Game {
     this.marketSalesHistory = [];
     this.highestSpeedMilestoneTriggered = 0;
     this.wreckages = [];
+    this.pendingPioneerSpawns = [];
   }
 
   recordMarketSale(resource, price) {
@@ -789,7 +790,7 @@ export class Game {
         player.resources[bombResource] = 3;
       }
 
-      // Spawn 5 corvettes around bestPos
+      // Spawn 5 corvettes around bestPos staggered by 10s
       const angles = [0, 72, 144, 216, 288];
       const potentialUpgrades = ['sensorarrays', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 'marines', 'command'];
 
@@ -798,63 +799,32 @@ export class Game {
         const sx = bestPos.x + Math.cos(angleRad) * 20;
         const sy = bestPos.y + Math.sin(angleRad) * 20;
 
-        const ship = new Ship(this.nextShipId++, sx, sy, null, player, sx, sy);
-        ship.isCruiser = true;
-        ship.classType = 'corvette';
-        ship.maxHealth = 15;
-        ship.health = 15;
-        ship.crew = 30;
-        ship.speed = 14; // Base speed: Math.max(5, 22 - 5 - 3) = 14
-        if (player.id === 'monsters') {
-          ship.speed = Math.max(5, ship.speed - 10);
-        }
-        ship.speedModifier = 1.0;
-        ship.expScore = 0;
-        ship.cruiserStyle = player.cruiserStyle;
-        ship.count = 1;
-        this.assignRandomShipName(ship);
-
-        // Clear any previous upgrades
+        let upgrades = {};
         for (const up of potentialUpgrades) {
-          ship[up] = 0;
+          upgrades[up] = 0;
         }
 
         if (i < 3) {
-          // first 3 corvettes: diplomat level 1, lab level 1, and fuel_tanker level 1
-          ship.diplomat = 1;
-          ship.labs = 1;
-          ship.fuel_tanker = 1;
-          ship.maxsupplies = 15;
-
-          // Load full supplies/marines/bombs/fuel first
-          ship.fuel = ship.getMaxFuel();
-          ship.bombs = ship.getMaxBombs();
-          ship.marineCount = (ship.marines || 0) * ship.maxHealth;
-          ship.supplies = ship.maxsupplies;
-          ship.shieldPoints = 3 * (ship.shields || 0);
-
-          // After this add 30 supplies to the first 3 corvettes
-          ship.supplies += 30;
+          upgrades.diplomat = 1;
+          upgrades.labs = 1;
+          upgrades.fuel_tanker = 1;
+        } else if (i === 3) {
+          upgrades.munitions = 1;
+          upgrades.sensorarrays = 1;
+          upgrades.fuel_tanker = 1;
         } else {
-          // Then also 2 others (5 in all) with a munitions upgrade, armor, and fuel_tanker.
-          ship.munitions = 1;
-          ship.splashDamage = 1;
-          ship.armor = 1;
-          const armorBonus = 4 + 0.10 * 15; // 5.5
-          ship.maxArmor = (ship.maxArmor || 0) + armorBonus;
-          ship.armorPoints = (ship.armorPoints || 0) + armorBonus;
-          ship.fuel_tanker = 1;
-          ship.maxsupplies = 15;
-
-          // Load full supplies/marines/bombs/fuel/shields
-          ship.fuel = ship.getMaxFuel();
-          ship.bombs = ship.getMaxBombs();
-          ship.marineCount = (ship.marines || 0) * ship.maxHealth;
-          ship.supplies = ship.maxsupplies;
-          ship.shieldPoints = 3 * (ship.shields || 0);
+          upgrades.munitions = 1;
+          upgrades.armor = 1;
+          upgrades.fuel_tanker = 1;
         }
 
-        this.ships.push(ship);
+        this.pendingPioneerSpawns.push({
+          ownerId: player.id,
+          x: sx,
+          y: sy,
+          upgrades: upgrades,
+          timer: i * 10000 // 10 seconds apart: 0s, 10s, 20s, 30s, 40s
+        });
       }
 
       player.builtClasses = player.builtClasses || {};
@@ -3561,6 +3531,63 @@ export class Game {
 
   update(deltaTime) {
     if (!this.wreckages) this.wreckages = [];
+    if (!this.pendingPioneerSpawns) this.pendingPioneerSpawns = [];
+
+    // Process pending pioneer ship spawns
+    if (this.pendingPioneerSpawns.length > 0) {
+      for (let i = this.pendingPioneerSpawns.length - 1; i >= 0; i--) {
+        const pSpawn = this.pendingPioneerSpawns[i];
+        pSpawn.timer -= deltaTime;
+        if (pSpawn.timer <= 0) {
+          const player = this.allPlayers.find(p => p.id === pSpawn.ownerId);
+          if (player) {
+            const ship = new Ship(this.nextShipId++, pSpawn.x, pSpawn.y, null, player, pSpawn.x, pSpawn.y);
+            ship.isCruiser = true;
+            ship.classType = 'corvette';
+            ship.maxHealth = 15;
+            ship.health = 15;
+            ship.crew = 30;
+            ship.speed = 14;
+            if (player.id === 'monsters') {
+              ship.speed = Math.max(5, ship.speed - 10);
+            }
+            ship.speedModifier = 1.0;
+            ship.expScore = 0;
+            ship.cruiserStyle = player.cruiserStyle;
+            ship.count = 1;
+            this.assignRandomShipName(ship);
+
+            // Assign upgrades
+            for (const up in pSpawn.upgrades) {
+              ship[up] = pSpawn.upgrades[up];
+            }
+
+            // Apply upgrade side effects
+            if (ship.armor) {
+              const armorBonus = 4 + 0.10 * 15; // 5.5
+              ship.maxArmor = (ship.maxArmor || 0) + armorBonus;
+              ship.armorPoints = (ship.armorPoints || 0) + armorBonus;
+            }
+            if (ship.munitions) {
+              ship.splashDamage = 1;
+            }
+            if (ship.fuel_tanker) {
+              ship.maxsupplies = 15;
+            }
+
+            // Load full supplies/marines/bombs/fuel/shields
+            ship.fuel = ship.getMaxFuel();
+            ship.bombs = ship.getMaxBombs();
+            ship.marineCount = (ship.marines || 0) * ship.maxHealth;
+            ship.supplies = ship.maxsupplies;
+            ship.shieldPoints = 3 * (ship.shields || 0);
+
+            this.ships.push(ship);
+          }
+          this.pendingPioneerSpawns.splice(i, 1);
+        }
+      }
+    }
     
     // Store/initialize current total health for all cruisers and amoebas
     for (const ship of this.ships) {
@@ -5190,8 +5217,8 @@ export class Game {
       const minDistanceSq = minDistance * minDistance;
       let anyMoved = false;
       
-      // Run multiple iterations of relaxation to handle multi-cruiser stacks nicely
-      for (let pass = 0; pass < 4; pass++) {
+      // Run relaxation at a gradual speed of 3 pixels per second per cruiser
+      for (let pass = 0; pass < 1; pass++) {
         let movedThisPass = false;
         for (let i = 0; i < nonMovingCruisers.length; i++) {
           const shipA = nonMovingCruisers[i];
@@ -5202,7 +5229,7 @@ export class Game {
             const distSq = dx * dx + dy * dy;
             
             if (distSq < minDistanceSq) {
-              // Stacked! Resolve by scooting them in opposite directions.
+              // Stacked! Resolve by scooting them in opposite directions gradually.
               // If they are exactly on top of each other, use a random angle to break symmetry.
               // Otherwise, push them directly away from each other.
               let pushX, pushY;
@@ -5216,7 +5243,7 @@ export class Game {
                 pushY = dy / dist;
               }
               
-              const scootAmount = 8; // move 8px each (total 16px separation per pass)
+              const scootAmount = 3 * (deltaTime / 1000); // adjust gradually at speed 3
               
               shipA.x -= pushX * scootAmount;
               shipA.y -= pushY * scootAmount;

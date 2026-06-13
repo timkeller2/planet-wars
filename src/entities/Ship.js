@@ -469,13 +469,6 @@ export class Ship {
         this.executeNextOrder(allPlanets, allShips, game);
       }
     } else if (order.type === 'target') {
-      this.cruiserTargetType = order.targetType;
-      this.cruiserTargetId = order.targetId;
-      this.savedBombardPlanetId = null;
-      this.cruiserTargetClickX = order.clickX !== undefined ? order.clickX : null;
-      this.cruiserTargetClickY = order.clickY !== undefined ? order.clickY : null;
-      this.targetPlanet = null;
-      
       let tx = this.x;
       let ty = this.y;
       if (order.targetType === 'planet') {
@@ -495,6 +488,12 @@ export class Ship {
         const targetPlanet = order.targetType === 'planet' ? (allPlanets ? allPlanets.find(p => p.id === order.targetId) : null) : null;
         this.handlePlayerMoveOrder({ planet: targetPlanet, x: tx, y: ty }, game);
       }
+      this.cruiserTargetType = order.targetType;
+      this.cruiserTargetId = order.targetId;
+      this.savedBombardPlanetId = null;
+      this.cruiserTargetClickX = order.clickX !== undefined ? order.clickX : null;
+      this.cruiserTargetClickY = order.clickY !== undefined ? order.clickY : null;
+      this.targetPlanet = null;
       this.targetX = tx;
       this.targetY = ty;
       this.startX = this.x;
@@ -5366,6 +5365,18 @@ export class Ship {
       effectiveSpeed *= 1/3;
     }
 
+    if (this.isCruiser && this.cruiserTargetType === 'ship' && this.cruiserTargetId) {
+      const targetObj = allShips ? allShips.find(s => s.id === this.cruiserTargetId) : null;
+      if (targetObj && targetObj.isCruiser && !targetObj.isAmoeba && targetObj.active) {
+        const tdx = targetObj.x - this.x;
+        const tdy = targetObj.y - this.y;
+        const dist = Math.sqrt(tdx * tdx + tdy * tdy);
+        if (dist <= 30 && !this.isMovingBackward) {
+          effectiveSpeed = 0;
+        }
+      }
+    }
+
     if (this.isUpgrading || this.isDismantling) {
       effectiveSpeed = 0;
     }
@@ -5385,8 +5396,8 @@ export class Ship {
         }
       }
     }
-    this.currentSpeed = effectiveSpeed;
     const isMoving = (moveDistanceToDest > 0 && effectiveSpeed > 0);
+    this.currentSpeed = isMoving ? effectiveSpeed : 0;
     if (isMoving) {
       this.timeSinceLastMoved = 0;
     } else {
