@@ -2608,6 +2608,20 @@ async function bootstrap() {
         }
       }
 
+      // Chunk visibility filtering
+      const visibleChunks = [];
+      for (const c of (game.chunks || [])) {
+        if (isVisible(c.x, c.y)) {
+          visibleChunks.push({
+            id: c.id,
+            x: c.x,
+            y: c.y,
+            amoebaDamage: c.amoebaDamage,
+            cruiserDamage: c.cruiserDamage
+          });
+        }
+      }
+
       const state = {
         planets: visiblePlanets,
         ships: visibleShips,
@@ -2617,6 +2631,7 @@ async function bootstrap() {
         lasers: visibleLasers,
         storms: visibleStorms,
         wreckages: visibleWreckages,
+        chunks: visibleChunks,
         players: game.allPlayers.map(p => {
           const pObj = Object.assign({}, p);
           pObj.discoveredPlanetsArray = p.discoveredPlanets ? Array.from(p.discoveredPlanets) : [];

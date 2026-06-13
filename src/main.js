@@ -9461,61 +9461,100 @@ function getPlanetTradeIncomePerMin(planet) {
           
           ctx.rotate(driftAngle);
           
-          // Draw wreckage debris pieces
-          // Piece 1: Large jagged fragment
-          ctx.fillStyle = '#4a5568';
-          ctx.strokeStyle = '#718096';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(-6, -4);
-          ctx.lineTo(2, -8);
-          ctx.lineTo(8, -2);
-          ctx.lineTo(3, 4);
-          ctx.lineTo(-4, 2);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-          
-          // Piece 2: Smaller fragment
-          ctx.fillStyle = '#2d3748';
-          ctx.strokeStyle = '#4a5568';
-          ctx.beginPath();
-          ctx.moveTo(-8, 3);
-          ctx.lineTo(-3, 8);
-          ctx.lineTo(-1, 5);
-          ctx.lineTo(-5, 1);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
+          // Render the bigger wreckage as several chunks in a 50px area
+          const idNum = parseInt(w.id.replace(/\D/g, ''), 10) || 0;
+          const numChunks = 4 + (idNum % 3); // 4 to 6 chunks
+          for (let i = 0; i < numChunks; i++) {
+            const angle = ((idNum * (i + 1) * 17) % 360) * Math.PI / 180;
+            const dist = ((idNum * (i + 2) * 23) % 20) + 5; // 5 to 25px
+            const cx = Math.cos(angle) * dist;
+            const cy = Math.sin(angle) * dist;
+            
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(((idNum * (i + 3) * 11) % 360) * Math.PI / 180);
+            
+            // Draw a gray chunk
+            const rOffset = (idx) => (((idNum + i * 13 + idx * 7) % 5) - 2);
+            ctx.fillStyle = '#64748b'; // gray
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-4 + rOffset(0), -4 + rOffset(1));
+            ctx.lineTo(4 + rOffset(2), -4 + rOffset(3));
+            ctx.lineTo(4 + rOffset(4), 4 + rOffset(5));
+            ctx.lineTo(-4 + rOffset(6), 4 + rOffset(7));
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          }
 
-          // Piece 3: Tiny shard
-          ctx.fillStyle = '#1a202c';
-          ctx.beginPath();
-          ctx.moveTo(5, 4);
-          ctx.lineTo(8, 7);
-          ctx.lineTo(9, 3);
-          ctx.closePath();
-          ctx.fill();
+          // Draw Amoeba blobs if it contains Amoeba parts
+          if (w.amoebaDamage > 0) {
+            const numBlobs = 2 + (idNum % 3); // 2 to 4 blobs
+            for (let i = 0; i < numBlobs; i++) {
+              const angle = ((idNum * (i + 5) * 29) % 360) * Math.PI / 180;
+              const dist = ((idNum * (i + 6) * 31) % 15) + 3; // 3 to 18px
+              const bx = Math.cos(angle) * dist;
+              const by = Math.sin(angle) * dist;
+              
+              ctx.save();
+              ctx.translate(bx, by);
+              ctx.fillStyle = 'rgba(0, 220, 80, 0.8)';
+              ctx.shadowColor = '#00ff66';
+              ctx.shadowBlur = 6;
+              const rSize = ((idNum + i * 19) % 3) + 3; // 3 to 5px
+              ctx.beginPath();
+              ctx.arc(0, 0, rSize, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            }
+          }
           
-          // Reactor glow / Amoeba residue in the center
-          // If a lot of amoeba damage, make it green/slime glow. Otherwise orange core glow.
-          const hasAmoebaResidue = w.amoebaDamage > 0;
-          const glowColor = hasAmoebaResidue ? 'rgba(0, 255, 100, 0.8)' : 'rgba(255, 100, 0, 0.8)';
-          const glowColorInner = hasAmoebaResidue ? '#b3ffb3' : '#ffcc80';
+          ctx.restore();
+        }
+      }
+
+      // Draw chunks
+      if (serverState.chunks) {
+        for (const c of serverState.chunks) {
+          ctx.save();
+          ctx.translate(c.x, c.y);
           
-          ctx.shadowColor = hasAmoebaResidue ? '#00ff66' : '#ff6600';
-          ctx.shadowBlur = 4 + 2 * Math.sin(Date.now() / 150);
-          
-          ctx.fillStyle = glowColor;
-          ctx.beginPath();
-          ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
-          ctx.fill();
-          
-          ctx.fillStyle = glowColorInner;
-          ctx.beginPath();
-          ctx.arc(0, 0, 1.2, 0, Math.PI * 2);
-          ctx.fill();
-          
+          const hasAmoebaParts = c.amoebaDamage > 0;
+          const idNum = parseInt(c.id.replace(/\D/g, ''), 10) || 0;
+          const rOffset = (idx) => (((idNum + idx * 7) % 5) - 2);
+
+          if (!hasAmoebaParts) {
+            // Mishapen gray square
+            ctx.fillStyle = '#64748b'; // gray
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-4 + rOffset(0), -4 + rOffset(1));
+            ctx.lineTo(4 + rOffset(2), -4 + rOffset(3));
+            ctx.lineTo(4 + rOffset(4), 4 + rOffset(5));
+            ctx.lineTo(-4 + rOffset(6), 4 + rOffset(7));
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            // Organic piece of blob
+            ctx.fillStyle = 'rgba(0, 220, 80, 0.8)';
+            ctx.shadowColor = '#00ff66';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.arc(rOffset(0), rOffset(1), 5 + rOffset(2), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(2 + rOffset(3), -1 + rOffset(4), 4 + rOffset(5), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(-2 + rOffset(6), 1 + rOffset(7), 4.5 + rOffset(8), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0; // reset
+          }
           ctx.restore();
         }
       }
