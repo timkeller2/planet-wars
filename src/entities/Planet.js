@@ -125,17 +125,6 @@ export class Planet {
       this.preferredResourceWantedChatQueued = false;
     }
 
-    if (this.owner && this.focusMode === 'economy') {
-      const currentThreshold = this.sizeClass * ((this.habitability + Math.sqrt(this.owner.techScore || 0)) / 100);
-      if (this.maxShips >= currentThreshold) {
-        if (this.maxShips > 119) {
-          this.focusMode = 'commerce';
-        } else {
-          this.focusMode = 'research';
-        }
-        this.focusTransition = null;
-      }
-    }
   }
 
   decreaseMaxShips(amount = 1) {
@@ -186,6 +175,20 @@ export class Planet {
           this.focusMode = this.focusTransition.targetMode;
           this.focusChanges = (this.focusChanges || 0) + 1;
           
+          if (this.focusMode === 'homeworld') {
+            if (allPlanets) {
+              for (const p of allPlanets) {
+                if (p.homeworldOf === this.owner.id) {
+                  p.homeworldOf = null;
+                  if (p.focusMode === 'homeworld') {
+                    p.focusMode = 'economy';
+                  }
+                }
+              }
+            }
+            this.homeworldOf = this.owner.id;
+          }
+
           if (oldMode === 'garrison' && this.focusMode !== 'garrison' && this.ships > this.maxShips) {
             const extraShips = this.ships - this.maxShips;
             this.ships = this.maxShips;
@@ -303,7 +306,7 @@ export class Planet {
             if (this.ships > limit && !this.retainedShips) {
               this.ships = limit;
             }
-          } else if (focus === 'economy') {
+          } else if (focus === 'economy' || focus === 'homeworld') {
             // Grow max capacity, no tech score
             if (this.rampageEvent) {
               this.decreaseMaxShips(1);

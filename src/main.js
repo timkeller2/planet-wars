@@ -7165,6 +7165,15 @@ function getPlanetTradeIncomePerMin(planet) {
             return;
           }
         }
+        if (key === 'h' && planet.focusMode !== 'homeworld') {
+          const hasHomeworld = serverState && serverState.planets && localPlayer && serverState.planets.some(p => p.homeworldOf === localPlayer.id);
+          if (!hasHomeworld) {
+            event.preventDefault();
+            socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'homeworld' });
+            focusModeActive = false;
+            return;
+          }
+        }
         if (key === 'o' || event.key === 'Escape') {
           event.preventDefault();
           focusModeActive = false;
@@ -7861,6 +7870,7 @@ function getPlanetTradeIncomePerMin(planet) {
   registerFocusBtn('btn-focus-commerce', 'commerce');
   registerFocusBtn('btn-focus-mining', 'mining');
   registerFocusBtn('btn-focus-terraforming', 'terraforming');
+  registerFocusBtn('btn-focus-homeworld', 'homeworld');
 
   // Bind Sci-Fi Planetary Resources UI window actions & bank sell button
 
@@ -8352,7 +8362,8 @@ function getPlanetTradeIncomePerMin(planet) {
       'btn-focus-garrison': 'garrison',
       'btn-focus-commerce': 'commerce',
       'btn-focus-mining': 'mining',
-      'btn-focus-terraforming': 'terraforming'
+      'btn-focus-terraforming': 'terraforming',
+      'btn-focus-homeworld': 'homeworld'
     };
     const selectedPlanetFocus = getSelectedPlanetForFocus();
     if (!selectedPlanetFocus) {
@@ -8421,6 +8432,12 @@ function getPlanetTradeIncomePerMin(planet) {
             const techBonus = Math.floor(Math.sqrt((myPlayer ? myPlayer.techScore : 0) || 0));
             const limit = Math.ceil(selectedPlanetFocus.habitability / 5);
             if (techBonus <= limit) {
+              shouldShow = false;
+            }
+          }
+          if (mode === 'homeworld') {
+            const hasHomeworld = serverState && serverState.planets && localPlayer && serverState.planets.some(p => p.homeworldOf === localPlayer.id);
+            if (hasHomeworld) {
               shouldShow = false;
             }
           }

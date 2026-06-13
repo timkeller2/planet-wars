@@ -1314,13 +1314,17 @@ async function bootstrap() {
       if (!planet || !planet.owner || planet.owner.id !== player.id) return;
       if (planet.inRevolt) return;
 
-      const validModes = ['economy', 'research', 'garrison', 'commerce', 'mining', 'terraforming'];
+      const validModes = ['economy', 'research', 'garrison', 'commerce', 'mining', 'terraforming', 'homeworld'];
       if (!validModes.includes(data.focusMode)) return;
       if (data.focusMode === 'commerce' && planet.maxShips <= 100) return;
       if (data.focusMode === 'terraforming') {
         const techBonus = Math.floor(Math.sqrt(player.techScore || 0));
         const limit = Math.ceil(planet.habitability / 5);
         if (techBonus <= limit) return;
+      }
+      if (data.focusMode === 'homeworld') {
+        const hasHomeworld = game.planets.some(p => p.homeworldOf === player.id);
+        if (hasHomeworld) return;
       }
 
       if (planet.focusTransition) return; // Prevent concurrent focus shifts on same planet
@@ -2071,7 +2075,7 @@ async function bootstrap() {
       }
       
       if (!hasEntities && game.settings?.fogOfWar && !player.isAI) {
-         console.log(`GETSTATE: ${player.id} has NO entities! (Planets: ${game.planets.filter(p=>p.owner).map(p=>p.owner.id).join(',')})`);
+         // console.log(`GETSTATE: ${player.id} has NO entities! (Planets: ${game.planets.filter(p=>p.owner).map(p=>p.owner.id).join(',')})`);
       }
 
       for (const s of game.ships) {

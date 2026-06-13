@@ -625,6 +625,248 @@ export class Game {
       return dists.length >= 3 ? dists[2] : (dists.length >= 2 ? dists[1] : (dists[0] || Infinity));
     };
 
+    if (hwSizeSetting === 'pioneers') {
+      // Find a safe starting position away from existing homeworlds and not in a hazard
+      const existingHomeworlds = this.planets.filter(p => p.homeworldOf !== undefined && p.homeworldOf !== null);
+      
+      let bestPos = null;
+      let maxMinDist = -1;
+      
+      // Try with different spacing values in case map is very crowded
+      const spacings = [40, 25, 10];
+      for (const spacing of spacings) {
+        const candidates = [];
+        for (let attempt = 0; attempt < 200; attempt++) {
+          const x = 30 + 50 + Math.random() * (this.width - 30 * 2 - 100);
+          const y = 30 + 50 + Math.random() * (this.height - 30 * 2 - 100);
+          
+          // Check collision with existing planets
+          let collision = false;
+          for (const p of this.planets) {
+            const dx = p.x - x;
+            const dy = p.y - y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < p.radius + 30 + spacing) {
+              collision = true;
+              break;
+            }
+          }
+          
+          // Check hazard
+          const isWithinHazard = (px, py) => {
+            for (const storm of this.ionStorms) {
+              const dx = storm.x - px;
+              const dy = storm.y - py;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              if (dist <= storm.radius) {
+                return true;
+              }
+            }
+            return false;
+          };
+
+          if (!collision && !isWithinHazard(x, y)) {
+            candidates.push({ x, y });
+          }
+        }
+        
+        if (candidates.length > 0) {
+          // Calculate groupDist for each candidate
+          const candidatesWithGroupDist = candidates.map(c => {
+            return { x: c.x, y: c.y, groupDist: getGroupDist(c) };
+          });
+
+          // Filter/sort candidates to be not too far from a group of 2-3 planets (groupDist <= 320)
+          let groupFiltered = candidatesWithGroupDist.filter(c => c.groupDist <= 320);
+          if (groupFiltered.length === 0) {
+            candidatesWithGroupDist.sort((a, b) => a.groupDist - b.groupDist);
+            groupFiltered = candidatesWithGroupDist.slice(0, Math.max(1, Math.floor(candidatesWithGroupDist.length * 0.1)));
+          }
+
+          // Honey hole avoidance filter metered by starting credits
+          const startingCredits = (this.settings && this.settings.startingCredits !== undefined) ? this.settings.startingCredits : 0;
+          const maxAllowedEconomy = avgEconomy * (2 + startingCredits / 250);
+
+          const candidatesWithInfo = groupFiltered.map(c => {
+            const minDist = existingHomeworlds.length > 0 ? Math.min(...existingHomeworlds.map(h => {
+              const dx = h.x - c.x;
+              const dy = h.y - c.y;
+              return Math.sqrt(dx * dx + dy * dy);
+            })) : Infinity;
+            return {
+              x: c.x,
+              y: c.y,
+              groupDist: c.groupDist,
+              economy: getEconomyWithin400(c.x, c.y),
+              minHwDist: minDist
+            };
+          });
+
+          // Filter for "not near another player" (distance >= 250px)
+          let notNear = candidatesWithInfo;
+          if (existingHomeworlds.length > 0) {
+            notNear = candidatesWithInfo.filter(c => c.minHwDist >= 250);
+            if (notNear.length === 0) {
+              candidatesWithInfo.sort((a, b) => b.minHwDist - a.minHwDist);
+              notNear = candidatesWithInfo.slice(0, Math.max(1, Math.floor(candidatesWithInfo.length / 2)));
+            }
+          }
+
+          // Filter for economy <= maxAllowedEconomy
+          let economyFiltered = notNear.filter(c => c.economy <= maxAllowedEconomy);
+          if (economyFiltered.length === 0) {
+            notNear.sort((a, b) => a.economy - b.economy);
+            economyFiltered = notNear.slice(0, Math.max(1, Math.floor(notNear.length / 2)));
+          }
+
+          economyFiltered.sort((a, b) => b.economy - a.economy);
+          bestPos = economyFiltered[0];
+          
+          if (bestPos && existingHomeworlds.length > 0) {
+            maxMinDist = bestPos.minHwDist;
+          }
+          break;
+        }
+      }
+
+      // If we couldn't find a safe spot after checking spacing, fallback to any random point
+      if (!bestPos) {
+        bestPos = {
+          x: 30 + 50 + Math.random() * (this.width - 30 * 2 - 100),
+          y: 30 + 50 + Math.random() * (this.height - 30 * 2 - 100)
+        };
+      }
+
+      // Assign player cruiserStyle if not already set
+      if (!player.cruiserStyle) {
+        const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
+        if (!player.isAI) {
+          const assignedStyles = this.allPlayers
+            .filter(p => !p.isAI && p.cruiserStyle)
+            .map(p => p.cruiserStyle);
+          const unusedStyles = styles.filter(s => !assignedStyles.includes(s));
+          if (unusedStyles.length > 0) {
+            player.cruiserStyle = unusedStyles[Math.floor(Math.random() * unusedStyles.length)];
+          } else {
+            player.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
+          }
+        } else {
+          player.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
+        }
+        console.log(`Assigned style ${player.cruiserStyle} to player ${player.id}`);
+      }
+
+      // Give player starting credits bomb resource
+      if (player.id !== 'monsters') {
+        const bombResource = (player.cruiserStyle === 'Romulan' || player.cruiserStyle === 'Gorn') ? 'antimatter' :
+                             ((player.cruiserStyle === 'Tholian' || player.cruiserStyle === 'Lyran') ? 'dilithium' : 'merculite');
+        player.resources = player.resources || {
+          dilithium: 0,
+          merculite: 0,
+          duranium: 0,
+          tritanium: 0,
+          antimatter: 0,
+          deuterium: 0,
+          latinum: 0
+        };
+        player.resources[bombResource] = 3;
+      }
+
+      // Spawn 5 corvettes around bestPos
+      const angles = [0, 72, 144, 216, 288];
+      const potentialUpgrades = ['sensorarrays', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 'marines', 'command'];
+
+      for (let i = 0; i < 5; i++) {
+        const angleRad = (angles[i] * Math.PI) / 180;
+        const sx = bestPos.x + Math.cos(angleRad) * 20;
+        const sy = bestPos.y + Math.sin(angleRad) * 20;
+
+        const ship = new Ship(this.nextShipId++, sx, sy, null, player, sx, sy);
+        ship.isCruiser = true;
+        ship.classType = 'corvette';
+        ship.maxHealth = 15;
+        ship.health = 15;
+        ship.crew = 30;
+        ship.speed = 14; // Base speed: Math.max(5, 22 - 5 - 3) = 14
+        if (player.id === 'monsters') {
+          ship.speed = Math.max(5, ship.speed - 10);
+        }
+        ship.speedModifier = 1.0;
+        ship.expScore = 0;
+        ship.cruiserStyle = player.cruiserStyle;
+        ship.count = 1;
+        this.assignRandomShipName(ship);
+
+        // Clear any previous upgrades
+        for (const up of potentialUpgrades) {
+          ship[up] = 0;
+        }
+
+        if (i < 3) {
+          // first 3 corvettes: diplomat level 1, lab level 1, one other random upgrade
+          ship.diplomat = 1;
+          ship.labs = 1;
+          // select a random upgrade excluding diplomat and labs
+          const otherUpgrades = potentialUpgrades.filter(u => u !== 'diplomat' && u !== 'labs');
+          const randomUp = otherUpgrades[Math.floor(Math.random() * otherUpgrades.length)];
+          ship[randomUp] = 1;
+
+          // Apply upgrade side effects
+          if (randomUp === 'armor') {
+            const bonus = 4 + 0.10 * 15; // 5.5
+            ship.maxArmor = (ship.maxArmor || 0) + bonus;
+            ship.armorPoints = (ship.armorPoints || 0) + bonus;
+          } else if (randomUp === 'munitions') {
+            ship.splashDamage = 1;
+          } else if (randomUp === 'fuel_tanker') {
+            ship.maxsupplies = 15;
+          } else if (randomUp === 'shields') {
+            ship.shieldPoints = 3;
+          }
+
+          // Load full supplies/marines/bombs/fuel first
+          ship.fuel = ship.getMaxFuel();
+          ship.bombs = ship.getMaxBombs();
+          ship.marineCount = ship.marines * ship.maxHealth;
+          ship.supplies = ship.maxsupplies;
+          ship.shieldPoints = 3 * (ship.shields || 0);
+
+          // After this add 30 supplies to the first 3 corvettes
+          ship.supplies += 30;
+        } else {
+          // Then also 2 others (5 in all) with a munitions upgrade, armor and marines.
+          ship.munitions = 1;
+          ship.splashDamage = 1;
+          ship.armor = 1;
+          const armorBonus = 4 + 0.10 * 15; // 5.5
+          ship.maxArmor = (ship.maxArmor || 0) + armorBonus;
+          ship.armorPoints = (ship.armorPoints || 0) + armorBonus;
+          ship.marines = 1;
+
+          // Load full supplies/marines/bombs/fuel/shields
+          ship.fuel = ship.getMaxFuel();
+          ship.bombs = ship.getMaxBombs();
+          ship.marineCount = ship.marines * ship.maxHealth;
+          ship.supplies = ship.maxsupplies;
+          ship.shieldPoints = 3 * (ship.shields || 0);
+        }
+
+        this.ships.push(ship);
+      }
+
+      player.builtClasses = player.builtClasses || {};
+      player.builtClasses['corvette'] = true;
+      player.buildCounts = player.buildCounts || {};
+      player.buildCounts['corvette'] = (player.buildCounts['corvette'] || 0) + 5;
+
+      player.planetCount = 0;
+      player.needsPlanet = false;
+      player.totalCapacity = 0;
+      player.isAlive = true;
+      this.recalculateResourceRarities();
+      return true;
+    }
+
     if (!isNatural) {
       // Create a new homeworld planet!
       const parsedVal = parseInt(hwSizeSetting, 10);
@@ -674,41 +916,50 @@ export class Game {
             groupFiltered = candidatesWithGroupDist.slice(0, Math.max(1, Math.floor(candidatesWithGroupDist.length * 0.1)));
           }
 
-          // Honey hole avoidance filter
-          const withEconomy = groupFiltered.map(c => ({
-            ...c,
-            economy: getEconomyWithin400(c.x, c.y)
-          }));
-          const threshold = avgEconomy * 1.5;
-          let honeyHoleFiltered = withEconomy.filter(c => c.economy <= threshold);
-          if (honeyHoleFiltered.length === 0) {
-            // Fallback: keep bottom 50% with lowest economy
-            withEconomy.sort((a, b) => a.economy - b.economy);
-            honeyHoleFiltered = withEconomy.slice(0, Math.max(1, Math.floor(withEconomy.length / 2)));
-          }
-          groupFiltered = honeyHoleFiltered;
+          // Honey hole avoidance filter metered by starting credits
+          const startingCredits = (this.settings && this.settings.startingCredits !== undefined) ? this.settings.startingCredits : 0;
+          const maxAllowedEconomy = avgEconomy * (2 + startingCredits / 250);
 
-          if (existingHomeworlds.length === 0) {
-            // First homeworld: pick the one closest to a group (minimizes groupDist)
-            groupFiltered.sort((a, b) => a.groupDist - b.groupDist);
-            bestPos = groupFiltered[0];
-          } else {
-            // Pick candidate that maximizes minimum distance to other homeworlds
-            let bestCandidate = null;
-            let bestMinHwDist = -1;
-            for (const c of groupFiltered) {
-              const minDist = Math.min(...existingHomeworlds.map(h => {
-                const dx = h.x - c.x;
-                const dy = h.y - c.y;
-                return Math.sqrt(dx * dx + dy * dy);
-              }));
-              if (minDist > bestMinHwDist) {
-                bestMinHwDist = minDist;
-                bestCandidate = c;
-              }
+          const candidatesWithInfo = groupFiltered.map(c => {
+            const minDist = existingHomeworlds.length > 0 ? Math.min(...existingHomeworlds.map(h => {
+              const dx = h.x - c.x;
+              const dy = h.y - c.y;
+              return Math.sqrt(dx * dx + dy * dy);
+            })) : Infinity;
+            return {
+              x: c.x,
+              y: c.y,
+              groupDist: c.groupDist,
+              economy: getEconomyWithin400(c.x, c.y),
+              minHwDist: minDist
+            };
+          });
+
+          // Filter for "not near another player" (distance >= 250px)
+          let notNear = candidatesWithInfo;
+          if (existingHomeworlds.length > 0) {
+            notNear = candidatesWithInfo.filter(c => c.minHwDist >= 250);
+            if (notNear.length === 0) {
+              // Fallback: keep top 50% furthest from other homeworlds
+              candidatesWithInfo.sort((a, b) => b.minHwDist - a.minHwDist);
+              notNear = candidatesWithInfo.slice(0, Math.max(1, Math.floor(candidatesWithInfo.length / 2)));
             }
-            bestPos = bestCandidate;
-            maxMinDist = bestMinHwDist;
+          }
+
+          // Filter for economy <= maxAllowedEconomy
+          let economyFiltered = notNear.filter(c => c.economy <= maxAllowedEconomy);
+          if (economyFiltered.length === 0) {
+            // Fallback: keep bottom 50% with lowest economy
+            notNear.sort((a, b) => a.economy - b.economy);
+            economyFiltered = notNear.slice(0, Math.max(1, Math.floor(notNear.length / 2)));
+          }
+
+          // Sort by economy descending to target the HIGHEST economy below the threshold
+          economyFiltered.sort((a, b) => b.economy - a.economy);
+          bestPos = economyFiltered[0];
+          
+          if (bestPos && existingHomeworlds.length > 0) {
+            maxMinDist = bestPos.minHwDist;
           }
           break; // Found a position, stop trying smaller spacings
         }
@@ -727,42 +978,9 @@ export class Game {
       const neutralPlanets = this.planets.filter(p => p.owner === null && !p.isSuperPlanet);
       if (neutralPlanets.length === 0) return false;
 
-      let availableCandidates = neutralPlanets;
-
-      // Honey hole avoidance filter for existing planets
-      const withEconomy = availableCandidates.map(p => ({
-        planet: p,
-        economy: getEconomyWithin400(p.x, p.y)
-      }));
-      const threshold = avgEconomy * 1.5;
-      let nonHoneyHoles = withEconomy.filter(item => item.economy <= threshold);
-      if (nonHoneyHoles.length === 0) {
-        // Fallback: keep bottom 50% with lowest economy
-        withEconomy.sort((a, b) => a.economy - b.economy);
-        nonHoneyHoles = withEconomy.slice(0, Math.max(1, Math.floor(withEconomy.length / 2)));
-      }
-      availableCandidates = nonHoneyHoles.map(item => item.planet);
-
-      if (player.isAI && player !== this.monsterPlayer) {
-        const preferred = availableCandidates.filter(p => {
-          // Skip if in human gravity well
-          if (this.isPlanetInHumanGravityWell(p)) return false;
-          // Skip if FOW is enabled and visible to human (66% chance)
-          if (this.settings && this.settings.fogOfWar) {
-            if (this.isPlanetVisibleToHuman(p) && Math.random() < 0.66) {
-              return false;
-            }
-          }
-          return true;
-        });
-        if (preferred.length > 0) {
-          availableCandidates = preferred;
-        }
-      }
-
       if (player === this.monsterPlayer) {
         // Monster gets the smallest planet
-        let candidates = [...availableCandidates];
+        let candidates = [...neutralPlanets];
         const nearGroup = candidates.filter(p => getGroupDist(p) <= 320);
         if (nearGroup.length > 0) {
           candidates = nearGroup;
@@ -770,61 +988,46 @@ export class Game {
         candidates.sort((a, b) => a.maxShips - b.maxShips);
         targetPlanet = candidates[0];
       } else {
-        const humanPlanets = this.planets.filter(p => p.owner && !p.owner.isAI);
-        
-        if (!player.isAI && humanPlanets.length > 0) {
-          // Human player: prioritize candidates with maxShips > 115, sorted by distance to nearest human planet descending
-          let candidatePlanets = availableCandidates.filter(p => p.maxShips > 115);
-          if (candidatePlanets.length > 0) {
-            const nearGroup = candidatePlanets.filter(p => getGroupDist(p) <= 320);
-            if (nearGroup.length > 0) {
-              candidatePlanets = nearGroup;
-            }
-            candidatePlanets.sort((a, b) => {
-              const distA = humanPlanets.reduce((min, hp) => Math.min(min, (a.x - hp.x)**2 + (a.y - hp.y)**2), Infinity);
-              const distB = humanPlanets.reduce((min, hp) => Math.min(min, (b.x - hp.x)**2 + (b.y - hp.y)**2), Infinity);
-              return distB - distA; // Descending order (furthest first)
-            });
-            targetPlanet = candidatePlanets[0];
-          }
-        }
-        
-        if (!targetPlanet) {
-          let candidatePlanets = availableCandidates.filter(p => p.maxShips > 115 && humanPlanets.every(hp => {
-            const dx = p.x - hp.x;
-            const dy = p.y - hp.y;
-            return dx*dx + dy*dy >= 40000; // 200^2
-          }));
+        // Regular players: honey hole avoidance filter for existing planets metered by starting credits
+        const startingCredits = (this.settings && this.settings.startingCredits !== undefined) ? this.settings.startingCredits : 0;
+        const maxAllowedEconomy = avgEconomy * (2 + startingCredits / 250);
 
-          if (candidatePlanets.length > 0) {
-            const nearGroup = candidatePlanets.filter(p => getGroupDist(p) <= 320);
-            if (nearGroup.length > 0) {
-              candidatePlanets = nearGroup;
-            }
-            candidatePlanets.sort((a, b) => a.maxShips - b.maxShips); // smallest > 115
-            targetPlanet = candidatePlanets[0];
-          } else {
-            // Fallback 1: smallest > 115 regardless of distance
-            let anyLarge = availableCandidates.filter(p => p.maxShips > 115);
-            if (anyLarge.length > 0) {
-              const nearGroup = anyLarge.filter(p => getGroupDist(p) <= 320);
-              if (nearGroup.length > 0) {
-                anyLarge = nearGroup;
-              }
-              anyLarge.sort((a, b) => a.maxShips - b.maxShips);
-              targetPlanet = anyLarge[0];
-            } else {
-              // Fallback 2: highest maxShips overall
-              let fallbackList = [...availableCandidates];
-              const nearGroup = fallbackList.filter(p => getGroupDist(p) <= 320);
-              if (nearGroup.length > 0) {
-                fallbackList = nearGroup;
-              }
-              fallbackList.sort((a, b) => b.maxShips - a.maxShips);
-              targetPlanet = fallbackList[0];
-            }
+        const occupiedPlanets = this.planets.filter(p => p.owner !== null);
+        const candidatesWithInfo = neutralPlanets.map(p => {
+          const minDist = occupiedPlanets.length > 0 ? Math.min(...occupiedPlanets.map(op => {
+            const dx = op.x - p.x;
+            const dy = op.y - p.y;
+            return Math.sqrt(dx * dx + dy * dy);
+          })) : Infinity;
+          return {
+            planet: p,
+            economy: getEconomyWithin400(p.x, p.y),
+            minOccupiedDist: minDist
+          };
+        });
+
+        // Filter for "not near another player" (distance >= 250px)
+        let notNear = candidatesWithInfo;
+        if (occupiedPlanets.length > 0) {
+          notNear = candidatesWithInfo.filter(c => c.minOccupiedDist >= 250);
+          if (notNear.length === 0) {
+            // Fallback: keep top 50% furthest from other players
+            candidatesWithInfo.sort((a, b) => b.minOccupiedDist - a.minOccupiedDist);
+            notNear = candidatesWithInfo.slice(0, Math.max(1, Math.floor(candidatesWithInfo.length / 2)));
           }
         }
+
+        // Filter for economy <= maxAllowedEconomy
+        let economyFiltered = notNear.filter(c => c.economy <= maxAllowedEconomy);
+        if (economyFiltered.length === 0) {
+          // Fallback: keep bottom 50% with lowest economy
+          notNear.sort((a, b) => a.economy - b.economy);
+          economyFiltered = notNear.slice(0, Math.max(1, Math.floor(notNear.length / 2)));
+        }
+
+        // Sort by economy descending to target the HIGHEST economy below the threshold
+        economyFiltered.sort((a, b) => b.economy - a.economy);
+        targetPlanet = economyFiltered[0].planet;
       }
     }
 

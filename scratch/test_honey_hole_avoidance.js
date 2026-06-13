@@ -3,68 +3,91 @@ import { Player } from '../src/entities/Player.js';
 import { Planet } from '../src/entities/Planet.js';
 import assert from 'assert';
 
-console.log("Starting Honey Hole Avoidance and Default Starting Credits Test...");
+console.log("Starting Metered Starting Credits Homeworld Placement Test...");
 
-// 1. Verify that a new player is constructed with 0 credits by default.
+// 1. Verify Player credit initialization
 const player = new Player('p1', '#00ff00', false);
 assert.strictEqual(player.credits, 0, "Default Player credits must be 0");
 console.log("✓ Player default credits is 0");
 
 // 2. Setup game and mock planets.
-const game = new Game({ width: 2000, height: 2000 });
-game.settings = {
-  homeworldSize: "120",
-  startingCredits: 0
-};
-game.isRunning = true;
-game.planets = [];
+// We will place 3 groups of planets to test metered honey hole thresholds:
+// - Group A (Honey Hole) at (200, 200): 5 planets with maxShips = 500 (total local economy ~2500)
+// - Group B (Mid Economy) at (800, 800): 5 planets with maxShips = 120 (total local economy ~600)
+// - Group C (Low Economy) at (1500, 1500): 5 planets with maxShips = 20 (total local economy ~100)
+function setupTestGame(startingCredits) {
+  const game = new Game({ width: 2000, height: 2000 });
+  game.settings = {
+    homeworldSize: "natural", // forces existing neutral planet assignment to test selecting a candidate
+    startingCredits: startingCredits
+  };
+  game.isRunning = true;
+  game.planets = [];
 
-// Create a honey hole of non-homeworld planets at (200, 200)
-// High maxShips (e.g. 500) within 400px of (200, 200).
-for (let i = 0; i < 5; i++) {
-  const x = 200 + i * 20;
-  const y = 200 + i * 20;
-  const planet = new Planet(i + 1, x, y, 40, null, 100, 2000, 2000);
-  planet.maxShips = 500;
-  game.planets.push(planet);
+  // Group A (Honey Hole)
+  for (let i = 0; i < 5; i++) {
+    const p = new Planet(i + 1, 200 + i * 10, 200 + i * 10, 30, null, 100, 2000, 2000);
+    p.maxShips = 500;
+    game.planets.push(p);
+  }
+
+  // Group B (Mid Economy)
+  for (let i = 0; i < 5; i++) {
+    const p = new Planet(i + 6, 800 + i * 10, 800 + i * 10, 25, null, 60, 2000, 2000);
+    p.maxShips = 120;
+    game.planets.push(p);
+  }
+
+  // Group C (Low Economy)
+  for (let i = 0; i < 5; i++) {
+    const p = new Planet(i + 11, 1500 + i * 10, 1500 + i * 10, 15, null, 10, 2000, 2000);
+    p.maxShips = 20;
+    game.planets.push(p);
+  }
+
+  return game;
 }
 
-// Create some isolated low-economy planets at (1500, 1500)
-for (let i = 0; i < 5; i++) {
-  const x = 1500 + i * 20;
-  const y = 1500 + i * 20;
-  const planet = new Planet(i + 10, x, y, 20, null, 20, 2000, 2000);
-  planet.maxShips = 30;
-  game.planets.push(planet);
+// TEST CASE 1: startingCredits = 0
+// maxAllowedEconomy = avgEconomy * 2
+// avgEconomy is around 1066. maxAllowedEconomy = ~2133.
+// Honey hole (~2500) is ABOVE threshold (excluded).
+// Mid economy (~600) is BELOW threshold.
+// Low economy (~100) is BELOW threshold.
+// Highest economy below threshold is Mid economy, so it should select a planet from Group B.
+{
+  const game0 = setupTestGame(0);
+  const p1 = new Player('p1', '#00ff00', false);
+  game0.allPlayers = [p1];
+  game0.assignPlanet(p1);
+
+  const assigned = game0.planets.find(p => p.owner === p1);
+  assert.ok(assigned, "Planet must be assigned to player");
+  console.log(`With 0 credits, assigned planet maxShips: ${assigned.maxShips} at (${assigned.x.toFixed(1)}, ${assigned.y.toFixed(1)})`);
+  
+  // It should be one of the Group B planets (around x = 800)
+  assert.ok(assigned.x >= 700 && assigned.x <= 900, "Should select from Mid Economy (Group B) when 0 credits");
+  console.log("✓ Correctly selected Mid Economy planet, avoiding Honey Hole");
 }
 
-// 3. Test assignPlanet for a new player (this will try to create a new homeworld)
-// It should place the homeworld far from the (200, 200) cluster since that's a honey hole.
-game.allPlayers = [player];
-game.assignPlanet(player);
+// TEST CASE 2: startingCredits = 250
+// maxAllowedEconomy = avgEconomy * 3
+// avgEconomy is around 1066. maxAllowedEconomy = ~3200.
+// Honey hole (~2500) is BELOW threshold.
+// Highest economy below threshold is Honey Hole, so it should select a planet from Group A.
+{
+  const game250 = setupTestGame(250);
+  const p1 = new Player('p1', '#00ff00', false);
+  game250.allPlayers = [p1];
+  game250.assignPlanet(p1);
 
-const createdPlanet = game.planets.find(p => p.owner === player);
-assert.ok(createdPlanet, "Homeworld planet should be created and owned by player");
+  const assigned = game250.planets.find(p => p.owner === p1);
+  assert.ok(assigned, "Planet must be assigned to player");
+  console.log(`With 250 credits, assigned planet maxShips: ${assigned.maxShips} at (${assigned.x.toFixed(1)}, ${assigned.y.toFixed(1)})`);
+  
+  // It should be one of the Group A planets (around x = 200)
+  assert.ok(assigned.x >= 100 && assigned.x <= 300, "Should select from Honey Hole (Group A) when 250 credits");
+  console.log("✓ Correctly selected Honey Hole planet because starting credits allows it");
+}
 
-// Calculate distance to (200, 200)
-const distToHoneyHole = Math.sqrt((createdPlanet.x - 200) ** 2 + (createdPlanet.y - 200) ** 2);
-console.log(`Created Homeworld at (${createdPlanet.x.toFixed(1)}, ${createdPlanet.y.toFixed(1)})`);
-console.log(`Distance to Honey Hole center: ${distToHoneyHole.toFixed(1)}px`);
-assert.ok(distToHoneyHole > 400, "Homeworld must not be placed within 400px of the honey hole!");
-console.log("✓ Homeworld placed successfully away from honey hole");
-
-// 4. Test assignPlanet to existing neutral planet (noNatural = true)
-game.settings.homeworldSize = "natural"; // forces existing neutral planet assignment
-const p2 = new Player('p2', '#ff0000', false);
-game.allPlayers.push(p2);
-game.assignPlanet(p2);
-
-const assignedPlanet = game.planets.find(p => p.owner === p2);
-assert.ok(assignedPlanet, "An existing planet should be assigned to p2");
-const distToHoneyHole2 = Math.sqrt((assignedPlanet.x - 200) ** 2 + (assignedPlanet.y - 200) ** 2);
-console.log(`Assigned planet at (${assignedPlanet.x.toFixed(1)}, ${assignedPlanet.y.toFixed(1)})`);
-console.log(`Distance to Honey Hole center: ${distToHoneyHole2.toFixed(1)}px`);
-assert.ok(distToHoneyHole2 > 400, "Assigned planet must not be within the honey hole!");
-console.log("✓ Neutral planet assigned successfully away from honey hole");
-
-console.log("All tests passed!");
+console.log("All tests passed successfully!");
