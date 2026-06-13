@@ -89,6 +89,7 @@ console.log("=== Testing Anomaly Beaming / Completion Delay ===");
   ship.labs = 100; // high labs to make research progress very fast
   ship.cruiserRadarRange = () => 150;
   ship.update = () => {};
+  ship.checkSurvivalRoll = () => true;
   game.ships.push(ship);
 
   // 1. Tick 1 (12000ms): 100 * 12000 / 120000 = 10 completions, progress reaches difficulty (5)

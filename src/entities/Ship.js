@@ -83,6 +83,10 @@ export class Ship {
     this.maxArmor = 0;
     this.armorPoints = 0;
     this.shields = 0;
+    this.shieldPoints = 0;
+    this.shieldShowTimer = 0;
+    this.inEffectiveStorm = false;
+    this.timeSinceLastMoved = 0;
     this.engine = 0;
     this.munitions = 0;
     this.splashDamage = 0;
@@ -693,6 +697,9 @@ export class Ship {
 
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
+    if (this.isCruiser) {
+      this.shieldShowTimer = Math.max(0, (this.shieldShowTimer || 0) - deltaTime / 1000);
+    }
     if (this.anomalyDiscoveryCooldown > 0) {
       this.anomalyDiscoveryCooldown = Math.max(0, this.anomalyDiscoveryCooldown - deltaTime);
     }
@@ -782,6 +789,8 @@ export class Ship {
               } else if (key === 'fuel_tanker') {
                 this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + 5 * val);
                 this.maxsupplies = val * 15;
+              } else if (key === 'shields') {
+                this.shieldPoints = 3 * val;
               }
             }
           }
@@ -1386,6 +1395,8 @@ export class Ship {
             this.maxsupplies = (this.fuel_tanker || 0) * 15;
           } else if (this.upgradeProp === 'marines') {
             // Just capacity increases; do not load free marines upon upgrade completion
+          } else if (this.upgradeProp === 'shields') {
+            this.shieldPoints = 3 * this.shields;
           }
           
           console.log(`[Cruiser Upgrade Complete] Ship ${this.id} upgraded ${this.upgradeProp} to level ${this[this.upgradeProp]}`);
@@ -1932,6 +1943,9 @@ export class Ship {
             }
           }
 
+          if (enemyShip.isCruiser) {
+            enemyShip.shieldShowTimer = 30;
+          }
           if (Math.random() < finalHitChance) {
             const damageDealt = enemyShip.takeDamage(explosions, this, false, targetData.targetType || 'side');
             if (damageDealt && this.owner) {
@@ -2164,6 +2178,12 @@ export class Ship {
           const minHitChance = (this.maxHealth > 0 && !this.isAmoeba) ? 0.10 : 0.01;
           finalHitChance = Math.min(1.0, Math.max(minHitChance, finalHitChance + friendlyPlanetBoost - defenderPlanetPenalty - hazardPenalty));
           
+          if (this.isCruiser) {
+            this.shieldShowTimer = 30;
+          }
+          if (enemyShip.isCruiser) {
+            enemyShip.shieldShowTimer = 30;
+          }
           const isHit = Math.random() < finalHitChance;
           if (isFirstVolleyShot) {
             if (game && game.accuracyEvents) {
@@ -2372,6 +2392,9 @@ export class Ship {
             }
             
             shotsFired++;
+            if (this.isCruiser) {
+              this.shieldShowTimer = 30;
+            }
             
             let destroyedDefender = false;
             let finalPlanetHitChance = this.isAmoeba ? (hitChance / 2) : hitChance;
@@ -4347,6 +4370,9 @@ export class Ship {
       }
 
       let supplyShipForFuel = this.findNearbySupplyShip(allShips, true);
+      if (this.fuel_tanker > 0 && (this.supplies || 0) > 0 && (this.timeNotMoved || 0) >= 3.0) {
+        supplyShipForFuel = this;
+      }
       if (supplyShipForFuel === this) {
         if ((this.fuel || 0) <= this.getMaxFuel() - 2) {
           this.isSelfRefueling = true;
@@ -4585,6 +4611,24 @@ export class Ship {
                 age: 0
               });
             }
+          }
+        }
+      }
+
+      // Shield regeneration
+      const maxShields = 3 * (this.shields || 0);
+      if ((this.shields || 0) > 0 && (this.shieldPoints || 0) < maxShields) {
+        if (!this.inEffectiveStorm && (this.fuel || 0) > 0) {
+          const baseHealRateInFriendlyWell = 6 * (1 + 0.50 * (this.damagecontrol || 0));
+          const shieldRegenRatePerMin = 4 * baseHealRateInFriendlyWell;
+          let shieldRegenAmount = (deltaTime / 60000) * shieldRegenRatePerMin;
+          const neededShields = maxShields - (this.shieldPoints || 0);
+          shieldRegenAmount = Math.min(shieldRegenAmount, neededShields);
+          const maxShieldsFromFuel = (this.fuel || 0) / 0.1;
+          shieldRegenAmount = Math.min(shieldRegenAmount, maxShieldsFromFuel);
+          if (shieldRegenAmount > 0) {
+            this.shieldPoints = (this.shieldPoints || 0) + shieldRegenAmount;
+            this.fuel = Math.max(0, (this.fuel || 0) - 0.1 * shieldRegenAmount);
           }
         }
       }
@@ -5073,6 +5117,8 @@ export class Ship {
       this.insideHazards = new Set();
     }
 
+    this.inEffectiveStorm = false;
+
     // Hazard checks (Nebula slowdown + Entry damage roll for Storms/Minefields)
     if (ionStorms) {
       const currentHazards = new Set();
@@ -5119,6 +5165,9 @@ export class Ship {
             const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
             const sRed = this.getLocalXpBonus();
             const effectiveIntensity = Math.max(0, h.intensity - sRed - (eRed + tRed) / 2 - knowledge);
+            if (effectiveIntensity > 0) {
+              this.inEffectiveStorm = true;
+            }
             const V0 = effectiveSpeed;
             let speed = V0;
             let remaining = effectiveIntensity;
@@ -5160,6 +5209,9 @@ export class Ship {
             const sRed = this.getLocalXpBonus();
 
             const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+            if (effectiveIntensity > 0) {
+              this.inEffectiveStorm = true;
+            }
             const normalSpeed = effectiveSpeed;
             const safeSpeed = normalSpeed - effectiveIntensity;
             effectiveSpeed = Math.max(5, safeSpeed);
@@ -5334,6 +5386,12 @@ export class Ship {
       }
     }
     this.currentSpeed = effectiveSpeed;
+    const isMoving = (moveDistanceToDest > 0 && effectiveSpeed > 0);
+    if (isMoving) {
+      this.timeSinceLastMoved = 0;
+    } else {
+      this.timeSinceLastMoved = (this.timeSinceLastMoved || 0) + (deltaTime / 1000);
+    }
 
   }
 
@@ -5400,7 +5458,13 @@ export class Ship {
 
   takeDamage(explosions, attacker = null, isHazard = false, targetType = null) {
     if (this.health >= 0) {
+      if (this.isCruiser) {
+        this.shieldShowTimer = 30;
+      }
       if (attacker) {
+        if (attacker.isCruiser) {
+          attacker.shieldShowTimer = 30;
+        }
         if (attacker.owner !== this.owner) {
           this.lastTimeAttacked = Date.now();
         }
@@ -5429,9 +5493,7 @@ export class Ship {
         let shrugChance = 0;
         if (!this.isAmoeba) {
           const baseDeflection = this.maxHealth + (techBonus + expBonus + shipExpBonus);
-          const deflectionRem = 100 - baseDeflection;
-          const shieldDeflectionBonus = (this.shields || 0) * (deflectionRem / 5);
-          shrugChance = (baseDeflection + shieldDeflectionBonus) / 100;
+          shrugChance = baseDeflection / 100;
           if ((this.bombs || 0) < 1) {
             shrugChance /= 2;
           }
@@ -5490,8 +5552,20 @@ export class Ship {
       const cruiserCheck = this.maxHealth > 0 && !this.isAmoeba;
       let damageAmt = (cruiserCheck && isHazard) ? (Math.floor(Math.random() * 6) + 1) : 1;
       
-      // 1. Deplete armor first
-      if (cruiserCheck && (this.armorPoints || 0) > 0) {
+      // 0. Deplete shields first (if shields are active and working)
+      const shieldsActive = cruiserCheck && (this.shields || 0) > 0 && !this.inEffectiveStorm && (this.fuel || 0) > 0 && (this.shieldPoints || 0) > 0;
+      if (shieldsActive && damageAmt > 0) {
+        if (this.shieldPoints >= damageAmt) {
+          this.shieldPoints -= damageAmt;
+          damageAmt = 0;
+        } else {
+          damageAmt -= this.shieldPoints;
+          this.shieldPoints = 0;
+        }
+      }
+
+      // 1. Deplete armor second
+      if (cruiserCheck && (this.armorPoints || 0) > 0 && damageAmt > 0) {
         if (this.armorPoints >= damageAmt) {
           this.armorPoints -= damageAmt;
           damageAmt = 0;

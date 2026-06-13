@@ -139,7 +139,8 @@ const testResearchCyclesAndRewards = () => {
   game.planets.push(planet1);
 
   // Run update to trigger instant completion
-  game.update(1000);
+  game.update(50); // trigger completing state
+  game.update(3000); // let completing timer expire
   console.log(`Instant anomaly researched status: ${planet1.anomaly.researched}`);
   if (!planet1.anomaly.researched) {
     console.error("FAILED: Expected difficulty <= 0 anomaly to be instantly researched");
@@ -168,7 +169,12 @@ const testResearchCyclesAndRewards = () => {
   // Simulate ticks until anomaly is researched.
   // One cycle = accumulatedTech >= 1.0. With 4 labs, xpMultiplier = 1, dt = 30000ms:
   // knowledgeGained = 4 * 30000 / 120000 = 1.0.
-  // Let's run 5 ticks of 30000ms to hit progress 5.
+  // With rate tripling (difficulty 5 < threshold 12), rate is tripled:
+  // knowledgeGained = 3.0 per tick.
+  // Tick 1: progress = 3.
+  // Tick 2: progress = 6. Anomaly starts completing.
+  // Tick 3: completing timer finishes.
+  // Total completions = 6.
   for (let i = 0; i < 5; i++) {
     game.update(30000);
   }
@@ -182,8 +188,8 @@ const testResearchCyclesAndRewards = () => {
     process.exit(1);
   }
 
-  if (ship.expScore !== 5) {
-    console.error(`FAILED: Expected ship XP score to increase by 5 (1 per completion), got ${ship.expScore}`);
+  if (ship.expScore !== 6) {
+    console.error(`FAILED: Expected ship XP score to increase by 6 (rate-tripled), got ${ship.expScore}`);
     process.exit(1);
   }
 
@@ -226,10 +232,13 @@ const testResearchCyclesAndRewards = () => {
 
   // Run update for one completion cycle (with labs = 4, xpMultiplier = 1.90, dt = 30000ms):
   // knowledgeGained = 4 * 30000 * 1.90 / 120000 = 1.90.
+  // Under the rate tripling conditions, the rate is tripled because remaining difficulty is 10 < threshold 3012.
+  // Tripled knowledgeGained = 1.90 * 3 = 5.70.
+  // This yields 5 completions in 1 tick, giving 5 tech score points.
   game.update(30000);
   console.log(`Player techScore after 100% chance cycle: ${human.techScore}`);
-  if (human.techScore !== 1) {
-    console.error(`FAILED: Expected player to receive exactly 1 tech point, got ${human.techScore}`);
+  if (human.techScore !== 5) {
+    console.error(`FAILED: Expected player to receive exactly 5 tech points (rate-tripled), got ${human.techScore}`);
     process.exit(1);
   }
 

@@ -1779,7 +1779,7 @@ function getPlanetTradeIncomePerMin(planet) {
             let currentY = s.y - size - 4;
             
             const maxFuel = getMaxFuel(s);
-            if (s.fuel !== undefined && s.fuel < maxFuel) {
+            if (s.fuel !== undefined) {
               currentY -= barH;
               ctxTile.fillStyle = '#555';
               ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
@@ -1790,18 +1790,16 @@ function getPlanetTradeIncomePerMin(planet) {
             
             if (s.bombs !== undefined) {
               const maxBombs = getMaxBombs(s);
-              if (s.bombs < maxBombs) {
-                currentY -= barH;
-                ctxTile.fillStyle = '#3a3a3a';
-                ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
-                ctxTile.fillStyle = '#a0a0a0';
-                ctxTile.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.bombs) / maxBombs), barH);
-                currentY -= 1;
-              }
+              currentY -= barH;
+              ctxTile.fillStyle = '#3a3a3a';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctxTile.fillStyle = '#a0a0a0';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.bombs) / maxBombs), barH);
+              currentY -= 1;
             }
             
             const shipExpBonus = Math.sqrt(s.expScore || 0);
-            if ((s.expScore || 0) >= 1) {
+            if (s.isCruiser && (s.expScore || 0) >= 1) {
               currentY -= barH;
               ctxTile.fillStyle = '#1a3344';
               ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
@@ -1809,14 +1807,41 @@ function getPlanetTradeIncomePerMin(planet) {
               ctxTile.fillRect(s.x - barW / 2, currentY, barW * Math.min(1.0, shipExpBonus / 20), barH);
               currentY -= 1;
             }
-            
-            if (s.health < s.maxHealth) {
+
+            if (s.isCruiser && (s.commandPoints || 0) > 0) {
               currentY -= barH;
-              ctxTile.fillStyle = 'red';
+              ctxTile.fillStyle = '#3a0f0f';
               ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
-              ctxTile.fillStyle = '#0f0';
-              ctxTile.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.health) / s.maxHealth), barH);
+              ctxTile.fillStyle = '#800000';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW * Math.min(1.0, s.commandPoints / 20), barH);
+              currentY -= 1;
             }
+
+            if (s.isCruiser && s.maxsupplies > 0) {
+              currentY -= barH;
+              ctxTile.fillStyle = '#3a1a4a';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctxTile.fillStyle = '#a855f7';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.supplies || 0) / s.maxsupplies), barH);
+              currentY -= 1;
+            }
+
+            if (s.isCruiser && (s.diplomat || 0) > 0) {
+              currentY -= barH;
+              ctxTile.fillStyle = '#443d00';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctxTile.fillStyle = '#ffff00';
+              const maxParley = (s.diplomat || 0) * 3;
+              const ratio = maxParley > 0 ? Math.min(1.0, Math.max(0, s.parley || 0) / maxParley) : 0;
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW * ratio, barH);
+              currentY -= 1;
+            }
+            
+            currentY -= barH;
+            ctxTile.fillStyle = 'red';
+            ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
+            ctxTile.fillStyle = '#0f0';
+            ctxTile.fillRect(s.x - barW / 2, currentY, barW * (Math.max(0, s.health) / s.maxHealth), barH);
           }
 
           let modeText = '';
@@ -2863,9 +2888,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const shipExpBonus = Math.sqrt(shipExp) + (hs.commandPoints || 0);
 
         const baseDeflection = hs.maxHealth + (techBonus + expBonus + shipExpBonus);
-        const deflectionRem = 100 - baseDeflection;
-        const shieldDeflectionBonus = (hs.shields || 0) * (deflectionRem / 5);
-        let shrugChance = Math.floor(baseDeflection + shieldDeflectionBonus);
+        let shrugChance = Math.floor(baseDeflection);
         if ((hs.bombs || 0) < 1) {
           shrugChance = Math.floor(shrugChance / 2);
         }
@@ -2873,7 +2896,7 @@ function getPlanetTradeIncomePerMin(planet) {
           shrugChance += 10;
         }
         shrugChance = Math.min(90, shrugChance);
-        let deflectionLabel = hs.shields > 0 ? `Deflection (${hs.shields})` : 'Deflection';
+        let deflectionLabel = 'Deflection';
         if (hs.specialduranium && hs.specialduranium > 0) {
           deflectionLabel += '*';
         }
@@ -11033,9 +11056,7 @@ function getPlanetTradeIncomePerMin(planet) {
             const shipExpBonus = Math.sqrt(shipExp);
 
             const baseDeflection = hs.maxHealth + (techBonus + expBonus + shipExpBonus);
-            const deflectionRem = 100 - baseDeflection;
-            const shieldDeflectionBonus = (hs.shields || 0) * (deflectionRem / 5);
-            let shrugChance = Math.floor(baseDeflection + shieldDeflectionBonus);
+            let shrugChance = Math.floor(baseDeflection);
             if ((hs.bombs || 0) < 1) {
               shrugChance = Math.floor(shrugChance / 2);
             }
@@ -11043,7 +11064,7 @@ function getPlanetTradeIncomePerMin(planet) {
               shrugChance += 10;
             }
             shrugChance = Math.min(90, shrugChance);
-            let deflectionLabel = hs.shields > 0 ? `Deflection (${hs.shields})` : 'Deflection';
+            let deflectionLabel = 'Deflection';
             if (hs.specialduranium && hs.specialduranium > 0) {
               deflectionLabel += '*';
             }
@@ -12446,6 +12467,28 @@ function getPlanetTradeIncomePerMin(planet) {
 
             ctx.restore();
           }
+
+          // Draw Cruiser Shields as a yellow circle around the ship if within 30s of firing/being fired upon
+          if (s.isCruiser && (s.shields || 0) > 0 && (s.shieldShowTimer || 0) > 0 && (s.shieldPoints || 0) > 0) {
+            const maxShields = 3 * s.shields;
+            const shieldPct = s.shieldPoints / maxShields;
+            
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, size + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ffff00'; // Yellow
+            
+            if (shieldPct > 0.66) {
+              ctx.lineWidth = 2.5; // Normal width
+            } else if (shieldPct > 0.33) {
+              ctx.lineWidth = 1.25; // Narrow line
+            } else {
+              ctx.lineWidth = 0.5; // Very thin line
+            }
+            
+            ctx.stroke();
+            ctx.restore();
+          }
           
           // Draw research warmup indicator around the ship
           if (s.isActivelyResearching && s.accumulatedTech !== undefined) {
@@ -12734,7 +12777,7 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.fillRect(s.x - barW / 2, currentY, barW * ratio, barH);
               currentY -= 1;
             }
-            
+
             if (s.health < s.maxHealth) {
               currentY -= barH;
               ctx.fillStyle = 'red';

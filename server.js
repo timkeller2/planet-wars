@@ -1928,6 +1928,8 @@ async function bootstrap() {
           armorPoints: s.armorPoints || 0,
           maxArmor: s.maxArmor || 0,
           shields: s.shields || 0,
+          shieldPoints: s.shieldPoints !== undefined ? s.shieldPoints : 0,
+          shieldShowTimer: s.shieldShowTimer !== undefined ? s.shieldShowTimer : 0,
           engine: s.engine || 0,
           munitions: s.munitions || 0,
           splashDamage: s.splashDamage || 0,
