@@ -658,13 +658,14 @@
               <li><strong>Research Process:</strong> Cruisers with labs progress research at an experience-boosted rate. Each completed research cycle has a chance: <code>(local ship xp bonus * 3 + player xp bonus - player tech bonus)%</code> to reward the player with 🧪 tech points.</li>
               <li><strong>Cruiser XP:</strong> Completing a research cycle awards +1 local XP to the cruiser.</li>
               <li><strong>Instant Resolution:</strong> Anomalies with a difficulty of 0 or negative can be resolved instantly by any cruiser in range.</li>
-              <li><strong>Completion Rewards:</strong> Fully researching an anomaly yields one of 5 random rewards:
+              <li><strong>Completion Rewards:</strong> Fully researching an anomaly yields one of 6 random rewards:
                 <ul style="margin-top: 6px;">
                   <li><strong>Upgrade Discounts:</strong> <code>1 + floor(difficulty / 20)</code> discounts of 15% on cruiser upgrade modules.</li>
                   <li><strong>Credits:</strong> <code>(30 + difficulty) * (100 - 200)%</code> credits.</li>
                   <li><strong>Tech Score:</strong> 1/10 of equivalent credit value added directly to tech score.</li>
                   <li><strong>Player XP:</strong> 1/10 of equivalent credit value added to crew experience score.</li>
                   <li><strong>Planet Habitability:</strong> Increases planet habitability by 1/5 of equivalent credit value.</li>
+                  <li><strong>Upgrade Tokens:</strong> <code>1 + floor(credit value / 40)</code> upgrade tokens rewarded directly to the cruiser.</li>
                 </ul>
               </li>
             </ul>

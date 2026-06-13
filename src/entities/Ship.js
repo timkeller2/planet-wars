@@ -126,6 +126,8 @@ export class Ship {
     this.upgradePlanetId = null;
     this.upgradeShipsPaid = 0;
     this.upgradeAccumulator = 0;
+    this.upgradeTokens = 0;
+    this.upgradeUsingToken = false;
     this.patrolReloadTargetPlanetId = null;
     this.planetBombardTimer = 0;
     this.combatCooldown = 0;
@@ -331,8 +333,14 @@ export class Ship {
     if (this.isWarp) {
       range *= 0.25;
     }
-    const techBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
-    range *= (1 + techBonus);
+    const techScore = this.owner ? (this.owner.techScore || 0) : 0;
+    const expScore = this.owner ? (this.owner.expScore || 0) : 0;
+    const playerTechBonus = 0.01 * Math.floor(Math.sqrt(techScore));
+    const playerExpBonus = 0.01 * Math.sqrt(expScore);
+    const shipXpBonus = this.getLocalXpBonus();
+
+    range *= (1 + playerTechBonus + playerExpBonus);
+    range *= (1 + 0.03 * shipXpBonus);
     return range;
   }
 
@@ -1359,69 +1367,117 @@ export class Ship {
     }
 
     if (this.isCruiser && this.isUpgrading) {
-      const planet = allPlanets ? allPlanets.find(p => p.id === this.upgradePlanetId) : null;
-      let minAllowedCredits = 0;
-      if (this.owner && game && game.planets) {
-        const ownsHomeworld = game.planets.some(p => p.homeworldOf === this.owner.id && p.owner && p.owner.id === this.owner.id);
-        if (ownsHomeworld) {
-          minAllowedCredits = -(1000 + (this.owner.totalShips || 0));
-        }
-      }
-      const creditsAvailable = (this.owner && this.owner.useCredits !== false && this.owner.credits !== undefined) ? (this.owner.credits - minAllowedCredits) : 0;
-      if (planet && planet.owner && this.owner && planet.owner.id === this.owner.id && (planet.ships >= 1 || creditsAvailable >= 1)) {
+      if (this.upgradeUsingToken) {
         this.upgradeAccumulator += deltaTime / 1000;
         while (this.upgradeAccumulator >= 0.2 && this.upgradeTimer > 0) {
-          const currentCredits = (this.owner && this.owner.useCredits !== false) ? (this.owner.credits || 0) : 0;
-          const currentCreditsAvailable = (this.owner && this.owner.useCredits !== false) ? (currentCredits - minAllowedCredits) : 0;
-          if (currentCreditsAvailable >= 1) {
-            this.owner.credits -= 1;
-            this.upgradeShipsPaid += 1;
-            this.upgradeTimer = Math.max(0, this.upgradeTimer - 0.2);
-            this.upgradeAccumulator -= 0.2;
-          } else if (planet.ships >= 1) {
-            planet.ships -= 1;
-            this.upgradeShipsPaid += 1;
-            this.upgradeTimer = Math.max(0, this.upgradeTimer - 0.2);
-            this.upgradeAccumulator -= 0.2;
-          } else {
-            break;
-          }
+          this.upgradeTimer = Math.max(0, this.upgradeTimer - 0.2);
+          this.upgradeAccumulator -= 0.2;
         }
         
         if (this.upgradeTimer <= 0) {
           this.upgradeTimer = 0;
           this.isUpgrading = false;
+          this.upgradeUsingToken = false;
           
-          const currentLevel = this[this.upgradeProp] || 0;
-          this[this.upgradeProp] = currentLevel + 1;
+          const prop = this.upgradeProp;
+          const currentLevel = this[prop] || 0;
+          this[prop] = currentLevel + 1;
           
-          if (this.upgradeProp === 'armor') {
-            const upgradeCost = this.upgradeShipsPaid || 0;
+          if (prop === 'armor') {
+            const upgradeCost = 50;
             const duraniumThreshold = upgradeCost / 50;
             let bonus = 4 + 0.10 * this.maxHealth;
             const canUseRes = !!(this.useResources || (this.owner && this.owner.tradeLimitToggle === true));
             if (canUseRes && this.owner && this.owner.resources && (this.owner.resources.duranium || 0) > duraniumThreshold) {
               this.owner.resources.duranium = Math.max(0, (this.owner.resources.duranium || 0) - duraniumThreshold);
               bonus *= 1.5;
-              console.log(`[Armor Upgrade Boosted] Consumed ${duraniumThreshold} duranium. Boosted bonus by 50% to ${bonus}`);
+              console.log(`[Armor Token Upgrade Boosted] Consumed ${duraniumThreshold} duranium. Boosted bonus by 50% to ${bonus}`);
             }
             this.maxArmor = (this.maxArmor || 0) + bonus;
             this.armorPoints = (this.armorPoints || 0) + bonus;
-          } else if (this.upgradeProp === 'munitions') {
+          } else if (prop === 'munitions') {
             this.splashDamage = this.munitions;
-          } else if (this.upgradeProp === 'fuel_tanker') {
-            this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + 5);
+            this.bombs = this.getMaxBombs();
+          } else if (prop === 'fuel_tanker') {
             this.maxsupplies = (this.fuel_tanker || 0) * 15;
-          } else if (this.upgradeProp === 'marines') {
-            // Just capacity increases; do not load free marines upon upgrade completion
-          } else if (this.upgradeProp === 'shields') {
+            this.fuel = this.getMaxFuel();
+            this.supplies = this.maxsupplies;
+          } else if (prop === 'marines') {
+            this.marineCount = (this.marines || 0) * this.maxHealth;
+          } else if (prop === 'shields') {
             this.shieldPoints = 3 * this.shields;
           }
           
-          console.log(`[Cruiser Upgrade Complete] Ship ${this.id} upgraded ${this.upgradeProp} to level ${this[this.upgradeProp]}`);
+          console.log(`[Cruiser Token Upgrade Complete] Ship ${this.id} upgraded ${prop} to level ${this[prop]}`);
           this.upgradeProp = null;
           this.upgradeType = null;
           this.upgradePlanetId = null;
+        }
+      } else {
+        const planet = allPlanets ? allPlanets.find(p => p.id === this.upgradePlanetId) : null;
+        let minAllowedCredits = 0;
+        if (this.owner && game && game.planets) {
+          const ownsHomeworld = game.planets.some(p => p.homeworldOf === this.owner.id && p.owner && p.owner.id === this.owner.id);
+          if (ownsHomeworld) {
+            minAllowedCredits = -(1000 + (this.owner.totalShips || 0));
+          }
+        }
+        const creditsAvailable = (this.owner && this.owner.useCredits !== false && this.owner.credits !== undefined) ? (this.owner.credits - minAllowedCredits) : 0;
+        if (planet && planet.owner && this.owner && planet.owner.id === this.owner.id && (planet.ships >= 1 || creditsAvailable >= 1)) {
+          this.upgradeAccumulator += deltaTime / 1000;
+          while (this.upgradeAccumulator >= 0.2 && this.upgradeTimer > 0) {
+            const currentCredits = (this.owner && this.owner.useCredits !== false) ? (this.owner.credits || 0) : 0;
+            const currentCreditsAvailable = (this.owner && this.owner.useCredits !== false) ? (currentCredits - minAllowedCredits) : 0;
+            if (currentCreditsAvailable >= 1) {
+              this.owner.credits -= 1;
+              this.upgradeShipsPaid += 1;
+              this.upgradeTimer = Math.max(0, this.upgradeTimer - 0.2);
+              this.upgradeAccumulator -= 0.2;
+            } else if (planet.ships >= 1) {
+              planet.ships -= 1;
+              this.upgradeShipsPaid += 1;
+              this.upgradeTimer = Math.max(0, this.upgradeTimer - 0.2);
+              this.upgradeAccumulator -= 0.2;
+            } else {
+              break;
+            }
+          }
+          
+          if (this.upgradeTimer <= 0) {
+            this.upgradeTimer = 0;
+            this.isUpgrading = false;
+            
+            const currentLevel = this[this.upgradeProp] || 0;
+            this[this.upgradeProp] = currentLevel + 1;
+            
+            if (this.upgradeProp === 'armor') {
+              const upgradeCost = this.upgradeShipsPaid || 0;
+              const duraniumThreshold = upgradeCost / 50;
+              let bonus = 4 + 0.10 * this.maxHealth;
+              const canUseRes = !!(this.useResources || (this.owner && this.owner.tradeLimitToggle === true));
+              if (canUseRes && this.owner && this.owner.resources && (this.owner.resources.duranium || 0) > duraniumThreshold) {
+                this.owner.resources.duranium = Math.max(0, (this.owner.resources.duranium || 0) - duraniumThreshold);
+                bonus *= 1.5;
+                console.log(`[Armor Upgrade Boosted] Consumed ${duraniumThreshold} duranium. Boosted bonus by 50% to ${bonus}`);
+              }
+              this.maxArmor = (this.maxArmor || 0) + bonus;
+              this.armorPoints = (this.armorPoints || 0) + bonus;
+            } else if (this.upgradeProp === 'munitions') {
+              this.splashDamage = this.munitions;
+            } else if (this.upgradeProp === 'fuel_tanker') {
+              this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + 5);
+              this.maxsupplies = (this.fuel_tanker || 0) * 15;
+            } else if (this.upgradeProp === 'marines') {
+              // Just capacity increases; do not load free marines upon upgrade completion
+            } else if (this.upgradeProp === 'shields') {
+              this.shieldPoints = 3 * this.shields;
+            }
+            
+            console.log(`[Cruiser Upgrade Complete] Ship ${this.id} upgraded ${this.upgradeProp} to level ${this[this.upgradeProp]}`);
+            this.upgradeProp = null;
+            this.upgradeType = null;
+            this.upgradePlanetId = null;
+          }
         }
       }
     }
@@ -2345,14 +2401,7 @@ export class Ship {
         const isCruiser = !this.isAmoeba;
         let enemyNearby = false;
         if (isCruiser && allShips) {
-          let cruiserRadar = Math.min(250, 5 * this.maxHealth);
-          if (this.isWarp) cruiserRadar *= 0.25;
-
-          const playerTechBonus = 0.01 * Math.floor(techBonus);
-          const playerExpBonus = 0.01 * expBonus;
-          const baseRange = cruiserRadar * (1 + playerTechBonus + playerExpBonus);
-          const shipXpBonus = this.getLocalXpBonus();
-          const sensorRange = baseRange * (100 + shipXpBonus * 3) / 100;
+          const sensorRange = this.cruiserRadarRange();
           const rangeSq = sensorRange * sensorRange;
 
           const candidateThreats = (typeof allShips.getShipsInRadiusSq === 'function')

@@ -387,6 +387,20 @@ async function bootstrap() {
             }
           }
 
+          if (ship.upgradeTokens > 0) {
+            ship.upgradeTokens--;
+            ship.isUpgrading = true;
+            ship.upgradeUsingToken = true;
+            ship.upgradeTimer = 3.0;
+            ship.upgradeProp = prop;
+            ship.upgradeType = data.type;
+            ship.upgradePlanetId = null;
+            ship.upgradeShipsPaid = 0;
+            ship.upgradeAccumulator = 0;
+            console.log(`Started token upgrade for cruiser ${ship.id} with ${data.type}. Tokens left: ${ship.upgradeTokens}`);
+            return;
+          }
+
           if (nextLevel > maxIndividualLevel || (totalUpgrades + 1) > maxTotalUpgrades) {
             console.log(`[Server Upgrade Rejected] Health limits exceeded. shipId: ${ship.id}, maxHealth: ${ship.maxHealth}, currentVal: ${currentVal}, next: ${nextLevel}, maxLevel: ${maxIndividualLevel}, totalUpgrades: ${totalUpgrades}, maxTotalUpgrades: ${maxTotalUpgrades}`);
             return;
@@ -1958,6 +1972,8 @@ async function bootstrap() {
           isUpgrading: s.isUpgrading || false,
           upgradeTimer: s.upgradeTimer || 0,
           upgradeType: s.upgradeType || null,
+          upgradeTokens: s.upgradeTokens || 0,
+          upgradeUsingToken: s.upgradeUsingToken || false,
           isDismantling: s.isDismantling || false,
           dismantleTimer: s.dismantleTimer !== undefined ? s.dismantleTimer : 0,
           dismantleDuration: s.dismantleDuration || (s.maxHealth / 2) || 15,
@@ -2268,7 +2284,7 @@ async function bootstrap() {
               const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
               const difficulty = Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff;
               
-              const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache'];
+              const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache', 'upgrade_token'];
               const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
               
               p.anomaly = {

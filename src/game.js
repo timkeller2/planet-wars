@@ -790,11 +790,11 @@ export class Game {
         player.resources[bombResource] = 3;
       }
 
-      // Spawn 5 corvettes around bestPos staggered by 10s
-      const angles = [0, 72, 144, 216, 288];
-      const potentialUpgrades = ['sensorarrays', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 'marines', 'command'];
+      // Spawn 1 Destroyer immediately and 2 Corvettes staggered by 30s
+      const angles = [0, 120, 240];
+      const potentialUpgrades = ['sensorarrays', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 'marines', 'command', 'labs', 'diplomat'];
 
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 3; i++) {
         const angleRad = (angles[i] * Math.PI) / 180;
         const sx = bestPos.x + Math.cos(angleRad) * 20;
         const sy = bestPos.y + Math.sin(angleRad) * 20;
@@ -804,34 +804,25 @@ export class Game {
           upgrades[up] = 0;
         }
 
-        if (i < 3) {
-          upgrades.diplomat = 1;
-          upgrades.labs = 1;
-          upgrades.fuel_tanker = 1;
-        } else if (i === 3) {
-          upgrades.munitions = 1;
-          upgrades.sensorarrays = 1;
-          upgrades.fuel_tanker = 1;
-        } else {
-          upgrades.munitions = 1;
-          upgrades.armor = 1;
-          upgrades.fuel_tanker = 1;
-        }
-
+        const isDestroyer = (i === 0);
         this.pendingPioneerSpawns.push({
           ownerId: player.id,
           x: sx,
           y: sy,
+          classType: isDestroyer ? 'destroyer' : 'corvette',
+          upgradeTokens: isDestroyer ? 5 : 3,
           upgrades: upgrades,
-          timer: i * 30000, // 30 seconds apart: 0s, 30s, 60s, 90s, 120s
+          timer: i * 30000, // 30 seconds apart: 0s, 30s, 60s
           isAdditional: i > 0
         });
       }
 
       player.builtClasses = player.builtClasses || {};
+      player.builtClasses['destroyer'] = true;
       player.builtClasses['corvette'] = true;
       player.buildCounts = player.buildCounts || {};
-      player.buildCounts['corvette'] = (player.buildCounts['corvette'] || 0) + 5;
+      player.buildCounts['destroyer'] = (player.buildCounts['destroyer'] || 0) + 1;
+      player.buildCounts['corvette'] = (player.buildCounts['corvette'] || 0) + 2;
 
       player.planetCount = 0;
       player.needsPlanet = false;
@@ -2058,7 +2049,7 @@ export class Game {
 
     // Scatter ( map size / 100 ) anomalies randomly around the map at map creation
     const numScattered = Math.floor(this.width / 100);
-    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache'];
+    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache', 'upgrade_token'];
     for (let i = 0; i < numScattered; i++) {
       const ax = Math.random() * this.width;
       const ay = Math.random() * this.height;
@@ -3563,13 +3554,18 @@ export class Game {
               }
             }
 
+            const classType = pSpawn.classType || 'corvette';
+            const hp = (classType === 'destroyer') ? 25 : 15;
             const ship = new Ship(this.nextShipId++, spawnX, spawnY, null, player, pSpawn.x, pSpawn.y);
             ship.isCruiser = true;
-            ship.classType = 'corvette';
-            ship.maxHealth = 15;
-            ship.health = 15;
-            ship.crew = 30;
-            ship.speed = 14;
+            ship.classType = classType;
+            ship.maxHealth = hp;
+            ship.health = hp;
+            ship.crew = 2 * hp;
+            
+            const basePower = Math.floor(hp / 5);
+            ship.fuel = basePower * 5;
+            ship.speed = Math.max(5, 22 - 5 - basePower);
             if (player.id === 'monsters') {
               ship.speed = Math.max(5, ship.speed - 10);
             }
@@ -3584,6 +3580,7 @@ export class Game {
             ship.expScore = 0;
             ship.cruiserStyle = player.cruiserStyle;
             ship.count = 1;
+            ship.upgradeTokens = pSpawn.upgradeTokens || 0;
             this.assignRandomShipName(ship);
 
             // Assign upgrades
@@ -3593,22 +3590,22 @@ export class Game {
 
             // Apply upgrade side effects
             if (ship.armor) {
-              const armorBonus = 4 + 0.10 * 15; // 5.5
+              const armorBonus = 4 + 0.10 * hp;
               ship.maxArmor = (ship.maxArmor || 0) + armorBonus;
               ship.armorPoints = (ship.armorPoints || 0) + armorBonus;
             }
             if (ship.munitions) {
-              ship.splashDamage = 1;
+              ship.splashDamage = ship.munitions;
             }
             if (ship.fuel_tanker) {
-              ship.maxsupplies = 15;
+              ship.maxsupplies = ship.fuel_tanker * 15;
             }
 
             // Load full supplies/marines/bombs/fuel/shields
             ship.fuel = ship.getMaxFuel();
             ship.bombs = ship.getMaxBombs();
             ship.marineCount = (ship.marines || 0) * ship.maxHealth;
-            ship.supplies = ship.maxsupplies;
+            ship.supplies = ship.maxsupplies || 0;
             ship.shieldPoints = 3 * (ship.shields || 0);
 
             this.ships.push(ship);
@@ -6031,7 +6028,7 @@ export class Game {
     const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
     const difficulty = customDifficulty !== null ? customDifficulty : (Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff);
 
-    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache'];
+    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache', 'upgrade_token'];
     const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
 
     const planetId = 30000 + this.planets.length;
@@ -6065,7 +6062,7 @@ export class Game {
     const difficulty = planet.anomaly ? planet.anomaly.difficulty : 0;
     
     // Choose a random reward from the 5 options:
-    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache'];
+    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache', 'upgrade_token'];
     const rewardType = (planet.anomaly && planet.anomaly.rewardType) ? planet.anomaly.rewardType : rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
     
     let text = '';
@@ -6187,6 +6184,23 @@ export class Game {
       const resName = chosenRes.charAt(0).toUpperCase() + chosenRes.slice(1);
       text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received +${qty} ${resName}!`;
       floatText = `+${qty} ${resName}!`;
+    } else if (rewardType === 'upgrade_token') {
+      const numTokens = 1 + Math.floor(creditsValueEquivalent / 40);
+      const completingShipId = planet.anomaly ? planet.anomaly.completingShipId : null;
+      let targetShip = this.ships.find(s => s.id === completingShipId);
+      if (!targetShip) {
+        targetShip = this.ships.find(s => s.active && s.isCruiser && s.ownerId === player.id);
+      }
+      if (targetShip) {
+        targetShip.upgradeTokens = (targetShip.upgradeTokens || 0) + numTokens;
+        text = `ANOMALY RESOLVED ${preposition} ${locationName}: Cruiser ${targetShip.name || ''} received +${numTokens} Upgrade Tokens!`;
+        floatText = `+${numTokens} Tokens`;
+      } else {
+        const creditsReward = Math.round(creditsValueEquivalent);
+        player.credits = (player.credits || 0) + creditsReward;
+        text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received +${creditsReward} Credits!`;
+        floatText = `+${creditsReward} 💲`;
+      }
     }
     
     // Add to pending chat messages for the player
