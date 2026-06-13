@@ -960,6 +960,12 @@ export class Game {
       sellOrders: this.sellOrders,
       fulfillOrders: this.fulfillOrders,
       exploredGrid: this.exploredGrid,
+      gameSpeed: this.gameSpeed || 1.0,
+      highestSpeedMilestoneTriggered: this.highestSpeedMilestoneTriggered || 0,
+      nextIonStormId: this.nextIonStormId,
+      ionStormSpawnTimer: this.ionStormSpawnTimer,
+      ionStormDamageTimer: this.ionStormDamageTimer,
+      minefieldDamageTimer: this.minefieldDamageTimer,
       ionStorms: this.ionStorms.map(storm => ({
         id: storm.id,
         name: storm.name,
@@ -998,7 +1004,18 @@ export class Game {
         afkWarningSent: p.afkWarningSent,
         storageFeeAccumulator: p.storageFeeAccumulator,
         tradeOptions: p.tradeOptions,
-        tradeRegenAccumulator: p.tradeRegenAccumulator
+        tradeRegenAccumulator: p.tradeRegenAccumulator,
+        
+        upgradeModifiers: p.upgradeModifiers,
+        resources: p.resources,
+        targetStockpile: p.targetStockpile,
+        offerPrice: p.offerPrice,
+        buyPrice: p.buyPrice,
+        sellToggled: p.sellToggled,
+        tradeLimitToggle: p.tradeLimitToggle,
+        discoveredPlanets: p.discoveredPlanets ? Array.from(p.discoveredPlanets) : [],
+        attackedPlanets: p.attackedPlanets ? Array.from(p.attackedPlanets.entries()) : [],
+        spyRootedEvents: p.spyRootedEvents ? Array.from(p.spyRootedEvents) : []
       })),
       planets: this.planets.map(p => ({
         id: p.id,
@@ -1035,7 +1052,16 @@ export class Game {
         diplomacyWarmupTimer: p.diplomacyWarmupTimer,
         activeDiplomatId: p.activeDiplomatId,
         revoltShipsToDestroy: p.revoltShipsToDestroy,
-        revoltShipsDestroyedSoFar: p.revoltShipsDestroyedSoFar
+        revoltShipsDestroyedSoFar: p.revoltShipsDestroyedSoFar,
+
+        disposition: p.disposition,
+        expScore: p.expScore,
+        expProgress: p.expProgress,
+        sacrificedShips: p.sacrificedShips,
+        focusChanges: p.focusChanges,
+        productionProgress: p.productionProgress,
+        capacityProgress: p.capacityProgress,
+        preferredResourceWantedEvent: p.preferredResourceWantedEvent
       })),
       ships: this.ships.map(s => {
         const sData = {};
@@ -1044,6 +1070,8 @@ export class Game {
             sData.targetPlanetId = v ? v.id : null;
           } else if (k === 'owner') {
             sData.ownerId = v ? v.id : null;
+          } else if (k === 'insideHazards') {
+            sData.insideHazards = v ? Array.from(v) : [];
           } else if (typeof v !== 'function') {
             sData[k] = v;
           }
@@ -1070,6 +1098,12 @@ export class Game {
     this.sellOrders = state.sellOrders;
     this.fulfillOrders = state.fulfillOrders;
     this.exploredGrid = state.exploredGrid;
+    this.gameSpeed = state.gameSpeed !== undefined ? state.gameSpeed : 1.0;
+    this.highestSpeedMilestoneTriggered = state.highestSpeedMilestoneTriggered !== undefined ? state.highestSpeedMilestoneTriggered : 0;
+    this.nextIonStormId = state.nextIonStormId !== undefined ? state.nextIonStormId : 0;
+    this.ionStormSpawnTimer = state.ionStormSpawnTimer !== undefined ? state.ionStormSpawnTimer : 0;
+    this.ionStormDamageTimer = state.ionStormDamageTimer !== undefined ? state.ionStormDamageTimer : 0;
+    this.minefieldDamageTimer = state.minefieldDamageTimer !== undefined ? state.minefieldDamageTimer : 0;
 
     // Restore players
     const playersMap = new Map();
@@ -1097,6 +1131,17 @@ export class Game {
       p.storageFeeAccumulator = pData.storageFeeAccumulator;
       p.tradeOptions = pData.tradeOptions;
       p.tradeRegenAccumulator = pData.tradeRegenAccumulator;
+
+      p.upgradeModifiers = pData.upgradeModifiers || p.upgradeModifiers;
+      p.resources = pData.resources || p.resources;
+      p.targetStockpile = pData.targetStockpile || p.targetStockpile;
+      p.offerPrice = pData.offerPrice || p.offerPrice;
+      p.buyPrice = pData.buyPrice || p.buyPrice;
+      p.sellToggled = pData.sellToggled || p.sellToggled;
+      p.tradeLimitToggle = pData.tradeLimitToggle !== undefined ? pData.tradeLimitToggle : p.tradeLimitToggle;
+      p.discoveredPlanets = new Set(pData.discoveredPlanets || []);
+      p.attackedPlanets = new Map(pData.attackedPlanets || []);
+      p.spyRootedEvents = new Set(pData.spyRootedEvents || []);
 
       if (p.id === 'p1') this.humanPlayer = p;
       if (p.id === 'monsters') this.monsterPlayer = p;
@@ -1143,6 +1188,15 @@ export class Game {
       p.revoltShipsToDestroy = pData.revoltShipsToDestroy || 0;
       p.revoltShipsDestroyedSoFar = pData.revoltShipsDestroyedSoFar || 0;
 
+      p.disposition = pData.disposition || {};
+      p.expScore = pData.expScore !== undefined ? pData.expScore : 0;
+      p.expProgress = pData.expProgress !== undefined ? pData.expProgress : 0;
+      p.sacrificedShips = pData.sacrificedShips !== undefined ? pData.sacrificedShips : 0;
+      p.focusChanges = pData.focusChanges !== undefined ? pData.focusChanges : 0;
+      p.productionProgress = pData.productionProgress !== undefined ? pData.productionProgress : 0;
+      p.capacityProgress = pData.capacityProgress !== undefined ? pData.capacityProgress : 0;
+      p.preferredResourceWantedEvent = pData.preferredResourceWantedEvent !== undefined ? pData.preferredResourceWantedEvent : false;
+
       planetsMap.set(p.id, p);
       return p;
     });
@@ -1160,7 +1214,17 @@ export class Game {
 
         for (const [k, v] of Object.entries(sData)) {
           if (k !== 'targetPlanetId' && k !== 'ownerId') {
-            s[k] = v;
+            if (k === 'insideHazards') {
+              if (Array.isArray(v)) {
+                s.insideHazards = new Set(v);
+              } else if (v && typeof v === 'object') {
+                s.insideHazards = new Set(Object.keys(v));
+              } else {
+                s.insideHazards = new Set();
+              }
+            } else {
+              s[k] = v;
+            }
           }
         }
         s.owner = owner;
