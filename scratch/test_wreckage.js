@@ -101,8 +101,8 @@ const runTests = () => {
     process.exit(1);
   }
 
-  // 4. Retrieval Test (Amoeba Core Anomaly)
-  console.log("\n--- Part 4: Wreckage Retrieval (Amoeba Anomaly) ---");
+  // 4. Retrieval Test (Amoeba Core Anomaly Coexistence)
+  console.log("\n--- Part 4: Wreckage Retrieval (Amoeba Anomaly Coexistence) ---");
   // Create an amoeba ship
   const amoeba = new Ship('a1', 300, 300, null, game.monsterPlayer);
   amoeba.isAmoeba = true;
@@ -151,6 +151,92 @@ const runTests = () => {
   console.log(`Spawned anomaly difficulty: ${deepSpaceAnoms[0].anomaly.difficulty}`);
   if (deepSpaceAnoms[0].anomaly.difficulty !== 1) { // 15 / 10 = 1.5 -> floor is 1
     console.error("FAILED: Incorrect anomaly difficulty!");
+    process.exit(1);
+  }
+
+  // Under the non-exclusivity rule, they can both exist: the wreckage should still be there!
+  console.log(`Wreckages count after anomaly spawned: ${game.wreckages.length}`);
+  if (game.wreckages.length !== 1) {
+    console.error("FAILED: Wreckage was deleted upon spawning anomaly under non-exclusive rule!");
+    process.exit(1);
+  }
+  console.log(`Wreckage amoebaDamage after anomaly spawned: ${w2.amoebaDamage}`);
+  if (w2.amoebaDamage !== 0) {
+    console.error("FAILED: Wreckage amoebaDamage was not reset to 0!");
+    process.exit(1);
+  }
+
+  // 5. Cleanup Low-Damage Wreckage Test
+  console.log("\n--- Part 5: Cleanup Low-Damage Wreckages ---");
+  // The wreckage w2 now has amoebaDamage = 0 and cruiserDamage = 0 (which is < 5).
+  // Currently, it is locked because w2.lastFightingTime was set to Date.now() when anomaly was spawned.
+  // Wait, let's fast-forward w2.lastFightingTime to the past (unlocking it).
+  w2.lastFightingTime = Date.now() - 35000;
+  // Next tick should delete it!
+  game.update(100);
+  console.log(`Wreckages count after cooldown: ${game.wreckages.length}`);
+  if (game.wreckages.length !== 0) {
+    console.error("FAILED: Low-damage wreckage was not cleaned up after cooldown!");
+    process.exit(1);
+  }
+
+  // Let's test a wreckage with 6 cruiserDamage (should NOT be cleaned up after cooldown)
+  const cruiser2 = new Ship('c2', 500, 500, null, human);
+  cruiser2.isCruiser = true;
+  cruiser2.health = 100;
+  cruiser2.maxHealth = 100;
+  cruiser2.update = () => {};
+  game.ships.push(cruiser2);
+  game.update(100);
+
+  cruiser2.health = 94; // 6 damage
+  game.update(100);
+
+  if (game.wreckages.length !== 1) {
+    console.error("FAILED: 6-damage wreckage not spawned!");
+    process.exit(1);
+  }
+  const w3 = game.wreckages[0];
+  w3.lastFightingTime = Date.now() - 35000;
+  game.update(100);
+  console.log(`Wreckages count (6-damage, unlocked): ${game.wreckages.length}`);
+  if (game.wreckages.length !== 1) {
+    console.error("FAILED: 6-damage wreckage was incorrectly cleaned up!");
+    process.exit(1);
+  }
+
+  // 6. Cruiser Shields and Armor Damage Wreckage Exclusion Test
+  console.log("\n--- Part 6: Cruiser Shields and Armor Exclusion ---");
+  // Set up a new cruiser
+  const cruiser3 = new Ship('c3', 700, 700, null, human);
+  cruiser3.isCruiser = true;
+  cruiser3.health = 100;
+  cruiser3.maxHealth = 100;
+  cruiser3.shieldPoints = 50;
+  cruiser3.armorPoints = 50;
+  cruiser3.update = () => {};
+  game.ships.push(cruiser3);
+  game.update(100);
+
+  // Deal shield/armor damage (reduce shield/armor from 50 to 30)
+  cruiser3.shieldPoints = 30;
+  cruiser3.armorPoints = 30;
+  // Clear any existing wreckages to isolate this check
+  game.wreckages = [];
+  game.update(100);
+
+  console.log(`Wreckages count after shield/armor damage: ${game.wreckages.length}`);
+  if (game.wreckages.length !== 0) {
+    console.error("FAILED: Shield/armor damage incorrectly spawned wreckage!");
+    process.exit(1);
+  }
+
+  // Now deal health damage
+  cruiser3.health = 80;
+  game.update(100);
+  console.log(`Wreckages count after health damage: ${game.wreckages.length}`);
+  if (game.wreckages.length !== 1) {
+    console.error("FAILED: Cruiser health damage did not spawn wreckage!");
     process.exit(1);
   }
 

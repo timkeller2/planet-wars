@@ -3568,7 +3568,7 @@ export class Game {
         let totalHealth = 0;
         if (ship.active) {
           if (isTargetCruiser) {
-            totalHealth = (ship.health || 0) + (ship.shieldPoints || 0) + (ship.armorPoints || 0) + (ship.specialduranium || 0);
+            totalHealth = ship.health || 0;
           } else if (isTargetAmoeba) {
             totalHealth = Math.floor(ship.health || 0) + ((ship.maxHealth || 0) * ((ship.maxHealth || 0) - 1)) / 2;
           }
@@ -4322,6 +4322,10 @@ export class Game {
               playerId: player.id,
               text: `Wreckage salvage triggered a new Deep Space Anomaly due to concentrated Amoeba residue!`
             });
+            
+            w.amoebaDamage = 0;
+            w.lastFightingTime = Date.now();
+            w.scanTimeLeft = 3000;
           } else {
             // Reward credits: (amoebaDamage * 2 + cruiserDamage) * (1 + random 100%)
             const randMultiplier = 1.0 + Math.random();
@@ -4342,8 +4346,20 @@ export class Game {
               y: w.y,
               text: `+${rewardCredits} Credits`
             });
+            
+            this.wreckages.splice(i, 1);
           }
+        } else {
+          this.wreckages.splice(i, 1);
         }
+      }
+    }
+
+    // 5. Cleanup low-damage wreckages after 30s cooldown
+    for (let i = this.wreckages.length - 1; i >= 0; i--) {
+      const w = this.wreckages[i];
+      const isLocked = (Date.now() - w.lastFightingTime) < 30000;
+      if (!isLocked && (w.amoebaDamage + w.cruiserDamage) < 5) {
         this.wreckages.splice(i, 1);
       }
     }
@@ -5436,7 +5452,7 @@ export class Game {
         let currentTotal = 0;
         if (ship.active) {
           if (isTargetCruiser) {
-            currentTotal = (ship.health || 0) + (ship.shieldPoints || 0) + (ship.armorPoints || 0) + (ship.specialduranium || 0);
+            currentTotal = ship.health || 0;
           } else if (isTargetAmoeba) {
             currentTotal = Math.floor(ship.health || 0) + ((ship.maxHealth || 0) * ((ship.maxHealth || 0) - 1)) / 2;
           }
