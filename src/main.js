@@ -2552,9 +2552,10 @@ function getPlanetTradeIncomePerMin(planet) {
             }
             dispStr = `<span style="color: ${scoreColor}; font-weight: bold;">${dVal}</span> ${emoji}`;
           }
+          const baseSym = p.sympathy?.[pId] || 0;
           lines.push({
             label: `🎭 Disp (${pName}): ${dispStr}`,
-            value: `💖 Sym: ${Math.round(symVal)}`,
+            value: `💖 Sym: ${Math.round(baseSym)}/${Math.round(symVal)}`,
             color: pColor
           });
         }
@@ -6629,8 +6630,64 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   }
 
+  function handleDoubleClickOrTap(x, y) {
+    if (!serverState || !localPlayer) return;
+    const pos = getMouseServerPos(x, y);
+
+    // 1. Search for friendly cruiser at double-click/tap location
+    let clickedCruiser = null;
+    if (serverState && serverState.ships) {
+      for (const ship of serverState.ships) {
+        if (!ship.active || ship.ownerId !== localPlayer.id) continue;
+        if (!ship.isCruiser) continue;
+        const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
+        const hitRadius = ship.count > 1 ? maxSpread + 10 : 25;
+        const sdx = ship.x - pos.x;
+        const sdy = ship.y - pos.y;
+        if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
+          clickedCruiser = ship;
+          break;
+        }
+      }
+    }
+
+    if (clickedCruiser) {
+      selectedShips = [];
+      selectedPlanets = [];
+      for (const ship of serverState.ships) {
+        if (ship.active && ship.ownerId === localPlayer.id && ship.isCruiser) {
+          const dx = ship.x - clickedCruiser.x;
+          const dy = ship.y - clickedCruiser.y;
+          if (dx * dx + dy * dy <= 200 * 200) {
+            selectedShips.push(ship);
+          }
+        }
+      }
+      return;
+    }
+
+    // 2. Search for friendly planet at double-click/tap location
+    const clickedPlanet = getPlanetAt(x, y);
+    if (clickedPlanet && clickedPlanet.ownerId === localPlayer.id) {
+      selectedPlanets = [];
+      selectedShips = [];
+      for (const planet of serverState.planets) {
+        if (planet.ownerId === localPlayer.id) {
+          const dx = planet.x - clickedPlanet.x;
+          const dy = planet.y - clickedPlanet.y;
+          if (dx * dx + dy * dy <= 400 * 400) {
+            selectedPlanets.push(planet);
+          }
+        }
+      }
+      return;
+    }
+  }
+
   canvas.addEventListener('dblclick', (event) => {
     // Info panels are now tooltips triggered by hover / single tap.
+    const cPos = getCanvasPos(event.clientX, event.clientY);
+    handleDoubleClickOrTap(cPos.x, cPos.y);
   });
 
   let mouseTimeout = null;
@@ -6804,6 +6861,9 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastTouchX = 0;
   let lastTouchY = 0;
   let touchTooltipEntity = null;
+  let lastTapTime = 0;
+  let lastTapX = 0;
+  let lastTapY = 0;
 
   canvas.addEventListener('touchstart', (event) => {
     event.preventDefault(); // Prevent double-firing with simulated mouse events
@@ -7019,6 +7079,21 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       handlePointerDown(cPos.x, cPos.y, event.shiftKey, true, 0);
+
+      // Check for double tap
+      const now = Date.now();
+      const timeDiff = now - lastTapTime;
+      const dx = touchStartX - lastTapX;
+      const dy = touchStartY - lastTapY;
+      const distSq = dx * dx + dy * dy;
+
+      if (timeDiff < 300 && distSq < 40 * 40) {
+        handleDoubleClickOrTap(cPos.x, cPos.y);
+      }
+
+      lastTapTime = now;
+      lastTapX = touchStartX;
+      lastTapY = touchStartY;
     }
 
     touchStartActive = false;
@@ -7274,8 +7349,14 @@ function getPlanetTradeIncomePerMin(planet) {
                 shieldCheck = false;
               }
             }
+            const hasTokens = ship.upgradeTokens > 0;
+            if (hasTokens) {
+              return (currentVal < 5) && (nextLevel <= Math.min(5, maxIndividualLevel)) && shieldCheck;
+            }
             return (currentVal < 5) && (currentVal + 1 <= maxIndividualLevel) && (totalUpgrades + 1 <= maxTotalUpgrades) && shieldCheck;
           };
+
+
 
           let triggered = false;
           if (key === 's') {
@@ -8196,12 +8277,12 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           if (ship.upgradeTokens > 0) {
-            if (currentVal < 5 && shieldCheck) {
+            if (currentVal < 5 && nextLevel <= Math.min(5, maxIndividualLevel) && shieldCheck) {
               const socketType = upgradeToSocketTypeMap[type] || type;
               console.log(`[Upgrade Click] Token Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${qual.ship.id}`);
               socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
             } else {
-              console.log(`[Upgrade Click Rejected] Token limits failed. type: ${type}, currentVal: ${currentVal}, shieldCheck: ${shieldCheck}`);
+              console.log(`[Upgrade Click Rejected] Token limits failed. type: ${type}, currentVal: ${currentVal}, nextLevel: ${nextLevel}, maxLevel: ${maxIndividualLevel}, shieldCheck: ${shieldCheck}`);
             }
             upgradeModeActive = false;
             return;
@@ -8576,8 +8657,9 @@ function getPlanetTradeIncomePerMin(planet) {
           const levelAllowed = nextLevel <= maxIndividualLevel;
           const totalAllowed = (totalUpgrades + 1) <= maxTotalUpgrades;
           const shieldCheck = (prop !== 'shields' || nextLevel * 0.10 <= 0.80);
+          const tokenAllowed = hasTokens && (nextLevel <= Math.min(5, maxIndividualLevel));
           
-          const displayUpgrade = currentVal < 5 && !selectedCruiser.isUpgrading && shieldCheck && (hasTokens || (levelAllowed && totalAllowed));
+          const displayUpgrade = currentVal < 5 && !selectedCruiser.isUpgrading && shieldCheck && (tokenAllowed || (levelAllowed && totalAllowed));
           
           el.style.display = displayUpgrade ? 'inline-flex' : 'none';
           if (el.style.display === 'inline-flex') {
@@ -11034,7 +11116,8 @@ function getPlanetTradeIncomePerMin(planet) {
               if (pl.id !== 'monsters') {
                 const symVal = getEffectiveSympathyClient(hp, pl.id);
                 if (symVal > 0) {
-                  lines.push({ label: `💖 Sympathy (${pl.name})`, value: `${Math.round(symVal)}`, color: pl.color });
+                  const baseSym = hp.sympathy?.[pl.id] || 0;
+                  lines.push({ label: `💖 Sympathy (${pl.name})`, value: `${Math.round(baseSym)}/${Math.round(symVal)}`, color: pl.color });
                 }
               }
             }

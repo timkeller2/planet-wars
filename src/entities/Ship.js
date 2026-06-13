@@ -73,6 +73,11 @@ export class Ship {
     this.diplomacyFuelRetreatTargetPlanetId = null;
     this.diplomacyFleeing = false;
     this.diplomacyFleeTargetPlanetId = null;
+    this.stationedX = targetPlanet ? null : targetX;
+    this.stationedY = targetPlanet ? null : targetY;
+    this.stationedPlanetId = targetPlanet ? targetPlanet.id : null;
+    this.stationedOffsetX = 0;
+    this.stationedOffsetY = 0;
     this.fireSideLeft = false;
     this.labs = 0;
     this.accumulatedTech = 0;
@@ -103,6 +108,7 @@ export class Ship {
     this.specialfuel = 0;
     this.specialbombs = 0;
     this.specialduranium = 0;
+    this.bombReloadTimer = 0;
     this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
     this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
     this.conversionTimer = 0;
@@ -284,6 +290,23 @@ export class Ship {
     return closestSupplyShip;
   }
 
+  isWithinSensorRangeOfSupplyShip(allShips) {
+    if (!allShips || !this.owner) return false;
+    for (const other of allShips) {
+      if (other === this) continue;
+      if (other.active && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.supplies || 0) > 0) {
+        const dx = other.x - this.x;
+        const dy = other.y - this.y;
+        const distSq = dx * dx + dy * dy;
+        const otherRadarRange = (typeof other.cruiserRadarRange === 'function') ? other.cruiserRadarRange() : 150;
+        if (distSq <= otherRadarRange * otherRadarRange) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   getLocalXpBonus() {
     return Math.sqrt(this.expScore || 0) + (this.commandPoints || 0);
   }
@@ -377,6 +400,21 @@ export class Ship {
   handlePlayerMoveOrder(destination, game) {
     if (!this.isCruiser) return;
     this.flightTime = 0;
+
+    // Save stationed destination
+    if (destination && destination.planet) {
+      this.stationedPlanetId = destination.planet.id;
+      this.stationedX = null;
+      this.stationedY = null;
+      this.stationedOffsetX = destination.x - destination.planet.x;
+      this.stationedOffsetY = destination.y - destination.planet.y;
+    } else if (destination) {
+      this.stationedPlanetId = null;
+      this.stationedX = destination.x;
+      this.stationedY = destination.y;
+      this.stationedOffsetX = 0;
+      this.stationedOffsetY = 0;
+    }
 
     // Reset all retreat states and flags
     this.isRetreating = false;
@@ -862,9 +900,11 @@ export class Ship {
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
       const maxFuel = this.getMaxFuel();
       const maxBombs = this.getMaxBombs();
+      const hasSupplies = (this.supplies || 0) > 0;
+      const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
       
-      const lowFuel = this.fuel < maxFuel * 0.5;
-      const emptyBombs = maxBombs > 0 && this.bombs <= 0;
+      const lowFuel = (this.fuel < maxFuel * 0.5) && !hasSupplies && !withinSensorRangeOfSupplyShip;
+      const emptyBombs = maxBombs > 0 && this.bombs <= 0 && !hasSupplies && !withinSensorRangeOfSupplyShip;
       const lowHealth = this.health < this.maxHealth * 0.5;
 
       const isBombingPlanet = (this.cruiserTargetType === 'planet' && this.cruiserTargetId !== null) || this.savedBombardPlanetId !== null;
@@ -905,6 +945,28 @@ export class Ship {
           this.isRetreating = false;
           this.retreatTargetPlanetId = null;
           this.retreatTargetShipId = null;
+
+          // Return to stationed destination!
+          if (this.stationedX !== null || this.stationedY !== null || this.stationedPlanetId !== null) {
+            if (this.stationedPlanetId !== null) {
+              const targetPlanet = allPlanets ? allPlanets.find(p => p.id === this.stationedPlanetId) : null;
+              if (targetPlanet) {
+                this.targetPlanet = targetPlanet;
+                this.targetX = null;
+                this.targetY = null;
+                this.cruiserTargetOffsetX = this.stationedOffsetX || 0;
+                this.cruiserTargetOffsetY = this.stationedOffsetY || 0;
+              } else {
+                this.targetPlanet = null;
+                this.targetX = this.stationedX;
+                this.targetY = this.stationedY;
+              }
+            } else {
+              this.targetPlanet = null;
+              this.targetX = this.stationedX;
+              this.targetY = this.stationedY;
+            }
+          }
         }
       }
       
@@ -2075,7 +2137,8 @@ export class Ship {
       } else {
         // Stagger shots: multi-shot ships fire 1 shot per sub-interval
         let cooldownMultiplier = 1.0;
-        if (this.maxHealth > 0 && !this.isAmoeba && this.bombs <= 0) {
+        const hasSupplies = (this.supplies || 0) > 0;
+        if (this.maxHealth > 0 && !this.isAmoeba && this.bombs <= 0 && !hasSupplies) {
           cooldownMultiplier = 2.0;
         }
         this.fireCooldown = (shotsPerVolley > 1 ? (1.0 / shotsPerVolley) : 1.0) * cooldownMultiplier;
@@ -2580,7 +2643,9 @@ export class Ship {
     // Cruiser Patrol Mode Decision Engine
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isPatrolling && !this.isRetreating) {
       // Check if fuel is 1 or less while patrolling
-      if (this.fuel <= 1 && (!this.playerMoveOrderRetreatCooldown || this.playerMoveOrderRetreatCooldown <= 0)) {
+      const hasSupplies = (this.supplies || 0) > 0;
+      const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
+      if (this.fuel <= 1 && !hasSupplies && !withinSensorRangeOfSupplyShip && (!this.playerMoveOrderRetreatCooldown || this.playerMoveOrderRetreatCooldown <= 0)) {
         this.patrolFuelRetreating = true;
         this.patrolReloading = false;
         this.patrolReloadTargetPlanetId = null;
@@ -2709,10 +2774,12 @@ export class Ship {
         // 1. Check if out of bombs -> Reloading State, or low health -> Retreat to repair
         const supplyShip = this.findNearbySupplyShip(allShips);
         const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
+        const hasSupplies = (this.supplies || 0) > 0;
+        const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
         const needsHealthRetreat = this.health < this.maxHealth * 0.5;
         const needsHealthFinish = this.health < this.maxHealth;
         const coolingReload = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
-        if (!coolingReload && (needsHealthRetreat || (this.bombs <= 0 && !hasNearbySupply) || (this.patrolReloading && (this.bombs < this.getMaxBombs() || needsHealthFinish)))) {
+        if (!coolingReload && (needsHealthRetreat || (this.bombs <= 0 && !hasNearbySupply && !hasSupplies && !withinSensorRangeOfSupplyShip) || (this.patrolReloading && (this.bombs < this.getMaxBombs() || needsHealthFinish)))) {
         const wasReloading = this.patrolReloading;
         this.patrolReloading = true;
         
@@ -2921,10 +2988,12 @@ export class Ship {
     // Cruiser Scout Mode Decision Engine
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isScouting && !this.isRetreating) {
       // 1. Refueling & Rearming & Health Retreat Check: if fuel is half or less, OR if attack is on and bombs are depleted, OR health is below 1/2 maxhealth
-      const needsRefuel = this.fuel <= this.getMaxFuel() * 0.5;
+      const hasSupplies = (this.supplies || 0) > 0;
+      const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
+      const needsRefuel = (this.fuel <= this.getMaxFuel() * 0.5) && !hasSupplies && !withinSensorRangeOfSupplyShip;
       const supplyShip = this.findNearbySupplyShip(allShips);
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
-      const needsRearm = this.scoutAttackEnabled && this.bombs <= 0 && !hasNearbySupply;
+      const needsRearm = this.scoutAttackEnabled && this.bombs <= 0 && !hasNearbySupply && !hasSupplies && !withinSensorRangeOfSupplyShip;
       const needsHealthRetreat = this.health < this.maxHealth * 0.5;
       const coolingScout = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
       if (!coolingScout && (needsRefuel || needsRearm || needsHealthRetreat)) {
@@ -3395,7 +3464,9 @@ export class Ship {
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isResearching && this.labs > 0 && !this.isRetreating) {
       // 1. Refueling Retreat Check: if fuel is less than 2
       const coolingResearch = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
-      if (this.fuel < 2 && !coolingResearch) {
+      const hasSupplies = (this.supplies || 0) > 0;
+      const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
+      if (this.fuel < 2 && !hasSupplies && !withinSensorRangeOfSupplyShip && !coolingResearch) {
         this.researchFuelRetreating = true;
       }
       
@@ -3501,7 +3572,9 @@ export class Ship {
         // 2. Rearming Retreat Check: if attack mode is also on and bombs are depleted
         const supplyShip = this.findNearbySupplyShip(allShips);
         const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
-        const needsRearm = this.scoutAttackEnabled && this.bombs <= 0 && !hasNearbySupply;
+        const hasSupplies = (this.supplies || 0) > 0;
+        const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
+        const needsRearm = this.scoutAttackEnabled && this.bombs <= 0 && !hasNearbySupply && !hasSupplies && !withinSensorRangeOfSupplyShip;
         const coolingResearchRearm = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
         if (!coolingResearchRearm && (needsRearm || this.researchRearming)) {
           this.researchRearming = true;
@@ -3731,8 +3804,10 @@ export class Ship {
       // If out of bombs and not in a friendly gravity well, enter rearming retreat mode
       const supplyShip = this.findNearbySupplyShip(allShips);
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
+      const hasSupplies = (this.supplies || 0) > 0;
+      const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
       const coolingBombard = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
-      if (!coolingBombard && this.bombs <= 0 && !this.inFriendlyWell && !hasNearbySupply) {
+      if (!coolingBombard && this.bombs <= 0 && !this.inFriendlyWell && !hasNearbySupply && !hasSupplies && !withinSensorRangeOfSupplyShip) {
         if (isTargetingPlanet) {
           this.savedBombardPlanetId = this.cruiserTargetId;
           this.cruiserTargetType = null;
@@ -4307,6 +4382,9 @@ export class Ship {
         this.bombs = this.getMaxBombs();
         this.bombReloadTimer = 0;
       }
+      if (this.bombReloadTimer === undefined) {
+        this.bombReloadTimer = 0;
+      }
       
       // Don't convert fuel to munitions.
       
@@ -4580,76 +4658,6 @@ export class Ship {
                 friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * amountRefueled * costMultiplier);
               }
             }
-          }
-          
-          const supplyShipForBombs = this.findNearbySupplyShip(allShips);
-          if (this.bombs < this.getMaxBombs() && (friendlyWellPlanet || supplyShipForBombs)) {
-            const maxBombs = this.getMaxBombs();
-            const reloadMultiplier = 0.5 * (1 + 0.1 * maxBombs);
-            this.bombReloadTimer += (deltaTime / 1000) * reloadMultiplier * recoveryRate;
-            if (this.bombReloadTimer >= 5) {
-              let bombResource = 'merculite';
-              const style = this.cruiserStyle || (owner ? owner.cruiserStyle : null);
-              if (style === 'Romulan' || style === 'Gorn') {
-                bombResource = 'antimatter';
-              } else if (style === 'Tholian' || style === 'Lyran') {
-                bombResource = 'dilithium';
-              }
-
-              const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle === true));
-              const hasExcessResource = canUseRes && owner && owner.resources && (owner.resources[bombResource] || 0) >= 0.1;
-              const resourceSellPrice = owner ? (owner.offerPrice?.[bombResource] ?? 3) : 3;
-
-              let canAffordReload = false;
-              if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
-                canAffordReload = true;
-              } else if (hasExcessResource && resourceSellPrice < 12) {
-                canAffordReload = true;
-              } else if (owner && owner.useCredits !== false) {
-                canAffordReload = true;
-              } else if (friendlyWellPlanet && friendlyWellPlanet.ships >= 1.0) {
-                canAffordReload = true;
-              }
-
-              if (canAffordReload) {
-                this.bombReloadTimer = 0;
-                this.bombs++;
-                if (owner && !owner.isMonster && owner.id !== 'monsters') {
-                  if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
-                    if (lasers && supplyShipForBombs !== this) {
-                      lasers.push({
-                        startX: supplyShipForBombs.x,
-                        startY: supplyShipForBombs.y,
-                        endX: this.x,
-                        endY: this.y,
-                        color: 'resupply-beam',
-                        age: 0,
-                        duration: 0.6
-                      });
-                    }
-                    supplyShipForBombs.supplies -= 1.0;
-                  } else if (hasExcessResource && resourceSellPrice < 12) {
-                    const consumed = 1/12;
-                    owner.resources[bombResource] = (owner.resources[bombResource] || 0) - consumed;
-                    this.specialbombs = (this.specialbombs || 0) + 1;
-                    if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
-                    if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
-                    this.resourceAccumulators[bombResource] = (this.resourceAccumulators[bombResource] || 0) + consumed;
-                    if (this.resourceAccumulators[bombResource] >= 0.0833) {
-                      this.resourceConsumeEvents[bombResource] = (this.resourceConsumeEvents[bombResource] || 0) + 1;
-                      this.resourceAccumulators[bombResource] -= 0.0833;
-                    }
-                  } else if (owner.useCredits !== false) {
-                    owner.credits = (owner.credits || 0) - 1.0;
-                  } else if (friendlyWellPlanet) {
-                    friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0);
-                  }
-                }
-              } else {
-                this.bombReloadTimer = 5;
-              }
-            }
-          }
         }
       } else {
         let fuelDrain = this.isWarp ? 8 : 4;
@@ -4678,6 +4686,80 @@ export class Ship {
                 color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
                 age: 0
               });
+            }
+          }
+        }
+      }
+
+      // Bomb reloading logic (independent of fuel/armor refueling blocks)
+      if (!this.isWarp) {
+        const supplyShipForBombs = this.findNearbySupplyShip(allShips);
+        if (this.bombs < this.getMaxBombs() && (friendlyWellPlanet || supplyShipForBombs)) {
+          const maxBombs = this.getMaxBombs();
+          const reloadMultiplier = 0.5 * (1 + 0.1 * maxBombs);
+          const recoveryRate = (this.combatCooldown && this.combatCooldown > 0) ? 0.5 : 1.0;
+          this.bombReloadTimer = (this.bombReloadTimer || 0) + (deltaTime / 1000) * reloadMultiplier * recoveryRate;
+          if (this.bombReloadTimer >= 5) {
+            let bombResource = 'merculite';
+            const owner = this.owner;
+            const style = this.cruiserStyle || (owner ? owner.cruiserStyle : null);
+            if (style === 'Romulan' || style === 'Gorn') {
+              bombResource = 'antimatter';
+            } else if (style === 'Tholian' || style === 'Lyran') {
+              bombResource = 'dilithium';
+            }
+
+            const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle === true));
+            const hasExcessResource = canUseRes && owner && owner.resources && (owner.resources[bombResource] || 0) >= 0.1;
+            const resourceSellPrice = owner ? (owner.offerPrice?.[bombResource] ?? 3) : 3;
+
+            let canAffordReload = false;
+            if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
+              canAffordReload = true;
+            } else if (hasExcessResource && resourceSellPrice < 12) {
+              canAffordReload = true;
+            } else if (owner && owner.useCredits !== false) {
+              canAffordReload = true;
+            } else if (friendlyWellPlanet && friendlyWellPlanet.ships >= 1.0) {
+              canAffordReload = true;
+            }
+
+            if (canAffordReload) {
+              this.bombReloadTimer = 0;
+              this.bombs++;
+              if (owner && !owner.isMonster && owner.id !== 'monsters') {
+                if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
+                  if (lasers && supplyShipForBombs !== this) {
+                    lasers.push({
+                      startX: supplyShipForBombs.x,
+                      startY: supplyShipForBombs.y,
+                      endX: this.x,
+                      endY: this.y,
+                      color: 'resupply-beam',
+                      age: 0,
+                      duration: 0.6
+                    });
+                  }
+                  supplyShipForBombs.supplies -= 1.0;
+                } else if (hasExcessResource && resourceSellPrice < 12) {
+                  const consumed = 1/12;
+                  owner.resources[bombResource] = (owner.resources[bombResource] || 0) - consumed;
+                  this.specialbombs = (this.specialbombs || 0) + 1;
+                  if (!this.resourceConsumeEvents) this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                  if (!this.resourceAccumulators) this.resourceAccumulators = { deuterium: 0, tritanium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+                  this.resourceAccumulators[bombResource] = (this.resourceAccumulators[bombResource] || 0) + consumed;
+                  if (this.resourceAccumulators[bombResource] >= 0.0833) {
+                    this.resourceConsumeEvents[bombResource] = (this.resourceConsumeEvents[bombResource] || 0) + 1;
+                    this.resourceAccumulators[bombResource] -= 0.0833;
+                  }
+                } else if (owner.useCredits !== false) {
+                  owner.credits = (owner.credits || 0) - 1.0;
+                } else if (friendlyWellPlanet) {
+                  friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0);
+                }
+              }
+            } else {
+              this.bombReloadTimer = 5;
             }
           }
         }

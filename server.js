@@ -388,17 +388,22 @@ async function bootstrap() {
           }
 
           if (ship.upgradeTokens > 0) {
-            ship.upgradeTokens--;
-            ship.isUpgrading = true;
-            ship.upgradeUsingToken = true;
-            ship.upgradeTimer = 3.0;
-            ship.upgradeProp = prop;
-            ship.upgradeType = data.type;
-            ship.upgradePlanetId = null;
-            ship.upgradeShipsPaid = 0;
-            ship.upgradeAccumulator = 0;
-            console.log(`Started token upgrade for cruiser ${ship.id} with ${data.type}. Tokens left: ${ship.upgradeTokens}`);
-            return;
+            if (nextLevel <= Math.min(5, maxIndividualLevel)) {
+              ship.upgradeTokens--;
+              ship.isUpgrading = true;
+              ship.upgradeUsingToken = true;
+              ship.upgradeTimer = 3.0;
+              ship.upgradeProp = prop;
+              ship.upgradeType = data.type;
+              ship.upgradePlanetId = null;
+              ship.upgradeShipsPaid = 0;
+              ship.upgradeAccumulator = 0;
+              console.log(`Started token upgrade for cruiser ${ship.id} with ${data.type}. Tokens left: ${ship.upgradeTokens}`);
+              return;
+            } else {
+              console.log(`[Server Upgrade Rejected] Token level limit exceeded. nextLevel: ${nextLevel}, maxLevel: ${maxIndividualLevel}`);
+              return;
+            }
           }
 
           if (nextLevel > maxIndividualLevel || (totalUpgrades + 1) > maxTotalUpgrades) {
