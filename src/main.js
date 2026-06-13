@@ -2267,6 +2267,12 @@ function getPlanetTradeIncomePerMin(planet) {
           infoPanelImagePlaceholder.style.backgroundRepeat = "";
           infoPanelImageHologram.style.display = "flex";
         }
+      } else if (type === 'anomaly') {
+        infoPanelImagePlaceholder.style.backgroundImage = "url('/Art/anomaly.jpg')";
+        infoPanelImagePlaceholder.style.backgroundSize = "cover";
+        infoPanelImagePlaceholder.style.backgroundRepeat = "no-repeat";
+        infoPanelImagePlaceholder.style.backgroundPosition = "center center";
+        infoPanelImageHologram.style.display = "none";
       } else {
         infoPanelImagePlaceholder.style.backgroundImage = "";
         infoPanelImagePlaceholder.style.backgroundRepeat = "";
