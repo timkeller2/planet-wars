@@ -269,7 +269,6 @@ export class Game {
     this.marketSalesHistory = [];
     this.highestSpeedMilestoneTriggered = 0;
     this.wreckages = [];
-    this.chunks = [];
     this.pendingPioneerSpawns = [];
   }
 
@@ -1308,19 +1307,8 @@ export class Game {
         beingScanned: w.beingScanned,
         scanningShipId: w.scanningShipId,
         scanningPlayerId: w.scanningPlayerId,
-        scanTimeLeft: w.scanTimeLeft
       })),
-      chunks: this.chunks.map(c => ({
-        id: c.id,
-        x: c.x,
-        y: c.y,
-        amoebaDamage: c.amoebaDamage,
-        cruiserDamage: c.cruiserDamage,
-        dx: c.dx,
-        dy: c.dy,
-        speed: c.speed,
-        lifespan: c.lifespan
-      }))
+      chunks: []
     };
     return state;
   }
@@ -1527,23 +1515,7 @@ export class Game {
         });
       }
     }
-    
     this.chunks = [];
-    if (state.chunks) {
-      for (const cData of state.chunks) {
-        this.chunks.push({
-          id: cData.id,
-          x: cData.x,
-          y: cData.y,
-          amoebaDamage: cData.amoebaDamage,
-          cruiserDamage: cData.cruiserDamage,
-          dx: cData.dx,
-          dy: cData.dy,
-          speed: cData.speed,
-          lifespan: cData.lifespan
-        });
-      }
-    }
   }
 
   initMap() {
@@ -3661,50 +3633,7 @@ export class Game {
 
   update(deltaTime) {
     if (!this.wreckages) this.wreckages = [];
-    if (!this.chunks) this.chunks = [];
     if (!this.pendingPioneerSpawns) this.pendingPioneerSpawns = [];
-
-    // Update drift and lifespan of chunks
-    const dtSeconds = deltaTime / 1000;
-    for (let i = this.chunks.length - 1; i >= 0; i--) {
-      const c = this.chunks[i];
-      c.x += c.dx * c.speed * dtSeconds;
-      c.y += c.dy * c.speed * dtSeconds;
-      c.lifespan -= deltaTime;
-      
-      if (c.lifespan <= 0) {
-        // Merge into or create wreckage
-        let closestW = null;
-        let minDistSq = Infinity;
-        for (const w of this.wreckages) {
-          const dx = w.x - c.x;
-          const dy = w.y - c.y;
-          const distSq = dx * dx + dy * dy;
-          if (distSq <= 300 * 300 && distSq < minDistSq) {
-            minDistSq = distSq;
-            closestW = w;
-          }
-        }
-        
-        if (closestW) {
-          closestW.amoebaDamage += c.amoebaDamage;
-          closestW.cruiserDamage += c.cruiserDamage;
-          closestW.lastFightingTime = Date.now(); // reset wreckage cooldown
-        } else {
-          const wreckage = {
-            id: 'wreck_' + Math.random().toString(36).substr(2, 9),
-            x: c.x,
-            y: c.y,
-            amoebaDamage: c.amoebaDamage,
-            cruiserDamage: c.cruiserDamage,
-            lastFightingTime: Date.now()
-          };
-          this.wreckages.push(wreckage);
-        }
-        
-        this.chunks.splice(i, 1);
-      }
-    }
 
     // Process pending pioneer ship spawns
     if (this.pendingPioneerSpawns.length > 0) {
@@ -6109,47 +6038,35 @@ export class Game {
   }
 
   handleWreckageDamage(x, y, amoebaDamage, cruiserDamage) {
-    if (!this.chunks) this.chunks = [];
     if (!this.wreckages) this.wreckages = [];
     
-    // Find an existing chunk within 75px with less than 3 units (amoebaDamage + cruiserDamage)
-    let closestChunk = null;
+    // Find an existing wreckage within 300px merge range
+    let closestW = null;
     let minDistSq = Infinity;
-    for (const c of this.chunks) {
-      const units = c.amoebaDamage + c.cruiserDamage;
-      if (units < 3) {
-        const dx = c.x - x;
-        const dy = c.y - y;
-        const distSq = dx * dx + dy * dy;
-        if (distSq <= 75 * 75 && distSq < minDistSq) {
-          minDistSq = distSq;
-          closestChunk = c;
-        }
+    for (const w of this.wreckages) {
+      const dx = w.x - x;
+      const dy = w.y - y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq <= 300 * 300 && distSq < minDistSq) {
+        minDistSq = distSq;
+        closestW = w;
       }
     }
     
-    if (closestChunk) {
-      closestChunk.amoebaDamage += amoebaDamage;
-      closestChunk.cruiserDamage += cruiserDamage;
+    if (closestW) {
+      closestW.amoebaDamage += amoebaDamage;
+      closestW.cruiserDamage += cruiserDamage;
+      closestW.lastFightingTime = Date.now(); // reset combat lock cooldown to 20s
     } else {
-      // Create a new chunk and have it drift in a random direction at speed 2-5
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 2 + Math.random() * 3; // speed 2-5
-      const dx = Math.cos(angle);
-      const dy = Math.sin(angle);
-      
-      const chunk = {
-        id: 'chunk_' + Math.random().toString(36).substr(2, 9),
+      const wreckage = {
+        id: 'wreck_' + Math.random().toString(36).substr(2, 9),
         x: x,
         y: y,
         amoebaDamage: amoebaDamage,
         cruiserDamage: cruiserDamage,
-        dx: dx,
-        dy: dy,
-        speed: speed,
-        lifespan: 10000 // 10 seconds lifespan
+        lastFightingTime: Date.now()
       };
-      this.chunks.push(chunk);
+      this.wreckages.push(wreckage);
     }
   }
 

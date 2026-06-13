@@ -9461,12 +9461,14 @@ function getPlanetTradeIncomePerMin(planet) {
           
           ctx.rotate(driftAngle);
           
-          // Render the bigger wreckage as several chunks in a 50px area
+          // Render the wreckage as sqrt(cruiser damage) gray squares and sqrt(amoeba damage) green blobs in 100px area (50px radius)
           const idNum = parseInt(w.id.replace(/\D/g, ''), 10) || 0;
-          const numChunks = 4 + (idNum % 3); // 4 to 6 chunks
-          for (let i = 0; i < numChunks; i++) {
+          const numSquares = w.cruiserDamage > 0 ? Math.max(1, Math.floor(Math.sqrt(w.cruiserDamage))) : 0;
+          const numBlobs = w.amoebaDamage > 0 ? Math.max(1, Math.floor(Math.sqrt(w.amoebaDamage))) : 0;
+
+          for (let i = 0; i < numSquares; i++) {
             const angle = ((idNum * (i + 1) * 17) % 360) * Math.PI / 180;
-            const dist = ((idNum * (i + 2) * 23) % 20) + 5; // 5 to 25px
+            const dist = ((idNum * (i + 2) * 23) % 45) + 5; // 5 to 50px (100px area)
             const cx = Math.cos(angle) * dist;
             const cy = Math.sin(angle) * dist;
             
@@ -9490,74 +9492,28 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.restore();
           }
 
-          // Draw Amoeba blobs if it contains Amoeba parts
-          if (w.amoebaDamage > 0) {
-            const numBlobs = 2 + (idNum % 3); // 2 to 4 blobs
-            for (let i = 0; i < numBlobs; i++) {
-              const angle = ((idNum * (i + 5) * 29) % 360) * Math.PI / 180;
-              const dist = ((idNum * (i + 6) * 31) % 15) + 3; // 3 to 18px
-              const bx = Math.cos(angle) * dist;
-              const by = Math.sin(angle) * dist;
-              
-              ctx.save();
-              ctx.translate(bx, by);
-              ctx.fillStyle = 'rgba(0, 220, 80, 0.8)';
-              ctx.shadowColor = '#00ff66';
-              ctx.shadowBlur = 6;
-              const rSize = ((idNum + i * 19) % 3) + 3; // 3 to 5px
-              ctx.beginPath();
-              ctx.arc(0, 0, rSize, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.restore();
-            }
-          }
-          
-          ctx.restore();
-        }
-      }
-
-      // Draw chunks
-      if (serverState.chunks) {
-        for (const c of serverState.chunks) {
-          ctx.save();
-          ctx.translate(c.x, c.y);
-          
-          const hasAmoebaParts = c.amoebaDamage > 0;
-          const idNum = parseInt(c.id.replace(/\D/g, ''), 10) || 0;
-          const rOffset = (idx) => (((idNum + idx * 7) % 5) - 2);
-
-          if (!hasAmoebaParts) {
-            // Mishapen gray square
-            ctx.fillStyle = '#64748b'; // gray
-            ctx.strokeStyle = '#475569';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(-4 + rOffset(0), -4 + rOffset(1));
-            ctx.lineTo(4 + rOffset(2), -4 + rOffset(3));
-            ctx.lineTo(4 + rOffset(4), 4 + rOffset(5));
-            ctx.lineTo(-4 + rOffset(6), 4 + rOffset(7));
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-          } else {
-            // Organic piece of blob
+          for (let i = 0; i < numBlobs; i++) {
+            const angle = ((idNum * (i + 5) * 29) % 360) * Math.PI / 180;
+            const dist = ((idNum * (i + 6) * 31) % 45) + 5; // 5 to 50px (100px area)
+            const bx = Math.cos(angle) * dist;
+            const by = Math.sin(angle) * dist;
+            
+            ctx.save();
+            ctx.translate(bx, by);
             ctx.fillStyle = 'rgba(0, 220, 80, 0.8)';
             ctx.shadowColor = '#00ff66';
             ctx.shadowBlur = 6;
+            const rSize = ((idNum + i * 19) % 3) + 3; // 3 to 5px
             ctx.beginPath();
-            ctx.arc(rOffset(0), rOffset(1), 5 + rOffset(2), 0, Math.PI * 2);
+            ctx.arc(0, 0, rSize, 0, Math.PI * 2);
             ctx.fill();
-            ctx.beginPath();
-            ctx.arc(2 + rOffset(3), -1 + rOffset(4), 4 + rOffset(5), 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(-2 + rOffset(6), 1 + rOffset(7), 4.5 + rOffset(8), 0, Math.PI * 2);
-            ctx.fill();
-            ctx.shadowBlur = 0; // reset
+            ctx.restore();
           }
+          
           ctx.restore();
         }
       }
+
 
       for (const p of serverState.planets) {
         if (p.isDeepSpaceAnomaly) {
