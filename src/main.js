@@ -1090,7 +1090,10 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     if (!drawnButtonImage) {
-      const size = isCruiserBtn ? 14 : 8;
+      let size = isCruiserBtn ? 14 : 8;
+      if (style === 'Romulan' && classType === 'corvette') {
+        size *= 1.35;
+      }
       ctxBtn.fillStyle = playerColor;
       drawRacialShipHull(ctxBtn, style, cohort, size);
       ctxBtn.closePath();
@@ -1645,10 +1648,13 @@ function getPlanetTradeIncomePerMin(planet) {
           } else if (s.isDismantling && s.dismantleTimer !== undefined && s.dismantleDuration) {
             ctxTile.globalAlpha = Math.max(0, Math.min(1.0, s.dismantleTimer / s.dismantleDuration));
           }
-          const size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0);
           let angle = s.angle || 0;
           let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
           let style = s.cruiserStyle || (ownerPlayer ? ownerPlayer.cruiserStyle : 'Klingon');
+          let size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0);
+          if (style === 'Romulan' && s.classType === 'corvette') {
+            size *= 1.35;
+          }
 
           let cohort = 'scout_group';
           if (s.classType === 'destroyer') {
@@ -4202,17 +4208,36 @@ function getPlanetTradeIncomePerMin(planet) {
       regenerateStars(state.width, state.height);
     }
 
-    // Center on homeworld and select it on first sync
+    // Center on homeworld/initial corvettes and select them on first sync
     if (!hasCenteredOnHomeworld && localPlayer && state.settings && state.width && state.height) {
-      const hw = state.planets.find(p => p.homeworldOf === localPlayer.id);
-      if (hw) {
-        cameraPanX = state.width / 2 - hw.x;
-        cameraPanY = state.height / 2 - hw.y;
-        cameraZoom = 2.0;
-        hasCenteredOnHomeworld = true;
+      if (state.settings.homeworldSize === 'pioneers') {
+        const myShips = state.ships.filter(s => s.ownerId === localPlayer.id && s.active);
+        if (myShips.length > 0) {
+          // Calculate average position of player's initial ships
+          let sumX = 0, sumY = 0;
+          for (const s of myShips) {
+            sumX += s.x;
+            sumY += s.y;
+          }
+          const centerX = sumX / myShips.length;
+          const centerY = sumY / myShips.length;
 
-        // Auto-select homeworld disabled per user request
-        // selectedPlanets = [hw];
+          cameraPanX = state.width / 2 - centerX;
+          cameraPanY = state.height / 2 - centerY;
+          cameraZoom = 2.0; // Zoom in!
+          hasCenteredOnHomeworld = true;
+        }
+      } else {
+        const hw = state.planets.find(p => p.homeworldOf === localPlayer.id);
+        if (hw) {
+          cameraPanX = state.width / 2 - hw.x;
+          cameraPanY = state.height / 2 - hw.y;
+          cameraZoom = 2.0;
+          hasCenteredOnHomeworld = true;
+
+          // Auto-select homeworld disabled per user request
+          // selectedPlanets = [hw];
+        }
       }
     }
 
@@ -12512,10 +12537,13 @@ function getPlanetTradeIncomePerMin(planet) {
           } else if (s.isDismantling && s.dismantleTimer !== undefined && s.dismantleDuration) {
             ctx.globalAlpha = Math.max(0, Math.min(1.0, s.dismantleTimer / s.dismantleDuration));
           }
-          const size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0);
           let angle = s.angle || 0;
           let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
           let style = s.cruiserStyle || (ownerPlayer ? ownerPlayer.cruiserStyle : 'Klingon');
+          let size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0);
+          if (style === 'Romulan' && s.classType === 'corvette') {
+            size *= 1.35;
+          }
 
           let cohort = 'scout_group';
           if (s.classType === 'destroyer') {
