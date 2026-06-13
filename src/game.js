@@ -591,7 +591,7 @@ export class Game {
 
   assignPlanet(player) {
     const hwSizeSetting = (this.settings && this.settings.homeworldSize) ? this.settings.homeworldSize : "120";
-    const isNatural = hwSizeSetting === 'natural';
+    const isNatural = hwSizeSetting === 'natural' || (hwSizeSetting === 'pioneers' && player.isAI);
 
     let targetPlanet = null;
 
@@ -628,18 +628,18 @@ export class Game {
       return dists.length >= 3 ? dists[2] : (dists.length >= 2 ? dists[1] : (dists[0] || Infinity));
     };
 
-    if (hwSizeSetting === 'pioneers') {
+    if (hwSizeSetting === 'pioneers' && !player.isAI) {
       let bestPos = null;
       
       // Spacing options to gradually relax if we cannot find a suitable spot
       const playerSpacingOptions = [600, 400, 200, 0];
       const planetSpacingOptions = [300, 200, 100, 50];
       
-      // Get starting positions of already spawned players from their active ships
-      const otherPlayersPositions = [];
+      // Get starting positions of already spawned human players' cruisers
+      const otherHumanCruiserPositions = [];
       for (const ship of this.ships) {
-        if (ship.active && ship.owner && ship.owner.id !== player.id) {
-          otherPlayersPositions.push({ x: ship.x, y: ship.y });
+        if (ship.active && ship.owner && ship.owner.id !== player.id && !ship.owner.isAI) {
+          otherHumanCruiserPositions.push({ x: ship.x, y: ship.y });
         }
       }
       
@@ -682,10 +682,10 @@ export class Game {
             }
             if (tooCloseToPlanet) continue;
 
-            // Check distance from other players' positions
-            if (playerSpacing > 0 && otherPlayersPositions.length > 0) {
+            // Check distance from other human players' cruisers
+            if (playerSpacing > 0 && otherHumanCruiserPositions.length > 0) {
               let tooCloseToPlayer = false;
-              for (const pos of otherPlayersPositions) {
+              for (const pos of otherHumanCruiserPositions) {
                 const dx = pos.x - x;
                 const dy = pos.y - y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
