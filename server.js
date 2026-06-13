@@ -1410,7 +1410,7 @@ async function bootstrap() {
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
-          startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250,
+          startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 0,
           graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
           enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false,
           aiEntry: options && options.aiEntry !== undefined ? options.aiEntry : 'mid',
@@ -1446,7 +1446,7 @@ async function bootstrap() {
           p.lastCommandTime = Date.now();
           p.discoveredPlanets = new Set();
           p.attackedPlanets = new Map();
-          p.credits = game.settings && game.settings.startingCredits !== undefined ? game.settings.startingCredits : 250;
+          p.credits = game.settings && game.settings.startingCredits !== undefined ? game.settings.startingCredits : 0;
         }
         for (const [socketId, activePlayer] of connectedClients.entries()) {
           io.to(socketId).emit('assignedPlayer', activePlayer);
@@ -1483,7 +1483,7 @@ async function bootstrap() {
           hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
-          startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 250,
+          startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 0,
           graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
           enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false,
           aiEntry: options && options.aiEntry !== undefined ? options.aiEntry : 'mid',
@@ -1532,7 +1532,7 @@ async function bootstrap() {
           p.cruiserStyle = null;
         }
         
-        p.credits = game.settings && game.settings.startingCredits !== undefined ? game.settings.startingCredits : 250;
+        p.credits = game.settings && game.settings.startingCredits !== undefined ? game.settings.startingCredits : 0;
         const resources = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
         p.autoBuyOrders = resources.map(res => ({
           id: "autobuy_" + Math.random().toString(36).substring(2, 9),

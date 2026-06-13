@@ -1,0 +1,4 @@
+# Antigravity Agent Directives
+
+- DO NOT use the browser tool or browser subagent for testing. 
+- All UI, gameplay, and manual testing must be left to the user.

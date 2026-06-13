@@ -8228,11 +8228,11 @@ function getPlanetTradeIncomePerMin(planet) {
       const customVal = homeworldSizeInput ? parseInt(homeworldSizeInput.value, 10) : 120;
       homeworldSizeSetting = isNaN(customVal) ? "120" : String(customVal);
     }
-    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "500";
+    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "0";
     if (startingCreditsVal === 'custom') {
       const startingCreditsInput = document.getElementById('starting-credits-input');
-      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 500;
-      startingCreditsVal = isNaN(customCredits) ? "500" : String(customCredits);
+      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 0;
+      startingCreditsVal = isNaN(customCredits) ? "0" : String(customCredits);
     }
     const raceSelect = document.getElementById('player-race-select');
     const selectedRace = raceSelect ? raceSelect.value : 'Random';
@@ -8294,11 +8294,11 @@ function getPlanetTradeIncomePerMin(planet) {
       const customVal = homeworldSizeInput ? parseInt(homeworldSizeInput.value, 10) : 120;
       homeworldSizeSetting = isNaN(customVal) ? "120" : String(customVal);
     }
-    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "500";
+    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "0";
     if (startingCreditsVal === 'custom') {
       const startingCreditsInput = document.getElementById('starting-credits-input');
-      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 500;
-      startingCreditsVal = isNaN(customCredits) ? "500" : String(customCredits);
+      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 0;
+      startingCreditsVal = isNaN(customCredits) ? "0" : String(customCredits);
     }
     const aiEntrySel = document.getElementById('ai-entry-select');
     const aiEntry = aiEntrySel ? aiEntrySel.value : 'mid';

@@ -592,6 +592,32 @@ export class Game {
 
     let targetPlanet = null;
 
+    // Helper to calculate total economy (maxShips) within 400px of a coordinate
+    const getEconomyWithin400 = (x, y) => {
+      let sum = 0;
+      for (const p of this.planets) {
+        if (!p.homeworldOf) {
+          const dx = p.x - x;
+          const dy = p.y - y;
+          if (dx * dx + dy * dy <= 400 * 400) {
+            sum += (p.maxShips || 0);
+          }
+        }
+      }
+      return sum;
+    };
+
+    // Calculate average economy within 400px of all non-homeworld planets
+    const nonHwPlanets = this.planets.filter(p => !p.homeworldOf);
+    let avgEconomy = 0;
+    if (nonHwPlanets.length > 0) {
+      let totalEconomySum = 0;
+      for (const p of nonHwPlanets) {
+        totalEconomySum += getEconomyWithin400(p.x, p.y);
+      }
+      avgEconomy = totalEconomySum / nonHwPlanets.length;
+    }
+
     // Helper to calculate distance from a position/planet to the 3rd closest non-homeworld planet
     const getGroupDist = (pos) => {
       const others = this.planets.filter(p => p !== pos && !p.homeworldOf);
@@ -648,6 +674,20 @@ export class Game {
             groupFiltered = candidatesWithGroupDist.slice(0, Math.max(1, Math.floor(candidatesWithGroupDist.length * 0.1)));
           }
 
+          // Honey hole avoidance filter
+          const withEconomy = groupFiltered.map(c => ({
+            ...c,
+            economy: getEconomyWithin400(c.x, c.y)
+          }));
+          const threshold = avgEconomy * 1.5;
+          let honeyHoleFiltered = withEconomy.filter(c => c.economy <= threshold);
+          if (honeyHoleFiltered.length === 0) {
+            // Fallback: keep bottom 50% with lowest economy
+            withEconomy.sort((a, b) => a.economy - b.economy);
+            honeyHoleFiltered = withEconomy.slice(0, Math.max(1, Math.floor(withEconomy.length / 2)));
+          }
+          groupFiltered = honeyHoleFiltered;
+
           if (existingHomeworlds.length === 0) {
             // First homeworld: pick the one closest to a group (minimizes groupDist)
             groupFiltered.sort((a, b) => a.groupDist - b.groupDist);
@@ -688,8 +728,23 @@ export class Game {
       if (neutralPlanets.length === 0) return false;
 
       let availableCandidates = neutralPlanets;
+
+      // Honey hole avoidance filter for existing planets
+      const withEconomy = availableCandidates.map(p => ({
+        planet: p,
+        economy: getEconomyWithin400(p.x, p.y)
+      }));
+      const threshold = avgEconomy * 1.5;
+      let nonHoneyHoles = withEconomy.filter(item => item.economy <= threshold);
+      if (nonHoneyHoles.length === 0) {
+        // Fallback: keep bottom 50% with lowest economy
+        withEconomy.sort((a, b) => a.economy - b.economy);
+        nonHoneyHoles = withEconomy.slice(0, Math.max(1, Math.floor(withEconomy.length / 2)));
+      }
+      availableCandidates = nonHoneyHoles.map(item => item.planet);
+
       if (player.isAI && player !== this.monsterPlayer) {
-        const preferred = neutralPlanets.filter(p => {
+        const preferred = availableCandidates.filter(p => {
           // Skip if in human gravity well
           if (this.isPlanetInHumanGravityWell(p)) return false;
           // Skip if FOW is enabled and visible to human (66% chance)
@@ -1320,7 +1375,7 @@ export class Game {
       player.expProgress = 0;
       player.cruiserStyle = null;
       player.prevTechBonus = 0;
-      player.credits = this.settings && this.settings.startingCredits !== undefined ? this.settings.startingCredits : 250;
+      player.credits = this.settings && this.settings.startingCredits !== undefined ? this.settings.startingCredits : 0;
       player.tradingBonus = 0;
       player.useCredits = true;
       player.atWarWith = {};
@@ -4762,6 +4817,84 @@ export class Game {
           ship.targetX = ship.x + (Math.random() - 0.5) * 400;
           ship.targetY = ship.y + (Math.random() - 0.5) * 400;
         }
+    }
+
+    // Resolve cruiser stacking when not moving
+    const nonMovingCruisers = [];
+    for (const ship of this.ships) {
+      if (ship.active && ship.isCruiser && ship.maxHealth > 0 && !ship.isCruiserMoving()) {
+        nonMovingCruisers.push(ship);
+      }
+    }
+
+    if (nonMovingCruisers.length > 1) {
+      const minDistance = 30; // minimum distance between cruiser centers
+      const minDistanceSq = minDistance * minDistance;
+      let anyMoved = false;
+      
+      // Run multiple iterations of relaxation to handle multi-cruiser stacks nicely
+      for (let pass = 0; pass < 4; pass++) {
+        let movedThisPass = false;
+        for (let i = 0; i < nonMovingCruisers.length; i++) {
+          const shipA = nonMovingCruisers[i];
+          for (let j = i + 1; j < nonMovingCruisers.length; j++) {
+            const shipB = nonMovingCruisers[j];
+            const dx = shipB.x - shipA.x;
+            const dy = shipB.y - shipA.y;
+            const distSq = dx * dx + dy * dy;
+            
+            if (distSq < minDistanceSq) {
+              // Stacked! Resolve by scooting them in opposite directions.
+              // If they are exactly on top of each other, use a random angle to break symmetry.
+              // Otherwise, push them directly away from each other.
+              let pushX, pushY;
+              if (distSq < 0.01) {
+                const angle = Math.random() * Math.PI * 2;
+                pushX = Math.cos(angle);
+                pushY = Math.sin(angle);
+              } else {
+                const dist = Math.sqrt(distSq);
+                pushX = dx / dist;
+                pushY = dy / dist;
+              }
+              
+              const scootAmount = 8; // move 8px each (total 16px separation per pass)
+              
+              shipA.x -= pushX * scootAmount;
+              shipA.y -= pushY * scootAmount;
+              shipB.x += pushX * scootAmount;
+              shipB.y += pushY * scootAmount;
+              
+              // Keep within map boundaries
+              shipA.x = Math.max(20, Math.min(this.width - 20, shipA.x));
+              shipA.y = Math.max(20, Math.min(this.height - 20, shipA.y));
+              shipB.x = Math.max(20, Math.min(this.width - 20, shipB.x));
+              shipB.y = Math.max(20, Math.min(this.height - 20, shipB.y));
+              
+              // Update target and starting coordinates so they don't jitter/try to return to old coords
+              if (shipA.targetX !== null && shipA.targetX !== undefined) {
+                shipA.targetX = shipA.x;
+                shipA.targetY = shipA.y;
+                shipA.startX = shipA.x;
+                shipA.startY = shipA.y;
+              }
+              if (shipB.targetX !== null && shipB.targetX !== undefined) {
+                shipB.targetX = shipB.x;
+                shipB.targetY = shipB.y;
+                shipB.startX = shipB.x;
+                shipB.startY = shipB.y;
+              }
+              
+              movedThisPass = true;
+              anyMoved = true;
+            }
+          }
+        }
+        if (!movedThisPass) break;
+      }
+      if (anyMoved) {
+        this.ships.updateGrid();
+      }
     }
     
     // Fleet attrition: destroy 1 ship per 4 seconds in a fleet (ships safe for first 12s)
