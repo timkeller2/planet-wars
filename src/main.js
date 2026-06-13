@@ -2464,7 +2464,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const currentSym = getEffectiveSympathyClient(p, myPlayer.id);
         const expBonus = Math.sqrt(myPlayer.expScore || 0);
         const selectedCruiser = getSelectedCruiser();
-        const shipExpBonus = selectedCruiser ? Math.sqrt(selectedCruiser.expScore || 0) : 0;
+        const shipExpBonus = selectedCruiser ? (Math.sqrt(selectedCruiser.expScore || 0) + (selectedCruiser.commandPoints || 0)) : 0;
         const bonusSum = expBonus + shipExpBonus;
         const disposition = p.disposition?.[myPlayer.id] ?? 0;
         
@@ -2772,7 +2772,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const currentTotalHealth = Math.floor(hs.health) + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
         const maxTotalHealth = hs.maxHealth + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
         lines.push({ label: 'Health', value: currentTotalHealth + ' / ' + maxTotalHealth, color: '#fff' });
-        lines.push({ label: 'Bomb Sacs', value: Math.floor(hs.bombs || 0) + ' / ' + hs.maxHealth, color: '#ff0' });
+        lines.push({ label: 'Sacs', value: (hs.bombs || 0).toFixed(1) + ' / ' + hs.maxHealth, color: '#ff0' });
         if (hs.isHungry) {
           lines.push({ label: 'Status', value: 'Hungry (will grow)', color: '#f66' });
         } else {
@@ -2902,12 +2902,12 @@ function getPlanetTradeIncomePerMin(planet) {
         }
 
         const maxBombs = getMaxBombs(hs);
-        let munitionsDisplay = Math.floor(hs.bombs || 0) + ' / ' + maxBombs;
+        let munitionsDisplay = (hs.bombs || 0).toFixed(1) + ' / ' + maxBombs;
         let munitionsLabel = hs.munitions > 0 ? `Munitions (${hs.munitions})` : 'Munitions';
         if (hs.specialbombs && hs.specialbombs > 0) {
           munitionsLabel += '*';
         }
-        lines.push({ label: `💣 ${munitionsLabel}`, value: `${munitionsDisplay}  |  🛡️ ${deflectionLabel}: ${shrugChance}%`, color: '#ffa' });
+        lines.push({ label: `${munitionsLabel}`, value: `${munitionsDisplay}  |  🛡️ ${deflectionLabel}: ${shrugChance}%`, color: '#ffa' });
         if (hs.munitions > 0) {
           lines.push({ label: 'Splash Damage', value: `+${hs.munitions}`, color: '#ffd740' });
         }
@@ -10963,7 +10963,7 @@ function getPlanetTradeIncomePerMin(planet) {
             const currentTotalHealth = Math.floor(hs.health) + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
             const maxTotalHealth = hs.maxHealth + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
             lines.push({ label: 'Health', value: currentTotalHealth + ' / ' + maxTotalHealth, color: '#fff' });
-            lines.push({ label: 'Bomb Sacs', value: Math.floor(hs.bombs || 0) + ' / ' + hs.maxHealth, color: '#ff0' });
+            lines.push({ label: 'Sacs', value: (hs.bombs || 0).toFixed(1) + ' / ' + hs.maxHealth, color: '#ff0' });
             if (hs.isHungry) {
               lines.push({ label: 'Status', value: 'Hungry (will grow)', color: '#f66' });
             } else {
@@ -11070,7 +11070,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
             const techBonus = Math.sqrt(rawTech);
             const expBonus = Math.sqrt(rawExp);
-            const shipExpBonus = Math.sqrt(shipExp);
+            const shipExpBonus = Math.sqrt(shipExp) + (hs.commandPoints || 0);
 
             const baseDeflection = hs.maxHealth + (techBonus + expBonus + shipExpBonus);
             let shrugChance = Math.floor(baseDeflection);
@@ -11087,12 +11087,12 @@ function getPlanetTradeIncomePerMin(planet) {
             }
 
             const maxBombs = getMaxBombs(hs);
-            let munitionsDisplay = Math.floor(hs.bombs || 0) + ' / ' + maxBombs;
+            let munitionsDisplay = (hs.bombs || 0).toFixed(1) + ' / ' + maxBombs;
             let munitionsLabel = hs.munitions > 0 ? `Munitions (${hs.munitions})` : 'Munitions';
             if (hs.specialbombs && hs.specialbombs > 0) {
               munitionsLabel += '*';
             }
-            lines.push({ label: `💣 ${munitionsLabel}`, value: `${munitionsDisplay}  |  🛡️ ${deflectionLabel}: ${shrugChance}%`, color: '#ffa' });
+            lines.push({ label: `${munitionsLabel}`, value: `${munitionsDisplay}  |  🛡️ ${deflectionLabel}: ${shrugChance}%`, color: '#ffa' });
             if (hs.munitions > 0) {
               lines.push({ label: 'Splash Damage', value: `+${hs.munitions}`, color: '#ffd740' });
             }
@@ -11741,7 +11741,7 @@ function getPlanetTradeIncomePerMin(planet) {
             }
             range = Math.floor(range);
           } else if (s.maxHealth > 0) {
-            const shipExpBonus = Math.sqrt(s.expScore || 0);
+            const shipExpBonus = Math.sqrt(s.expScore || 0) + (s.commandPoints || 0);
             const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
             const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
             range = baseDogfightRange * 1.10;
@@ -11776,7 +11776,7 @@ function getPlanetTradeIncomePerMin(planet) {
           
           if (s.isCruiser && !s.isAmoeba) {
             // Draw custom directional firing range envelope for cruisers
-            const shipExpBonus = Math.sqrt(s.expScore || 0);
+            const shipExpBonus = Math.sqrt(s.expScore || 0) + (s.commandPoints || 0);
             const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
             const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
 
