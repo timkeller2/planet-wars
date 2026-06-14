@@ -1164,6 +1164,7 @@ function getPlanetTradeIncomePerMin(planet) {
   let hoveredShip = null;
   let hoveredAnomaly = null;
   let hoveredAnomalyPlanet = null;
+  let hoveredWreckage = null;
   let isHoveringSelectionTile = false;
   let selectionTileMouseX = 0;
   let selectionTileMouseY = 0;
@@ -2173,6 +2174,19 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
       }
+    } else if (activeInfoPanel.type === 'wreckage') {
+      const serverPos = getMouseServerPos(lastCanvasMouseX, lastCanvasMouseY);
+      if (serverState && serverState.wreckages) {
+        for (const w of serverState.wreckages) {
+          if (w.id === activeInfoPanel.id) {
+            const wdx = w.x - serverPos.x;
+            const wdy = w.y - serverPos.y;
+            if (wdx * wdx + wdy * wdy < 50 * 50) {
+              return true;
+            }
+          }
+        }
+      }
     }
     return false;
   }
@@ -2321,6 +2335,12 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       } else if (type === 'anomaly') {
         infoPanelImagePlaceholder.style.backgroundImage = "url('/Art/anomaly.jpg')";
+        infoPanelImagePlaceholder.style.backgroundSize = "cover";
+        infoPanelImagePlaceholder.style.backgroundRepeat = "no-repeat";
+        infoPanelImagePlaceholder.style.backgroundPosition = "center center";
+        infoPanelImageHologram.style.display = "none";
+      } else if (type === 'wreckage') {
+        infoPanelImagePlaceholder.style.backgroundImage = "url('/Art/spacedebris.png')";
         infoPanelImagePlaceholder.style.backgroundSize = "cover";
         infoPanelImagePlaceholder.style.backgroundRepeat = "no-repeat";
         infoPanelImagePlaceholder.style.backgroundPosition = "center center";
@@ -3308,6 +3328,55 @@ function getPlanetTradeIncomePerMin(planet) {
           </div>`;
         }
       }
+    } else if (type === 'wreckage') {
+      const w = serverState.wreckages.find(wr => wr.id === id);
+      if (!w) {
+        closeInfoPanel();
+        return;
+      }
+      titleHTML = `<span style="color: #ffb74d; font-weight: bold;">WRECKAGE SALVAGE SITE</span>`;
+      
+      const lines = [];
+      const totalVolume = (w.cruiserDamage || 0) + (w.amoebaDamage || 0);
+      lines.push({ label: 'Total Volume', value: `${Math.round(totalVolume)} tons`, color: '#fff', isHeader: true });
+      
+      if (w.cruiserDamage > 0) {
+        lines.push({ label: 'Cruiser Debris', value: `${Math.round(w.cruiserDamage)} tons`, color: '#80deea' });
+      }
+      if (w.amoebaDamage > 0) {
+        lines.push({ label: 'Amoeba Residue', value: `${Math.round(w.amoebaDamage)} units`, color: '#a5d6a7' });
+      }
+      
+      const baseVal = (w.amoebaDamage || 0) * 2 + (w.cruiserDamage || 0);
+      if (w.amoebaDamage > 10) {
+        const difficulty = Math.floor(w.amoebaDamage / 10);
+        lines.push({ label: '⚠️ Bio-hazard warning', value: `Salvaging will trigger anomaly!`, color: '#ff8a65' });
+        lines.push({ label: 'Expected Reward', value: `Deep Space Anomaly (Diff: ${difficulty})`, color: '#ffb74d' });
+      } else if (baseVal > 0) {
+        const expectedVal = Math.round(baseVal * 1.5);
+        const minVal = Math.round(baseVal);
+        const maxVal = Math.round(baseVal * 2);
+        lines.push({ label: 'Expected Value', value: `~${expectedVal} Credits`, color: '#ffd54f' });
+        lines.push({ label: 'Credits Range', value: `${minVal} - ${maxVal} Credits`, color: '#ffd54f' });
+      } else {
+        lines.push({ label: 'Expected Value', value: '0 Credits', color: '#ffd54f' });
+      }
+      
+      for (const line of lines) {
+        const displayLabel = formatTooltipString(line.label);
+        const displayValue = formatTooltipString(line.value);
+        if (line.isHeader) {
+          bodyHTML += `<div class="info-panel-row header-row" style="color: ${line.color}">
+            <div class="info-panel-label">${displayLabel}</div>
+            <div class="info-panel-value">${displayValue || ''}</div>
+          </div>`;
+        } else {
+          bodyHTML += `<div class="info-panel-row" style="color: ${line.color || '#fff'}">
+            <div class="info-panel-label">${displayLabel}</div>
+            <div class="info-panel-value">${displayValue}</div>
+          </div>`;
+        }
+      }
     }
 
     infoPanelTitle.innerHTML = titleHTML;
@@ -3341,6 +3410,13 @@ function getPlanetTradeIncomePerMin(planet) {
       if (s) {
         targetX = s.x;
         targetY = s.y;
+        hasTargetCoords = true;
+      }
+    } else if (type === 'wreckage') {
+      let w = serverState.wreckages.find(wr => wr.id === id);
+      if (w) {
+        targetX = w.x;
+        targetY = w.y;
         hasTargetCoords = true;
       }
     }
@@ -6608,6 +6684,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (isTouchInput || isHoveringSelectionTile) {
       hoveredPlanet = null;
       hoveredShip = null;
+      hoveredWreckage = null;
       return;
     }
 
@@ -6649,14 +6726,33 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
 
+    // Detect hovered wreckage
+    hoveredWreckage = null;
+    if (serverState && serverState.wreckages) {
+      for (const w of serverState.wreckages) {
+        const wdx = w.x - serverPos.x;
+        const wdy = w.y - serverPos.y;
+        if (wdx * wdx + wdy * wdy < 50 * 50) {
+          hoveredWreckage = w;
+          break;
+        }
+      }
+    }
+
     // Hover overrides hierarchy
     if (hoveredAnomaly) {
       hoveredPlanet = null;
       hoveredShip = null;
+      hoveredWreckage = null;
     } else if (hoveredShip && hoveredShip.isCruiser) {
       hoveredPlanet = null;
+      hoveredWreckage = null;
     } else if (hoveredPlanet) {
       hoveredShip = null; // Planet overrides non-cruiser ships
+      hoveredWreckage = null;
+    } else if (hoveredWreckage) {
+      hoveredPlanet = null;
+      hoveredShip = null;
     }
 
     if (!lasso.active) return;
@@ -6879,6 +6975,9 @@ function getPlanetTradeIncomePerMin(planet) {
     } else if (hoveredPlanet) {
       newType = 'planet';
       newId = hoveredPlanet.id;
+    } else if (hoveredWreckage) {
+      newType = 'wreckage';
+      newId = hoveredWreckage.id;
     } else if (hoveredShip) {
       newType = 'fleet';
       newId = hoveredShip.id;
