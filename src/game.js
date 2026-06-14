@@ -1274,6 +1274,7 @@ export class Game {
         revoltShipsDestroyedSoFar: p.revoltShipsDestroyedSoFar,
 
         disposition: p.disposition,
+        dispositionTimers: p.dispositionTimers,
         expScore: p.expScore,
         expProgress: p.expProgress,
         sacrificedShips: p.sacrificedShips,
@@ -1420,6 +1421,7 @@ export class Game {
       p.revoltShipsDestroyedSoFar = pData.revoltShipsDestroyedSoFar || 0;
 
       p.disposition = pData.disposition || {};
+      p.dispositionTimers = pData.dispositionTimers || {};
       p.expScore = pData.expScore !== undefined ? pData.expScore : 0;
       p.expProgress = pData.expProgress !== undefined ? pData.expProgress : 0;
       p.sacrificedShips = pData.sacrificedShips !== undefined ? pData.sacrificedShips : 0;
@@ -6014,6 +6016,8 @@ export class Game {
         dispositionVal += 0.5 * currentSym;
 
         targetPlanet.disposition[ship.owner.id] = Math.max(-100, Math.min(100, Math.floor(dispositionVal)));
+        targetPlanet.dispositionTimers = targetPlanet.dispositionTimers || {};
+        targetPlanet.dispositionTimers[ship.owner.id] = 600000;
       }
 
       const baseIncreaseAmt = Math.floor(1 + (chancePercent - roll) / 25);
@@ -6493,9 +6497,9 @@ export class Game {
 
           let closestPlanet = null;
           if (qualifyingPlanets.length > 0) {
-            const closeQualifying = qualifyingPlanets.filter(qp => qp.dist <= 25);
+            const closeQualifying = qualifyingPlanets.filter(qp => qp.dist <= 40);
             if (closeQualifying.length > 0) {
-              // Exception: select the closest qualifying planet within 25px
+              // Exception: select the closest qualifying planet within 40px
               let minDist = Infinity;
               for (const qp of closeQualifying) {
                 if (qp.dist < minDist) {

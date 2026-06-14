@@ -2550,7 +2550,14 @@ function getPlanetTradeIncomePerMin(planet) {
             } else if (dVal > -25) {
               scoreColor = '#ffeb3b';
             }
-            dispStr = `<span style="color: ${scoreColor}; font-weight: bold;">${dVal}</span> ${emoji}`;
+            let timeStr = '';
+            if (p.dispositionTimers && p.dispositionTimers[pId] !== undefined) {
+              const totalSec = Math.max(0, Math.ceil(p.dispositionTimers[pId] / 1000));
+              const m = Math.floor(totalSec / 60);
+              const s = totalSec % 60;
+              timeStr = ` (${m}:${s.toString().padStart(2, '0')})`;
+            }
+            dispStr = `<span style="color: ${scoreColor}; font-weight: bold;">${dVal}</span> ${emoji}${timeStr}`;
           }
           const baseSym = p.sympathy?.[pId] || 0;
           lines.push({
@@ -11206,9 +11213,17 @@ function getPlanetTradeIncomePerMin(planet) {
                   scoreColor = '#ffeb3b';
                 }
 
+                let timeStr = '';
+                if (hp.dispositionTimers && hp.dispositionTimers[pId] !== undefined) {
+                  const totalSec = Math.max(0, Math.ceil(hp.dispositionTimers[pId] / 1000));
+                  const m = Math.floor(totalSec / 60);
+                  const s = totalSec % 60;
+                  timeStr = ` (${m}:${s.toString().padStart(2, '0')})`;
+                }
+
                 lines.push({ 
                   label: `🎭 Disposition (${pName})`, 
-                  value: `${dVal} ${emoji}`, 
+                  value: `${dVal} ${emoji}${timeStr}`, 
                   color: pColor,
                   valueColor: scoreColor
                 });

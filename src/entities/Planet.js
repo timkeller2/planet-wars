@@ -41,6 +41,7 @@ export class Planet {
     this.focusChanges = 0;
     this.sympathy = {};
     this.disposition = {};
+    this.dispositionTimers = {};
     this.retainedShips = false;
     this.revoltWarmup = 0;
     this.revoltWarmupMax = 1;
@@ -136,6 +137,20 @@ export class Planet {
   update(deltaTime, allPlanets, settings, game) {
     if (this.isDeepSpaceAnomaly) return;
     this.prorateSympathiesIfNeeded();
+
+    if (!this.dispositionTimers) this.dispositionTimers = {};
+    if (this.disposition) {
+      for (const pId of Object.keys(this.disposition)) {
+        if (this.dispositionTimers[pId] === undefined) {
+          this.dispositionTimers[pId] = 600000;
+        }
+        this.dispositionTimers[pId] -= deltaTime;
+        if (this.dispositionTimers[pId] <= 0) {
+          delete this.disposition[pId];
+          delete this.dispositionTimers[pId];
+        }
+      }
+    }
 
     if (this.owner && this.focusMode === 'terraforming') {
       const techBonus = Math.floor(Math.sqrt(this.owner.techScore || 0));
@@ -243,6 +258,7 @@ export class Planet {
         if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
           effectiveRate *= 1.30;
         }
+        effectiveRate *= (this.habitability / 100);
         this.productionProgress += effectiveRate * (deltaTime / 1000);
         if (this.productionProgress >= 1) {
           let newShips = Math.floor(this.productionProgress);
