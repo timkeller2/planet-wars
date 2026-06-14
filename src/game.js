@@ -825,7 +825,7 @@ export class Game {
             classType: 'corvette',
             upgradeTokens: 0,
             upgrades: upgrades,
-            timer: i * 30, // 30 seconds apart: 0s, 30s, 60s
+            timer: i * 30000, // 30 seconds apart: 0s, 30s, 60s
             isAdditional: i > 0,
             Pioneer: true
           });
