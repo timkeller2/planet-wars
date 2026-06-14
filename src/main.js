@@ -4287,7 +4287,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
     // Center on homeworld/initial corvettes and select them on first sync
     if (!hasCenteredOnHomeworld && localPlayer && state.settings && state.width && state.height) {
-      if (state.settings.homeworldSize === 'pioneers') {
+      if (state.settings.homeworldSize === 'pioneers' || state.settings.homeworldSize === 'pioneers-corvettes') {
         const myShips = state.ships.filter(s => s.ownerId === localPlayer.id && s.active);
         if (myShips.length > 0) {
           // Calculate average position of player's initial ships

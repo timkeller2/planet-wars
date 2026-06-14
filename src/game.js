@@ -590,7 +590,7 @@ export class Game {
 
   assignPlanet(player) {
     const hwSizeSetting = (this.settings && this.settings.homeworldSize) ? this.settings.homeworldSize : "120";
-    const isNatural = hwSizeSetting === 'natural' || (hwSizeSetting === 'pioneers' && player.isAI);
+    const isNatural = hwSizeSetting === 'natural' || ((hwSizeSetting === 'pioneers' || hwSizeSetting === 'pioneers-corvettes') && player.isAI);
 
     let targetPlanet = null;
 
@@ -627,7 +627,7 @@ export class Game {
       return dists.length >= 3 ? dists[2] : (dists.length >= 2 ? dists[1] : (dists[0] || Infinity));
     };
 
-    if (hwSizeSetting === 'pioneers' && !player.isAI) {
+    if ((hwSizeSetting === 'pioneers' || hwSizeSetting === 'pioneers-corvettes') && !player.isAI) {
       let bestPos = null;
       
       // Spacing options to gradually relax if we cannot find a suitable spot
@@ -790,35 +790,80 @@ export class Game {
         player.resources[bombResource] = 3;
       }
 
-      // Spawn 1 Battlecruiser immediately
       const potentialUpgrades = ['sensorarrays', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 'marines', 'command', 'labs', 'diplomat'];
 
-      let upgrades = {};
-      for (const up of potentialUpgrades) {
-        upgrades[up] = 0;
+      if (hwSizeSetting === 'pioneers-corvettes') {
+        const angles = [0, 120, 240];
+        for (let i = 0; i < 3; i++) {
+          const angleRad = (angles[i] * Math.PI) / 180;
+          const sx = bestPos.x + Math.cos(angleRad) * 20;
+          const sy = bestPos.y + Math.sin(angleRad) * 20;
+
+          let upgrades = {};
+          for (const up of potentialUpgrades) {
+            upgrades[up] = 0;
+          }
+
+          if (i === 0) {
+            upgrades['sensorarrays'] = 1;
+            upgrades['fuel_tanker'] = 1;
+            upgrades['diplomat'] = 1;
+          } else if (i === 1) {
+            upgrades['shields'] = 1;
+            upgrades['diplomat'] = 1;
+            upgrades['engine'] = 1;
+          } else {
+            upgrades['diplomat'] = 1;
+            upgrades['munitions'] = 1;
+            upgrades['targeting'] = 1;
+          }
+
+          this.pendingPioneerSpawns.push({
+            ownerId: player.id,
+            x: sx,
+            y: sy,
+            classType: 'corvette',
+            upgradeTokens: 0,
+            upgrades: upgrades,
+            timer: i * 30, // 30 seconds apart: 0s, 30s, 60s
+            isAdditional: i > 0,
+            Pioneer: true
+          });
+        }
+
+        player.builtClasses = player.builtClasses || {};
+        player.builtClasses['corvette'] = true;
+        player.buildCounts = player.buildCounts || {};
+        player.buildCounts['corvette'] = (player.buildCounts['corvette'] || 0) + 3;
+      } else {
+        // Spawn 1 Battlecruiser immediately
+        let upgrades = {};
+        for (const up of potentialUpgrades) {
+          upgrades[up] = 0;
+        }
+        upgrades['fuel_tanker'] = 2;
+        upgrades['diplomat'] = 2;
+        upgrades['sensorarrays'] = 1;
+        upgrades['labs'] = 1;
+        upgrades['damagecontrol'] = 1;
+
+        this.pendingPioneerSpawns.push({
+          ownerId: player.id,
+          x: bestPos.x,
+          y: bestPos.y,
+          classType: 'battlecruiser',
+          upgradeTokens: 0,
+          upgrades: upgrades,
+          timer: 0,
+          isAdditional: false,
+          Pioneer: true
+        });
+
+        player.builtClasses = player.builtClasses || {};
+        player.builtClasses['battlecruiser'] = true;
+        player.buildCounts = player.buildCounts || {};
+        player.buildCounts['battlecruiser'] = (player.buildCounts['battlecruiser'] || 0) + 1;
       }
-      upgrades['fuel_tanker'] = 2;
-      upgrades['diplomat'] = 2;
-      upgrades['sensorarrays'] = 1;
-      upgrades['labs'] = 1;
-      upgrades['damagecontrol'] = 1;
-
-      this.pendingPioneerSpawns.push({
-        ownerId: player.id,
-        x: bestPos.x,
-        y: bestPos.y,
-        classType: 'battlecruiser',
-        upgradeTokens: 0,
-        upgrades: upgrades,
-        timer: 0,
-        isAdditional: false,
-        Pioneer: true
-      });
-
-      player.builtClasses = player.builtClasses || {};
-      player.builtClasses['battlecruiser'] = true;
-      player.buildCounts = player.buildCounts || {};
-      player.buildCounts['battlecruiser'] = (player.buildCounts['battlecruiser'] || 0) + 1;
 
       player.planetCount = 0;
       player.needsPlanet = false;
