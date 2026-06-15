@@ -2135,6 +2135,9 @@ function getPlanetTradeIncomePerMin(planet) {
   const infoPanelImagePlaceholder = document.querySelector('.info-panel-image-placeholder');
   const infoPanelImageHologram = document.querySelector('.info-panel-image-hologram');
 
+  const touchContextMenu = document.getElementById('touch-context-menu');
+  const touchContextOptions = document.getElementById('touch-context-options');
+
   function isMouseOverActiveEntity() {
     if (isHoveringSelectionTile) return true;
     if (!activeInfoPanel) return false;
@@ -2252,6 +2255,135 @@ function getPlanetTradeIncomePerMin(planet) {
   window.getLocalPlayer = () => localPlayer;
   window.getCameraPan = () => ({ x: cameraPanX, y: cameraPanY });
   window.setCameraPan = (x, y) => { cameraPanX = x; cameraPanY = y; };
+
+  function openTouchContextMenu(clientX, clientY, canvasX, canvasY) {
+    if (!touchContextMenu || !touchContextOptions) return;
+
+    // Clear previous options
+    touchContextOptions.innerHTML = '';
+
+    // Determine current pause state
+    const isPaused = serverState && serverState.isPaused;
+    const pauseLabel = isPaused ? '▶ RESUME GAME' : '⏸ PAUSE GAME';
+
+    const options = [
+      {
+        text: pauseLabel,
+        action: () => {
+          socket.emit('togglePause');
+        }
+      }
+    ];
+
+    // Check if player has selected ships or planets to show "MOVE HERE"
+    const hasSelection = (selectedShips && selectedShips.length > 0) || (selectedPlanets && selectedPlanets.length > 0);
+    if (hasSelection) {
+      options.push({
+        text: '🚀 ISSUE ORDER / MOVE HERE',
+        action: () => {
+          const serverPos = getMouseServerPos(canvasX, canvasY);
+          // Show haptic text
+          floatingAnimations.push({
+            x: serverPos.x,
+            y: serverPos.y,
+            text: "COMMAND ISSUED",
+            color: "#0ff",
+            alpha: 1,
+            life: 1.0
+          });
+          handlePointerDown(canvasX, canvasY, false, true, 2);
+        }
+      });
+    }
+
+    // Toggle leaderboard option
+    options.push({
+      text: '🏆 TOGGLE LEADERBOARD',
+      action: () => {
+        const scoreBoard = document.getElementById('score-board');
+        if (scoreBoard) scoreBoard.classList.toggle('hidden');
+      }
+    });
+
+    // Open chat option
+    options.push({
+      text: '💬 TRANSMIT CHAT MESSAGE',
+      action: () => {
+        const chatInput = document.getElementById('chat-input');
+        const chatContainer = document.getElementById('chat-container');
+        if (chatInput) {
+          chatInput.classList.remove('hidden');
+          chatInput.focus();
+          if (chatContainer) chatContainer.classList.add('chat-active');
+        }
+      }
+    });
+
+    // How to play option
+    options.push({
+      text: '❓ HOW TO PLAY',
+      action: () => {
+        const helpModal = document.getElementById('help-modal');
+        if (helpModal) {
+          helpModal.classList.remove('hidden');
+          if (typeof showHelpIndex === 'function') {
+            showHelpIndex();
+          }
+        }
+      }
+    });
+
+    // Dismiss option
+    options.push({
+      text: '❌ DISMISS MENU',
+      class: 'danger',
+      action: () => {
+        // Just closes
+      }
+    });
+
+    // Build DOM elements
+    options.forEach(opt => {
+      const btn = document.createElement('div');
+      btn.className = opt.class ? `touch-context-option ${opt.class}` : 'touch-context-option';
+      btn.textContent = opt.text;
+      bindActionClick(btn, () => {
+        opt.action();
+        closeTouchContextMenu();
+      });
+      touchContextOptions.appendChild(btn);
+    });
+
+    // Position the menu
+    touchContextMenu.style.display = 'block';
+    touchContextMenu.classList.remove('hidden');
+
+    // Make sure menu doesn't overflow screen boundaries
+    const rect = touchContextMenu.getBoundingClientRect();
+    let left = clientX;
+    let top = clientY;
+
+    if (left + rect.width > window.innerWidth) {
+      left = window.innerWidth - rect.width - 10;
+    }
+    if (top + rect.height > window.innerHeight) {
+      top = window.innerHeight - rect.height - 10;
+    }
+    left = Math.max(10, left);
+    top = Math.max(10, top);
+
+    touchContextMenu.style.left = `${left + window.scrollX}px`;
+    touchContextMenu.style.top = `${top + window.scrollY}px`;
+  }
+  window.openTouchContextMenu = openTouchContextMenu;
+
+  function closeTouchContextMenu() {
+    if (touchContextMenu) {
+      touchContextMenu.classList.add('hidden');
+      touchContextMenu.style.display = 'none';
+    }
+  }
+  window.closeTouchContextMenu = closeTouchContextMenu;
 
   function closeInfoPanel() {
     activeInfoPanel = null;
@@ -3569,6 +3701,12 @@ function getPlanetTradeIncomePerMin(planet) {
       const container = document.querySelector('.info-panel-container');
       if (container && !container.contains(event.target)) {
         closeInfoPanel();
+      }
+    }
+    // Dismiss touch context menu with a click outside
+    if (touchContextMenu && !touchContextMenu.classList.contains('hidden')) {
+      if (!touchContextMenu.contains(event.target)) {
+        closeTouchContextMenu();
       }
     }
   });
@@ -7207,6 +7345,15 @@ function getPlanetTradeIncomePerMin(planet) {
     if (event.touches.length === 1) {
       const tx = event.touches[0].clientX;
       const ty = event.touches[0].clientY;
+
+      // Close context menu on new touch outside
+      if (touchContextMenu && !touchContextMenu.classList.contains('hidden')) {
+        const rect = touchContextMenu.getBoundingClientRect();
+        if (tx < rect.left || tx > rect.right || ty < rect.top || ty > rect.bottom) {
+          closeTouchContextMenu();
+        }
+      }
+
       lastCameraDragX = tx;
       lastCameraDragY = ty;
       
@@ -7235,27 +7382,66 @@ function getPlanetTradeIncomePerMin(planet) {
         const cPosHold = getCanvasPos(tx, ty);
         const serverPos = getMouseServerPos(cPosHold.x, cPosHold.y);
 
-        // Display beautiful cyber-haptic floating text at command location
-        floatingAnimations.push({
-          x: serverPos.x,
-          y: serverPos.y,
-          text: "COMMAND ISSUED",
-          color: "#0ff",
-          alpha: 1,
-          life: 1.0
-        });
-
-        // Trigger command orders (button === 2)
-        handlePointerDown(cPosHold.x, cPosHold.y, event.shiftKey, true, 2);
-
-        // Allow Lasso Mode if long press starts in empty space with no selection
+        // Check if there is any entity under the long press
         const clickedPlanet = getPlanetAt(cPosHold.x, cPosHold.y);
-        if (!clickedPlanet && selectedPlanets.length === 0 && selectedShips.length === 0) {
-          lasso.active = true;
-          lasso.startX = serverPos.x;
-          lasso.startY = serverPos.y;
-          lasso.endX = serverPos.x;
-          lasso.endY = serverPos.y;
+        let clickedShip = null;
+        if (serverState && serverState.ships) {
+          for (const ship of serverState.ships) {
+            if (!ship.active) continue;
+            const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
+            const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
+            const sdx = ship.x - serverPos.x;
+            const sdy = ship.y - serverPos.y;
+            if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
+              clickedShip = ship;
+              break;
+            }
+          }
+        }
+
+        let clickedAnomaly = null;
+        if (serverState && serverState.planets) {
+          for (const p of serverState.planets) {
+            if (p.anomaly && !p.anomaly.researched) {
+              const adx = p.anomaly.x - serverPos.x;
+              const ady = p.anomaly.y - serverPos.y;
+              if (adx * adx + ady * ady <= 25 * 25) {
+                clickedAnomaly = p.anomaly;
+                break;
+              }
+            }
+          }
+        }
+
+        let clickedWreckage = null;
+        if (serverState && serverState.wreckages) {
+          for (const w of serverState.wreckages) {
+            const wdx = w.x - serverPos.x;
+            const wdy = w.y - serverPos.y;
+            if (wdx * wdx + wdy * wdy < 50 * 50) {
+              clickedWreckage = w;
+              break;
+            }
+          }
+        }
+
+        const isDeepSpace = !clickedPlanet && !clickedShip && !clickedAnomaly && !clickedWreckage;
+
+        if (isDeepSpace) {
+          openTouchContextMenu(tx, ty, cPosHold.x, cPosHold.y);
+        } else {
+          // Display beautiful cyber-haptic floating text at command location
+          floatingAnimations.push({
+            x: serverPos.x,
+            y: serverPos.y,
+            text: "COMMAND ISSUED",
+            color: "#0ff",
+            alpha: 1,
+            life: 1.0
+          });
+
+          // Trigger command orders (button === 2)
+          handlePointerDown(cPosHold.x, cPosHold.y, event.shiftKey, true, 2);
         }
       }, 450);
     }
