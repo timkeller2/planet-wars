@@ -4652,30 +4652,36 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
         }
-        if (s.diplomatPrefResourceEvent && s.diplomatPrefResourceEvent > 0) {
+        if (s.diplomatPrefResourceEvent) {
           let targetX = s.x;
           let targetY = s.y;
           let prefEmoji = '💎';
+          const emojis = {
+            dilithium: '💎',
+            merculite: '☄️',
+            duranium: '🔲',
+            tritanium: '🔩',
+            antimatter: '🌀',
+            deuterium: '💧',
+            latinum: '🏺'
+          };
+          if (typeof s.diplomatPrefResourceEvent === 'string') {
+            prefEmoji = emojis[s.diplomatPrefResourceEvent] || '💎';
+          } else if (s.diplomatTargetPlanetId !== null && state.planets) {
+            const targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
+            if (targetP && targetP.preferredResource) {
+              prefEmoji = emojis[targetP.preferredResource] || '💎';
+            }
+          }
           if (s.diplomatTargetPlanetId !== null && state.planets) {
             const targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
             if (targetP) {
               targetX = targetP.x;
               targetY = targetP.y;
-              if (targetP.preferredResource) {
-                const emojis = {
-                  dilithium: '💎',
-                  merculite: '☄️',
-                  duranium: '🔲',
-                  tritanium: '🔩',
-                  antimatter: '🌀',
-                  deuterium: '💧',
-                  latinum: '🏺'
-                };
-                prefEmoji = emojis[targetP.preferredResource] || '💎';
-              }
             }
           }
-          for (let b = 0; b < s.diplomatPrefResourceEvent; b++) {
+          let count = typeof s.diplomatPrefResourceEvent === 'number' ? s.diplomatPrefResourceEvent : 1;
+          for (let b = 0; b < count; b++) {
             floatingAnimations.push({
               startX: s.x,
               startY: s.y,
@@ -4834,22 +4840,20 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (state.accuracyEvents && state.accuracyEvents.length > 0) {
       for (const ev of state.accuracyEvents) {
-        let text = `🎯${ev.accuracy}%`;
-        if (ev.isBombAttack) {
-          const outcome = ev.hit ? 'Hit!' : 'Miss!';
-          text = `🎯 ${outcome} (${ev.accuracy}%)`;
+        if (ev.attackerShipId) {
+          const alreadyExists = floatingAnimations.some(anim => anim.type === 'firingAccuracyIndicator' && anim.shipId === ev.attackerShipId);
+          if (!alreadyExists) {
+            floatingAnimations.push({
+              x: ev.attackerX || ev.x,
+              y: ev.attackerY || ev.y,
+              shipId: ev.attackerShipId,
+              text: `🎯 ${ev.accuracy}%`,
+              type: 'firingAccuracyIndicator',
+              age: 0,
+              duration: 1.5
+            });
+          }
         }
-        floatingAnimations.push({
-          x: ev.x,
-          y: ev.y,
-          text: text,
-          type: 'accuracyIndicator',
-          age: 0,
-          duration: 3.0,
-          attackerOwnerId: ev.attackerOwnerId,
-          targetOwnerId: ev.targetOwnerId,
-          isBombAttack: ev.isBombAttack
-        });
       }
     }
 
@@ -9433,6 +9437,70 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
+      // Draw scanning beams for planets being subverted by a diplomat (yellow scan beams)
+      for (const p of serverState.planets) {
+        if (p.activeDiplomatId && p.diplomacyWarmupTimer > 0) {
+          const diplomat = serverState.ships.find(s => s.id === p.activeDiplomatId);
+          if (diplomat) {
+            const sx = diplomat.x;
+            const sy = diplomat.y;
+            
+            // Target coordinates: smooth sweeping scan point on/in the planet
+            const timeVal = Date.now() / 250;
+            const seed = p.id;
+            const sweepRadius = p.radius * 0.6;
+            const tx = p.x + Math.sin(timeVal + seed) * sweepRadius;
+            const ty = p.y + Math.cos(timeVal * 0.8 + seed) * sweepRadius;
+            
+            const angle = Math.atan2(ty - sy, tx - sx);
+            
+            ctx.save();
+            
+            const shimmer = 0.5 + 0.3 * Math.sin(Date.now() / 50) + 0.2 * Math.random();
+            const alpha = 0.45 * shimmer;
+            
+            const coneWidth = 5;
+            const perpAngle = angle + Math.PI / 2;
+            
+            const tx1 = tx - Math.cos(perpAngle) * coneWidth;
+            const ty1 = ty - Math.sin(perpAngle) * coneWidth;
+            const tx2 = tx + Math.cos(perpAngle) * coneWidth;
+            const ty2 = ty + Math.sin(perpAngle) * coneWidth;
+            
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(tx1, ty1);
+            ctx.lineTo(tx2, ty2);
+            ctx.closePath();
+            
+            const grad = ctx.createLinearGradient(sx, sy, tx, ty);
+            grad.addColorStop(0, `rgba(255, 235, 59, 0.05)`);
+            grad.addColorStop(0.3, `rgba(255, 235, 59, ${alpha * 0.7})`);
+            grad.addColorStop(1, `rgba(255, 235, 59, ${alpha})`);
+            ctx.fillStyle = grad;
+            ctx.fill();
+            
+            ctx.strokeStyle = `rgba(255, 255, 200, ${alpha * 0.8})`;
+            ctx.lineWidth = 1 + Math.random() * 1.5;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(tx, ty);
+            ctx.stroke();
+            
+            ctx.strokeStyle = `rgba(255, 235, 59, ${alpha * 0.4})`;
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(tx1, ty1);
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(tx2, ty2);
+            ctx.stroke();
+            
+            ctx.restore();
+          }
+        }
+      }
+
       let anyBeingResearched = false;
       let anyCompleting = false;
 
@@ -9596,9 +9664,9 @@ function getPlanetTradeIncomePerMin(planet) {
           
           // 1. Draw combat cooldown lock indicator (red dotted outline & countdown)
           const nowTimestamp = Date.now();
-          const isLocked = (nowTimestamp - w.lastFightingTime) < 30000;
+          const isLocked = (nowTimestamp - w.lastFightingTime) < 10000;
           if (isLocked) {
-            const timeLeft = Math.ceil((30000 - (nowTimestamp - w.lastFightingTime)) / 1000);
+            const timeLeft = Math.ceil((10000 - (nowTimestamp - w.lastFightingTime)) / 1000);
             
             ctx.save();
             ctx.strokeStyle = 'rgba(255, 68, 68, 0.6)';
@@ -14008,8 +14076,8 @@ function getPlanetTradeIncomePerMin(planet) {
           yOffset = progress * 40 * mult; // float up nicely
         } else if (anim.type === 'outbreak') {
           yOffset = progress * 60; // drifts up nicely
-        } else if (anim.type === 'accuracyIndicator') {
-          yOffset = progress * (8.0 * anim.duration); // float slower (8.0px/sec)
+        } else if (anim.type === 'firingAccuracyIndicator') {
+          yOffset = 18 + progress * 10;
         } else if (anim.type === 'resource_wanted') {
           yOffset = progress * 60; // drifts up nicely
         } else if (anim.type === 'anomaly_completion') {
@@ -14038,8 +14106,8 @@ function getPlanetTradeIncomePerMin(planet) {
           fontsize = 12 + (progress * 8); // grows from 12 to 20
         } else if (anim.type === 'outbreak') {
           fontsize = 16 + (progress * 14); // grows moderately
-        } else if (anim.type === 'accuracyIndicator') {
-          fontsize = 4; // constant small font size (20% bigger than 10 / 3)
+        } else if (anim.type === 'firingAccuracyIndicator') {
+          fontsize = 6; // very small font size
         } else if (anim.type === 'resource_wanted') {
            fontsize = 11 + (progress * 9); // grows from 11px to 20px
         } else if (anim.type === 'revolt') {
@@ -14113,16 +14181,10 @@ function getPlanetTradeIncomePerMin(planet) {
           xOffset = -Math.sin(progress * Math.PI * 3) * 6;
           ctx.fillStyle = `rgba(180, 180, 180, ${alpha})`;
           ctx.shadowColor = `rgba(100, 100, 100, ${alpha})`;
-        } else if (anim.type === 'accuracyIndicator') {
+        } else if (anim.type === 'firingAccuracyIndicator') {
           xOffset = 0;
-          const isPlayerAttacker = (localPlayer && anim.attackerOwnerId === localPlayer.id);
-          if (isPlayerAttacker || anim.isBombAttack) {
-            ctx.fillStyle = `rgba(60, 255, 60, ${alpha})`; // green
-            ctx.shadowColor = `rgba(0, 255, 0, ${alpha})`; // green glow
-          } else {
-            ctx.fillStyle = `rgba(255, 60, 60, ${alpha})`; // very red
-            ctx.shadowColor = `rgba(255, 0, 0, ${alpha})`; // red glow
-          }
+          ctx.fillStyle = `rgba(60, 255, 60, ${alpha})`; // green
+          ctx.shadowColor = `rgba(0, 255, 0, ${alpha})`; // green glow
         } else if (anim.type === 'pref_resource_diplomacy') {
           xOffset = -Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;

@@ -2075,7 +2075,10 @@ export class Ship {
                 accuracy: Math.round(finalHitChance * 100),
                 isCruiser: false,
                 attackerOwnerId: this.owner ? this.owner.id : null,
-                targetOwnerId: enemyShip.owner ? enemyShip.owner.id : null
+                targetOwnerId: enemyShip.owner ? enemyShip.owner.id : null,
+                attackerShipId: this.id,
+                attackerX: this.x,
+                attackerY: this.y
               });
             }
           }
@@ -2333,7 +2336,10 @@ export class Ship {
                 attackerOwnerId: this.owner ? this.owner.id : null,
                 targetOwnerId: enemyShip.owner ? enemyShip.owner.id : null,
                 isBombAttack: usedBomb,
-                hit: isHit
+                hit: isHit,
+                attackerShipId: this.id,
+                attackerX: this.x,
+                attackerY: this.y
               });
             }
           }

@@ -4216,7 +4216,7 @@ export class Game {
         let claimableWreckage = null;
         let minWreckDistSq = Infinity;
         for (const w of this.wreckages) {
-          const isLocked = (wreckageNow - w.lastFightingTime) < 20000;
+          const isLocked = (wreckageNow - w.lastFightingTime) < 10000;
           if (!isLocked && !w.beingScanned) {
             const dx = w.x - ship.x;
             const dy = w.y - ship.y;
@@ -4480,14 +4480,6 @@ export class Game {
       }
     }
 
-    // 5. Cleanup low-damage wreckages after 20s cooldown
-    for (let i = this.wreckages.length - 1; i >= 0; i--) {
-      const w = this.wreckages[i];
-      const isLocked = (Date.now() - w.lastFightingTime) < 20000;
-      if (!isLocked && (w.amoebaDamage + w.cruiserDamage) < 5) {
-        this.wreckages.splice(i, 1);
-      }
-    }
 
     // AI planets gaining knowledge from overlapping hazards (1 knowledge every 3 minutes)
     for (const storm of this.ionStorms) {
@@ -5480,7 +5472,10 @@ export class Game {
               attackerOwnerId: laser.attackerOwnerId,
               targetOwnerId: laser.targetOwnerId,
               isBombAttack: !!laser.isBombAttack,
-              hit: !!laser.destroysDefender
+              hit: !!laser.destroysDefender,
+              attackerShipId: laser.sourceShipId,
+              attackerX: laser.startX,
+              attackerY: laser.startY
             });
           }
           if (laser.destroysDefender) {
@@ -6045,7 +6040,7 @@ export class Game {
 
     if (prefRes && initialQty >= 0.1) {
       ship.owner.resources[prefRes] = Math.max(0, ship.owner.resources[prefRes] - 0.1);
-      ship.diplomatPrefResourceEvent = (ship.diplomatPrefResourceEvent || 0) + 1;
+      ship.diplomatPrefResourceEvent = prefRes;
     }
 
     const hasPref = prefRes && initialQty >= 0.1;
@@ -6103,7 +6098,7 @@ export class Game {
 
       ship.gainXp(successXP, this);
       
-      ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + actualIncrease;
+      ship.diplomatSuccessEvent = (ship.diplomatSuccessEvent || 0) + Math.max(1, actualIncrease);
     } else {
       ship.diplomatFailureEvent = (ship.diplomatFailureEvent || 0) + 1;
       ship.diplomatFailureChance = Math.round(chancePercent);
