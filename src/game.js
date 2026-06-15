@@ -804,26 +804,12 @@ export class Game {
             upgrades[up] = 0;
           }
 
-          if (i === 0) {
-            upgrades['sensorarrays'] = 1;
-            upgrades['fuel_tanker'] = 1;
-            upgrades['diplomat'] = 1;
-          } else if (i === 1) {
-            upgrades['shields'] = 1;
-            upgrades['diplomat'] = 1;
-            upgrades['fuel_tanker'] = 1;
-          } else {
-            upgrades['diplomat'] = 1;
-            upgrades['munitions'] = 1;
-            upgrades['targeting'] = 1;
-          }
-
           this.pendingPioneerSpawns.push({
             ownerId: player.id,
             x: sx,
             y: sy,
             classType: 'corvette',
-            upgradeTokens: 0,
+            upgradeTokens: 3,
             upgrades: upgrades,
             timer: i * 30000, // 30 seconds apart: 0s, 30s, 60s
             isAdditional: i > 0,
