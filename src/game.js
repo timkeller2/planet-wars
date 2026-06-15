@@ -1228,6 +1228,7 @@ export class Game {
       highestSpeedMilestoneTriggered: this.highestSpeedMilestoneTriggered || 0,
       nextIonStormId: this.nextIonStormId,
       ionStormSpawnTimer: this.ionStormSpawnTimer,
+      happinessTimer: this.happinessTimer,
       ionStormDamageTimer: this.ionStormDamageTimer,
       minefieldDamageTimer: this.minefieldDamageTimer,
       ionStorms: this.ionStorms.map(storm => ({
@@ -1251,6 +1252,7 @@ export class Game {
         techScore: p.techScore,
         expScore: p.expScore,
         expProgress: p.expProgress,
+        happinessScore: p.happinessScore,
         credits: p.credits,
         tradingBonus: p.tradingBonus,
         useCredits: p.useCredits,
@@ -1381,6 +1383,7 @@ export class Game {
     this.ionStormSpawnTimer = state.ionStormSpawnTimer !== undefined ? state.ionStormSpawnTimer : 0;
     this.ionStormDamageTimer = state.ionStormDamageTimer !== undefined ? state.ionStormDamageTimer : 0;
     this.minefieldDamageTimer = state.minefieldDamageTimer !== undefined ? state.minefieldDamageTimer : 0;
+    this.happinessTimer = state.happinessTimer !== undefined ? state.happinessTimer : 0;
 
     // Restore players
     const playersMap = new Map();
@@ -1390,6 +1393,7 @@ export class Game {
       p.techScore = pData.techScore;
       p.expScore = pData.expScore;
       p.expProgress = pData.expProgress;
+      p.happinessScore = pData.happinessScore !== undefined ? pData.happinessScore : 100;
       p.credits = pData.credits;
       p.tradingBonus = pData.tradingBonus;
       p.useCredits = pData.useCredits;
@@ -6002,6 +6006,26 @@ export class Game {
       }
     }
 
+    // Update happiness scores every minute (60 seconds = 60000ms)
+    this.happinessTimer = (this.happinessTimer || 0) + deltaTime;
+    while (this.happinessTimer >= 60000) {
+      this.happinessTimer -= 60000;
+      
+      for (const player of this.allPlayers) {
+        if (!player.isAlive) continue;
+        
+        let happinessGained = 0;
+        for (const planet of this.planets) {
+          if (planet.owner && planet.owner.id === player.id && !planet.dead) {
+            if (planet.ships >= planet.maxShips) {
+              happinessGained += planet.ships * 0.01 * (planet.habitability / 100);
+            }
+          }
+        }
+        player.happinessScore = (player.happinessScore || 0) + happinessGained;
+      }
+    }
+
     if (this.onScoreUpdate) {
       const pCount = this.planets.filter(p => p.owner === this.humanPlayer).length;
       const aiCount = this.planets.filter(p => p.owner && p.owner !== this.humanPlayer).length;
@@ -6931,35 +6955,105 @@ export class Game {
       return;
     }
 
-    // Calculate total galactic capacity
+    const alivePlayers = this.allPlayers.filter(p => p.isAlive);
+    if (alivePlayers.length === 0) return;
+
+    // Helper functions for bonuses
+    const getTechBonus = p => Math.sqrt(p.techScore || 0);
+    const getExpBonus = p => Math.sqrt(p.expScore || 0);
+    const getHappinessBonus = p => Math.sqrt(p.happinessScore !== undefined ? p.happinessScore : 100);
+    const getVP = p => getTechBonus(p) + getExpBonus(p) + getHappinessBonus(p);
+
+    // 1. Tech Victory: leads by 12 Tech Bonus points
+    const sortedByTech = [...alivePlayers].sort((a, b) => getTechBonus(b) - getTechBonus(a));
+    if (sortedByTech.length >= 2) {
+      const topPlayer = sortedByTech[0];
+      const lead = getTechBonus(topPlayer) - getTechBonus(sortedByTech[1]);
+      if (lead >= 12) {
+        this.stop();
+        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH VICTORY)`;
+        if (this.onGameOver) this.onGameOver(this.gameOverMessage);
+        return;
+      }
+    } else if (sortedByTech.length === 1) {
+      const topPlayer = sortedByTech[0];
+      if (getTechBonus(topPlayer) >= 12) {
+        this.stop();
+        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH VICTORY)`;
+        if (this.onGameOver) this.onGameOver(this.gameOverMessage);
+        return;
+      }
+    }
+
+    // 2. Experience Victory: leads by 12 Experience Bonus points
+    const sortedByExp = [...alivePlayers].sort((a, b) => getExpBonus(b) - getExpBonus(a));
+    if (sortedByExp.length >= 2) {
+      const topPlayer = sortedByExp[0];
+      const lead = getExpBonus(topPlayer) - getExpBonus(sortedByExp[1]);
+      if (lead >= 12) {
+        this.stop();
+        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(EXPERIENCE VICTORY)`;
+        if (this.onGameOver) this.onGameOver(this.gameOverMessage);
+        return;
+      }
+    } else if (sortedByExp.length === 1) {
+      const topPlayer = sortedByExp[0];
+      if (getExpBonus(topPlayer) >= 12) {
+        this.stop();
+        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(EXPERIENCE VICTORY)`;
+        if (this.onGameOver) this.onGameOver(this.gameOverMessage);
+        return;
+      }
+    }
+
+    // 3. Happiness Victory: leads by 12 Happiness Bonus points
+    const sortedByHappiness = [...alivePlayers].sort((a, b) => getHappinessBonus(b) - getHappinessBonus(a));
+    if (sortedByHappiness.length >= 2) {
+      const topPlayer = sortedByHappiness[0];
+      const lead = getHappinessBonus(topPlayer) - getHappinessBonus(sortedByHappiness[1]);
+      if (lead >= 12) {
+        this.stop();
+        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(HAPPINESS VICTORY)`;
+        if (this.onGameOver) this.onGameOver(this.gameOverMessage);
+        return;
+      }
+    } else if (sortedByHappiness.length === 1) {
+      const topPlayer = sortedByHappiness[0];
+      if (getHappinessBonus(topPlayer) >= 12) {
+        this.stop();
+        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(HAPPINESS VICTORY)`;
+        if (this.onGameOver) this.onGameOver(this.gameOverMessage);
+        return;
+      }
+    }
+
+    // 4. Score Victory: twice the victory points of the 2nd highest player
+    const sortedByVP = [...alivePlayers].sort((a, b) => getVP(b) - getVP(a));
+    if (sortedByVP.length >= 2) {
+      const topPlayer = sortedByVP[0];
+      const topVP = getVP(topPlayer);
+      const secondVP = getVP(sortedByVP[1]);
+      if (topVP >= secondVP * 2 && topVP > 0) {
+        this.stop();
+        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(SCORE VICTORY)`;
+        if (this.onGameOver) this.onGameOver(this.gameOverMessage);
+        return;
+      }
+    } else if (sortedByVP.length === 1) {
+      const topPlayer = sortedByVP[0];
+      if (getVP(topPlayer) > 0) {
+        this.stop();
+        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(SCORE VICTORY)`;
+        if (this.onGameOver) this.onGameOver(this.gameOverMessage);
+        return;
+      }
+    }
+
+    // 5. Economic Domination: 75% of total galactic capacity
     let galacticCapacity = 0;
     for (const p of this.planets) {
       galacticCapacity += p.maxShips;
     }
-
-    // Tech score victory condition: 10% tech bonus lead AND minimum 15% absolute tech bonus
-    const sortedByTech = [...this.allPlayers].filter(p => p.isAlive).sort((a, b) => (b.techScore || 0) - (a.techScore || 0));
-    if (sortedByTech.length >= 2) {
-      const topPlayer = sortedByTech[0];
-      const topBonus = Math.floor(Math.sqrt(topPlayer.techScore || 0));
-      const secondBonus = Math.floor(Math.sqrt(sortedByTech[1].techScore || 0));
-      if (topBonus >= 15 && topBonus - secondBonus >= 10) {
-        this.stop();
-        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH DOMINATION)`;
-        if (this.onGameOver) this.onGameOver(this.gameOverMessage);
-      }
-    } else if (sortedByTech.length === 1) {
-      const topPlayer = sortedByTech[0];
-      const topBonus = Math.floor(Math.sqrt(topPlayer.techScore || 0));
-      if (topBonus >= 15) {
-        this.stop();
-        this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH DOMINATION)`;
-        if (this.onGameOver) this.onGameOver(this.gameOverMessage);
-      }
-    }
-
-    // Capacity victory condition: 75% of total galactic capacity
-    
     for (const player of this.allPlayers) {
       if (player.isAlive && (player.totalCapacity || 0) > galacticCapacity * 0.75) {
         this.stop();
@@ -6981,30 +7075,15 @@ export class Game {
       return;
     }
 
-    // Calculate total galaxy max ships capacity
-    let totalGalaxyMaxShips = 0;
-    for (const p of this.planets) {
-      totalGalaxyMaxShips += p.maxShips || 0;
-    }
-
-    // For each player, compute: Tech Bonus + Experience Bonus + Percentage of Maxships
     let bestPlayer = null;
     let highestScore = -Infinity;
 
     for (const player of players) {
       const techBonus = Math.sqrt(player.techScore || 0);
       const expBonus = Math.sqrt(player.expScore || 0);
+      const happinessBonus = Math.sqrt(player.happinessScore !== undefined ? player.happinessScore : 100);
 
-      // Percentage of Maxships (out of 100)
-      let playerMaxShips = 0;
-      for (const p of this.planets) {
-        if (p.owner && p.owner.id === player.id) {
-          playerMaxShips += p.maxShips || 0;
-        }
-      }
-      const pctMaxShips = totalGalaxyMaxShips > 0 ? (playerMaxShips / totalGalaxyMaxShips) * 100 : 0;
-
-      const totalScore = techBonus + expBonus + pctMaxShips;
+      const totalScore = techBonus + expBonus + happinessBonus;
 
       if (totalScore > highestScore) {
         highestScore = totalScore;

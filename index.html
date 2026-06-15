@@ -332,6 +332,9 @@
       </div>
       <div id="end-screen" class="screen hidden">
         <h1 id="end-title" class="glow-title"></h1>
+        <div id="victory-art-container" style="margin: 20px auto; max-width: 600px; border: 2px solid #555; border-radius: 8px; box-shadow: 0 0 20px rgba(0, 255, 255, 0.2); overflow: hidden; display: none;">
+          <img id="victory-art-img" src="" alt="Victory Art" style="width: 100%; display: block; filter: brightness(0.9) contrast(1.1);" />
+        </div>
         <div style="display: flex; gap: 20px;">
           <button id="restart-btn" class="cyber-btn">RESTART</button>
           <button id="lobby-btn" class="cyber-btn" style="border-color: #f0f; color: #f0f; box-shadow: 0 0 10px rgba(255, 0, 255, 0.3), inset 0 0 10px rgba(255, 0, 255, 0.3);">LOBBY</button>
@@ -374,11 +377,14 @@
           <div id="help-topic-victory" class="help-page hidden">
             <ul>
               <li><strong>Elimination:</strong> Be the last player standing. All other players must lose every planet and ship.</li>
-              <li><strong>Tech Domination:</strong> Achieve a √Tech bonus of at least <strong>15%</strong> AND lead 2nd place by at least <strong>10 percentage points</strong>.</li>
+              <li><strong>Tech Victory:</strong> Lead the 2nd place player by at least <strong>12 Tech Bonus points</strong> (√Tech).</li>
+              <li><strong>Experience Victory:</strong> Lead the 2nd place player by at least <strong>12 Experience Bonus points</strong> (√Exp).</li>
+              <li><strong>Happiness Victory:</strong> Lead the 2nd place player by at least <strong>12 Happiness Bonus points</strong> (√Happiness).</li>
+              <li><strong>Score Victory:</strong> Have twice the Victory Points of the 2nd place player.</li>
               <li><strong>Economic Domination:</strong> Control more than <strong>75%</strong> of the galaxy's total planet capacity.</li>
-              <li><strong>Timed Game Victory:</strong> When the clock runs out, the player with the highest combined score wins. Score = <strong>√Tech + √Exp + Capacity%</strong> (your percentage of total galactic max capacity). If no players survive, it's a draw.</li>
+              <li><strong>Timed Game Victory:</strong> When the clock runs out, the player with the highest combined Victory Points wins. If no players survive, it's a draw.</li>
               <li><strong>Player Elimination:</strong> Capturing a player's last planet eliminates them, awarding the conqueror <strong>+100 Exp</strong>. Destroying a Homeworld also awards <strong>+100 Exp</strong>.</li>
-              <li><strong>Leaderboard Scoring:</strong> The leaderboard ranks all players by Victory Score = √Tech% + √Exp% + Capacity%. Players with a 🎯 bullseye are dominant threats (capacity &gt;4,500, tech lead ≥200, or 2× capacity over 2nd place) — AIs will gang up on them!</li>
+              <li><strong>Leaderboard Scoring:</strong> The leaderboard ranks all players by Victory Points = √Tech + √Exp + √Happiness. Players with a 🎯 bullseye are dominant threats (tech, exp, or happiness lead ≥ 12, capacity &gt; 4,500, or 2× victory points over 2nd place) — AIs will gang up on them!</li>
             </ul>
           </div>
 
@@ -459,7 +465,7 @@
             <ul>
               <li><strong>Overview:</strong> Every owned planet operates in one of five focus modes. Press <strong>O</strong> (or click the focus badge) on a selected planet to switch. Focus transitions take <strong>15 seconds</strong> and cost <strong>half the planet's max capacity</strong> in ships (payable with credits). Planets start in a random mode (Economy, Research, or Garrison).</li>
               <li><strong>📈 Economy (E):</strong> The default growth mode. When the planet is at full capacity, it gains <strong>+1 max capacity</strong> periodically (+2 for Homeworlds). This is how you expand your economy over time.</li>
-              <li><strong>🔬 Research (R):</strong> When at full capacity, the planet generates <strong>Tech Score 🧪</strong> instead of growing capacity. Success rate decreases as your share of galactic capacity increases. Research planets (🔬 type) earn double tech. Essential for Tech Domination victory!</li>
+              <li><strong>🔬 Research (R):</strong> When at full capacity, the planet generates <strong>Tech Score 🧪</strong> instead of growing capacity. Success rate decreases as your share of galactic capacity increases. Research planets (🔬 type) earn double tech. Essential for Tech Victory!</li>
               <li><strong>🛡️ Garrison (G):</strong> The planet can hold up to <strong>2× its max capacity</strong> in ships, producing beyond the normal cap. It does not grow max capacity or earn tech when full. Garrison planets extend their gravity well radius by <strong>+ships/2</strong> when above capacity, and grant a starting experience bonus (maxShips/10) to all launched fleets, cruisers, and capital ships built there. Excess ships are sacrificed for capacity upgrades when transitioning out.</li>
               <li><strong>💲 Commerce (C):</strong> Requires <strong>&gt;100 max capacity</strong> to unlock. When at full capacity, the planet generates <strong>Credits</strong> at a rate proportional to ships above 100. Credits can be used to pay for cruiser construction, upgrades, and focus transitions — reducing the need to drain planet garrisons. Commerce planets do not grow capacity or earn tech.</li>
               <li><strong>⛏️ Mining (M):</strong> When selected, the planet passively extracts dilithium crystals, merculite, duranium, and other raw sci-fi materials found on it at double rate. If the planet is at full capacity (ships &gt;= max capacity), the extraction rate is doubled again. Stockpiled resources can be traded or sold to the galactic bank.</li>

@@ -5565,40 +5565,66 @@ function getPlanetTradeIncomePerMin(planet) {
     if (leaderboardContent) {
       let galacticCapacity = serverState.galacticCapacity || 1;
 
-      const getVictoryScore = (p) => {
-        const capacity = p.totalCapacity || 0;
-        const capacityPercent = galacticCapacity > 0 ? Math.round((capacity / galacticCapacity) * 100) : 0;
-        const pTech = Math.floor(Math.sqrt(p.techScore || 0));
-        const pExp = Math.floor(Math.sqrt(p.expScore || 0));
-        return pTech + pExp + capacityPercent;
-      };
+      const getTechBonus = p => Math.sqrt(p.techScore || 0);
+      const getExpBonus = p => Math.sqrt(p.expScore || 0);
+      const getHappinessBonus = p => Math.sqrt(p.happinessScore !== undefined ? p.happinessScore : 100);
+      const getVictoryScore = p => getTechBonus(p) + getExpBonus(p) + getHappinessBonus(p);
 
       const alivePlayers = serverState.players.filter(p => p.isAlive || p.id === localPlayer.id || (serverState.ships && serverState.ships.some(s => s.active && s.ownerId === p.id)));
       alivePlayers.sort((a, b) => getVictoryScore(b) - getVictoryScore(a));
 
-      const techSorted = [...alivePlayers].sort((a, b) => (b.techScore || 0) - (a.techScore || 0));
-      const techLead = techSorted.length > 1 ? ((techSorted[0].techScore || 0) - (techSorted[1].techScore || 0)) : (techSorted[0] ? (techSorted[0].techScore || 0) : 0);
-      const techLeadingId = techLead >= 200 ? techSorted[0].id : null;
+      const techSorted = [...alivePlayers].sort((a, b) => getTechBonus(b) - getTechBonus(a));
+      const expSorted = [...alivePlayers].sort((a, b) => getExpBonus(b) - getExpBonus(a));
+      const happySorted = [...alivePlayers].sort((a, b) => getHappinessBonus(b) - getHappinessBonus(a));
+      const vpSorted = [...alivePlayers].sort((a, b) => getVictoryScore(b) - getVictoryScore(a));
 
-      const capSorted = [...alivePlayers].sort((a, b) => (b.totalCapacity || 0) - (a.totalCapacity || 0));
-      const capLeadingId = capSorted.length > 1 && (capSorted[0].totalCapacity || 0) > 2 * (capSorted[1].totalCapacity || 0) ? capSorted[0].id : (capSorted.length === 1 && (capSorted[0].totalCapacity || 0) > 0 ? capSorted[0].id : null);
-
-      // Determine bullseye targets: capacity > 4500, OR tech lead >= 200, OR 2x capacity over 2nd
+      // Determine bullseye targets: 75% of any victory condition
       const bullseyeIds = new Set();
-      if (techLeadingId) bullseyeIds.add(techLeadingId);
-      if (capLeadingId) bullseyeIds.add(capLeadingId);
+
+      // 1. Tech Victory: 75% of 12 points lead = 9 points lead
+      if (techSorted.length > 1 && (getTechBonus(techSorted[0]) - getTechBonus(techSorted[1]) >= 9)) {
+        bullseyeIds.add(techSorted[0].id);
+      } else if (techSorted.length === 1 && getTechBonus(techSorted[0]) >= 9) {
+        bullseyeIds.add(techSorted[0].id);
+      }
+
+      // 2. Experience Victory: 75% of 12 points lead = 9 points lead
+      if (expSorted.length > 1 && (getExpBonus(expSorted[0]) - getExpBonus(expSorted[1]) >= 9)) {
+        bullseyeIds.add(expSorted[0].id);
+      } else if (expSorted.length === 1 && getExpBonus(expSorted[0]) >= 9) {
+        bullseyeIds.add(expSorted[0].id);
+      }
+
+      // 3. Happiness Victory: 75% of 12 points lead = 9 points lead
+      if (happySorted.length > 1 && (getHappinessBonus(happySorted[0]) - getHappinessBonus(happySorted[1]) >= 9)) {
+        bullseyeIds.add(happySorted[0].id);
+      } else if (happySorted.length === 1 && getHappinessBonus(happySorted[0]) >= 9) {
+        bullseyeIds.add(happySorted[0].id);
+      }
+
+      // 4. Score Victory: 75% of 2.0x lead ratio = 1.75x lead ratio
+      if (vpSorted.length > 1 && (getVictoryScore(vpSorted[0]) >= getVictoryScore(vpSorted[1]) * 1.75) && getVictoryScore(vpSorted[0]) > 0) {
+        bullseyeIds.add(vpSorted[0].id);
+      } else if (vpSorted.length === 1 && getVictoryScore(vpSorted[0]) > 0) {
+        bullseyeIds.add(vpSorted[0].id);
+      }
+
+      // 5. Economic Domination: 75% of 75% capacity = 56.25% of capacity
       alivePlayers.forEach(p => {
-        if ((p.totalCapacity || 0) > 4500) bullseyeIds.add(p.id);
+        const capacity = p.totalCapacity || 0;
+        const capacityPercent = galacticCapacity > 0 ? (capacity / galacticCapacity) * 100 : 0;
+        if (capacityPercent >= 56.25) {
+          bullseyeIds.add(p.id);
+        }
       });
 
       let html = '';
       alivePlayers.forEach(p => {
-        const capacity = p.totalCapacity || 0;
-        const capacityPercent = galacticCapacity > 0 ? Math.round((capacity / galacticCapacity) * 100) : 0;
-        const pTech = Math.floor(Math.sqrt(p.techScore || 0));
-        const pExp = Math.floor(Math.sqrt(p.expScore || 0));
-        const victoryScore = pTech + pExp + capacityPercent;
-        const blinkClass = (p.id === techLeadingId || p.id === capLeadingId) ? ' leader-row' : '';
+        const pTech = getTechBonus(p).toFixed(1);
+        const pExp = getExpBonus(p).toFixed(1);
+        const pHappiness = getHappinessBonus(p).toFixed(1);
+        const victoryScore = getVictoryScore(p).toFixed(1);
+        const blinkClass = bullseyeIds.has(p.id) ? ' leader-row' : '';
         const bullseye = bullseyeIds.has(p.id) ? '<span style="color: #f00; text-shadow: 0 0 5px #f00; margin-left: 2px;" title="Target!">🎯</span>' : '';
 
         // Check if local player is at war with player p
@@ -5608,9 +5634,9 @@ function getPlanetTradeIncomePerMin(planet) {
         html += `
             <div class="${blinkClass}" style="display: flex; justify-content: space-between; font-family: 'Rajdhani', sans-serif; font-size: 1.05rem; gap: 5px; color: ${p.color}; text-shadow: 0 0 5px ${p.color};">
               <span style="width: 75px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${warIcon}${p.name}${bullseye}</span>
-              <span style="width: 50px; text-align: center;">+${pTech}%</span>
-              <span style="width: 45px; text-align: center;">+${pExp}%</span>
-              <span style="width: 45px; text-align: right;">${capacityPercent}%</span>
+              <span style="width: 50px; text-align: center;">+${pTech}</span>
+              <span style="width: 45px; text-align: center;">+${pExp}</span>
+              <span style="width: 45px; text-align: right;">+${pHappiness}</span>
               <span style="width: 55px; text-align: right; font-weight: bold;">${victoryScore}</span>
             </div>
           `;
@@ -5621,7 +5647,10 @@ function getPlanetTradeIncomePerMin(planet) {
     if (!serverState.isRunning && gameUI.classList.contains('hidden') === false) {
       gameUI.classList.add('hidden');
       endScreen.classList.remove('hidden');
-      endTitle.innerHTML = (serverState.gameOverMessage || 'GAME OVER').replace(/\n/g, '<br>');
+      
+      const msg = serverState.gameOverMessage || '';
+      endTitle.innerHTML = msg.replace(/\n/g, '<br>');
+      
       if (pCount > 0) {
         endTitle.style.color = '#0ff';
         endTitle.style.textShadow = '0 0 10px #0ff, 0 0 20px #0ff';
@@ -5629,6 +5658,37 @@ function getPlanetTradeIncomePerMin(planet) {
         endTitle.style.color = '#f0f';
         endTitle.style.textShadow = '0 0 10px #f0f, 0 0 20px #f0f';
       }
+
+      let artSrc = '';
+      if (msg.includes('(ELIMINATION)')) {
+        artSrc = '/Art/victory_elimination.png';
+      } else if (msg.includes('(TECH VICTORY)')) {
+        artSrc = '/Art/victory_tech.png';
+      } else if (msg.includes('(EXPERIENCE VICTORY)')) {
+        artSrc = '/Art/victory_experience.png';
+      } else if (msg.includes('(HAPPINESS VICTORY)')) {
+        artSrc = '/Art/victory_happiness.png';
+      } else if (msg.includes('(ECONOMIC DOMINATION)')) {
+        artSrc = '/Art/victory_economic.png';
+      } else if (msg.includes('(SCORE VICTORY)')) {
+        artSrc = '/Art/victory_score.png';
+      } else if (msg.includes('(TIMED GAME VICTORY)')) {
+        artSrc = '/Art/victory_timed.png';
+      } else if (msg.includes('(DRAW)')) {
+        artSrc = '/Art/victory_draw.png';
+      }
+
+      const artContainer = document.getElementById('victory-art-container');
+      const artImg = document.getElementById('victory-art-img');
+      if (artContainer && artImg) {
+        if (artSrc) {
+          artImg.src = artSrc;
+          artContainer.style.display = 'block';
+        } else {
+          artContainer.style.display = 'none';
+        }
+      }
+
       if (scoreBoard) {
         endScreen.appendChild(scoreBoard);
         scoreBoard.classList.remove('hidden');
