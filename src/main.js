@@ -9324,7 +9324,13 @@ function getPlanetTradeIncomePerMin(planet) {
         const cellSize = 100;
         const numCellsX = Math.ceil(mapWidth / cellSize);
         const numCellsY = Math.ceil(mapHeight / cellSize);
-        ctx.fillStyle = 'rgba(255, 255, 0, 0.04)';
+        
+        // Detect touch device to adjust opacity for better visibility on glossy/mobile screens
+        const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        const fillOpacity = isTouch ? 0.12 : 0.04;
+        const strokeOpacity = isTouch ? 0.08 : 0.02;
+        
+        ctx.fillStyle = `rgba(255, 255, 0, ${fillOpacity})`;
         for (let cx = 0; cx < numCellsX; cx++) {
           for (let cy = 0; cy < numCellsY; cy++) {
             const key = `${cx}_${cy}`;
@@ -9334,7 +9340,7 @@ function getPlanetTradeIncomePerMin(planet) {
               const ry = cy * cellSize;
               if (rx + cellSize >= viewMinX && rx <= viewMaxX && ry + cellSize >= viewMinY && ry <= viewMaxY) {
                 ctx.fillRect(rx, ry, cellSize, cellSize);
-                ctx.strokeStyle = 'rgba(255, 255, 0, 0.02)';
+                ctx.strokeStyle = `rgba(255, 255, 0, ${strokeOpacity})`;
                 ctx.lineWidth = 0.5;
                 ctx.strokeRect(rx, ry, cellSize, cellSize);
               }

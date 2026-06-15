@@ -235,6 +235,7 @@ async function bootstrap() {
         assignedPlayer.clientPlayerId = clientId;
         assignedPlayer.isAI = false;
         assignedPlayer.lastCommandTime = Date.now();
+        assignedPlayer.disconnectTime = null;
       } else {
         const availableExtendedAI = game.aiPlayers.slice(11).find(ai => !ai.clientPlayerId && game.planets.filter(p => p.owner === ai).length === 0);
         if (availableExtendedAI) {
@@ -242,13 +243,24 @@ async function bootstrap() {
             availableExtendedAI.clientPlayerId = clientId;
             availableExtendedAI.isAI = false;
             availableExtendedAI.lastCommandTime = Date.now();
+            availableExtendedAI.disconnectTime = null;
             assignedPlayer = availableExtendedAI;
           }
         }
       }
     } else {
+      const wasAI = assignedPlayer.isAI;
       assignedPlayer.isAI = false;
       assignedPlayer.lastCommandTime = Date.now();
+      assignedPlayer.disconnectTime = null;
+      if (wasAI) {
+        console.log(`Player ${assignedPlayer.id} reconnected. Restoring control from AI.`);
+        io.emit('chatMessage', {
+          sender: 'System',
+          color: '#39ff14',
+          text: `Player ${assignedPlayer.name || assignedPlayer.id} has reconnected. Restoring control.`
+        });
+      }
     }
     
     if (assignedPlayer) {
@@ -1570,6 +1582,7 @@ async function bootstrap() {
           p.isAlive = true;
           p.needsPlanet = true;
           p.lastCommandTime = Date.now();
+          p.disconnectTime = null;
           p.discoveredPlanets = new Set();
           p.attackedPlanets = new Map();
           p.credits = game.settings && game.settings.startingCredits !== undefined ? game.settings.startingCredits : 0;
@@ -1644,6 +1657,7 @@ async function bootstrap() {
         p.isAlive = true;
         p.needsPlanet = true;
         p.lastCommandTime = now;
+        p.disconnectTime = null;
         p.discoveredPlanets = new Set();
         p.attackedPlanets = new Map();
         
@@ -1680,8 +1694,9 @@ async function bootstrap() {
     socket.on('disconnect', () => {
       lastHumanActivityTime = Date.now();
       const player = connectedClients.get(socket.id);
-      if (player && player.id !== game.humanPlayer.id) {
-        player.isAI = true; // Revert to AI if it's one of the AI slots
+      if (player) {
+        player.disconnectTime = Date.now();
+        console.log(`Player ${player.id} disconnected. 5-minute AI takeover cooldown started.`);
       }
       connectedClients.delete(socket.id);
     });
@@ -1709,6 +1724,26 @@ async function bootstrap() {
     }
 
     if (game.isRunning && !game.isPaused) {
+      // Check if any disconnected players have exceeded the 5-minute cooldown
+      for (const p of game.allPlayers) {
+        if (!p.isAI && p.disconnectTime && (currentTime - p.disconnectTime >= 300000)) { // 5 minutes
+          p.isAI = true;
+          p.disconnectTime = null;
+          console.log(`[Disconnect AI Takeover] Player ${p.id} disconnected for 5 minutes. Converting to AI.`);
+          io.emit('chatMessage', {
+            sender: 'System',
+            color: '#ffb74d',
+            text: `Player ${p.name || p.id} has been offline for 5 minutes. AI is taking control.`
+          });
+          // Also ensure they are updated in client's assignedPlayer
+          for (const [socketId, activePlayer] of connectedClients.entries()) {
+            if (activePlayer.id === p.id) {
+              io.to(socketId).emit('assignedPlayer', activePlayer);
+            }
+          }
+        }
+      }
+
       const speed = game.gameSpeed || 1.0;
       game.update(deltaTime * speed);
       game.checkWinCondition();
