@@ -2221,6 +2221,22 @@ function getPlanetTradeIncomePerMin(planet) {
     return Math.abs(hash % 100);
   }
 
+  function bindActionClick(elementOrId, callback) {
+    const el = typeof elementOrId === 'string' ? document.getElementById(elementOrId) : elementOrId;
+    if (!el) return;
+
+    const handler = (e) => {
+      if (e.type === 'touchstart') {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      callback(e);
+    };
+
+    el.addEventListener('touchstart', handler, { passive: false });
+    el.addEventListener('click', handler);
+  }
+
   function openInfoPanel(type, id) {
     activeInfoPanel = { type, id };
     if (infoPanelModal) {
@@ -2249,14 +2265,13 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   if (infoPanelCloseBtn) {
-    infoPanelCloseBtn.addEventListener('click', closeInfoPanel);
+    bindActionClick(infoPanelCloseBtn, closeInfoPanel);
   }
   if (infoPanelBackdrop) {
-    infoPanelBackdrop.addEventListener('click', closeInfoPanel);
+    bindActionClick(infoPanelBackdrop, closeInfoPanel);
   }
   if (infoPanelModal) {
-    infoPanelModal.addEventListener('click', closeInfoPanel);
-    infoPanelModal.addEventListener('touchstart', closeInfoPanel);
+    bindActionClick(infoPanelModal, closeInfoPanel);
   }
 
   function updateInfoPanelContent() {
@@ -3491,7 +3506,7 @@ function getPlanetTradeIncomePerMin(planet) {
   const leaderboardContent = document.getElementById('leaderboard-content');
   const scoreBoard = document.getElementById('score-board');
 
-  document.getElementById('btn-leaderboard').addEventListener('click', () => {
+  bindActionClick('btn-leaderboard', () => {
     scoreBoard.classList.toggle('hidden');
   });
 
@@ -3536,12 +3551,12 @@ function getPlanetTradeIncomePerMin(planet) {
     helpTitle.textContent = topicTitles[topic] || 'How to Play';
   }
 
-  helpBtn.addEventListener('click', () => {
+  bindActionClick(helpBtn, () => {
     helpModal.classList.remove('hidden');
     showHelpIndex();
   });
 
-  closeHelp.addEventListener('click', () => {
+  bindActionClick(closeHelp, () => {
     helpModal.classList.add('hidden');
   });
 
@@ -3560,13 +3575,13 @@ function getPlanetTradeIncomePerMin(planet) {
 
   // Wire up topic buttons
   document.querySelectorAll('.help-topic-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    bindActionClick(btn, () => {
       showHelpTopic(btn.dataset.topic);
     });
   });
 
   // Wire up back button
-  helpBackBtn.addEventListener('click', () => {
+  bindActionClick(helpBackBtn, () => {
     showHelpIndex();
   });
 
@@ -3718,7 +3733,7 @@ function getPlanetTradeIncomePerMin(planet) {
   let lockedSettings = false;
 
   if (setupNewGameBtn && setupOptionsContainer) {
-    setupNewGameBtn.addEventListener('click', () => {
+    bindActionClick(setupNewGameBtn, () => {
       setupOptionsContainer.style.display = 'flex';
       setupNewGameBtn.style.display = 'none';
       startBtn.textContent = 'START GAME';
@@ -3752,7 +3767,7 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   }
 
-  startBtn.addEventListener('click', () => {
+  bindActionClick(startBtn, () => {
     console.log('startBtn clicked!');
     megalovaniaPlayed = false;
     const nameInput = document.getElementById('player-name-input');
@@ -4068,12 +4083,10 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   });
 
-  if (resetAfkBtn) {
-    resetAfkBtn.addEventListener('click', () => {
-      socket.emit('resetAFK');
-      afkWarningOverlay.classList.add('hidden');
-    });
-  }
+  bindActionClick(resetAfkBtn, () => {
+    socket.emit('resetAFK');
+    afkWarningOverlay.classList.add('hidden');
+  });
 
   let lastPlanetCapacities = {};
   let lastPlanetAssignments = {};
@@ -7878,28 +7891,25 @@ function getPlanetTradeIncomePerMin(planet) {
   });
   const elTimer = document.getElementById('game-timer');
   if (elTimer) {
-    elTimer.addEventListener('click', (e) => {
-      if (e.button === 0) {
-        e.preventDefault();
-        socket.emit('changeGameSpeed', { direction: 'up' });
-      }
+    bindActionClick(elTimer, (e) => {
+      socket.emit('changeGameSpeed', { direction: 'up' });
     });
     elTimer.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       socket.emit('changeGameSpeed', { direction: 'down' });
     });
   }
-  document.getElementById('btn-warp').addEventListener('click', () => { warpOrderNext = !warpOrderNext; });
-  document.getElementById('btn-bomb').addEventListener('click', () => { bombOrderNext = bombOrderNext === 'eco' ? false : 'eco'; });
-  document.getElementById('btn-bomb-ships').addEventListener('click', () => { bombOrderNext = bombOrderNext === 'ships' ? false : 'ships'; });
-  document.getElementById('btn-scout').addEventListener('click', () => {
+  bindActionClick('btn-warp', () => { warpOrderNext = !warpOrderNext; });
+  bindActionClick('btn-bomb', () => { bombOrderNext = bombOrderNext === 'eco' ? false : 'eco'; });
+  bindActionClick('btn-bomb-ships', () => { bombOrderNext = bombOrderNext === 'ships' ? false : 'ships'; });
+  bindActionClick('btn-scout', () => {
     const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
     const techBonus = myPlayer ? Math.sqrt(myPlayer.techScore || 0) : 0;
     if (techBonus >= 10) {
       scoutModeNext = !scoutModeNext;
     }
   });
-  document.getElementById('btn-cruiser').addEventListener('click', () => { cruiserBuildModeActive = !cruiserBuildModeActive; });
+  bindActionClick('btn-cruiser', () => { cruiserBuildModeActive = !cruiserBuildModeActive; });
   const handleClassBuildTrigger = (classType, selectedPlanetBuild) => {
     if (!selectedPlanetBuild) return;
 
@@ -8036,15 +8046,12 @@ function getPlanetTradeIncomePerMin(planet) {
   };
 
   const bindBuildButton = (btnId, classType) => {
-    const el = document.getElementById(btnId);
-    if (el) {
-      el.addEventListener('click', () => {
-        const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
-        if (selectedPlanetBuild) {
-          handleClassBuildTrigger(classType, selectedPlanetBuild);
-        }
-      });
-    }
+    bindActionClick(btnId, () => {
+      const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
+      if (selectedPlanetBuild) {
+        handleClassBuildTrigger(classType, selectedPlanetBuild);
+      }
+    });
   };
   bindBuildButton('btn-build-corvette', 'corvette');
   bindBuildButton('btn-build-frigate', 'frigate');
@@ -8054,12 +8061,9 @@ function getPlanetTradeIncomePerMin(planet) {
   bindBuildButton('btn-build-battleship', 'battleship');
   bindBuildButton('btn-build-titan', 'titan');
   bindBuildButton('btn-build-mammoth', 'mammoth');
-  const elBuildCancel = document.getElementById('btn-build-cancel');
-  if (elBuildCancel) {
-    elBuildCancel.addEventListener('click', () => {
-      cruiserBuildModeActive = false;
-    });
-  }
+  bindActionClick('btn-build-cancel', () => {
+    cruiserBuildModeActive = false;
+  });
 
   const selCruiserPackage = document.getElementById('sel-cruiser-package');
   if (selCruiserPackage) {
@@ -8107,135 +8111,112 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
 
-  const btnPatrolEl = document.getElementById('btn-patrol');
-  if (btnPatrolEl) {
-    btnPatrolEl.addEventListener('click', () => {
-      const selectedCruisers = getSelectedCruisers();
-      if (selectedCruisers.length > 0) {
-        const anyNotPatrolling = selectedCruisers.some(c => !c.isPatrolling);
-        const nextState = anyNotPatrolling;
-        for (const ship of selectedCruisers) {
-          ship.isPatrolling = nextState;
-          if (nextState) {
-            ship.isScouting = false;
-            ship.isResearching = false;
-            ship.isDiplomacy = false;
-          }
-          socket.emit('toggleCruiserPatrol', { shipId: ship.id, enabled: nextState });
+  bindActionClick('btn-patrol', () => {
+    const selectedCruisers = getSelectedCruisers();
+    if (selectedCruisers.length > 0) {
+      const anyNotPatrolling = selectedCruisers.some(c => !c.isPatrolling);
+      const nextState = anyNotPatrolling;
+      for (const ship of selectedCruisers) {
+        ship.isPatrolling = nextState;
+        if (nextState) {
+          ship.isScouting = false;
+          ship.isResearching = false;
+          ship.isDiplomacy = false;
         }
+        socket.emit('toggleCruiserPatrol', { shipId: ship.id, enabled: nextState });
       }
-    });
-  }
-  const btnCruiserScoutEl = document.getElementById('btn-cruiser-scout');
-  if (btnCruiserScoutEl) {
-    btnCruiserScoutEl.addEventListener('click', () => {
-      const selectedCruisers = getSelectedCruisers();
-      if (selectedCruisers.length > 0) {
-        const anyNotScouting = selectedCruisers.some(c => !c.isScouting);
-        const nextState = anyNotScouting;
-        for (const ship of selectedCruisers) {
-          ship.isScouting = nextState;
-          if (nextState) {
-            ship.isPatrolling = false;
-            ship.isResearching = false;
-            ship.isDiplomacy = false;
-          }
-          socket.emit('toggleCruiserScout', { shipId: ship.id, enabled: nextState });
-        }
-      }
-    });
-  }
-  const btnCruiserAttackEl = document.getElementById('btn-cruiser-attack');
-  if (btnCruiserAttackEl) {
-    btnCruiserAttackEl.addEventListener('click', () => {
-      const selectedCruisers = getSelectedCruisers();
-      if (selectedCruisers.length > 0) {
-        const anyNotAttacking = selectedCruisers.some(c => !c.scoutAttackEnabled);
-        const nextState = anyNotAttacking;
-        for (const ship of selectedCruisers) {
-          ship.scoutAttackEnabled = nextState;
-          socket.emit('toggleCruiserScoutAttack', { shipId: ship.id, enabled: nextState });
-        }
-      }
-    });
-  }
+    }
+  });
 
-  const btnCruiserUseResourcesEl = document.getElementById('btn-cruiser-use-resources');
-  if (btnCruiserUseResourcesEl) {
-    btnCruiserUseResourcesEl.addEventListener('click', () => {
-      const selectedCruisers = getSelectedCruisers();
-      if (selectedCruisers.length > 0) {
-        const anyNotUsing = selectedCruisers.some(c => !c.useResources);
-        const nextState = anyNotUsing;
-        for (const ship of selectedCruisers) {
-          ship.useResources = nextState;
-          socket.emit('toggleCruiserUseResources', { shipId: ship.id, enabled: nextState });
+  bindActionClick('btn-cruiser-scout', () => {
+    const selectedCruisers = getSelectedCruisers();
+    if (selectedCruisers.length > 0) {
+      const anyNotScouting = selectedCruisers.some(c => !c.isScouting);
+      const nextState = anyNotScouting;
+      for (const ship of selectedCruisers) {
+        ship.isScouting = nextState;
+        if (nextState) {
+          ship.isPatrolling = false;
+          ship.isResearching = false;
+          ship.isDiplomacy = false;
         }
-      } else if (selectedPlanets.length > 0) {
-        const anyNotUsing = selectedPlanets.some(p => !p.useResources);
-        const nextState = anyNotUsing;
-        for (const p of selectedPlanets) {
-          p.useResources = nextState;
-          socket.emit('togglePlanetUseResources', { planetId: p.id, enabled: nextState });
-        }
+        socket.emit('toggleCruiserScout', { shipId: ship.id, enabled: nextState });
       }
-    });
-  }
+    }
+  });
 
+  bindActionClick('btn-cruiser-attack', () => {
+    const selectedCruisers = getSelectedCruisers();
+    if (selectedCruisers.length > 0) {
+      const anyNotAttacking = selectedCruisers.some(c => !c.scoutAttackEnabled);
+      const nextState = anyNotAttacking;
+      for (const ship of selectedCruisers) {
+        ship.scoutAttackEnabled = nextState;
+        socket.emit('toggleCruiserScoutAttack', { shipId: ship.id, enabled: nextState });
+      }
+    }
+  });
+
+  bindActionClick('btn-cruiser-use-resources', () => {
+    const selectedCruisers = getSelectedCruisers();
+    if (selectedCruisers.length > 0) {
+      const anyNotUsing = selectedCruisers.some(c => !c.useResources);
+      const nextState = anyNotUsing;
+      for (const ship of selectedCruisers) {
+        ship.useResources = nextState;
+        socket.emit('toggleCruiserUseResources', { shipId: ship.id, enabled: nextState });
+      }
+    } else if (selectedPlanets.length > 0) {
+      const anyNotUsing = selectedPlanets.some(p => !p.useResources);
+      const nextState = anyNotUsing;
+      for (const p of selectedPlanets) {
+        p.useResources = nextState;
+        socket.emit('togglePlanetUseResources', { planetId: p.id, enabled: nextState });
+      }
+    }
+  });
 
   const btnDismantleEl = document.getElementById('btn-dismantle');
-  if (btnDismantleEl) {
-    btnDismantleEl.addEventListener('click', () => {
-      const selectedCruisers = getSelectedCruisers();
-      const eligibleCruisers = selectedCruisers.filter(c => !c.isDismantling && isCruiserInFriendlyGravityWell(c));
-      if (eligibleCruisers.length > 0) {
-        if (!confirmingDismantle) {
-          confirmingDismantle = true;
-          btnDismantleEl.innerHTML = '<span class="btn-icon">♻️</span>Confirm "D"ismantle';
-        } else {
-          socket.emit('dismantleCruisers', { shipIds: eligibleCruisers.map(c => c.id) });
-          for (const c of eligibleCruisers) {
-            c.isDismantling = true;
-          }
-          confirmingDismantle = false;
-          btnDismantleEl.innerHTML = '<span class="btn-icon">♻️</span>D';
+  bindActionClick('btn-dismantle', () => {
+    const selectedCruisers = getSelectedCruisers();
+    const eligibleCruisers = selectedCruisers.filter(c => !c.isDismantling && isCruiserInFriendlyGravityWell(c));
+    if (eligibleCruisers.length > 0) {
+      if (!confirmingDismantle) {
+        confirmingDismantle = true;
+        if (btnDismantleEl) btnDismantleEl.innerHTML = '<span class="btn-icon">♻️</span>Confirm "D"ismantle';
+      } else {
+        socket.emit('dismantleCruisers', { shipIds: eligibleCruisers.map(c => c.id) });
+        for (const c of eligibleCruisers) {
+          c.isDismantling = true;
         }
+        confirmingDismantle = false;
+        if (btnDismantleEl) btnDismantleEl.innerHTML = '<span class="btn-icon">♻️</span>D';
       }
-    });
-  }
-  const btnUpgradeEl = document.getElementById('btn-upgrade-mode');
-  if (btnUpgradeEl) {
-    btnUpgradeEl.addEventListener('click', () => {
-      const qual = getSelectedCruiserUpgradeQualifiers();
-      if (qual) {
-        upgradeModeActive = true;
-      }
-    });
-  }
+    }
+  });
 
+  bindActionClick('btn-upgrade-mode', () => {
+    const qual = getSelectedCruiserUpgradeQualifiers();
+    if (qual) {
+      upgradeModeActive = true;
+    }
+  });
 
-
-  const btnFocusEl = document.getElementById('btn-focus-mode');
-  if (btnFocusEl) {
-    btnFocusEl.addEventListener('click', () => {
-      const planet = getSelectedPlanetForFocus();
-      if (planet) {
-        focusModeActive = true;
-      }
-    });
-  }
+  bindActionClick('btn-focus-mode', () => {
+    const planet = getSelectedPlanetForFocus();
+    if (planet) {
+      focusModeActive = true;
+    }
+  });
 
   const registerFocusBtn = (id, mode) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.addEventListener('click', () => {
-        const planet = getSelectedPlanetFocusQualifiers();
-        if (planet) {
-          socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: mode });
-          focusModeActive = false;
-        }
-      });
-    }
+    bindActionClick(id, () => {
+      const planet = getSelectedPlanetFocusQualifiers();
+      if (planet) {
+        socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: mode });
+        focusModeActive = false;
+      }
+    });
   };
 
   registerFocusBtn('btn-focus-economy', 'economy');
@@ -8319,8 +8300,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
   const btnCreditsDisplay = document.getElementById('player-credits-display');
   if (btnCreditsDisplay) {
-    btnCreditsDisplay.addEventListener('click', (e) => {
-      e.stopPropagation();
+    bindActionClick(btnCreditsDisplay, (e) => {
       socket.emit('toggleUseCredits');
     });
 
@@ -8348,8 +8328,7 @@ function getPlanetTradeIncomePerMin(planet) {
   if (tradeOptionsDisplayBtn) {
     tradeOptionsDisplayBtn.style.cursor = 'pointer';
     tradeOptionsDisplayBtn.style.pointerEvents = 'auto';
-    tradeOptionsDisplayBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
+    bindActionClick(tradeOptionsDisplayBtn, (e) => {
       socket.emit('toggleTradeLimit');
     });
     tradeOptionsDisplayBtn.addEventListener('mouseenter', () => {
@@ -8471,12 +8450,9 @@ function getPlanetTradeIncomePerMin(planet) {
     playChaChingSound();
   });
 
-  const btnFocusCancel = document.getElementById('btn-focus-cancel');
-  if (btnFocusCancel) {
-    btnFocusCancel.addEventListener('click', () => {
-      focusModeActive = false;
-    });
-  }
+  bindActionClick('btn-focus-cancel', () => {
+    focusModeActive = false;
+  });
 
   const upgradeToSocketTypeMap = {
     sensorarrays: 'sensorarray',
@@ -8494,71 +8470,68 @@ function getPlanetTradeIncomePerMin(planet) {
   };
 
   const registerUpgradeBtn = (id, type) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.addEventListener('click', () => {
-        const qual = getSelectedCruiserUpgradeQualifiers();
-        if (qual) {
-          const ship = qual.ship;
-          const totalUpgrades = (ship.sensorarrays || 0) +
-                                (ship.labs || 0) +
-                                (ship.armor || 0) +
-                                (ship.shields || 0) +
-                                (ship.engine || 0) +
-                                (ship.munitions || 0) +
-                                (ship.targeting || 0) +
-                                (ship.damagecontrol || 0) +
-                                (ship.fuel_tanker || 0) +
-                                (ship.diplomat || 0) +
-                                (ship.marines || 0) +
-                                (ship.command || 0);
+    bindActionClick(id, () => {
+      const qual = getSelectedCruiserUpgradeQualifiers();
+      if (qual) {
+        const ship = qual.ship;
+        const totalUpgrades = (ship.sensorarrays || 0) +
+                              (ship.labs || 0) +
+                              (ship.armor || 0) +
+                              (ship.shields || 0) +
+                              (ship.engine || 0) +
+                              (ship.munitions || 0) +
+                              (ship.targeting || 0) +
+                              (ship.damagecontrol || 0) +
+                              (ship.fuel_tanker || 0) +
+                              (ship.diplomat || 0) +
+                              (ship.marines || 0) +
+                              (ship.command || 0);
 
-          const maxIndividualLevel = Math.floor((ship.maxHealth || 0) / 10);
-          const maxTotalUpgrades = Math.floor((ship.maxHealth || 0) / 5);
+        const maxIndividualLevel = Math.floor((ship.maxHealth || 0) / 10);
+        const maxTotalUpgrades = Math.floor((ship.maxHealth || 0) / 5);
 
-          const currentVal = ship[type] || 0;
-          const nextLevel = currentVal + 1;
+        const currentVal = ship[type] || 0;
+        const nextLevel = currentVal + 1;
 
-          let shieldCheck = true;
-          if (type === 'shields') {
-            const rawTech = localPlayer ? localPlayer.techScore || 0 : 0;
-            const rawExp = localPlayer ? localPlayer.expScore || 0 : 0;
-            const shipExp = ship.expScore || 0;
-            const techBonus = Math.sqrt(rawTech);
-            const expBonus = Math.sqrt(rawExp);
-            const shipExpBonus = Math.sqrt(shipExp);
-            const baseDeflection = ship.maxHealth + (techBonus + expBonus + shipExpBonus);
-            const deflectionRem = 100 - baseDeflection;
-            const nextShieldDeflectionBonus = nextLevel * (deflectionRem / 5);
-            const newDeflection = baseDeflection + nextShieldDeflectionBonus;
-            if (newDeflection > 90) {
-              shieldCheck = false;
-            }
+        let shieldCheck = true;
+        if (type === 'shields') {
+          const rawTech = localPlayer ? localPlayer.techScore || 0 : 0;
+          const rawExp = localPlayer ? localPlayer.expScore || 0 : 0;
+          const shipExp = ship.expScore || 0;
+          const techBonus = Math.sqrt(rawTech);
+          const expBonus = Math.sqrt(rawExp);
+          const shipExpBonus = Math.sqrt(shipExp);
+          const baseDeflection = ship.maxHealth + (techBonus + expBonus + shipExpBonus);
+          const deflectionRem = 100 - baseDeflection;
+          const nextShieldDeflectionBonus = nextLevel * (deflectionRem / 5);
+          const newDeflection = baseDeflection + nextShieldDeflectionBonus;
+          if (newDeflection > 90) {
+            shieldCheck = false;
           }
+        }
 
-          if (ship.upgradeTokens > 0) {
-            if (currentVal < 5 && nextLevel <= Math.min(5, maxIndividualLevel) && shieldCheck) {
-              const socketType = upgradeToSocketTypeMap[type] || type;
-              console.log(`[Upgrade Click] Token Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${qual.ship.id}`);
-              socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
-            } else {
-              console.log(`[Upgrade Click Rejected] Token limits failed. type: ${type}, currentVal: ${currentVal}, nextLevel: ${nextLevel}, maxLevel: ${maxIndividualLevel}, shieldCheck: ${shieldCheck}`);
-            }
-            upgradeModeActive = false;
-            return;
-          }
-
-          if (currentVal < 5 && nextLevel <= maxIndividualLevel && (totalUpgrades + 1) <= maxTotalUpgrades && shieldCheck) {
+        if (ship.upgradeTokens > 0) {
+          if (currentVal < 5 && nextLevel <= Math.min(5, maxIndividualLevel) && shieldCheck) {
             const socketType = upgradeToSocketTypeMap[type] || type;
-            console.log(`[Upgrade Click] Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${qual.ship.id}`);
+            console.log(`[Upgrade Click] Token Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${qual.ship.id}`);
             socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
           } else {
-            console.log(`[Upgrade Click Rejected] Limits failed. type: ${type}, currentVal: ${currentVal}, nextLevel: ${nextLevel}, maxLevel: ${maxIndividualLevel}, totalUpgrades: ${totalUpgrades}, maxTotalUpgrades: ${maxTotalUpgrades}`);
+            console.log(`[Upgrade Click Rejected] Token limits failed. type: ${type}, currentVal: ${currentVal}, nextLevel: ${nextLevel}, maxLevel: ${maxIndividualLevel}, shieldCheck: ${shieldCheck}`);
           }
           upgradeModeActive = false;
+          return;
         }
-      });
-    }
+
+        if (currentVal < 5 && nextLevel <= maxIndividualLevel && (totalUpgrades + 1) <= maxTotalUpgrades && shieldCheck) {
+          const socketType = upgradeToSocketTypeMap[type] || type;
+          console.log(`[Upgrade Click] Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${qual.ship.id}`);
+          socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
+        } else {
+          console.log(`[Upgrade Click Rejected] Limits failed. type: ${type}, currentVal: ${currentVal}, nextLevel: ${nextLevel}, maxLevel: ${maxIndividualLevel}, totalUpgrades: ${totalUpgrades}, maxTotalUpgrades: ${maxTotalUpgrades}`);
+        }
+        upgradeModeActive = false;
+      }
+    });
   };
 
   registerUpgradeBtn('btn-up-sensorarray', 'sensorarrays');
@@ -8574,12 +8547,9 @@ function getPlanetTradeIncomePerMin(planet) {
   registerUpgradeBtn('btn-up-marines', 'marines');
   registerUpgradeBtn('btn-up-command', 'command');
 
-  const btnUpCancel = document.getElementById('btn-up-cancel');
-  if (btnUpCancel) {
-    btnUpCancel.addEventListener('click', () => {
-      upgradeModeActive = false;
-    });
-  }
+  bindActionClick('btn-up-cancel', () => {
+    upgradeModeActive = false;
+  });
   function updateButtonHighlights() {
     const toggle = (id, active) => {
       const el = document.getElementById(id);
@@ -8652,7 +8622,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   });
 
-  restartBtn.addEventListener('click', () => {
+  bindActionClick(restartBtn, () => {
     console.log('restartBtn clicked!');
     endScreen.classList.add('hidden');
     gameUI.classList.remove('hidden');
@@ -8708,20 +8678,18 @@ function getPlanetTradeIncomePerMin(planet) {
     socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin });
   });
 
-  if (lobbyBtn) {
-    lobbyBtn.addEventListener('click', () => {
-      endScreen.classList.add('hidden');
-      startScreen.classList.remove('hidden');
-      lockedSettings = false;
-      const fogCheck = document.getElementById('fog-of-war-checkbox');
-      const aiInput = document.getElementById('ai-count-input');
-      if (fogCheck) fogCheck.disabled = false;
-      if (aiInput) aiInput.disabled = false;
-      startBtn.textContent = 'ENTER GAME';
-      if (setupOptionsContainer) setupOptionsContainer.style.display = 'none';
-      if (setupNewGameBtn) setupNewGameBtn.style.display = 'block';
-    });
-  }
+  bindActionClick(lobbyBtn, () => {
+    endScreen.classList.add('hidden');
+    startScreen.classList.remove('hidden');
+    lockedSettings = false;
+    const fogCheck = document.getElementById('fog-of-war-checkbox');
+    const aiInput = document.getElementById('ai-count-input');
+    if (fogCheck) fogCheck.disabled = false;
+    if (aiInput) aiInput.disabled = false;
+    startBtn.textContent = 'ENTER GAME';
+    if (setupOptionsContainer) setupOptionsContainer.style.display = 'none';
+    if (setupNewGameBtn) setupNewGameBtn.style.display = 'block';
+  });
 
   function draw() {
     if (keysDown['ArrowUp']) cameraPanY += 40 / cameraZoom;

@@ -2,6 +2,7 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body, html {
@@ -11,6 +12,14 @@ body, html {
   background-color: #050510;
   font-family: 'Rajdhani', sans-serif;
   color: #fff;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input, textarea {
+  -webkit-user-select: auto !important;
+  user-select: auto !important;
 }
 
 canvas {
