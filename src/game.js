@@ -811,7 +811,7 @@ export class Game {
           } else if (i === 1) {
             upgrades['shields'] = 1;
             upgrades['diplomat'] = 1;
-            upgrades['engine'] = 1;
+            upgrades['fuel_tanker'] = 1;
           } else {
             upgrades['diplomat'] = 1;
             upgrades['munitions'] = 1;
