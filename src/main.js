@@ -3789,6 +3789,58 @@ function getPlanetTradeIncomePerMin(planet) {
 
     startScreen.classList.add('hidden');
     gameUI.classList.remove('hidden');
+
+    const fogOfWar = document.getElementById('fog-of-war-checkbox').checked;
+    const smallEmpires = document.getElementById('small-empires-checkbox').checked;
+    const noRampagers = document.getElementById('no-rampagers-checkbox').checked;
+    const enableCheats = document.getElementById('cheats-checkbox').checked;
+    const aiCount = parseInt(document.getElementById('ai-count-input').value, 10);
+    const productionMultiple = parseFloat(document.getElementById('production-multiple-input').value) || 1.0;
+    const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 2000;
+    const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 60;
+    const clustersInput = document.getElementById('clusters-input');
+    const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
+    const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
+    const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
+    const timedGameSelect = document.getElementById('timed-game-select');
+    let timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
+    if (timedGameLimit === 'custom') {
+      const timedGameInput = document.getElementById('timed-game-input');
+      const customMin = timedGameInput ? parseFloat(timedGameInput.value) : 60;
+      timedGameLimit = String(Math.round((isNaN(customMin) ? 60 : customMin) * 60));
+    }
+    let homeworldSizeSetting = homeworldSizeSelect ? homeworldSizeSelect.value : "120";
+    if (homeworldSizeSetting === 'custom') {
+      const homeworldSizeInput = document.getElementById('homeworld-size-input');
+      const customVal = homeworldSizeInput ? parseInt(homeworldSizeInput.value, 10) : 120;
+      homeworldSizeSetting = isNaN(customVal) ? "120" : String(customVal);
+    }
+    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "0";
+    if (startingCreditsVal === 'custom') {
+      const startingCreditsInput = document.getElementById('starting-credits-input');
+      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 0;
+      startingCreditsVal = isNaN(customCredits) ? "0" : String(customCredits);
+    }
+    const raceSelect = document.getElementById('player-race-select');
+    const selectedRace = raceSelect ? raceSelect.value : 'Random';
+    if (raceSelect) {
+      localStorage.setItem('planetWarsPlayerRace', selectedRace);
+    }
+    const aiEntrySel = document.getElementById('ai-entry-select');
+    const aiEntry = aiEntrySel ? aiEntrySel.value : 'mid';
+    const customAiEntryIn = document.getElementById('custom-ai-entry-input');
+    const customAiEntryMin = customAiEntryIn ? parseFloat(customAiEntryIn.value) : 5;
+
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, enableCheats, race: selectedRace, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin };
+
+    if (startBtn.textContent === 'START GAME') {
+      hasCenteredOnHomeworld = false;
+      serverState = null;
+      lastKnownPlanets = {};
+      socket.emit('restartGame', payload);
+    } else {
+      socket.emit('enterGame', payload);
+    }
   });
 
   const chatInput = document.getElementById('chat-input');
@@ -8565,62 +8617,6 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
 
-  startBtn.addEventListener('click', () => {
-    console.log('startBtn clicked!');
-    startScreen.classList.add('hidden');
-    gameUI.classList.remove('hidden');
-    const fogOfWar = document.getElementById('fog-of-war-checkbox').checked;
-    const smallEmpires = document.getElementById('small-empires-checkbox').checked;
-    const noRampagers = document.getElementById('no-rampagers-checkbox').checked;
-    const enableCheats = document.getElementById('cheats-checkbox').checked;
-    const aiCount = parseInt(document.getElementById('ai-count-input').value, 10);
-    const productionMultiple = parseFloat(document.getElementById('production-multiple-input').value) || 1.0;
-    const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 2000;
-    const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 60;
-    const clustersInput = document.getElementById('clusters-input');
-    const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
-    const hazardMultiple = parseFloat(document.getElementById('hazard-multiple-input').value);
-    const hm = isNaN(hazardMultiple) ? 1.0 : hazardMultiple;
-    const timedGameSelect = document.getElementById('timed-game-select');
-    let timedGameLimit = timedGameSelect ? timedGameSelect.value : "3600";
-    if (timedGameLimit === 'custom') {
-      const timedGameInput = document.getElementById('timed-game-input');
-      const customMin = timedGameInput ? parseFloat(timedGameInput.value) : 60;
-      timedGameLimit = String(Math.round((isNaN(customMin) ? 60 : customMin) * 60));
-    }
-    let homeworldSizeSetting = homeworldSizeSelect ? homeworldSizeSelect.value : "120";
-    if (homeworldSizeSetting === 'custom') {
-      const homeworldSizeInput = document.getElementById('homeworld-size-input');
-      const customVal = homeworldSizeInput ? parseInt(homeworldSizeInput.value, 10) : 120;
-      homeworldSizeSetting = isNaN(customVal) ? "120" : String(customVal);
-    }
-    let startingCreditsVal = startingCreditsSelect ? startingCreditsSelect.value : "0";
-    if (startingCreditsVal === 'custom') {
-      const startingCreditsInput = document.getElementById('starting-credits-input');
-      const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 0;
-      startingCreditsVal = isNaN(customCredits) ? "0" : String(customCredits);
-    }
-    const raceSelect = document.getElementById('player-race-select');
-    const selectedRace = raceSelect ? raceSelect.value : 'Random';
-    if (raceSelect) {
-      localStorage.setItem('planetWarsPlayerRace', selectedRace);
-    }
-    const aiEntrySel = document.getElementById('ai-entry-select');
-    const aiEntry = aiEntrySel ? aiEntrySel.value : 'mid';
-    const customAiEntryIn = document.getElementById('custom-ai-entry-input');
-    const customAiEntryMin = customAiEntryIn ? parseFloat(customAiEntryIn.value) : 5;
-
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, enableCheats, race: selectedRace, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin };
-
-    if (startBtn.textContent === 'START GAME') {
-      hasCenteredOnHomeworld = false;
-      serverState = null; // Clear old state so we don't draw it while waiting for the new one
-      lastKnownPlanets = {}; // Clear cached planet details
-      socket.emit('restartGame', payload);
-    } else {
-      socket.emit('enterGame', payload);
-    }
-  });
 
   bindActionClick(restartBtn, () => {
     console.log('restartBtn clicked!');
