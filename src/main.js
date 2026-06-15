@@ -2254,6 +2254,10 @@ function getPlanetTradeIncomePerMin(planet) {
   if (infoPanelBackdrop) {
     infoPanelBackdrop.addEventListener('click', closeInfoPanel);
   }
+  if (infoPanelModal) {
+    infoPanelModal.addEventListener('click', closeInfoPanel);
+    infoPanelModal.addEventListener('touchstart', closeInfoPanel);
+  }
 
   function updateInfoPanelContent() {
     if (!activeInfoPanel || !serverState || !infoPanelTitle || !infoPanelBody) {
@@ -6443,13 +6447,8 @@ function getPlanetTradeIncomePerMin(planet) {
             selectedShips.push(clickedShip);
           }
         } else {
-          const wasOnlySelection = (selectedShips.length === 1 && selectedShips[0].id === clickedShip.id && selectedPlanets.length === 0);
-          if (wasOnlySelection) {
-            upgradeModeActive = !upgradeModeActive;
-          } else {
-            selectedShips = [clickedShip];
-            selectedPlanets = [];
-          }
+          selectedShips = [clickedShip];
+          selectedPlanets = [];
         }
         return;
       }
@@ -7030,6 +7029,20 @@ function getPlanetTradeIncomePerMin(planet) {
     const cPos = getCanvasPos(event.clientX, event.clientY);
     lastCanvasMouseX = cPos.x;
     lastCanvasMouseY = cPos.y;
+
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    if (isTouchDevice) {
+      const now = Date.now();
+      if (now - lastMouseEmitTime > 5000) {
+        lastMouseEmitTime = now;
+        socket.emit('resetAFK');
+        if (afkWarningOverlay && !afkWarningOverlay.classList.contains('hidden')) {
+          afkWarningOverlay.classList.add('hidden');
+        }
+      }
+      return;
+    }
+
     handlePointerMove(cPos.x, cPos.y, false);
 
     // Tooltip hover check
@@ -7293,32 +7306,39 @@ function getPlanetTradeIncomePerMin(planet) {
 
       let tappedType = null;
       let tappedId = null;
+      let isAlreadySelected = false;
+
       if (clickedShip && clickedShip.isCruiser) {
         tappedType = 'ship';
         tappedId = clickedShip.id;
+        isAlreadySelected = selectedShips.some(s => s.id === clickedShip.id);
       } else if (clickedPlanet) {
         tappedType = 'planet';
         tappedId = clickedPlanet.id;
+        isAlreadySelected = selectedPlanets.some(p => p.id === clickedPlanet.id);
       } else if (clickedShip) {
         tappedType = 'fleet';
         tappedId = clickedShip.id;
+        isAlreadySelected = selectedShips.some(s => s.id === clickedShip.id);
       }
 
+      handlePointerDown(cPos.x, cPos.y, event.shiftKey, true, 0);
+
       if (tappedType && (tappedId !== null && tappedId !== undefined)) {
-        if (activeInfoPanel && activeInfoPanel.type === tappedType && activeInfoPanel.id === tappedId) {
-          closeInfoPanel();
+        if (isAlreadySelected) {
+          if (activeInfoPanel && activeInfoPanel.type === tappedType && activeInfoPanel.id === tappedId) {
+            closeInfoPanel();
+          } else {
+            openInfoPanel(tappedType, tappedId);
+          }
         } else {
-          openInfoPanel(tappedType, tappedId);
-          panelOpenedThisTick = true;
-          setTimeout(() => { panelOpenedThisTick = false; }, 0);
+          closeInfoPanel();
         }
       } else {
         if (activeInfoPanel) {
           closeInfoPanel();
         }
       }
-
-      handlePointerDown(cPos.x, cPos.y, event.shiftKey, true, 0);
 
       // Check for double tap
       const now = Date.now();
