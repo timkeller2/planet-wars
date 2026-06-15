@@ -7369,35 +7369,85 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
+      let clickedAnomaly = null;
+      let clickedAnomalyPlanet = null;
+      if (serverState && serverState.planets) {
+        for (const p of serverState.planets) {
+          if (p.anomaly && !p.anomaly.researched) {
+            const adx = p.anomaly.x - serverPos.x;
+            const ady = p.anomaly.y - serverPos.y;
+            if (adx * adx + ady * ady <= 25 * 25) {
+              clickedAnomaly = p.anomaly;
+              clickedAnomalyPlanet = p;
+              break;
+            }
+          }
+        }
+      }
+
+      let clickedWreckage = null;
+      if (serverState && serverState.wreckages) {
+        for (const w of serverState.wreckages) {
+          const wdx = w.x - serverPos.x;
+          const wdy = w.y - serverPos.y;
+          if (wdx * wdx + wdy * wdy < 50 * 50) {
+            clickedWreckage = w;
+            break;
+          }
+        }
+      }
+
       let tappedType = null;
       let tappedId = null;
       let isAlreadySelected = false;
+      let isOwned = false;
 
-      if (clickedShip && clickedShip.isCruiser) {
+      if (clickedAnomaly) {
+        tappedType = 'anomaly';
+        tappedId = clickedAnomalyPlanet.id;
+        isOwned = false;
+      } else if (clickedWreckage) {
+        tappedType = 'wreckage';
+        tappedId = clickedWreckage.id;
+        isOwned = false;
+      } else if (clickedShip && clickedShip.isCruiser) {
         tappedType = 'ship';
         tappedId = clickedShip.id;
         isAlreadySelected = selectedShips.some(s => s.id === clickedShip.id);
+        isOwned = localPlayer && (clickedShip.ownerId === localPlayer.id);
       } else if (clickedPlanet) {
         tappedType = 'planet';
         tappedId = clickedPlanet.id;
         isAlreadySelected = selectedPlanets.some(p => p.id === clickedPlanet.id);
+        isOwned = localPlayer && (clickedPlanet.ownerId === localPlayer.id);
       } else if (clickedShip) {
         tappedType = 'fleet';
         tappedId = clickedShip.id;
         isAlreadySelected = selectedShips.some(s => s.id === clickedShip.id);
+        isOwned = localPlayer && (clickedShip.ownerId === localPlayer.id);
       }
 
       handlePointerDown(cPos.x, cPos.y, event.shiftKey, true, 0);
 
       if (tappedType && (tappedId !== null && tappedId !== undefined)) {
-        if (isAlreadySelected) {
+        if (!isOwned) {
+          // Unowned entities: open tooltip on a single touch/tap
           if (activeInfoPanel && activeInfoPanel.type === tappedType && activeInfoPanel.id === tappedId) {
             closeInfoPanel();
           } else {
             openInfoPanel(tappedType, tappedId);
           }
         } else {
-          closeInfoPanel();
+          // Owned entities: require second tap (isAlreadySelected)
+          if (isAlreadySelected) {
+            if (activeInfoPanel && activeInfoPanel.type === tappedType && activeInfoPanel.id === tappedId) {
+              closeInfoPanel();
+            } else {
+              openInfoPanel(tappedType, tappedId);
+            }
+          } else {
+            closeInfoPanel();
+          }
         }
       } else {
         if (activeInfoPanel) {
