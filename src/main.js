@@ -5602,10 +5602,15 @@ function getPlanetTradeIncomePerMin(planet) {
         bullseyeIds.add(happySorted[0].id);
       }
 
-      // 4. Score Victory: 75% of 2.0x lead ratio = 1.75x lead ratio
-      if (vpSorted.length > 1 && (getVictoryScore(vpSorted[0]) >= getVictoryScore(vpSorted[1]) * 1.75) && getVictoryScore(vpSorted[0]) > 0) {
+      // 4. Score Victory: 75% of 2.0x lead ratio = 1.75x lead ratio, and at least 75% of minScoreToWin (50, or timed game minutes)
+      let minScoreToWin = 50;
+      if (serverState.settings && serverState.settings.timedGameLimit && serverState.settings.timedGameLimit !== 'unlimited') {
+        minScoreToWin = Math.round(parseFloat(serverState.settings.timedGameLimit) / 60);
+      }
+      const targetMinScore = minScoreToWin * 0.75;
+      if (vpSorted.length > 1 && (getVictoryScore(vpSorted[0]) >= getVictoryScore(vpSorted[1]) * 1.75) && getVictoryScore(vpSorted[0]) >= targetMinScore) {
         bullseyeIds.add(vpSorted[0].id);
-      } else if (vpSorted.length === 1 && getVictoryScore(vpSorted[0]) > 0) {
+      } else if (vpSorted.length === 1 && getVictoryScore(vpSorted[0]) >= targetMinScore) {
         bullseyeIds.add(vpSorted[0].id);
       }
 

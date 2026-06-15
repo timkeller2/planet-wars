@@ -7027,13 +7027,17 @@ export class Game {
       }
     }
 
-    // 4. Score Victory: twice the victory points of the 2nd highest player
+    // 4. Score Victory: twice the victory points of the 2nd highest player and at least minScoreToWin (50, or timed game minutes)
+    let minScoreToWin = 50;
+    if (this.settings && this.settings.timedGameLimit && this.settings.timedGameLimit !== 'unlimited') {
+      minScoreToWin = Math.round(parseFloat(this.settings.timedGameLimit) / 60);
+    }
     const sortedByVP = [...alivePlayers].sort((a, b) => getVP(b) - getVP(a));
     if (sortedByVP.length >= 2) {
       const topPlayer = sortedByVP[0];
       const topVP = getVP(topPlayer);
       const secondVP = getVP(sortedByVP[1]);
-      if (topVP >= secondVP * 2 && topVP > 0) {
+      if (topVP >= secondVP * 2 && topVP >= minScoreToWin) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(SCORE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7041,7 +7045,7 @@ export class Game {
       }
     } else if (sortedByVP.length === 1) {
       const topPlayer = sortedByVP[0];
-      if (getVP(topPlayer) > 0) {
+      if (getVP(topPlayer) >= minScoreToWin) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(SCORE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
