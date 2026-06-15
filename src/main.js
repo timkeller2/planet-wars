@@ -5620,10 +5620,10 @@ function getPlanetTradeIncomePerMin(planet) {
 
       let html = '';
       alivePlayers.forEach(p => {
-        const pTech = getTechBonus(p).toFixed(1);
-        const pExp = getExpBonus(p).toFixed(1);
-        const pHappiness = getHappinessBonus(p).toFixed(1);
-        const victoryScore = getVictoryScore(p).toFixed(1);
+        const pTech = Math.round(getTechBonus(p));
+        const pExp = Math.round(getExpBonus(p));
+        const pHappiness = Math.round(getHappinessBonus(p));
+        const victoryScore = Math.round(getVictoryScore(p));
         const blinkClass = bullseyeIds.has(p.id) ? ' leader-row' : '';
         const bullseye = bullseyeIds.has(p.id) ? '<span style="color: #f00; text-shadow: 0 0 5px #f00; margin-left: 2px;" title="Target!">🎯</span>' : '';
 
