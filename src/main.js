@@ -5243,7 +5243,7 @@ function getPlanetTradeIncomePerMin(planet) {
       for (const res of resourcesList) {
         const qtySpan = document.getElementById(`res-qty-${res}`);
         const rawQty = myPlayer.resources?.[res] || 0;
-        const qtyVal = rawQty > 5 ? Math.floor(rawQty).toString() : rawQty.toFixed(2);
+        const qtyVal = Math.floor(rawQty).toString();
         
         if (qtySpan) qtySpan.textContent = qtyVal;
         
@@ -5567,7 +5567,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
       const getTechBonus = p => Math.sqrt(p.techScore || 0);
       const getExpBonus = p => Math.sqrt(p.expScore || 0);
-      const getHappinessBonus = p => Math.sqrt(p.happinessScore !== undefined ? p.happinessScore : 100);
+      const getHappinessBonus = p => Math.sqrt(p.happinessScore !== undefined ? p.happinessScore : 0);
       const getVictoryScore = p => getTechBonus(p) + getExpBonus(p) + getHappinessBonus(p);
 
       const alivePlayers = serverState.players.filter(p => p.isAlive || p.id === localPlayer.id || (serverState.ships && serverState.ships.some(s => s.active && s.ownerId === p.id)));

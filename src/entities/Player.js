@@ -6,7 +6,7 @@ export class Player {
     this.techScore = 0;
     this.expScore = 0;
     this.expProgress = 0;
-    this.happinessScore = 100;
+    this.happinessScore = 0;
     this.cruiserStyle = null;
     this.credits = 0;
     this.upgradeModifiers = {

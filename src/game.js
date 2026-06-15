@@ -1393,7 +1393,7 @@ export class Game {
       p.techScore = pData.techScore;
       p.expScore = pData.expScore;
       p.expProgress = pData.expProgress;
-      p.happinessScore = pData.happinessScore !== undefined ? pData.happinessScore : 100;
+      p.happinessScore = pData.happinessScore !== undefined ? pData.happinessScore : 0;
       p.credits = pData.credits;
       p.tradingBonus = pData.tradingBonus;
       p.useCredits = pData.useCredits;
@@ -6961,7 +6961,7 @@ export class Game {
     // Helper functions for bonuses
     const getTechBonus = p => Math.sqrt(p.techScore || 0);
     const getExpBonus = p => Math.sqrt(p.expScore || 0);
-    const getHappinessBonus = p => Math.sqrt(p.happinessScore !== undefined ? p.happinessScore : 100);
+    const getHappinessBonus = p => Math.sqrt(p.happinessScore !== undefined ? p.happinessScore : 0);
     const getVP = p => getTechBonus(p) + getExpBonus(p) + getHappinessBonus(p);
 
     // 1. Tech Victory: leads by 12 Tech Bonus points
@@ -7081,7 +7081,7 @@ export class Game {
     for (const player of players) {
       const techBonus = Math.sqrt(player.techScore || 0);
       const expBonus = Math.sqrt(player.expScore || 0);
-      const happinessBonus = Math.sqrt(player.happinessScore !== undefined ? player.happinessScore : 100);
+      const happinessBonus = Math.sqrt(player.happinessScore !== undefined ? player.happinessScore : 0);
 
       const totalScore = techBonus + expBonus + happinessBonus;
 
