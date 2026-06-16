@@ -9921,8 +9921,15 @@ function getPlanetTradeIncomePerMin(planet) {
       // Draw scanning beams/cones for anomalies being researched/completed
       for (const p of serverState.planets) {
         if (p.anomaly && !p.anomaly.researched && p.anomaly.beingResearched) {
-          const shipId = p.anomaly.completingShipId || p.anomaly.researchingShipId;
-          if (shipId) {
+          const shipIds = new Set();
+          if (p.anomaly.completingShipId) shipIds.add(p.anomaly.completingShipId);
+          if (p.anomaly.researchingShipId) shipIds.add(p.anomaly.researchingShipId);
+          if (p.anomaly.researchingShipIds) {
+            for (const id of p.anomaly.researchingShipIds) {
+              shipIds.add(id);
+            }
+          }
+          for (const shipId of shipIds) {
             const ship = serverState.ships.find(s => s.id === shipId);
             if (ship) {
               anyBeingResearched = true;

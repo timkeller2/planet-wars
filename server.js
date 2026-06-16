@@ -2041,7 +2041,8 @@ async function bootstrap() {
              completingTimeLeft: p.anomaly.completingTimeLeft || 0,
              completingShipId: p.anomaly.completingShipId || null,
              completingPlayerId: p.anomaly.completingPlayerId || null,
-             researchingShipId: p.anomaly.researchingShipId || null
+             researchingShipId: p.anomaly.researchingShipId || null,
+             researchingShipIds: p.anomaly.researchingShipIds || []
            } : null
       };
     });
@@ -2518,7 +2519,8 @@ async function bootstrap() {
                  completingTimeLeft: p.anomaly.completingTimeLeft || 0,
                  completingShipId: p.anomaly.completingShipId || null,
                  completingPlayerId: p.anomaly.completingPlayerId || null,
-                 researchingShipId: p.anomaly.researchingShipId || null
+                 researchingShipId: p.anomaly.researchingShipId || null,
+                 researchingShipIds: p.anomaly.researchingShipIds || []
                } : null
             });
           }

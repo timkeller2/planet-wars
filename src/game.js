@@ -1312,9 +1312,23 @@ export class Game {
         expProgress: p.expProgress,
         sacrificedShips: p.sacrificedShips,
         focusChanges: p.focusChanges,
-        productionProgress: p.productionProgress,
-        capacityProgress: p.capacityProgress,
-        preferredResourceWantedEvent: p.preferredResourceWantedEvent
+        preferredResourceWantedEvent: p.preferredResourceWantedEvent,
+        anomaly: p.anomaly ? {
+          x: p.anomaly.x,
+          y: p.anomaly.y,
+          radius: p.anomaly.radius,
+          type: p.anomaly.type || 'anomaly',
+          beingResearched: p.anomaly.beingResearched || false,
+          difficulty: p.anomaly.difficulty || 0,
+          initialDifficulty: p.anomaly.initialDifficulty || 0,
+          progress: p.anomaly.progress || {},
+          completing: p.anomaly.completing || false,
+          completingTimeLeft: p.anomaly.completingTimeLeft || 0,
+          completingShipId: p.anomaly.completingShipId || null,
+          completingPlayerId: p.anomaly.completingPlayerId || null,
+          researchingShipId: p.anomaly.researchingShipId || null,
+          researchingShipIds: p.anomaly.researchingShipIds || []
+        } : null
       })),
       ships: this.ships.map(s => {
         const sData = {};
@@ -1464,6 +1478,22 @@ export class Game {
       p.productionProgress = pData.productionProgress !== undefined ? pData.productionProgress : 0;
       p.capacityProgress = pData.capacityProgress !== undefined ? pData.capacityProgress : 0;
       p.preferredResourceWantedEvent = pData.preferredResourceWantedEvent !== undefined ? pData.preferredResourceWantedEvent : false;
+      p.anomaly = pData.anomaly ? {
+        x: pData.anomaly.x,
+        y: pData.anomaly.y,
+        radius: pData.anomaly.radius,
+        type: pData.anomaly.type || 'anomaly',
+        beingResearched: pData.anomaly.beingResearched || false,
+        difficulty: pData.anomaly.difficulty || 0,
+        initialDifficulty: pData.anomaly.initialDifficulty || 0,
+        progress: pData.anomaly.progress || {},
+        completing: pData.anomaly.completing || false,
+        completingTimeLeft: pData.anomaly.completingTimeLeft || 0,
+        completingShipId: pData.anomaly.completingShipId || null,
+        completingPlayerId: pData.anomaly.completingPlayerId || null,
+        researchingShipId: pData.anomaly.researchingShipId || null,
+        researchingShipIds: pData.anomaly.researchingShipIds || []
+      } : null;
 
       planetsMap.set(p.id, p);
       return p;
@@ -3594,10 +3624,14 @@ export class Game {
       p.anomaly.completingPlayerId = ship.owner.id;
       p.anomaly.beingResearched = true;
       p.anomaly.researchingShipId = ship.id;
+      if (!p.anomaly.researchingShipIds) p.anomaly.researchingShipIds = [];
+      if (!p.anomaly.researchingShipIds.includes(ship.id)) p.anomaly.researchingShipIds.push(ship.id);
       ship.isActivelyResearching = true;
     } else {
       p.anomaly.beingResearched = true;
       p.anomaly.researchingShipId = ship.id;
+      if (!p.anomaly.researchingShipIds) p.anomaly.researchingShipIds = [];
+      if (!p.anomaly.researchingShipIds.includes(ship.id)) p.anomaly.researchingShipIds.push(ship.id);
       ship.isActivelyResearching = true;
       
       const labs = ship.labs || 0;
@@ -4127,6 +4161,7 @@ export class Game {
       if (p.anomaly) {
         p.anomaly.beingResearched = false;
         p.anomaly.researchingShipId = null;
+        p.anomaly.researchingShipIds = [];
       }
     }
     for (const w of this.wreckages) {
@@ -4181,6 +4216,8 @@ export class Game {
           if (dx*dx + dy*dy <= effRadar * effRadar) {
             completingPlanet.anomaly.beingResearched = true;
             completingPlanet.anomaly.researchingShipId = ship.id;
+            if (!completingPlanet.anomaly.researchingShipIds) completingPlanet.anomaly.researchingShipIds = [];
+            if (!completingPlanet.anomaly.researchingShipIds.includes(ship.id)) completingPlanet.anomaly.researchingShipIds.push(ship.id);
             ship.isActivelyResearching = true;
 
             completingPlanet.anomaly.completingTimeLeft = (completingPlanet.anomaly.completingTimeLeft || 0) - deltaTime;
@@ -4232,7 +4269,7 @@ export class Game {
           let anomalyLow = null;
           let minLowDistSq = Infinity;
           for (const p of this.planets) {
-            if (p.anomaly && !p.anomaly.researched && !p.anomaly.beingResearched && !p.anomaly.completing) {
+            if (p.anomaly && !p.anomaly.researched && !p.anomaly.completing) {
               const canResearch = p.anomaly.difficulty <= 0 || hasLabs;
               if (canResearch && p.anomaly.difficulty <= 3) {
                 const dx = p.anomaly.x - ship.x;
@@ -4397,7 +4434,7 @@ export class Game {
           let minHighDifficulty = Infinity;
           let minHighDistSq = Infinity;
           for (const p of this.planets) {
-            if (p.anomaly && !p.anomaly.researched && !p.anomaly.beingResearched && !p.anomaly.completing) {
+            if (p.anomaly && !p.anomaly.researched && !p.anomaly.completing) {
               const canResearch = p.anomaly.difficulty <= 0 || hasLabs;
               if (canResearch && p.anomaly.difficulty > 3) {
                 const dx = p.anomaly.x - ship.x;
