@@ -7555,8 +7555,9 @@ function getPlanetTradeIncomePerMin(planet) {
         }
 
         const isDeepSpace = !clickedPlanet && !clickedShip && !clickedAnomaly && !clickedWreckage;
+        const hasSelection = (selectedShips && selectedShips.length > 0) || (selectedPlanets && selectedPlanets.length > 0);
 
-        if (isDeepSpace) {
+        if (isDeepSpace && !hasSelection) {
           openTouchContextMenu(tx, ty, cPosHold.x, cPosHold.y);
         } else {
           // Display beautiful cyber-haptic floating text at command location
