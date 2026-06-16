@@ -4174,6 +4174,7 @@ export class Game {
             break;
           }
         }
+        let completedOrResearchedAnomalyOrWreckage = false;
         if (completingPlanet) {
           const dx = ship.x - completingPlanet.anomaly.x;
           const dy = ship.y - completingPlanet.anomaly.y;
@@ -4188,7 +4189,7 @@ export class Game {
               completingPlanet.anomaly.completing = false;
               this.triggerAnomalyCompletion(completingPlanet, ship.owner);
             }
-            continue; // Proceed to next ship
+            completedOrResearchedAnomalyOrWreckage = true;
           } else {
             completingPlanet.anomaly.completing = false;
             completingPlanet.anomaly.completingTimeLeft = 0;
@@ -4198,58 +4199,63 @@ export class Game {
         }
 
         // 2. Decide next research task based on priority:
-        // Priority 1: claimable wreckage
-        let claimableWreckage = null;
-        let minWreckDistSq = Infinity;
-        for (const w of this.wreckages) {
-          const isLocked = (wreckageNow - w.lastFightingTime) < 10000;
-          if (!isLocked && !w.beingScanned) {
-            const dx = w.x - ship.x;
-            const dy = w.y - ship.y;
-            const distSq = dx * dx + dy * dy;
-            if (distSq <= effRadar * effRadar && distSq < minWreckDistSq) {
-              minWreckDistSq = distSq;
-              claimableWreckage = w;
-            }
-          }
-        }
-
-        if (claimableWreckage) {
-          claimableWreckage.beingScanned = true;
-          claimableWreckage.scanningShipId = ship.id;
-          claimableWreckage.scanningPlayerId = ship.owner.id;
-          ship.isActivelyResearching = true;
-
-          claimableWreckage.scanTimeLeft = (claimableWreckage.scanTimeLeft !== undefined ? claimableWreckage.scanTimeLeft : 3000) - deltaTime;
-          continue;
-        }
-
-        // Priority 2: anomaly <= 3
-        let anomalyLow = null;
-        let minLowDistSq = Infinity;
-        for (const p of this.planets) {
-          if (p.anomaly && !p.anomaly.researched && !p.anomaly.beingResearched && !p.anomaly.completing) {
-            const canResearch = p.anomaly.difficulty <= 0 || hasLabs;
-            if (canResearch && p.anomaly.difficulty <= 3) {
-              const dx = p.anomaly.x - ship.x;
-              const dy = p.anomaly.y - ship.y;
+        if (!completedOrResearchedAnomalyOrWreckage) {
+          // Priority 1: claimable wreckage
+          let claimableWreckage = null;
+          let minWreckDistSq = Infinity;
+          for (const w of this.wreckages) {
+            const isLocked = (wreckageNow - w.lastFightingTime) < 10000;
+            if (!isLocked && !w.beingScanned) {
+              const dx = w.x - ship.x;
+              const dy = w.y - ship.y;
               const distSq = dx * dx + dy * dy;
-              if (distSq <= effRadar * effRadar && distSq < minLowDistSq) {
-                minLowDistSq = distSq;
-                anomalyLow = p;
+              if (distSq <= effRadar * effRadar && distSq < minWreckDistSq) {
+                minWreckDistSq = distSq;
+                claimableWreckage = w;
               }
             }
           }
+
+          if (claimableWreckage) {
+            claimableWreckage.beingScanned = true;
+            claimableWreckage.scanningShipId = ship.id;
+            claimableWreckage.scanningPlayerId = ship.owner.id;
+            ship.isActivelyResearching = true;
+
+            claimableWreckage.scanTimeLeft = (claimableWreckage.scanTimeLeft !== undefined ? claimableWreckage.scanTimeLeft : 3000) - deltaTime;
+            completedOrResearchedAnomalyOrWreckage = true;
+          }
         }
 
-        if (anomalyLow) {
-          this.researchAnomaly(anomalyLow, ship, deltaTime);
-          continue;
+        if (!completedOrResearchedAnomalyOrWreckage) {
+          // Priority 2: anomaly <= 3
+          let anomalyLow = null;
+          let minLowDistSq = Infinity;
+          for (const p of this.planets) {
+            if (p.anomaly && !p.anomaly.researched && !p.anomaly.beingResearched && !p.anomaly.completing) {
+              const canResearch = p.anomaly.difficulty <= 0 || hasLabs;
+              if (canResearch && p.anomaly.difficulty <= 3) {
+                const dx = p.anomaly.x - ship.x;
+                const dy = p.anomaly.y - ship.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq <= effRadar * effRadar && distSq < minLowDistSq) {
+                  minLowDistSq = distSq;
+                  anomalyLow = p;
+                }
+              }
+            }
+          }
+
+          if (anomalyLow) {
+            this.researchAnomaly(anomalyLow, ship, deltaTime);
+            completedOrResearchedAnomalyOrWreckage = true;
+          }
         }
 
         // Priority 3: hazards (storms and minefields)
-        let targetHazard = null;
+        // Research vessels (hasLabs) can simultaneously research a hazard even if they did an anomaly/wreckage!
         if (hasLabs) {
+          let targetHazard = null;
           for (const storm of this.ionStorms) {
             const dx = storm.x - ship.x;
             const dy = storm.y - ship.y;
@@ -4270,148 +4276,148 @@ export class Game {
               }
             }
           }
-        }
 
-        if (targetHazard) {
-          if (targetHazard.type === 'storm') {
-            if (!targetHazard.storm.knowledge[ship.owner.id]) targetHazard.storm.knowledge[ship.owner.id] = 0;
-            targetHazard.storm.knowledge[ship.owner.id] += (ship.labs * deltaTime) / 120000;
-            ship.isActivelyResearching = true;
-          } else {
-            // Minefield
-            if (!targetHazard.storm.knowledge[ship.owner.id]) targetHazard.storm.knowledge[ship.owner.id] = 0;
-            targetHazard.storm.knowledge[ship.owner.id] += (ship.labs * deltaTime) / 120000;
-            
-            ship.isActivelyResearching = true;
-            const xpMultiplier = 1 + (ship.getLocalXpBonus() * 3) / 100;
-            const knowledgeGained = (ship.labs * deltaTime * xpMultiplier) / 120000;
-            ship.owner.techScore = (ship.owner.techScore || 0) + knowledgeGained;
-            ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
-            
-            if (ship.accumulatedTech >= 1.0) {
-              const completions = Math.floor(ship.accumulatedTech);
-              ship.accumulatedTech -= completions;
-              ship.gainXp(completions, this, ship.x, ship.y);
+          if (targetHazard) {
+            if (targetHazard.type === 'storm') {
+              if (!targetHazard.storm.knowledge[ship.owner.id]) targetHazard.storm.knowledge[ship.owner.id] = 0;
+              targetHazard.storm.knowledge[ship.owner.id] += (ship.labs * deltaTime) / 120000;
+              ship.isActivelyResearching = true;
+            } else {
+              // Minefield
+              if (!targetHazard.storm.knowledge[ship.owner.id]) targetHazard.storm.knowledge[ship.owner.id] = 0;
+              targetHazard.storm.knowledge[ship.owner.id] += (ship.labs * deltaTime) / 120000;
               
-              if (ship.scoutAttackEnabled) {
-                const cap = Math.floor(ship.health - 2);
-                let volleySize = Math.max(1, Math.floor((ship.maxHealth + ship.health) / 6));
-                if (volleySize > cap) volleySize = cap;
-                if (ship.health <= 2) volleySize = 0;
+              ship.isActivelyResearching = true;
+              const xpMultiplier = 1 + (ship.getLocalXpBonus() * 3) / 100;
+              const knowledgeGained = (ship.labs * deltaTime * xpMultiplier) / 120000;
+              ship.owner.techScore = (ship.owner.techScore || 0) + knowledgeGained;
+              ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
+              
+              if (ship.accumulatedTech >= 1.0) {
+                const completions = Math.floor(ship.accumulatedTech);
+                ship.accumulatedTech -= completions;
+                ship.gainXp(completions, this, ship.x, ship.y);
+                
+                if (ship.scoutAttackEnabled) {
+                  const cap = Math.floor(ship.health - 2);
+                  let volleySize = Math.max(1, Math.floor((ship.maxHealth + ship.health) / 6));
+                  if (volleySize > cap) volleySize = cap;
+                  if (ship.health <= 2) volleySize = 0;
 
-                const hitChance = Math.min(1.0, Math.max(0.0, ship.getAccuracy() + 0.10 * ship.labs));
-                let minesDestroyed = 0;
-                const rangeOfFire = ship.getWeaponRange();
+                  const hitChance = Math.min(1.0, Math.max(0.0, ship.getAccuracy() + 0.10 * ship.labs));
+                  let minesDestroyed = 0;
+                  const rangeOfFire = ship.getWeaponRange();
 
-                for (let v = 0; v < volleySize; v++) {
-                  let tx = 0;
-                  let ty = 0;
-                  let found = false;
-                  for (let attempt = 0; attempt < 100; attempt++) {
-                    const angle = Math.random() * Math.PI * 2;
-                    const r = Math.random() * targetHazard.storm.radius;
-                    const px = targetHazard.storm.x + Math.cos(angle) * r;
-                    const py = targetHazard.storm.y + Math.sin(angle) * r;
-                    const sDx = px - ship.x;
-                    const sDy = py - ship.y;
-                    if (sDx * sDx + sDy * sDy <= rangeOfFire * rangeOfFire) {
-                      tx = px;
-                      ty = py;
-                      found = true;
-                      break;
-                    }
-                  }
-
-                  if (!found) continue;
-
-                  const isHit = (targetHazard.storm.mines > 0) && (Math.random() < hitChance);
-                  if (isHit) {
-                    targetHazard.storm.mines -= 1;
-                    minesDestroyed += 1;
-                  }
-
-                  const delayMs = v * 500;
-                  const shipId = ship.id;
-                  const finalTx = tx;
-                  const finalTy = ty;
-
-                  this.scheduledEvents.push({
-                    delay: delayMs,
-                    action: () => {
-                      const currentShip = this.ships.find(s => s.id === shipId);
-                      if (currentShip && currentShip.active) {
-                        this.lasers.push({
-                          startX: currentShip.x,
-                          startY: currentShip.y,
-                          endX: finalTx,
-                          endY: finalTy,
-                          color: '#44f',
-                          age: 0,
-                          duration: 0.4
-                        });
-                      }
-                      if (isHit) {
-                        this.explosions.push({
-                          x: finalTx,
-                          y: finalTy,
-                          color: '#44f',
-                          age: 0
-                        });
-                        this.explosions.push({
-                          x: finalTx,
-                          y: finalTy,
-                          isDollarSign: true,
-                          amount: 1,
-                          remainingMines: targetHazard.storm.mines,
-                          age: 0
-                        });
+                  for (let v = 0; v < volleySize; v++) {
+                    let tx = 0;
+                    let ty = 0;
+                    let found = false;
+                    for (let attempt = 0; attempt < 100; attempt++) {
+                      const angle = Math.random() * Math.PI * 2;
+                      const r = Math.random() * targetHazard.storm.radius;
+                      const px = targetHazard.storm.x + Math.cos(angle) * r;
+                      const py = targetHazard.storm.y + Math.sin(angle) * r;
+                      const sDx = px - ship.x;
+                      const sDy = py - ship.y;
+                      if (sDx * sDx + sDy * sDy <= rangeOfFire * rangeOfFire) {
+                        tx = px;
+                        ty = py;
+                        found = true;
+                        break;
                       }
                     }
-                  });
-                }
 
-                if (minesDestroyed > 0) {
-                  ship.owner.credits = (ship.owner.credits || 0) + minesDestroyed;
-                  ship.creditsGainedEvent = (ship.creditsGainedEvent || 0) + minesDestroyed;
+                    if (!found) continue;
+
+                    const isHit = (targetHazard.storm.mines > 0) && (Math.random() < hitChance);
+                    if (isHit) {
+                      targetHazard.storm.mines -= 1;
+                      minesDestroyed += 1;
+                    }
+
+                    const delayMs = v * 500;
+                    const shipId = ship.id;
+                    const finalTx = tx;
+                    const finalTy = ty;
+
+                    this.scheduledEvents.push({
+                      delay: delayMs,
+                      action: () => {
+                        const currentShip = this.ships.find(s => s.id === shipId);
+                        if (currentShip && currentShip.active) {
+                          this.lasers.push({
+                            startX: currentShip.x,
+                            startY: currentShip.y,
+                            endX: finalTx,
+                            endY: finalTy,
+                            color: '#44f',
+                            age: 0,
+                            duration: 0.4
+                          });
+                        }
+                        if (isHit) {
+                          this.explosions.push({
+                            x: finalTx,
+                            y: finalTy,
+                            color: '#44f',
+                            age: 0
+                          });
+                          this.explosions.push({
+                            x: finalTx,
+                            y: finalTy,
+                            isDollarSign: true,
+                            amount: 1,
+                            remainingMines: targetHazard.storm.mines,
+                            age: 0
+                          });
+                        }
+                      }
+                    });
+                  }
+
+                  if (minesDestroyed > 0) {
+                    ship.owner.credits = (ship.owner.credits || 0) + minesDestroyed;
+                    ship.creditsGainedEvent = (ship.creditsGainedEvent || 0) + minesDestroyed;
+                  }
+                } else {
+                  ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + completions;
                 }
-              } else {
-                ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + completions;
-              }
-              
-              if (targetHazard.storm.initialMines > 0) {
-                targetHazard.storm.radius = targetHazard.storm.initialRadius * (targetHazard.storm.mines / targetHazard.storm.initialMines);
+                
+                if (targetHazard.storm.initialMines > 0) {
+                  targetHazard.storm.radius = targetHazard.storm.initialRadius * (targetHazard.storm.mines / targetHazard.storm.initialMines);
+                }
               }
             }
           }
-          continue;
         }
 
         // Priority 4: lowest level anomaly in range after that
-        let anomalyHigh = null;
-        let minHighDifficulty = Infinity;
-        let minHighDistSq = Infinity;
-        for (const p of this.planets) {
-          if (p.anomaly && !p.anomaly.researched && !p.anomaly.beingResearched && !p.anomaly.completing) {
-            const canResearch = p.anomaly.difficulty <= 0 || hasLabs;
-            if (canResearch && p.anomaly.difficulty > 3) {
-              const dx = p.anomaly.x - ship.x;
-              const dy = p.anomaly.y - ship.y;
-              const distSq = dx * dx + dy * dy;
-              if (distSq <= effRadar * effRadar) {
-                if (p.anomaly.difficulty < minHighDifficulty || 
-                    (p.anomaly.difficulty === minHighDifficulty && distSq < minHighDistSq)) {
-                  minHighDifficulty = p.anomaly.difficulty;
-                  minHighDistSq = distSq;
-                  anomalyHigh = p;
+        if (!completedOrResearchedAnomalyOrWreckage) {
+          let anomalyHigh = null;
+          let minHighDifficulty = Infinity;
+          let minHighDistSq = Infinity;
+          for (const p of this.planets) {
+            if (p.anomaly && !p.anomaly.researched && !p.anomaly.beingResearched && !p.anomaly.completing) {
+              const canResearch = p.anomaly.difficulty <= 0 || hasLabs;
+              if (canResearch && p.anomaly.difficulty > 3) {
+                const dx = p.anomaly.x - ship.x;
+                const dy = p.anomaly.y - ship.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq <= effRadar * effRadar) {
+                  if (p.anomaly.difficulty < minHighDifficulty || 
+                      (p.anomaly.difficulty === minHighDifficulty && distSq < minHighDistSq)) {
+                    minHighDifficulty = p.anomaly.difficulty;
+                    minHighDistSq = distSq;
+                    anomalyHigh = p;
+                  }
                 }
               }
             }
           }
-        }
 
-        if (anomalyHigh) {
-          this.researchAnomaly(anomalyHigh, ship, deltaTime);
-          continue;
+          if (anomalyHigh) {
+            this.researchAnomaly(anomalyHigh, ship, deltaTime);
+          }
         }
       }
     }
