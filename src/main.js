@@ -2406,6 +2406,9 @@ function getPlanetTradeIncomePerMin(planet) {
   if (infoPanelModal) {
     bindActionClick(infoPanelModal, closeInfoPanel);
   }
+  if (infoPanelContainer) {
+    bindActionClick(infoPanelContainer, closeInfoPanel);
+  }
 
   function updateInfoPanelContent() {
     if (!activeInfoPanel || !serverState || !infoPanelTitle || !infoPanelBody) {
@@ -7156,6 +7159,7 @@ function getPlanetTradeIncomePerMin(planet) {
   let mouseTimeout = null;
   let mouseDownStartX = 0;
   let mouseDownStartY = 0;
+  let wasAlreadySelectedOnMouseDown = false;
 
 
 
@@ -7183,6 +7187,34 @@ function getPlanetTradeIncomePerMin(planet) {
     lastCameraDragX = event.clientX;
     lastCameraDragY = event.clientY;
     isDraggingCamera = false; // Reset stale drag state
+
+    if (event.button === 0) {
+      // Check if clicked entity was already selected BEFORE handlePointerDown runs:
+      const clickedPlanet = getPlanetAt(posX, posY);
+      let clickedShip = null;
+      const serverPos = getMouseServerPos(posX, posY);
+      if (serverState && serverState.ships) {
+        for (const ship of serverState.ships) {
+          if (!ship.active) continue;
+          const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
+          const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
+          const sdx = ship.x - serverPos.x;
+          const sdy = ship.y - serverPos.y;
+          if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
+            if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
+              clickedShip = ship;
+            }
+          }
+        }
+      }
+      
+      wasAlreadySelectedOnMouseDown = false;
+      if (clickedPlanet) {
+        wasAlreadySelectedOnMouseDown = selectedPlanets.some(p => p.id === clickedPlanet.id);
+      } else if (clickedShip) {
+        wasAlreadySelectedOnMouseDown = selectedShips.some(s => s.id === clickedShip.id);
+      }
+    }
 
     handlePointerDown(posX, posY, event.shiftKey, false, event.button);
 
@@ -7272,43 +7304,6 @@ function getPlanetTradeIncomePerMin(planet) {
 
     handlePointerMove(cPos.x, cPos.y, false);
 
-    // Tooltip hover check
-    let newType = null;
-    let newId = null;
-    if (hoveredAnomaly) {
-      newType = 'anomaly';
-      newId = hoveredAnomalyPlanet.id;
-    } else if (hoveredShip && hoveredShip.isCruiser) {
-      newType = 'ship';
-      newId = hoveredShip.id;
-    } else if (hoveredPlanet) {
-      newType = 'planet';
-      newId = hoveredPlanet.id;
-    } else if (hoveredWreckage) {
-      newType = 'wreckage';
-      newId = hoveredWreckage.id;
-    } else if (hoveredShip) {
-      newType = 'fleet';
-      newId = hoveredShip.id;
-    }
-
-    if (newType && (newId !== null && newId !== undefined)) {
-      if (activeInfoPanel && activeInfoPanel.type === newType && activeInfoPanel.id === newId) {
-        if (infoPanelTimer) {
-          clearTimeout(infoPanelTimer);
-          infoPanelTimer = null;
-        }
-      } else {
-        if (infoPanelTimer) {
-          clearTimeout(infoPanelTimer);
-          infoPanelTimer = null;
-        }
-        openInfoPanel(newType, newId);
-      }
-    } else {
-      checkInfoPanelDismiss();
-    }
-
     const now = Date.now();
     if (now - lastMouseEmitTime > 5000) {
       lastMouseEmitTime = now;
@@ -7330,6 +7325,116 @@ function getPlanetTradeIncomePerMin(planet) {
       return;
     }
     handlePointerUp(event);
+
+    if (event.button === 0) {
+      // Check drag distance to see if it was a quick click
+      const cPos = getCanvasPos(event.clientX, event.clientY);
+      const dx = cPos.x - mouseDownStartX;
+      const dy = cPos.y - mouseDownStartY;
+      const dragDistance = Math.sqrt(dx * dx + dy * dy);
+
+      if (dragDistance < 8) {
+        // It's a click! Let's check what was clicked
+        const clickedPlanet = getPlanetAt(cPos.x, cPos.y);
+        let clickedShip = null;
+        const serverPos = getMouseServerPos(cPos.x, cPos.y);
+        if (serverState && serverState.ships) {
+          for (const ship of serverState.ships) {
+            if (!ship.active) continue;
+            const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
+            const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
+            const sdx = ship.x - serverPos.x;
+            const sdy = ship.y - serverPos.y;
+            if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
+              if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
+                clickedShip = ship;
+              }
+            }
+          }
+        }
+
+        let clickedAnomaly = null;
+        let clickedAnomalyPlanet = null;
+        if (serverState && serverState.planets) {
+          for (const p of serverState.planets) {
+            if (p.anomaly && !p.anomaly.researched) {
+              const adx = p.anomaly.x - serverPos.x;
+              const ady = p.anomaly.y - serverPos.y;
+              if (adx * adx + ady * ady <= 25 * 25) {
+                clickedAnomaly = p.anomaly;
+                clickedAnomalyPlanet = p;
+                break;
+              }
+            }
+          }
+        }
+
+        let clickedWreckage = null;
+        if (serverState && serverState.wreckages) {
+          for (const w of serverState.wreckages) {
+            const wdx = w.x - serverPos.x;
+            const wdy = w.y - serverPos.y;
+            if (wdx * wdx + wdy * wdy < 50 * 50) {
+              clickedWreckage = w;
+              break;
+            }
+          }
+        }
+
+        let clickedType = null;
+        let clickedId = null;
+        let isOwned = false;
+
+        if (clickedAnomaly) {
+          clickedType = 'anomaly';
+          clickedId = clickedAnomalyPlanet.id;
+          isOwned = false;
+        } else if (clickedWreckage) {
+          clickedType = 'wreckage';
+          clickedId = clickedWreckage.id;
+          isOwned = false;
+        } else if (clickedShip && clickedShip.isCruiser) {
+          clickedType = 'ship';
+          clickedId = clickedShip.id;
+          isOwned = localPlayer && (clickedShip.ownerId === localPlayer.id);
+        } else if (clickedPlanet) {
+          clickedType = 'planet';
+          clickedId = clickedPlanet.id;
+          isOwned = localPlayer && (clickedPlanet.ownerId === localPlayer.id);
+        } else if (clickedShip) {
+          clickedType = 'fleet';
+          clickedId = clickedShip.id;
+          isOwned = localPlayer && (clickedShip.ownerId === localPlayer.id);
+        }
+
+        if (clickedType && (clickedId !== null && clickedId !== undefined)) {
+          if (!isOwned) {
+            // Unowned entities: open tooltip on a single click
+            if (activeInfoPanel && activeInfoPanel.type === clickedType && activeInfoPanel.id === clickedId) {
+              closeInfoPanel();
+            } else {
+              openInfoPanel(clickedType, clickedId);
+            }
+          } else {
+            // Owned entities: require click on a selected unit (wasAlreadySelectedOnMouseDown)
+            if (wasAlreadySelectedOnMouseDown) {
+              if (activeInfoPanel && activeInfoPanel.type === clickedType && activeInfoPanel.id === clickedId) {
+                closeInfoPanel();
+              } else {
+                openInfoPanel(clickedType, clickedId);
+              }
+            } else {
+              closeInfoPanel();
+            }
+          }
+        } else {
+          // Clicked empty space: close the tooltip
+          if (activeInfoPanel) {
+            closeInfoPanel();
+          }
+        }
+      }
+    }
   });
 
   let touchStartX = 0;
