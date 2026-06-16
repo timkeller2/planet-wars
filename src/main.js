@@ -5539,7 +5539,7 @@ function getPlanetTradeIncomePerMin(planet) {
       for (const res of resourcesList) {
         const qtySpan = document.getElementById(`res-qty-${res}`);
         const rawQty = myPlayer.resources?.[res] || 0;
-        const qtyVal = rawQty < 1 ? rawQty.toFixed(1) : Math.floor(rawQty).toString();
+        const qtyVal = (rawQty >= 1 || rawQty < 0.1) ? Math.floor(rawQty).toString() : rawQty.toFixed(1);
         
         if (qtySpan) qtySpan.textContent = qtyVal;
         
