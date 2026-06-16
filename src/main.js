@@ -2298,10 +2298,11 @@ function getPlanetTradeIncomePerMin(planet) {
 
     // Toggle leaderboard option
     options.push({
-      text: '🏆 TOGGLE LEADERBOARD',
+      text: '🏆 TOGGLE LEADERBOARD / HUD',
       action: () => {
-        const scoreBoard = document.getElementById('score-board');
-        if (scoreBoard) scoreBoard.classList.toggle('hidden');
+        if (typeof cycleLeaderboardAndHudToggle === 'function') {
+          cycleLeaderboardAndHudToggle();
+        }
       }
     });
 
@@ -3638,8 +3639,31 @@ function getPlanetTradeIncomePerMin(planet) {
   const leaderboardContent = document.getElementById('leaderboard-content');
   const scoreBoard = document.getElementById('score-board');
 
+  let leaderboardToggleState = 0; // 0: all visible, 1: leaderboard hidden, 2: leaderboard & top HUD hidden
+  function cycleLeaderboardAndHudToggle() {
+    leaderboardToggleState = (leaderboardToggleState + 1) % 3;
+    const scoreBoardEl = document.getElementById('score-board');
+    const topLeftHud = document.getElementById('top-left-hud');
+    const topRightHud = document.getElementById('top-right-hud');
+
+    if (leaderboardToggleState === 0) {
+      if (scoreBoardEl) scoreBoardEl.classList.remove('hidden');
+      if (topLeftHud) topLeftHud.classList.remove('hidden');
+      if (topRightHud) topRightHud.classList.remove('hidden');
+    } else if (leaderboardToggleState === 1) {
+      if (scoreBoardEl) scoreBoardEl.classList.add('hidden');
+      if (topLeftHud) topLeftHud.classList.remove('hidden');
+      if (topRightHud) topRightHud.classList.remove('hidden');
+    } else if (leaderboardToggleState === 2) {
+      if (scoreBoardEl) scoreBoardEl.classList.add('hidden');
+      if (topLeftHud) topLeftHud.classList.add('hidden');
+      if (topRightHud) topRightHud.classList.add('hidden');
+    }
+  }
+  window.cycleLeaderboardAndHudToggle = cycleLeaderboardAndHudToggle;
+
   bindActionClick('btn-leaderboard', () => {
-    scoreBoard.classList.toggle('hidden');
+    cycleLeaderboardAndHudToggle();
   });
 
   const helpBtn = document.getElementById('help-btn');
@@ -5349,7 +5373,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
       creditsDisplay.style.display = 'block';
       const hasMoneyBags = myPlayer.otherEffectiveShips !== undefined && myPlayer.playerEffectiveShips !== undefined && myPlayer.otherEffectiveShips >= myPlayer.playerEffectiveShips && myPlayer.playerEffectiveShips > 0;
-      creditsDisplay.innerHTML = `💲 ${Math.floor(creditsVal)}<span style="font-size: 33.33%; font-weight: normal; margin-left: 4px; opacity: 0.85;">${incomeInt >= 0 ? '+' : ''}${incomeInt}${hasMoneyBags ? '💰' : ''}</span>`;
+      creditsDisplay.innerHTML = `💲${Math.floor(creditsVal)}<span style="font-size: 80%; font-weight: normal; margin-left: 2px; opacity: 0.85;">${incomeInt >= 0 ? '+' : ''}${incomeInt}${hasMoneyBags ? '💰' : ''}</span>`;
       creditsDisplay.removeAttribute('title');
 
       if (creditsVal < 0) {
@@ -5378,7 +5402,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const commandCount = myPlayer.commandCount || 0;
       const commandLimit = myPlayer.commandLimit || 0;
       commandLimitDisplay.style.display = 'block';
-      commandLimitDisplay.textContent = `⚓: ${commandCount}/${commandLimit}`;
+      commandLimitDisplay.textContent = `⚓${commandCount}/${commandLimit}`;
     }
 
     const tradeOptionsDisplay = document.getElementById('player-trade-options-display');
@@ -5386,7 +5410,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const tradeOptions = myPlayer.tradeOptions !== undefined ? Math.floor(myPlayer.tradeOptions) : 5;
       const tradeCapacity = myPlayer.tradeCapacity !== undefined ? Math.floor(myPlayer.tradeCapacity) : 5;
       tradeOptionsDisplay.style.display = 'block';
-      tradeOptionsDisplay.textContent = `⚖️: ${tradeOptions}/${tradeCapacity}`;
+      tradeOptionsDisplay.textContent = `⚖️${tradeOptions}/${tradeCapacity}`;
       
       if (myPlayer.tradeLimitToggle === true) {
         tradeOptionsDisplay.style.color = '#ff9800';
@@ -5412,7 +5436,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
       const stockpileCapacity = myPlayer.stockpileCapacity || 1;
       stockpileCapacityDisplay.style.display = 'block';
-      stockpileCapacityDisplay.textContent = `📦: ${Math.floor(totalStockpile)}/${stockpileCapacity}`;
+      stockpileCapacityDisplay.textContent = `📦${Math.floor(totalStockpile)}/${stockpileCapacity}`;
 
       if (totalStockpile > stockpileCapacity) {
         stockpileCapacityDisplay.style.color = '#ff5252';
@@ -5431,7 +5455,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (sellForDisplay) {
       const sellPriceSetting = myPlayer.sellPriceSetting !== undefined ? myPlayer.sellPriceSetting : 1;
       sellForDisplay.style.display = 'block';
-      sellForDisplay.textContent = `💰: ${sellPriceSetting}`;
+      sellForDisplay.textContent = `💰${sellPriceSetting}`;
     }
 
 
@@ -8097,7 +8121,7 @@ function getPlanetTradeIncomePerMin(planet) {
       bombOrderNext = bombOrderNext === 'ships' ? false : 'ships';
     }
     if (event.key.toLowerCase() === 'l') {
-      scoreBoard.classList.toggle('hidden');
+      cycleLeaderboardAndHudToggle();
     }
     if (event.key.toLowerCase() === 's') {
       const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id);

@@ -171,23 +171,22 @@
           <div id="game-timer" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #0ff; text-shadow: 0 0 5px #0ff; background: rgba(0, 255, 255, 0.05); border: 1px solid rgba(0, 255, 255, 0.2); padding: 5px 15px; border-radius: 4px; backdrop-filter: blur(5px); display: none; min-width: 120px; text-align: center; font-variant-numeric: tabular-nums; cursor: pointer; pointer-events: auto;">00:00</div>
           <div id="game-speed-display" style="font-family: 'Orbitron', sans-serif; font-size: 0.8rem; color: #0ff; text-shadow: 0 0 3px #0ff; display: none; padding-right: 5px; user-select: none;">Speed: 100%</div>
         </div>
-        <div id="top-left-hud" style="position: absolute; top: 20px; left: 20px; display: flex; gap: 15px; align-items: flex-start; z-index: 100; pointer-events: none;">
-          <!-- Left stacked column -->
-          <div id="left-hud-column" style="display: flex; flex-direction: column; gap: 10px; align-items: flex-start; pointer-events: auto;">
-            <!-- Sell For Button -->
-            <button id="player-sell-for-display" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ffeb3b; text-shadow: 0 0 5px #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; pointer-events: auto;">💰: 2</button>
-            <!-- Command Limit Display -->
-            <div id="player-command-limit-display" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #00e5ff; text-shadow: 0 0 5px #00e5ff; background: rgba(0, 229, 255, 0.05); border: 1px solid rgba(0, 229, 255, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">⚓: 0/0</div>
-            <!-- Trade Options Display -->
-            <button id="player-trade-options-display" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ff9800; text-shadow: 0 0 5px #ff9800; background: rgba(255, 152, 0, 0.05); border: 1px solid rgba(255, 152, 0, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; pointer-events: auto; outline: none; box-shadow: none;">⚖️: 0/0</button>
-            <!-- Resource Stockpile Capacity Display -->
-            <div id="player-stockpile-capacity-display" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #e91e63; text-shadow: 0 0 5px #e91e63; background: rgba(233, 30, 99, 0.05); border: 1px solid rgba(233, 30, 99, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">📦: 0.00/0</div>
-            <!-- Credits Button -->
-            <button id="player-credits-display" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: #ffeb3b; text-shadow: 0 0 5px #ffeb3b; background: rgba(255, 235, 59, 0.05); border: 1px solid rgba(255, 235, 59, 0.2); padding: 5px 20px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; pointer-events: auto; outline: none; box-shadow: none;">💲 0</button>
-          </div>
-
-          <!-- Market panel (Resource buttons starting to the right of the Sell For button) -->
+        <div id="top-left-hud" style="position: absolute; top: 20px; left: 20px; z-index: 100; pointer-events: none;">
+          <!-- Market panel (now containing stats row above resource stockpile row) -->
           <div id="market-panel" style="display: flex; flex-direction: column; gap: 8px; pointer-events: auto;">
+            <!-- Horizontal stats row -->
+            <div id="left-hud-column" style="display: flex; flex-direction: row; gap: 6px; align-items: center;">
+              <!-- Sell For Button -->
+              <button id="player-sell-for-display" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 0.95rem; font-weight: bold; color: #ffeb3b; text-shadow: 0 0 4px #ffeb3b; background: rgba(255, 235, 59, 0.1); border: 1px solid rgba(255, 235, 59, 0.4); box-shadow: 0 0 8px rgba(255, 235, 59, 0.3); padding: 5px 10px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; transition: all 0.2s; pointer-events: auto;">💰2</button>
+              <!-- Command Limit Display -->
+              <div id="player-command-limit-display" style="font-family: 'Orbitron', sans-serif; font-size: 0.95rem; font-weight: bold; color: #00e5ff; text-shadow: 0 0 4px #00e5ff; background: rgba(0, 229, 255, 0.1); border: 1px solid rgba(0, 229, 255, 0.4); box-shadow: 0 0 8px rgba(0, 229, 255, 0.3); padding: 5px 10px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">⚓0/0</div>
+              <!-- Trade Options Display -->
+              <button id="player-trade-options-display" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 0.95rem; font-weight: bold; color: #ff9800; text-shadow: 0 0 4px #ff9800; background: rgba(255, 152, 0, 0.1); border: 1px solid rgba(255, 152, 0, 0.4); box-shadow: 0 0 8px rgba(255, 152, 0, 0.3); padding: 5px 10px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; transition: all 0.2s; pointer-events: auto; outline: none; box-shadow: none;">⚖️0/0</button>
+              <!-- Resource Stockpile Capacity Display -->
+              <div id="player-stockpile-capacity-display" style="font-family: 'Orbitron', sans-serif; font-size: 0.95rem; font-weight: bold; color: #e91e63; text-shadow: 0 0 4px #e91e63; background: rgba(233, 30, 99, 0.1); border: 1px solid rgba(233, 30, 99, 0.4); box-shadow: 0 0 8px rgba(233, 30, 99, 0.3); padding: 5px 10px; border-radius: 4px; backdrop-filter: blur(5px); display: none;">📦0.00/0</div>
+              <!-- Credits Button -->
+              <button id="player-credits-display" class="cyber-btn" style="font-family: 'Orbitron', sans-serif; font-size: 0.95rem; font-weight: bold; color: #ffeb3b; text-shadow: 0 0 4px #ffeb3b; background: rgba(255, 235, 59, 0.1); border: 1px solid rgba(255, 235, 59, 0.4); box-shadow: 0 0 8px rgba(255, 235, 59, 0.3); padding: 5px 10px; border-radius: 4px; backdrop-filter: blur(5px); display: none; cursor: pointer; transition: all 0.2s; pointer-events: auto; outline: none; box-shadow: none;">💲0</button>
+            </div>
             <div id="resources-hud" style="display: none; align-items: center; gap: 6px; pointer-events: auto; font-family: 'Orbitron', sans-serif; font-size: 0.8rem; color: #fff; background: rgba(0, 20, 30, 0.7); border: 1px solid rgba(0, 229, 255, 0.35); padding: 4px 10px; border-radius: 6px; backdrop-filter: blur(5px); box-shadow: 0 0 10px rgba(0, 229, 255, 0.15); user-select: none;">
               <!-- Antimatter 🌀 -->
               <div id="res-card-antimatter" title="Antimatter - Rearms bombs, improves accuracy and range for Romulan and Gorn vessels" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
