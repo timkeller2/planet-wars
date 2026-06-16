@@ -9265,7 +9265,7 @@ function getPlanetTradeIncomePerMin(planet) {
       };
 
       const descMap = {
-        'sensorarrays': 'Adds +25 to base sensor range and +25% total range per level to reveal the fog of war',
+        'sensorarrays': 'Adds +25 to base sensor range and +10% total range per level to reveal the fog of war',
         'labs': 'Adds +1 Lab research tick speed per level (up to +5) to generate tech points',
         'armor': 'Adds +4 flat + 10% max health armor points per level to withstand damage',
         'shields': 'Shield deflection increases by 1/5 of remaining deflection per level with no cap',
@@ -13052,8 +13052,8 @@ function getPlanetTradeIncomePerMin(planet) {
             
             // Draw cyan sensor range circle (outline only, no fill!)
             let baseCruiserRadar = 25 + s.maxHealth * 2;
-            let sensorRange = baseCruiserRadar + 10 * (s.sensorarrays || 0);
-            sensorRange *= (1 + 0.25 * (s.sensorarrays || 0));
+            let sensorRange = baseCruiserRadar + 25 * (s.sensorarrays || 0);
+            sensorRange *= (1 + 0.10 * (s.sensorarrays || 0));
             if (s.isWarp) sensorRange *= 0.25;
             if (owner) {
               const techScore = owner.techScore || 0;
@@ -13062,7 +13062,7 @@ function getPlanetTradeIncomePerMin(planet) {
               const playerExpBonus = 0.01 * Math.sqrt(expScore);
               const shipXpBonus = Math.sqrt(s.expScore || 0) + (s.commandPoints || 0);
               sensorRange *= (1 + playerTechBonus + playerExpBonus);
-              sensorRange *= (1 + 0.03 * shipXpBonus);
+              sensorRange *= (1 + 0.01 * shipXpBonus);
             }
             const pct = hazardSensorReductionPct(s.x, s.y, s.ownerId);
             sensorRange = Math.max(10, sensorRange * pct);

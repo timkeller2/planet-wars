@@ -6398,8 +6398,8 @@ export class Game {
         if (diplomat && diplomat.active && !p.dead && (diplomat.parley || 0) > 0) {
           // Check sensor range
           let baseCruiserRadar = 25 + diplomat.maxHealth * 2;
-          let radar = baseCruiserRadar + 10 * (diplomat.sensorarrays || 0);
-          radar *= (1 + 0.25 * (diplomat.sensorarrays || 0));
+          let radar = baseCruiserRadar + 25 * (diplomat.sensorarrays || 0);
+          radar *= (1 + 0.10 * (diplomat.sensorarrays || 0));
           if (diplomat.isWarp) radar *= 0.25;
           if (diplomat.owner) {
             const techBonus = 0.01 * Math.sqrt(diplomat.owner.techScore || 0);

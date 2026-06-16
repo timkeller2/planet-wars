@@ -351,8 +351,8 @@ export class Ship {
   cruiserRadarRange() {
     if (this.maxHealth <= 0) return 0;
     let baseCruiserRadar = 25 + this.maxHealth * 2;
-    let range = baseCruiserRadar + 10 * (this.sensorarrays || 0);
-    range *= (1 + 0.25 * (this.sensorarrays || 0));
+    let range = baseCruiserRadar + 25 * (this.sensorarrays || 0);
+    range *= (1 + 0.10 * (this.sensorarrays || 0));
     if (this.isWarp) {
       range *= 0.25;
     }
@@ -363,7 +363,7 @@ export class Ship {
     const shipXpBonus = this.getLocalXpBonus();
 
     range *= (1 + playerTechBonus + playerExpBonus);
-    range *= (1 + 0.03 * shipXpBonus);
+    range *= (1 + 0.01 * shipXpBonus);
     return range;
   }
 
@@ -3752,7 +3752,7 @@ export class Ship {
                 cruiserRadar *= (1.0 + this.sensorarrays * 0.20);
               }
               const shipXpBonus = this.getLocalXpBonus();
-              const finalCruiserRadar = cruiserRadar * (100 + shipXpBonus * 3) / 100;
+              const finalCruiserRadar = cruiserRadar * (100 + shipXpBonus * 1) / 100;
               const parkingDist = bestHazard.radius + Math.max(20, finalCruiserRadar - 40);
 
               this.targetPlanet = null;
