@@ -258,7 +258,7 @@ export class Planet {
         if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
           effectiveRate *= 1.30;
         }
-        effectiveRate *= (this.habitability / 100);
+        effectiveRate *= ((50 + this.habitability / 2) / 100);
         this.productionProgress += effectiveRate * (deltaTime / 1000);
         if (this.productionProgress >= 1) {
           let newShips = Math.floor(this.productionProgress);
