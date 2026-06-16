@@ -4899,21 +4899,40 @@ function getPlanetTradeIncomePerMin(planet) {
             deuterium: '💧',
             latinum: '🏺'
           };
+          let targetP = null;
           if (typeof s.diplomatPrefResourceEvent === 'string') {
             prefEmoji = emojis[s.diplomatPrefResourceEvent] || '💎';
-          } else if (s.diplomatTargetPlanetId !== null && state.planets) {
-            const targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
-            if (targetP && targetP.preferredResource) {
-              prefEmoji = emojis[targetP.preferredResource] || '💎';
-            }
           }
           if (s.diplomatTargetPlanetId !== null && state.planets) {
-            const targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
+            targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
             if (targetP) {
+              if (typeof s.diplomatPrefResourceEvent !== 'string' && targetP.preferredResource) {
+                prefEmoji = emojis[targetP.preferredResource] || '💎';
+              }
               targetX = targetP.x;
               targetY = targetP.y;
             }
           }
+          // Check if cruiser race matches the target planet race
+          const sOwner = state.players ? state.players.find(pl => pl.id === s.ownerId) : null;
+          const shipRace = s.cruiserStyle || (sOwner ? sOwner.cruiserStyle : null);
+          const targetRace = targetP ? targetP.racialAffinity : null;
+          let animText = prefEmoji;
+          if (shipRace && targetRace && shipRace === targetRace) {
+            const raceIcons = {
+              'Federation': '🖖',
+              'Romulan': '🦅',
+              'Klingon': '⚔️',
+              'Gorn': '🦎',
+              'Tholian': '🕸️',
+              'Lyran': '🐶'
+            };
+            const raceIcon = raceIcons[shipRace];
+            if (raceIcon) {
+              animText = `${prefEmoji} ${raceIcon}`;
+            }
+          }
+
           let count = typeof s.diplomatPrefResourceEvent === 'number' ? s.diplomatPrefResourceEvent : 1;
           for (let b = 0; b < count; b++) {
             floatingAnimations.push({
@@ -4923,7 +4942,7 @@ function getPlanetTradeIncomePerMin(planet) {
               endY: targetY,
               x: s.x,
               y: s.y,
-              text: prefEmoji,
+              text: animText,
               type: 'pref_resource_diplomacy',
               age: b * 0.2,
               duration: 2.5
@@ -4955,11 +4974,30 @@ function getPlanetTradeIncomePerMin(planet) {
         if (s.diplomatSuccessEvent && s.diplomatSuccessEvent > 0) {
           let targetX = s.x;
           let targetY = s.y - 12;
+          let targetP = null;
           if (s.diplomatTargetPlanetId !== null && state.planets) {
-            const targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
+            targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
             if (targetP) {
               targetX = targetP.x;
               targetY = targetP.y;
+            }
+          }
+          let successText = '💖';
+          const sOwner = state.players ? state.players.find(pl => pl.id === s.ownerId) : null;
+          const shipRace = s.cruiserStyle || (sOwner ? sOwner.cruiserStyle : null);
+          const targetRace = targetP ? targetP.racialAffinity : null;
+          if (shipRace && targetRace && shipRace === targetRace) {
+            const raceIcons = {
+              'Federation': '🖖',
+              'Romulan': '🦅',
+              'Klingon': '⚔️',
+              'Gorn': '🦎',
+              'Tholian': '🕸️',
+              'Lyran': '🐶'
+            };
+            const raceIcon = raceIcons[shipRace];
+            if (raceIcon) {
+              successText = `💖 ${raceIcon}`;
             }
           }
           for (let b = 0; b < s.diplomatSuccessEvent; b++) {
@@ -4971,7 +5009,7 @@ function getPlanetTradeIncomePerMin(planet) {
               x: targetX,
               y: targetY,
               shipId: s.id,
-              text: '💖',
+              text: successText,
               type: 'diplomacy_success',
               age: b * 0.15,
               duration: 2.2 + Math.random() * 0.6,
@@ -4984,18 +5022,38 @@ function getPlanetTradeIncomePerMin(planet) {
         if (s.diplomatFailureEvent && s.diplomatFailureEvent > 0) {
           let targetX = s.x;
           let targetY = s.y - 12;
+          let targetP = null;
           if (s.diplomatTargetPlanetId !== null && state.planets) {
-            const targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
+            targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
             if (targetP) {
               targetX = targetP.x;
               targetY = targetP.y;
             }
           }
+          let baseText = '💔';
+          const sOwner = state.players ? state.players.find(pl => pl.id === s.ownerId) : null;
+          const shipRace = s.cruiserStyle || (sOwner ? sOwner.cruiserStyle : null);
+          const targetRace = targetP ? targetP.racialAffinity : null;
+          if (shipRace && targetRace && shipRace === targetRace) {
+            const raceIcons = {
+              'Federation': '🖖',
+              'Romulan': '🦅',
+              'Klingon': '⚔️',
+              'Gorn': '🦎',
+              'Tholian': '🕸️',
+              'Lyran': '🐶'
+            };
+            const raceIcon = raceIcons[shipRace];
+            if (raceIcon) {
+              baseText = `💔 ${raceIcon}`;
+            }
+          }
+          const textVal = baseText + (s.diplomatFailureChance ? ` ${s.diplomatFailureChance}%` : '');
           for (let b = 0; b < s.diplomatFailureEvent; b++) {
             floatingAnimations.push({
               x: targetX,
               y: targetY,
-              text: '💔' + (s.diplomatFailureChance ? ` ${s.diplomatFailureChance}%` : ''),
+              text: textVal,
               type: 'diplomacy_failure',
               age: b * 0.2,
               duration: 7.5
