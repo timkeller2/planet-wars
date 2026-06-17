@@ -61,7 +61,7 @@ function playRandomIntroTrack() {
 
   bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
   bgMusic.loop = true; // Loop so it doesn't go silent and trigger browser autoplay blocks
-  bgMusic.volume = 0.4;
+  bgMusic.volume = 0.025;
   bgMusic.play().catch(e => console.warn('Music play blocked:', e));
 
   lastMusicChangeTime = Date.now();
@@ -313,6 +313,9 @@ function getPlanetTradeIncomePerMin(planet) {
     activeConfigClassType = null;
     confirmingDismantle = false;
     speedModifierNext = null;
+    controlGroups = {};
+    lastSelectedCruiserId = null;
+    lastSelectedCruiserIdsStr = "";
   }
 
   let transparentPlanetsCanvas = null;
@@ -4141,7 +4144,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (musicCheckbox && musicCheckbox.checked && bgMusic) {
           bgMusic.src = '/Music/Battletime.mp3';
           bgMusic.loop = false;
-          bgMusic.volume = 0.5;
+          bgMusic.volume = 0.03125;
           bgMusic.play().catch(e => console.warn('Battletime play blocked:', e));
         }
       }
@@ -4152,7 +4155,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (musicCheckbox && musicCheckbox.checked && bgMusic) {
           bgMusic.src = '/Music/Megalovania.mp3';
           bgMusic.loop = false;
-          bgMusic.volume = 0.5;
+          bgMusic.volume = 0.03125;
           bgMusic.play().catch(e => console.warn('Megalovania play blocked:', e));
         }
       }
@@ -4729,7 +4732,7 @@ function getPlanetTradeIncomePerMin(planet) {
               if (musicCheckbox && musicCheckbox.checked && bgMusic) {
                 bgMusic.src = '/Music/Megalovania.mp3';
                 bgMusic.loop = false;
-                bgMusic.volume = 0.5;
+                bgMusic.volume = 0.03125;
                 bgMusic.play().catch(e => console.warn('Megalovania play blocked:', e));
               }
             }

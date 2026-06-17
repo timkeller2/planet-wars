@@ -3468,331 +3468,7 @@ export class Ship {
 
     // Cruiser Research Mode Decision Engine
     if (this.maxHealth > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters' && this.isResearching && this.labs > 0 && !this.isRetreating) {
-      // 1. Refueling Retreat Check: if fuel is less than 2
-      const coolingResearch = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
-      const hasSupplies = (this.supplies || 0) > 0;
-      const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
-      if (this.fuel < 2 && !hasSupplies && !withinSensorRangeOfSupplyShip && !coolingResearch) {
-        this.researchFuelRetreating = true;
-      }
-      
-      // If we are fuel retreating, remain in this state until fuel is fully replenished
-      if (this.researchFuelRetreating) {
-        if (this.fuel >= this.getMaxFuel()) {
-          this.researchFuelRetreating = false;
-          this.researchFuelRetreatTargetPlanetId = null;
-        }
-      }
-
-      if (this.researchFuelRetreating) {
-        let needNewTarget = this.targetX === null || this.targetY === null || !this.researchFuelRetreatTargetPlanetId;
-        if (!needNewTarget && this.researchFuelRetreatTargetPlanetId) {
-          const tp = allPlanets ? allPlanets.find(p => p.id === this.researchFuelRetreatTargetPlanetId) : null;
-          if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
-            needNewTarget = true;
-          }
-        }
-        if (needNewTarget) {
-          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
-          let bestCandidate = null;
-          if (friendlyPlanets.length > 0) {
-            const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
-              const candidates = [];
-              for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
-                const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
-                const gRad = p.getGravityRadius();
-                const theta = Math.random() * Math.PI * 2;
-                const r = Math.random() * gRad * 0.7;
-                const tx = p.x + r * Math.cos(theta);
-                const ty = p.y + r * Math.sin(theta);
-                
-                const dx = tx - this.x;
-                const dy = ty - this.y;
-                if (dx * dx + dy * dy <= radius * radius) {
-                  let minEnemyDistSq = Infinity;
-                  if (allShips) {
-                    for (const other of allShips) {
-                      if (other.active && other.id !== this.id) {
-                        const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
-                        if (isEnemy) {
-                          const edx = other.x - tx;
-                          const edy = other.y - ty;
-                          const distSq = edx * edx + edy * edy;
-                          if (distSq < minEnemyDistSq) {
-                            minEnemyDistSq = distSq;
-                          }
-                        }
-                      }
-                    }
-                  }
-                  
-                  if (!strictSafe || minEnemyDistSq >= minEnemyDistReq * minEnemyDistReq) {
-                    candidates.push({ x: tx, y: ty, planet: p, minEnemyDistSq });
-                  }
-                }
-              }
-              
-              if (candidates.length > 0) {
-                candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
-                return candidates[0];
-              }
-              return null;
-            };
-
-            bestCandidate = findBestCandidate(300, 150, true);
-            if (!bestCandidate) bestCandidate = findBestCandidate(500, 150, true);
-            if (!bestCandidate) bestCandidate = findBestCandidate(300, 0, false);
-            if (!bestCandidate) bestCandidate = findBestCandidate(500, 0, false);
-          }
-
-          if (bestCandidate) {
-            this.targetPlanet = null;
-            this.researchFuelRetreatTargetPlanetId = bestCandidate.planet.id;
-            this.targetX = bestCandidate.x;
-            this.targetY = bestCandidate.y;
-            this.cruiserTargetType = null;
-            this.cruiserTargetId = null;
-          } else {
-            let closestFriendly = null;
-            let minFriendlyDistSq = Infinity;
-            for (const p of friendlyPlanets) {
-              const dx = p.x - this.x;
-              const dy = p.y - this.y;
-              const distSq = dx * dx + dy * dy;
-              if (distSq < minFriendlyDistSq) {
-                minFriendlyDistSq = distSq;
-                closestFriendly = p;
-              }
-            }
-            if (closestFriendly) {
-              this.targetPlanet = closestFriendly;
-              this.targetX = closestFriendly.x;
-              this.targetY = closestFriendly.y;
-              this.researchFuelRetreatTargetPlanetId = closestFriendly.id;
-              this.cruiserTargetType = null;
-              this.cruiserTargetId = null;
-            }
-          }
-        }
-      } else {
-        // 2. Rearming Retreat Check: if attack mode is also on and bombs are depleted
-        const supplyShip = this.findNearbySupplyShip(allShips);
-        const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
-        const hasSupplies = (this.supplies || 0) > 0;
-        const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
-        const needsRearm = this.scoutAttackEnabled && this.bombs <= 0 && !hasNearbySupply && !hasSupplies && !withinSensorRangeOfSupplyShip;
-        const coolingResearchRearm = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
-        if (!coolingResearchRearm && (needsRearm || this.researchRearming)) {
-          this.researchRearming = true;
-          if (this.bombs >= this.getMaxBombs()) {
-            this.researchRearming = false;
-            this.researchRearmTargetPlanetId = null;
-          }
-        }
-
-        if (this.researchRearming) {
-          let needNewTarget = this.targetX === null || this.targetY === null || !this.researchRearmTargetPlanetId;
-          if (!needNewTarget && this.researchRearmTargetPlanetId) {
-            const tp = allPlanets ? allPlanets.find(p => p.id === this.researchRearmTargetPlanetId) : null;
-            if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
-              needNewTarget = true;
-            }
-          }
-          if (needNewTarget) {
-            const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
-            let bestCandidate = null;
-            if (friendlyPlanets.length > 0) {
-              const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
-                const candidates = [];
-                for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
-                  const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
-                  const gRad = p.getGravityRadius();
-                  const theta = Math.random() * Math.PI * 2;
-                  const r = Math.random() * gRad * 0.7;
-                  const tx = p.x + r * Math.cos(theta);
-                  const ty = p.y + r * Math.sin(theta);
-                  
-                  const dx = tx - this.x;
-                  const dy = ty - this.y;
-                  if (dx * dx + dy * dy <= radius * radius) {
-                    let minEnemyDistSq = Infinity;
-                    if (allShips) {
-                      for (const other of allShips) {
-                        if (other.active && other.id !== this.id) {
-                          const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
-                          if (isEnemy) {
-                            const edx = other.x - tx;
-                            const edy = other.y - ty;
-                            const distSq = edx * edx + edy * edy;
-                            if (distSq < minEnemyDistSq) {
-                              minEnemyDistSq = distSq;
-                            }
-                          }
-                        }
-                      }
-                    }
-                    
-                    if (!strictSafe || minEnemyDistSq >= minEnemyDistReq * minEnemyDistReq) {
-                      candidates.push({ x: tx, y: ty, planet: p, minEnemyDistSq });
-                    }
-                  }
-                }
-                
-                if (candidates.length > 0) {
-                  candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
-                  return candidates[0];
-                }
-                return null;
-              };
-
-              bestCandidate = findBestCandidate(300, 150, true);
-              if (!bestCandidate) bestCandidate = findBestCandidate(500, 150, true);
-              if (!bestCandidate) bestCandidate = findBestCandidate(300, 0, false);
-              if (!bestCandidate) bestCandidate = findBestCandidate(500, 0, false);
-            }
-
-            if (bestCandidate) {
-              this.targetPlanet = null;
-              this.researchRearmTargetPlanetId = bestCandidate.planet.id;
-              this.targetX = bestCandidate.x;
-              this.targetY = bestCandidate.y;
-              this.cruiserTargetType = null;
-              this.cruiserTargetId = null;
-            } else {
-              let closestFriendly = null;
-              let minFriendlyDistSq = Infinity;
-              for (const p of friendlyPlanets) {
-                const dx = p.x - this.x;
-                const dy = p.y - this.y;
-                const distSq = dx * dx + dy * dy;
-                if (distSq < minFriendlyDistSq) {
-                  minFriendlyDistSq = distSq;
-                  closestFriendly = p;
-                }
-              }
-              if (closestFriendly) {
-                this.targetPlanet = closestFriendly;
-                this.targetX = closestFriendly.x;
-                this.targetY = closestFriendly.y;
-                this.researchRearmTargetPlanetId = closestFriendly.id;
-                this.cruiserTargetType = null;
-                this.cruiserTargetId = null;
-              }
-            }
-          }
-        } else {
-          // 3. Normal actions
-          let didAction = false;
-
-          // If attack mode is also on, seek active amoebas
-          if (this.scoutAttackEnabled && this.bombs > 0) {
-            let nearestAmoeba = null;
-            let minAmoebaDistSq = Infinity;
-            if (allShips) {
-              for (const other of allShips) {
-                if (other.active && other.isAmoeba) {
-                  const dx = other.x - this.x;
-                  const dy = other.y - this.y;
-                  const distSq = dx * dx + dy * dy;
-                  if (distSq <= 500 * 500) {
-                    const isFogEnabled = game && game.settings && game.settings.fogOfWar;
-                    const isVisible = !isFogEnabled || (this.owner && this.owner.isAI) || (game && typeof game.isCoordinateVisible === 'function' && game.isCoordinateVisible(other.x, other.y, this.owner));
-                    if (isVisible && distSq < minAmoebaDistSq) {
-                      minAmoebaDistSq = distSq;
-                      nearestAmoeba = other;
-                    }
-                  }
-                }
-              }
-            }
-            if (nearestAmoeba) {
-              this.targetPlanet = null;
-              this.targetX = nearestAmoeba.x;
-              this.targetY = nearestAmoeba.y;
-              this.cruiserTargetType = 'ship';
-              this.cruiserTargetId = nearestAmoeba.id;
-              didAction = true;
-            }
-          }
-
-          // Seek active hazards to research and park outside of them
-          if (!didAction) {
-            let bestHazard = null;
-            let minHazardDistSq = Infinity;
-            if (ionStorms) {
-              for (const storm of ionStorms) {
-                const k = storm.knowledge[this.owner.id] || 0;
-                const tR = Math.sqrt(this.owner.techScore || 0);
-                const eR = Math.sqrt(this.owner.expScore || 0);
-                const effectiveIntensity = Math.max(0, storm.intensity - k - (tR + eR) / 2);
-                if (effectiveIntensity > 0) {
-                  const isFogEnabled = game && game.settings && game.settings.fogOfWar;
-                  const isVisible = !isFogEnabled || (this.owner && this.owner.isAI) || (game && typeof game.isCoordinateVisible === 'function' && game.isCoordinateVisible(storm.x, storm.y, this.owner));
-                  if (isVisible) {
-                    const dx = storm.x - this.x;
-                    const dy = storm.y - this.y;
-                    const distSq = dx * dx + dy * dy;
-                    if (distSq < minHazardDistSq) {
-                      minHazardDistSq = distSq;
-                      bestHazard = storm;
-                    }
-                  }
-                }
-              }
-            }
-
-            if (bestHazard) {
-              const dx = this.x - bestHazard.x;
-              const dy = this.y - bestHazard.y;
-              const d = Math.sqrt(dx * dx + dy * dy);
-              
-              let cruiserRadar = Math.min(250, 5 * this.maxHealth);
-              if (this.isWarp) cruiserRadar *= 0.25;
-              if (this.sensorarrays > 0) {
-                cruiserRadar *= (1.0 + this.sensorarrays * 0.20);
-              }
-              const shipXpBonus = this.getLocalXpBonus();
-              const finalCruiserRadar = cruiserRadar * (100 + shipXpBonus * 1) / 100;
-              const parkingDist = bestHazard.radius + Math.max(20, finalCruiserRadar - 40);
-
-              this.targetPlanet = null;
-              if (d > 0) {
-                this.targetX = bestHazard.x + (dx / d) * parkingDist;
-                this.targetY = bestHazard.y + (dy / d) * parkingDist;
-              } else {
-                this.targetX = bestHazard.x + parkingDist;
-                this.targetY = bestHazard.y;
-              }
-              this.cruiserTargetType = null;
-              this.cruiserTargetId = null;
-              didAction = true;
-            }
-          }
-
-          // If no hazards or amoebas, park at the closest friendly planet
-          if (!didAction) {
-            const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
-            let closestFriendly = null;
-            let minFriendlyDistSq = Infinity;
-            for (const p of friendlyPlanets) {
-              const dx = p.x - this.x;
-              const dy = p.y - this.y;
-              const distSq = dx * dx + dy * dy;
-              if (distSq < minFriendlyDistSq) {
-                minFriendlyDistSq = distSq;
-                closestFriendly = p;
-              }
-            }
-            if (closestFriendly) {
-              this.targetPlanet = closestFriendly;
-              this.targetX = closestFriendly.x;
-              this.targetY = closestFriendly.y;
-              this.cruiserTargetType = null;
-              this.cruiserTargetId = null;
-            }
-          }
-        }
-      }
+      // Disabled: Do not automatically give move orders to researching ships.
     }
 
 
@@ -4171,8 +3847,8 @@ export class Ship {
       }
     }
 
-    let destX = this.targetPlanet ? (this.targetPlanet.x + (this.cruiserTargetOffsetX || 0)) : this.targetX;
-    let destY = this.targetPlanet ? (this.targetPlanet.y + (this.cruiserTargetOffsetY || 0)) : this.targetY;
+    let destX = this.targetPlanet ? (this.targetPlanet.x + (this.cruiserTargetOffsetX || 0)) : (this.targetX !== null ? this.targetX : this.x);
+    let destY = this.targetPlanet ? (this.targetPlanet.y + (this.cruiserTargetOffsetY || 0)) : (this.targetY !== null ? this.targetY : this.y);
 
     const finalDestX = destX + (this.isCruiser ? 0 : (this.isBomber ? this.bomberTargetOffsetX : this.endOffsetX));
     const finalDestY = destY + (this.isCruiser ? 0 : (this.isBomber ? this.bomberTargetOffsetY : this.endOffsetY));
@@ -4215,33 +3891,43 @@ export class Ship {
     const baseTargetDy = finalDestY - this.y;
     let distance = Math.sqrt(baseTargetDx * baseTargetDx + baseTargetDy * baseTargetDy);
 
-    if (this.isCruiser && !this.isUpgrading && this.orderQueue && this.orderQueue.length > 0) {
-      let shouldPopNext = false;
-      if (!this.cruiserTargetType) {
-        if (this.targetPlanet) {
-          const isFriendly = this.targetPlanet.owner && this.owner && this.targetPlanet.owner.id === this.owner.id;
-          if (isFriendly && distance < this.targetPlanet.radius + 45) {
-            shouldPopNext = true;
-          }
-        } else {
-          if (moveDistanceToDest < 15) {
-            shouldPopNext = true;
+    if (this.isCruiser && !this.isUpgrading) {
+      if (this.orderQueue && this.orderQueue.length > 0) {
+        let shouldPopNext = false;
+        if (!this.cruiserTargetType) {
+          if (this.targetPlanet) {
+            const isFriendly = this.targetPlanet.owner && this.owner && this.targetPlanet.owner.id === this.owner.id;
+            if (isFriendly && distance < this.targetPlanet.radius + 45) {
+              shouldPopNext = true;
+            }
+          } else {
+            if (moveDistanceToDest < 15) {
+              shouldPopNext = true;
+            }
           }
         }
-      }
-      if (shouldPopNext) {
-        this.executeNextOrder(allPlanets, allShips, game);
-        destX = this.targetPlanet ? (this.targetPlanet.x + (this.cruiserTargetOffsetX || 0)) : this.targetX;
-        destY = this.targetPlanet ? (this.targetPlanet.y + (this.cruiserTargetOffsetY || 0)) : this.targetY;
-        const newDx = destX - this.x;
-        const newDy = destY - this.y;
-        moveDistanceToDest = Math.sqrt(newDx * newDx + newDy * newDy);
-        
-        const newFinalDestX = destX + (this.isCruiser ? 0 : (this.isBomber ? this.bomberTargetOffsetX : this.endOffsetX));
-        const newFinalDestY = destY + (this.isCruiser ? 0 : (this.isBomber ? this.bomberTargetOffsetY : this.endOffsetY));
-        const newBaseTargetDx = newFinalDestX - this.x;
-        const newBaseTargetDy = newFinalDestY - this.y;
-        distance = Math.sqrt(newBaseTargetDx * newBaseTargetDx + newBaseTargetDy * newBaseTargetDy);
+        if (shouldPopNext) {
+          this.executeNextOrder(allPlanets, allShips, game);
+          destX = this.targetPlanet ? (this.targetPlanet.x + (this.cruiserTargetOffsetX || 0)) : this.targetX;
+          destY = this.targetPlanet ? (this.targetPlanet.y + (this.cruiserTargetOffsetY || 0)) : this.targetY;
+          const newDx = destX - this.x;
+          const newDy = destY - this.y;
+          moveDistanceToDest = Math.sqrt(newDx * newDx + newDy * newDy);
+          
+          const newFinalDestX = destX + (this.isCruiser ? 0 : (this.isBomber ? this.bomberTargetOffsetX : this.endOffsetX));
+          const newFinalDestY = destY + (this.isCruiser ? 0 : (this.isBomber ? this.bomberTargetOffsetY : this.endOffsetY));
+          const newBaseTargetDx = newFinalDestX - this.x;
+          const newBaseTargetDy = newFinalDestY - this.y;
+          distance = Math.sqrt(newBaseTargetDx * newBaseTargetDx + newBaseTargetDy * newBaseTargetDy);
+        }
+      } else {
+        if (!this.cruiserTargetType && !this.targetPlanet && this.targetX !== null && this.targetY !== null) {
+          if (moveDistanceToDest < 15) {
+            this.targetX = null;
+            this.targetY = null;
+            moveDistanceToDest = 0;
+          }
+        }
       }
     }
     

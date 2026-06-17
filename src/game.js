@@ -1598,7 +1598,7 @@ export class Game {
     this.ionStormDamageTimer = 0;
     this.minefieldDamageTimer = 0;
     this.ionStormsCreated = 0;
-    this.nextShipId = 1;
+    this.nextShipId = this.nextShipId || 1;
     this.gameTime = 0;
     this.timeRemaining = null;
     let rampageDelayMultiple = 1.0;
@@ -4320,7 +4320,18 @@ export class Game {
             if (targetHazard.type === 'storm') {
               if (!targetHazard.storm.knowledge[ship.owner.id]) targetHazard.storm.knowledge[ship.owner.id] = 0;
               targetHazard.storm.knowledge[ship.owner.id] += (ship.labs * deltaTime) / 120000;
+              
               ship.isActivelyResearching = true;
+              const xpMultiplier = 1 + (ship.getLocalXpBonus() * 3) / 100;
+              const knowledgeGained = (ship.labs * deltaTime * xpMultiplier) / 120000;
+              ship.owner.techScore = (ship.owner.techScore || 0) + knowledgeGained;
+              ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
+              
+              if (ship.accumulatedTech >= 1.0) {
+                const completions = Math.floor(ship.accumulatedTech);
+                ship.accumulatedTech -= completions;
+                ship.gainXp(completions, this, ship.x, ship.y);
+              }
             } else {
               // Minefield
               if (!targetHazard.storm.knowledge[ship.owner.id]) targetHazard.storm.knowledge[ship.owner.id] = 0;
