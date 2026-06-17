@@ -3543,8 +3543,8 @@ export class Game {
 
         planet.revoltWarmup = 0;
         
-        const baseShips = Math.floor(planet.ships / 2);
-        planet.ships = Math.max(1, baseShips);
+        // const baseShips = Math.floor(planet.ships / 2);
+        // planet.ships = Math.max(1, baseShips);
         if (planet.sympathy) {
           for (const pId in planet.sympathy) {
             planet.sympathy[pId] /= 2;
