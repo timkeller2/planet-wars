@@ -4913,25 +4913,7 @@ function getPlanetTradeIncomePerMin(planet) {
               targetY = targetP.y;
             }
           }
-          // Check if cruiser race matches the target planet race
-          const sOwner = state.players ? state.players.find(pl => pl.id === s.ownerId) : null;
-          const shipRace = s.cruiserStyle || (sOwner ? sOwner.cruiserStyle : null);
-          const targetRace = targetP ? targetP.racialAffinity : null;
           let animText = prefEmoji;
-          if (shipRace && targetRace && shipRace === targetRace) {
-            const raceIcons = {
-              'Federation': '🖖',
-              'Romulan': '🦅',
-              'Klingon': '⚔️',
-              'Gorn': '🦎',
-              'Tholian': '🕸️',
-              'Lyran': '🐶'
-            };
-            const raceIcon = raceIcons[shipRace];
-            if (raceIcon) {
-              animText = `${prefEmoji} ${raceIcon}`;
-            }
-          }
 
           let count = typeof s.diplomatPrefResourceEvent === 'number' ? s.diplomatPrefResourceEvent : 1;
           for (let b = 0; b < count; b++) {
@@ -4983,23 +4965,6 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
           let successText = '💖';
-          const sOwner = state.players ? state.players.find(pl => pl.id === s.ownerId) : null;
-          const shipRace = s.cruiserStyle || (sOwner ? sOwner.cruiserStyle : null);
-          const targetRace = targetP ? targetP.racialAffinity : null;
-          if (shipRace && targetRace && shipRace === targetRace) {
-            const raceIcons = {
-              'Federation': '🖖',
-              'Romulan': '🦅',
-              'Klingon': '⚔️',
-              'Gorn': '🦎',
-              'Tholian': '🕸️',
-              'Lyran': '🐶'
-            };
-            const raceIcon = raceIcons[shipRace];
-            if (raceIcon) {
-              successText = `💖 ${raceIcon}`;
-            }
-          }
           for (let b = 0; b < s.diplomatSuccessEvent; b++) {
             floatingAnimations.push({
               startX: targetX,
@@ -5031,23 +4996,6 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
           let baseText = '💔';
-          const sOwner = state.players ? state.players.find(pl => pl.id === s.ownerId) : null;
-          const shipRace = s.cruiserStyle || (sOwner ? sOwner.cruiserStyle : null);
-          const targetRace = targetP ? targetP.racialAffinity : null;
-          if (shipRace && targetRace && shipRace === targetRace) {
-            const raceIcons = {
-              'Federation': '🖖',
-              'Romulan': '🦅',
-              'Klingon': '⚔️',
-              'Gorn': '🦎',
-              'Tholian': '🕸️',
-              'Lyran': '🐶'
-            };
-            const raceIcon = raceIcons[shipRace];
-            if (raceIcon) {
-              baseText = `💔 ${raceIcon}`;
-            }
-          }
           const textVal = baseText + (s.diplomatFailureChance ? ` ${s.diplomatFailureChance}%` : '');
           for (let b = 0; b < s.diplomatFailureEvent; b++) {
             floatingAnimations.push({
@@ -10639,7 +10587,23 @@ function getPlanetTradeIncomePerMin(planet) {
                   prefix += prefEmoji + ' ';
                 }
 
-                ctx.fillText(`${prefix}${chancePercent}%`, p.x, p.y - p.radius - yOffset);
+                const diplomatRace = diplomat.cruiserStyle || (diplomatOwner ? diplomatOwner.cruiserStyle : null);
+                let raceIcon = '';
+                if (diplomatRace) {
+                  const raceIcons = {
+                    'Federation': '🖖',
+                    'Romulan': '🦅',
+                    'Klingon': '⚔️',
+                    'Gorn': '🦎',
+                    'Tholian': '🕸️',
+                    'Lyran': '🐶'
+                  };
+                  if (raceIcons[diplomatRace]) {
+                    raceIcon = raceIcons[diplomatRace] + ' ';
+                  }
+                }
+
+                ctx.fillText(`${raceIcon}${prefix}${chancePercent}%`, p.x, p.y - p.radius - yOffset);
                 ctx.restore();
               }
             }
