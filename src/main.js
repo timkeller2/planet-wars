@@ -10589,7 +10589,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
                 const diplomatRace = diplomat.cruiserStyle || (diplomatOwner ? diplomatOwner.cruiserStyle : null);
                 let raceIcon = '';
-                if (diplomatRace) {
+                if (diplomatRace && p.racialAffinity && diplomatRace === p.racialAffinity) {
                   const raceIcons = {
                     'Federation': '🖖',
                     'Romulan': '🦅',
