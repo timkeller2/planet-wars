@@ -1620,6 +1620,11 @@ export class Game {
     this.sellOrders = [];
     this.fulfillOrders = [];
     this.exploredGrid = {};
+    this.wreckages = [];
+    this.pendingPioneerSpawns = [];
+    if (this.usedShipNames) this.usedShipNames.clear();
+    this.marketSalesHistory = [];
+    this.highestSpeedMilestoneTriggered = 0;
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
     this.minefieldDamageTimer = 0;
