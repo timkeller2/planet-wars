@@ -51,7 +51,7 @@ export function getEffectiveSympathy(planet, playerId, allShips, player = null, 
           const dx = ship.x - planet.x;
           const dy = ship.y - planet.y;
           if (dx * dx + dy * dy <= maxDistSq) {
-            const shipHp = (ship.isCruiser || ship.maxHealth > 0) ? (ship.maxHealth * 0.5) : ((ship.count || 1) * 0.5);
+            const shipHp = (ship.isCruiser || ship.maxHealth > 0) ? (5 + ship.maxHealth * 0.5) : ((ship.count || 1) * 0.5);
             extraSympathy += shipHp;
           }
         }
@@ -5164,7 +5164,7 @@ export class Game {
               if (!planet.owner) {
                 // Neutral planet: cap counted ships to sympathy on that planet toward the player * 10
                 const sympathyVal = getEffectiveSympathy(planet, player.id, this.ships, player, this);
-                baseShips = Math.min(baseShips, sympathyVal * 10);
+                baseShips = Math.min(baseShips, sympathyVal * 20);
               }
 
               let eff = baseShips;

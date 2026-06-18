@@ -131,7 +131,7 @@ function getEffectiveSympathyClient(pl, playerId) {
           const dx = ship.x - pl.x;
           const dy = ship.y - pl.y;
           if (dx * dx + dy * dy <= maxDistSq) {
-            const shipHp = (ship.isCruiser || (ship.maxHealth && ship.maxHealth > 0)) ? ((ship.maxHealth || ship.health || 0) * 0.5) : ((ship.count || 1) * 0.5);
+            const shipHp = (ship.isCruiser || (ship.maxHealth && ship.maxHealth > 0)) ? (5 + (ship.maxHealth || ship.health || 0) * 0.5) : ((ship.count || 1) * 0.5);
             extraSympathy += shipHp;
           }
         }
@@ -187,7 +187,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let baseShips = pl.ships || 0;
         if (!pl.ownerId) {
           const sympathyVal = getEffectiveSympathyClient(pl, myPlayer.id);
-          baseShips = Math.min(baseShips, sympathyVal * 10);
+          baseShips = Math.min(baseShips, sympathyVal * 20);
         }
         let eff = baseShips;
         if (pl.focusMode === 'commerce') {
@@ -230,7 +230,7 @@ function getPlanetTradeIncomePerMin(planet) {
     let baseShips = planet.ships || 0;
     if (!planet.ownerId) {
       const sympathyVal = getEffectiveSympathyClient(planet, myPlayer.id);
-      baseShips = Math.min(baseShips, sympathyVal * 10);
+      baseShips = Math.min(baseShips, sympathyVal * 20);
     }
     let eff = baseShips;
     if (planet.focusMode === 'commerce') {
