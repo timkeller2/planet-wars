@@ -6258,9 +6258,26 @@ export class Game {
   triggerAnomalyCompletion(planet, player) {
     const difficulty = planet.anomaly ? planet.anomaly.difficulty : 0;
     
-    // Choose a random reward from the 5 options:
-    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache', 'upgrade_token'];
-    const rewardType = (planet.anomaly && planet.anomaly.rewardType) ? planet.anomaly.rewardType : rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
+    // Choose a random reward with 64% chance for credits and 6% chance for others:
+    let rewardType = (planet.anomaly && planet.anomaly.rewardType) ? planet.anomaly.rewardType : null;
+    if (!rewardType) {
+      const roll = Math.random() * 100;
+      if (roll < 64) {
+        rewardType = 'credits';
+      } else if (roll < 70) {
+        rewardType = 'discount';
+      } else if (roll < 76) {
+        rewardType = 'tech';
+      } else if (roll < 82) {
+        rewardType = 'xp';
+      } else if (roll < 88) {
+        rewardType = 'hab';
+      } else if (roll < 94) {
+        rewardType = 'rare_resource_cache';
+      } else {
+        rewardType = 'upgrade_token';
+      }
+    }
     
     let text = '';
     let floatText = '';

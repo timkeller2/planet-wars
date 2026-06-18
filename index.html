@@ -672,14 +672,15 @@
               <li><strong>Research Process:</strong> Cruisers with labs progress research at an experience-boosted rate. Each completed research cycle has a chance: <code>(local ship xp bonus * 3 + player xp bonus - player tech bonus)%</code> to reward the player with 🧪 tech points.</li>
               <li><strong>Cruiser XP:</strong> Completing a research cycle awards +1 local XP to the cruiser.</li>
               <li><strong>Instant Resolution:</strong> Anomalies with a difficulty of 0 or negative can be resolved instantly by any cruiser in range.</li>
-              <li><strong>Completion Rewards:</strong> Fully researching an anomaly yields one of 6 random rewards <strong>(rewards are clamped to a minimum base value of 15 and credit value equivalent of 30 to prevent zero/negative rewards in long games)</strong>:
+              <li><strong>Completion Rewards:</strong> Fully researching an anomaly yields one of 7 random rewards <strong>(64% chance for Credits, and 6% chance each for the other options; rewards are clamped to a minimum base value of 15 and credit value equivalent of 30 to prevent zero/negative rewards in long games)</strong>:
                 <ul style="margin-top: 6px;">
-                  <li><strong>Upgrade Discounts:</strong> <code>1 + floor(difficulty / 20)</code> discounts of 15% on cruiser upgrade modules.</li>
-                  <li><strong>Credits:</strong> <code>(30 + difficulty) * (100 - 200)%</code> credits.</li>
-                  <li><strong>Tech Score:</strong> 1/10 of equivalent credit value added directly to tech score.</li>
-                  <li><strong>Player XP:</strong> 1/10 of equivalent credit value added to crew experience score.</li>
-                  <li><strong>Planet Habitability:</strong> Increases planet habitability by 1/5 of equivalent credit value.</li>
-                  <li><strong>Upgrade Tokens:</strong> <code>1 + floor(credit value / 40)</code> upgrade tokens rewarded directly to the cruiser.</li>
+                  <li><strong>Credits:</strong> <code>(30 + difficulty) * (100 - 200)%</code> credits (64% chance).</li>
+                  <li><strong>Upgrade Discounts:</strong> <code>1 + floor(difficulty / 20)</code> discounts of 15% on cruiser upgrade modules (6% chance).</li>
+                  <li><strong>Tech Score:</strong> 1/10 of equivalent credit value added directly to tech score (6% chance).</li>
+                  <li><strong>Player XP:</strong> 1/10 of equivalent credit value added to crew experience score (6% chance).</li>
+                  <li><strong>Planet Habitability:</strong> Increases planet habitability by 1/5 of equivalent credit value (6% chance).</li>
+                  <li><strong>Upgrade Tokens:</strong> <code>1 + floor(credit value / 40)</code> upgrade tokens rewarded directly to the cruiser (6% chance).</li>
+                  <li><strong>Rare Resource Cache:</strong> <code>Random(1 to 6) + floor(credit value / 20)</code> units of a rare/exotic resource (6% chance).</li>
                 </ul>
               </li>
             </ul>
