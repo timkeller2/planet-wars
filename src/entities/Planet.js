@@ -128,10 +128,12 @@ export class Planet {
 
   }
 
-  decreaseMaxShips(amount = 1) {
+  decreaseMaxShips(amount = 1, silent = false) {
     this.maxShips = Math.max(5, this.maxShips - amount);
     this.radius = Math.min(this.sizeClass, this.maxShips) / 4;
-    this.capacityDecreaseEvent = true;
+    if (!silent) {
+      this.capacityDecreaseEvent = true;
+    }
   }
 
   update(deltaTime, allPlanets, settings, game) {
@@ -274,11 +276,11 @@ export class Planet {
             }
             this.ships += shipsBuilt;
             if (shipsBuilt > 0) {
-              this.decreaseMaxShips(0.04 * shipsBuilt);
+              this.decreaseMaxShips(0.04 * shipsBuilt, true);
             }
           } else {
             this.ships += newShips;
-            this.decreaseMaxShips(0.04 * newShips);
+            this.decreaseMaxShips(0.04 * newShips, true);
           }
         }
       } else {
