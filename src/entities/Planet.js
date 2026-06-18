@@ -129,7 +129,7 @@ export class Planet {
   }
 
   decreaseMaxShips(amount = 1) {
-    this.maxShips -= amount;
+    this.maxShips = Math.max(5, this.maxShips - amount);
     this.radius = Math.min(this.sizeClass, this.maxShips) / 4;
     this.capacityDecreaseEvent = true;
   }
@@ -273,8 +273,12 @@ export class Planet {
               }
             }
             this.ships += shipsBuilt;
+            if (shipsBuilt > 0) {
+              this.decreaseMaxShips(0.04 * shipsBuilt);
+            }
           } else {
             this.ships += newShips;
+            this.decreaseMaxShips(0.04 * newShips);
           }
         }
       } else {

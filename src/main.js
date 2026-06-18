@@ -3109,7 +3109,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
 
         const laserTechBonus = Math.floor(techBonus) * 0.01;
-        const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+        const xpRangeBonus = (expBonus + shipExpBonus) * 0.01;
         const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
         const targetingBonus = (hs.targeting || 0) * 5;
         const targetingRangeBonus = (hs.targeting || 0) * 0.05;
@@ -12125,7 +12125,7 @@ function getPlanetTradeIncomePerMin(planet) {
             }
 
             const laserTechBonus = Math.floor(techBonus) * 0.01;
-            const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+            const xpRangeBonus = (expBonus + shipExpBonus) * 0.01;
             const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
             const targetingBonus = (hs.targeting || 0) * 5;
             const targetingRangeBonus = (hs.targeting || 0) * 0.05;
@@ -12765,7 +12765,7 @@ function getPlanetTradeIncomePerMin(planet) {
             range = Math.floor(range);
           } else if (s.maxHealth > 0) {
             const shipExpBonus = Math.sqrt(s.expScore || 0) + (s.commandPoints || 0);
-            const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+            const xpRangeBonus = (expBonus + shipExpBonus) * 0.01;
             const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
             range = baseDogfightRange * 1.10;
             if (s.bombs > 0) {
@@ -12800,7 +12800,7 @@ function getPlanetTradeIncomePerMin(planet) {
           if (s.isCruiser && !s.isAmoeba) {
             // Draw custom directional firing range envelope for cruisers
             const shipExpBonus = Math.sqrt(s.expScore || 0) + (s.commandPoints || 0);
-            const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+            const xpRangeBonus = (expBonus + shipExpBonus) * 0.01;
             const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
 
             let rangeWithoutMunitions = range;

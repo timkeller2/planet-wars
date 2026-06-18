@@ -624,7 +624,7 @@ export class Ship {
       }
       effectiveRange = Math.floor(effectiveRange);
     } else if (this.maxHealth > 0) {
-      const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+      const xpRangeBonus = (expBonus + shipExpBonus) * 0.01;
       const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
       effectiveRange = baseDogfightRange * 1.10;
       if (this.bombs > 0) {
@@ -1785,7 +1785,7 @@ export class Ship {
       }
       effectiveRange = Math.floor(effectiveRange);
     } else if (this.maxHealth > 0) {
-      const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+      const xpRangeBonus = (expBonus + shipExpBonus) * 0.01;
       const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
       effectiveRange = baseDogfightRange * 1.10;
       if (this.bombs > 0) {
@@ -1977,7 +1977,7 @@ export class Ship {
             while (diff > Math.PI) diff -= Math.PI * 2;
             
             const absDiff = Math.abs(diff);
-            const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+            const xpRangeBonus = (expBonus + shipExpBonus) * 0.01;
             const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
             let targetingRangeBonus = 0;
             if (this.targeting > 0) {
@@ -5166,7 +5166,7 @@ export class Ship {
               // Aft arc: standard range without munitions bonus (cannot fire bombs backward)
               let rangeWithoutMunitions = effectiveRange;
               if (this.bombs > 0) {
-                const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+                const xpRangeBonus = (expBonus + shipExpBonus) * 0.01;
                 const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
                 const munitionsBonus = baseDogfightRange * 0.10 * (1 + targetingRangeBonus);
                 rangeWithoutMunitions = Math.max(0, effectiveRange - munitionsBonus);
@@ -5174,7 +5174,7 @@ export class Ship {
               targetRange = rangeWithoutMunitions * 0.85;
             } else {
               // Side arc
-              const xpRangeBonus = (expBonus + shipExpBonus) * 0.10;
+              const xpRangeBonus = (expBonus + shipExpBonus) * 0.01;
               const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
               let bombRangeBoost = 0;
               if (this.bombs > 0) {

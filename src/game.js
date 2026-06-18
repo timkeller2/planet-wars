@@ -6254,9 +6254,9 @@ export class Game {
     let text = '';
     let floatText = '';
     
-    const baseVal = 40 + difficulty * 3;
+    const baseVal = Math.max(15, 40 + difficulty * 3);
     const factor = 1.0 + Math.random(); // 100% to 200%
-    const creditsValueEquivalent = baseVal * factor;
+    const creditsValueEquivalent = Math.max(30, baseVal * factor);
     
     const locationName = planet.isDeepSpaceAnomaly ? 'Deep Space' : planet.name;
     const preposition = planet.isDeepSpaceAnomaly ? 'in' : 'on';
