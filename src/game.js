@@ -634,11 +634,23 @@ export class Game {
       const playerSpacingOptions = [600, 400, 200, 0];
       const planetSpacingOptions = [300, 200, 100, 50];
       
-      // Get starting positions of already spawned human players' cruisers
+      // Get starting positions of already spawned human players' cruisers, pending spawns, or homeworlds
       const otherHumanCruiserPositions = [];
       for (const ship of this.ships) {
-        if (ship.active && ship.owner && ship.owner.id !== player.id && !ship.owner.isAI) {
+        if (ship.active && ship.owner && ship.owner.id !== player.id) {
           otherHumanCruiserPositions.push({ x: ship.x, y: ship.y });
+        }
+      }
+      if (this.pendingPioneerSpawns) {
+        for (const pSpawn of this.pendingPioneerSpawns) {
+          if (pSpawn.ownerId !== player.id) {
+            otherHumanCruiserPositions.push({ x: pSpawn.x, y: pSpawn.y });
+          }
+        }
+      }
+      for (const p of this.planets) {
+        if (p.homeworldOf && p.homeworldOf !== player.id) {
+          otherHumanCruiserPositions.push({ x: p.x, y: p.y });
         }
       }
       
@@ -985,8 +997,22 @@ export class Game {
         const maxAllowedEconomy = avgEconomy * (2 + startingCredits / 250);
 
         const occupiedPlanets = this.planets.filter(p => p.owner !== null);
+        const avoidancePositions = occupiedPlanets.map(op => ({ x: op.x, y: op.y }));
+        for (const ship of this.ships) {
+          if (ship.active && ship.owner && ship.owner.id !== player.id) {
+            avoidancePositions.push({ x: ship.x, y: ship.y });
+          }
+        }
+        if (this.pendingPioneerSpawns) {
+          for (const pSpawn of this.pendingPioneerSpawns) {
+            if (pSpawn.ownerId !== player.id) {
+              avoidancePositions.push({ x: pSpawn.x, y: pSpawn.y });
+            }
+          }
+        }
+
         const candidatesWithInfo = neutralPlanets.map(p => {
-          const minDist = occupiedPlanets.length > 0 ? Math.min(...occupiedPlanets.map(op => {
+          const minDist = avoidancePositions.length > 0 ? Math.min(...avoidancePositions.map(op => {
             const dx = op.x - p.x;
             const dy = op.y - p.y;
             return Math.sqrt(dx * dx + dy * dy);
@@ -1000,7 +1026,7 @@ export class Game {
 
         // Filter for "not near another player" (distance >= 250px)
         let notNear = candidatesWithInfo;
-        if (occupiedPlanets.length > 0) {
+        if (avoidancePositions.length > 0) {
           notNear = candidatesWithInfo.filter(c => c.minOccupiedDist >= 250);
           if (notNear.length === 0) {
             // Fallback: keep top 50% furthest from other players
