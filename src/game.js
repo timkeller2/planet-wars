@@ -4197,6 +4197,7 @@ export class Game {
         p.anomaly.researchingShipIds = [];
       }
     }
+    this.wreckages = this.wreckages.filter(w => (w.amoebaDamage || 0) > 0 || (w.cruiserDamage || 0) > 0);
     for (const w of this.wreckages) {
       w.beingScanned = false;
       w.scanningShipId = null;
@@ -4522,8 +4523,12 @@ export class Game {
             });
             
             w.amoebaDamage = 0;
-            w.lastFightingTime = Date.now();
-            w.scanTimeLeft = 3000;
+            if ((w.cruiserDamage || 0) <= 0) {
+              this.wreckages.splice(i, 1);
+            } else {
+              w.lastFightingTime = Date.now();
+              w.scanTimeLeft = 3000;
+            }
           } else {
             // Reward credits: (amoebaDamage * 2 + cruiserDamage) * (1 + random 100%)
             const randMultiplier = 1.0 + Math.random();
@@ -6180,6 +6185,7 @@ export class Game {
 
   handleWreckageDamage(x, y, amoebaDamage, cruiserDamage) {
     if (!this.wreckages) this.wreckages = [];
+    if (amoebaDamage <= 0 && cruiserDamage <= 0) return;
     
     // Find an existing wreckage within 300px merge range
     let closestW = null;
