@@ -4913,7 +4913,7 @@ export class Game {
           this.highestSpeedMilestoneTriggered = this.highestSpeedMilestoneTriggered || 0;
           if (milestone > this.highestSpeedMilestoneTriggered) {
             this.highestSpeedMilestoneTriggered = milestone;
-            const newSpeed = Math.max(0.1, 1.0 - 0.05 * (milestone / 5));
+            const newSpeed = Math.max(0.1, 1.0 - 0.1 * (milestone / 5));
             this.gameSpeed = newSpeed;
             
             this.pendingChatMessages = this.pendingChatMessages || [];
