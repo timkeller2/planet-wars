@@ -5596,30 +5596,44 @@ function getPlanetTradeIncomePerMin(planet) {
           latinum: '🏺'
         };
         
-        if (L > 0) {
-          const iconParts = [];
-          for (const item of toSell) {
-            const emoji = resourceEmojis[item.name] || '';
-            for (let c = 0; c < item.count; c++) {
-              iconParts.push(emoji);
-            }
-          }
-          const iconStr = iconParts.join('');
-          sellBtn.textContent = `${iconStr}: +${totalGain}`;
-        } else {
-          sellBtn.textContent = 'SELL: +0';
-        }
-        
-        const availableOptions = myPlayer.tradeOptions !== undefined ? myPlayer.tradeOptions : 5;
-        // Don't gray it out if the player has at least one trade option (availableOptions >= 1), only if they have none (< 1)
-        if (L === 0 || availableOptions < 1) {
+        const now = Date.now();
+        const cooldownRemaining = myPlayer.lastBundleSaleTime ? Math.max(0, 5 * 60 * 1000 - (now - myPlayer.lastBundleSaleTime)) : 0;
+
+        if (cooldownRemaining > 0) {
+          const secs = Math.ceil(cooldownRemaining / 1000);
+          const mins = Math.floor(secs / 60);
+          const remSecs = secs % 60;
+          const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs}`;
+          sellBtn.textContent = `COOLDOWN: ${timeStr}`;
           sellBtn.disabled = true;
           sellBtn.style.opacity = '0.5';
           sellBtn.style.pointerEvents = 'none';
         } else {
-          sellBtn.disabled = false;
-          sellBtn.style.opacity = '1.0';
-          sellBtn.style.pointerEvents = 'auto';
+          if (L > 0) {
+            const iconParts = [];
+            for (const item of toSell) {
+              const emoji = resourceEmojis[item.name] || '';
+              for (let c = 0; c < item.count; c++) {
+                iconParts.push(emoji);
+              }
+            }
+            const iconStr = iconParts.join('');
+            sellBtn.textContent = `${iconStr}: +${totalGain}`;
+          } else {
+            sellBtn.textContent = 'SELL: +0';
+          }
+
+          const availableOptions = myPlayer.tradeOptions !== undefined ? myPlayer.tradeOptions : 5;
+          // Don't gray it out if the player has at least one trade option (availableOptions >= 1), only if they have none (< 1)
+          if (L === 0 || availableOptions < 1) {
+            sellBtn.disabled = true;
+            sellBtn.style.opacity = '0.5';
+            sellBtn.style.pointerEvents = 'none';
+          } else {
+            sellBtn.disabled = false;
+            sellBtn.style.opacity = '1.0';
+            sellBtn.style.pointerEvents = 'auto';
+          }
         }
         
         sellBtn.style.display = 'flex';

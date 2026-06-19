@@ -106,6 +106,7 @@ export class Player {
     this.attackedPlanets = new Map();
     this.lastKnownPlanets = {};
     this.spyRootedEvents = new Set();
+    this.lastBundleSaleTime = null;
   }
 
   addExperience(kills) {

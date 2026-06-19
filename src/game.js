@@ -1294,7 +1294,8 @@ export class Game {
         discoveredPlanets: p.discoveredPlanets ? Array.from(p.discoveredPlanets) : [],
         attackedPlanets: p.attackedPlanets ? Array.from(p.attackedPlanets.entries()) : [],
         spyRootedEvents: p.spyRootedEvents ? Array.from(p.spyRootedEvents) : [],
-        lastKnownPlanets: p.lastKnownPlanets || {}
+        lastKnownPlanets: p.lastKnownPlanets || {},
+        lastBundleSaleTime: p.lastBundleSaleTime
       })),
       planets: this.planets.map(p => ({
         id: p.id,
@@ -1456,6 +1457,7 @@ export class Game {
       p.attackedPlanets = new Map(pData.attackedPlanets || []);
       p.spyRootedEvents = new Set(pData.spyRootedEvents || []);
       p.lastKnownPlanets = pData.lastKnownPlanets || {};
+      p.lastBundleSaleTime = pData.lastBundleSaleTime !== undefined ? pData.lastBundleSaleTime : null;
 
       if (p.id === 'p1') this.humanPlayer = p;
       if (p.id === 'monsters') this.monsterPlayer = p;
@@ -1763,6 +1765,7 @@ export class Game {
       player.attackedPlanets = new Map();
       player.lastKnownPlanets = {};
       player.spyRootedEvents = new Set();
+      player.lastBundleSaleTime = null;
       const resources = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
       player.autoBuyOrders = resources.map(res => ({
         id: "autobuy_" + Math.random().toString(36).substring(2, 9),
@@ -2085,6 +2088,7 @@ export class Game {
       player.discoveredPlanets = new Set();
       player.attackedPlanets = new Map();
       player.spyRootedEvents = new Set();
+      player.lastBundleSaleTime = null;
       if (!player.isAI) {
         player.needsPlanet = true;
       }

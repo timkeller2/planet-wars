@@ -1081,6 +1081,12 @@ async function bootstrap() {
     socket.on('sellResourcesToBank', () => {
       const player = connectedClients.get(socket.id);
       if (player && player.resources) {
+        const now = Date.now();
+        if (player.lastBundleSaleTime && now - player.lastBundleSaleTime < 5 * 60 * 1000) {
+          console.log(`[Bank Direct Sale] Blocked: Player ${player.id} direct sale bundle is on cooldown.`);
+          return;
+        }
+
         if (player.tradeOptions === undefined) {
           player.tradeOptions = player.tradeCapacity || 5;
         }
@@ -1106,6 +1112,7 @@ async function bootstrap() {
 
         // Allow sale if they have at least 1 trade option
         if (L > 0 && player.tradeOptions >= 1) {
+          player.lastBundleSaleTime = now;
           const sellPrice = L + 2;
           for (const item of eligible) {
             player.resources[item.name] = (player.resources[item.name] || 0) - item.count;
