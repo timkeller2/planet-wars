@@ -1293,10 +1293,13 @@ export class Game {
         tradeLimitToggle: p.tradeLimitToggle,
         discoveredPlanets: p.discoveredPlanets ? Array.from(p.discoveredPlanets) : [],
         attackedPlanets: p.attackedPlanets ? Array.from(p.attackedPlanets.entries()) : [],
-        spyRootedEvents: p.spyRootedEvents ? Array.from(p.spyRootedEvents) : []
+        spyRootedEvents: p.spyRootedEvents ? Array.from(p.spyRootedEvents) : [],
+        lastKnownPlanets: p.lastKnownPlanets || {}
       })),
       planets: this.planets.map(p => ({
         id: p.id,
+        name: p.name,
+        isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false,
         x: p.x,
         y: p.y,
         radius: p.radius,
@@ -1340,6 +1343,7 @@ export class Game {
         focusChanges: p.focusChanges,
         preferredResourceWantedEvent: p.preferredResourceWantedEvent,
         anomaly: p.anomaly ? {
+          id: p.anomaly.id,
           x: p.anomaly.x,
           y: p.anomaly.y,
           radius: p.anomaly.radius,
@@ -1353,7 +1357,9 @@ export class Game {
           completingShipId: p.anomaly.completingShipId || null,
           completingPlayerId: p.anomaly.completingPlayerId || null,
           researchingShipId: p.anomaly.researchingShipId || null,
-          researchingShipIds: p.anomaly.researchingShipIds || []
+          researchingShipIds: p.anomaly.researchingShipIds || [],
+          rewardType: p.anomaly.rewardType,
+          researched: p.anomaly.researched || false
         } : null
       })),
       ships: this.ships.map(s => {
@@ -1449,6 +1455,7 @@ export class Game {
       p.discoveredPlanets = new Set(pData.discoveredPlanets || []);
       p.attackedPlanets = new Map(pData.attackedPlanets || []);
       p.spyRootedEvents = new Set(pData.spyRootedEvents || []);
+      p.lastKnownPlanets = pData.lastKnownPlanets || {};
 
       if (p.id === 'p1') this.humanPlayer = p;
       if (p.id === 'monsters') this.monsterPlayer = p;
@@ -1464,6 +1471,10 @@ export class Game {
       const owner = pData.ownerId ? playersMap.get(pData.ownerId) : null;
       const p = new Planet(pData.id, pData.x, pData.y, pData.radius, owner, pData.ships, this.width, this.height);
       
+      if (pData.name) {
+        p.name = pData.name;
+      }
+      p.isDeepSpaceAnomaly = pData.isDeepSpaceAnomaly || false;
       p.sizeClass = pData.sizeClass;
       p.maxShips = pData.maxShips;
       p.focusMode = pData.focusMode;
@@ -1505,6 +1516,7 @@ export class Game {
       p.capacityProgress = pData.capacityProgress !== undefined ? pData.capacityProgress : 0;
       p.preferredResourceWantedEvent = pData.preferredResourceWantedEvent !== undefined ? pData.preferredResourceWantedEvent : false;
       p.anomaly = pData.anomaly ? {
+        id: pData.anomaly.id || Math.random().toString(36).substr(2, 9),
         x: pData.anomaly.x,
         y: pData.anomaly.y,
         radius: pData.anomaly.radius,
@@ -1518,7 +1530,9 @@ export class Game {
         completingShipId: pData.anomaly.completingShipId || null,
         completingPlayerId: pData.anomaly.completingPlayerId || null,
         researchingShipId: pData.anomaly.researchingShipId || null,
-        researchingShipIds: pData.anomaly.researchingShipIds || []
+        researchingShipIds: pData.anomaly.researchingShipIds || [],
+        rewardType: pData.anomaly.rewardType,
+        researched: pData.anomaly.researched || false
       } : null;
 
       planetsMap.set(p.id, p);
@@ -5894,6 +5908,19 @@ export class Game {
           console.log(`[Market Expiration] Order ${order.id} expired. 1.0 ${order.resource} returned to ${owner.id}`);
         }
         this.sellOrders.splice(i, 1);
+      } else if (order.ownerId !== 'neutral') {
+        const createdAt = order.createdAt || nowTimestamp;
+        const elapsedMs = nowTimestamp - createdAt;
+        const durationLimitMs = 3 * 60000 * order.price;
+        if (elapsedMs > durationLimitMs && order.price < 6) {
+          const seller = this.allPlayers.find(p => p.id === order.ownerId);
+          if (seller) {
+            seller.credits = (seller.credits || 0) + order.price;
+            console.log(`[Market Direct Purchase] Market bought player order ${order.id} for ${order.price} credits.`);
+          }
+          this.recordMarketSale(order.resource, order.price);
+          this.sellOrders.splice(i, 1);
+        }
       }
     }
     for (let i = this.fulfillOrders.length - 1; i >= 0; i--) {
@@ -6150,7 +6177,7 @@ export class Game {
         let dispositionVal = rollSum - 60;
 
         if (initialQty >= 0.1) {
-          dispositionVal += (expBonus + shipExpBonus) * 3;
+          dispositionVal += (expBonus + shipExpBonus) * 1;
         }
         if (initialQty >= 0.1) {
           dispositionVal += 10;

@@ -156,7 +156,7 @@ export class Planet {
 
     if (this.owner && this.focusMode === 'terraforming') {
       const techBonus = Math.floor(Math.sqrt(this.owner.techScore || 0));
-      if (this.habitability > 6 * techBonus) {
+      if (this.habitability > 10 * techBonus) {
         this.focusMode = 'economy';
         this.focusTransition = null;
       }

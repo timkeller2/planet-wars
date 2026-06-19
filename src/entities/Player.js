@@ -102,6 +102,7 @@ export class Player {
       resource: res,
       price: 1
     }));
+    this.lastKnownPlanets = {};
   }
 
   addExperience(kills) {

@@ -1106,13 +1106,13 @@ async function bootstrap() {
 
         // Allow sale if they have at least 1 trade option
         if (L > 0 && player.tradeOptions >= 1) {
-          const sellPrice = Math.ceil((L * L) / 2) + 2;
+          const sellPrice = L + 2;
           for (const item of eligible) {
             player.resources[item.name] = (player.resources[item.name] || 0) - item.count;
           }
           let totalGain = sellPrice * L;
           if (latinumSold >= 1) {
-            totalGain = Math.round(totalGain * (1 + 0.25 * latinumSold));
+            totalGain = Math.round(totalGain * (1 + 0.10 * latinumSold));
           }
           player.credits = (player.credits || 0) + totalGain;
           
@@ -2476,6 +2476,9 @@ async function bootstrap() {
           }
           if (player.spyRootedEvents && player.spyRootedEvents.has(p.id)) mappedPlanet.spyRootedOutEvent = true;
           visiblePlanets.push(mappedPlanet);
+
+          player.lastKnownPlanets = player.lastKnownPlanets || {};
+          player.lastKnownPlanets[p.id] = Object.assign({}, mappedPlanet);
         } else if (isSilhouetteVisible(p.x, p.y) || player.discoveredPlanets.has(p.id) || p.rampageEvent) {
           if (isSilhouetteVisible(p.x, p.y)) {
             if (!player.discoveredPlanets.has(p.id)) {
@@ -2687,6 +2690,11 @@ async function bootstrap() {
         players: game.allPlayers.map(p => {
           const pObj = Object.assign({}, p);
           pObj.discoveredPlanetsArray = p.discoveredPlanets ? Array.from(p.discoveredPlanets) : [];
+          if (p.id === player.id) {
+            pObj.lastKnownPlanets = p.lastKnownPlanets || {};
+          } else {
+            delete pObj.lastKnownPlanets;
+          }
           return pObj;
         }),
         globalUpgradeModifiers: game.globalUpgradeModifiers,

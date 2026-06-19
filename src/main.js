@@ -2636,7 +2636,10 @@ function getPlanetTradeIncomePerMin(planet) {
       const hpOwner = owner || { techScore: 0, expScore: 0, id: 'neutral' };
       const techBonusVal = hpOwner ? Math.sqrt(hpOwner.techScore || 0) : 0;
       const softCap = Math.round(p.sizeClass * ((p.habitability + techBonusVal) / 100));
-      lines.push({ label: `Improvement Rate: ${p.habitability}`, value: `Potential: ${softCap}`, color: '#ffb74d' });
+      const techBonusInt = Math.floor(techBonusVal);
+      const maxTerraformedVal = techBonusInt * 10;
+      const improvementRateText = owner ? `${p.habitability}/${maxTerraformedVal}` : `${p.habitability}`;
+      lines.push({ label: `Improvement Rate: ${improvementRateText}`, value: `Potential: ${softCap}`, color: '#ffb74d' });
 
       const producedIcons = p.resources ? p.resources.map(r => resourceEmojis[r] || '').filter(Boolean).join(' ') : '';
       const wantedResourceName = p.preferredResource ? p.preferredResource.charAt(0).toUpperCase() + p.preferredResource.slice(1) : 'Nothing';
@@ -4574,6 +4577,13 @@ function getPlanetTradeIncomePerMin(planet) {
       lastKnownPlanets = {};
     }
 
+    if (state.players && localPlayer) {
+      const myPlayer = state.players.find(p => p.id === localPlayer.id);
+      if (myPlayer && myPlayer.lastKnownPlanets) {
+        lastKnownPlanets = { ...myPlayer.lastKnownPlanets };
+      }
+    }
+
     if (Object.keys(spriteSheets).length === 0 && state.players && state.players.length > 0) {
       preRenderSprites([...state.players, { id: 'neutral', color: '#ffffff' }]);
     }
@@ -5566,12 +5576,12 @@ function getPlanetTradeIncomePerMin(planet) {
         L += item.count;
       }
       
-      const sellPrice = Math.ceil((L * L) / 2) + 2;
+      const sellPrice = L + 2;
       let totalGain = sellPrice * L;
       const latinumItem = eligible.find(item => item.name === 'latinum');
       const latinumCount = latinumItem ? latinumItem.count : 0;
       if (latinumCount > 0) {
-        totalGain = Math.round(totalGain * (1 + 0.25 * latinumCount));
+        totalGain = Math.round(totalGain * (1 + 0.10 * latinumCount));
       }
       
       const sellBtn = document.getElementById('btn-sell-resources');
@@ -9160,7 +9170,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           if (mode === 'terraforming') {
             const techBonus = Math.floor(Math.sqrt((myPlayer ? myPlayer.techScore : 0) || 0));
-            const limit = Math.ceil(selectedPlanetFocus.habitability / 5);
+            const limit = Math.ceil(selectedPlanetFocus.habitability / 9);
             if (techBonus <= limit) {
               shouldShow = false;
             }
