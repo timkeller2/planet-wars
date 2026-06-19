@@ -1113,7 +1113,10 @@ function getPlanetTradeIncomePerMin(planet) {
   function updateBuildButtonCanvases() {
     if (!localPlayer) return;
     const myPlayer = (serverState && serverState.players) ? serverState.players.find(p => p.id === localPlayer.id) : null;
-    const style = myPlayer ? (myPlayer.cruiserStyle || 'Klingon') : (localPlayer.cruiserStyle || 'Klingon');
+    const selectedPlanetBuild = (selectedPlanets && selectedPlanets.length === 1) ? selectedPlanets[0] : null;
+    const style = (selectedPlanetBuild && selectedPlanetBuild.racialAffinity)
+      ? selectedPlanetBuild.racialAffinity
+      : (myPlayer ? (myPlayer.cruiserStyle || 'Klingon') : (localPlayer.cruiserStyle || 'Klingon'));
     const playerColor = myPlayer ? (myPlayer.color || '#00ffff') : (localPlayer.color || '#00ffff');
 
     for (const [classType, cfg] of Object.entries(SHIP_CLASSES)) {
@@ -6343,7 +6346,9 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      const style = myPlayer ? (myPlayer.cruiserStyle || 'Klingon') : (localPlayer.cruiserStyle || 'Klingon');
+      const style = (selectedPlanetBuild && selectedPlanetBuild.racialAffinity)
+        ? selectedPlanetBuild.racialAffinity
+        : (myPlayer ? (myPlayer.cruiserStyle || 'Klingon') : (localPlayer.cruiserStyle || 'Klingon'));
       const playerColor = myPlayer ? (myPlayer.color || '#00ffff') : (localPlayer.color || '#00ffff');
       if (canvas) {
         drawShipClassOnCanvas(canvas, cfg.classType, style, playerColor, true);
