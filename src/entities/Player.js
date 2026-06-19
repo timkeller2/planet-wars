@@ -102,7 +102,10 @@ export class Player {
       resource: res,
       price: 1
     }));
+    this.discoveredPlanets = new Set();
+    this.attackedPlanets = new Map();
     this.lastKnownPlanets = {};
+    this.spyRootedEvents = new Set();
   }
 
   addExperience(kills) {

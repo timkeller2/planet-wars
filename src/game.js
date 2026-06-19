@@ -1759,6 +1759,10 @@ export class Game {
       player.tradeOptions = undefined;
       player.tradeRegenAccumulator = 0;
       player.sellPriceSetting = 1;
+      player.discoveredPlanets = new Set();
+      player.attackedPlanets = new Map();
+      player.lastKnownPlanets = {};
+      player.spyRootedEvents = new Set();
       const resources = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
       player.autoBuyOrders = resources.map(res => ({
         id: "autobuy_" + Math.random().toString(36).substring(2, 9),
