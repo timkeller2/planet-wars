@@ -13035,16 +13035,12 @@ function getPlanetTradeIncomePerMin(planet) {
             // Draw cyan sensor range circle (outline only, no fill!)
             let baseCruiserRadar = 25 + s.maxHealth * 2;
             let sensorRange = baseCruiserRadar + 25 * (s.sensorarrays || 0);
-            sensorRange *= (1 + 0.10 * (s.sensorarrays || 0));
             if (s.isWarp) sensorRange *= 0.25;
             if (owner) {
               const techScore = owner.techScore || 0;
-              const expScore = owner.expScore || 0;
               const playerTechBonus = 0.01 * Math.floor(Math.sqrt(techScore));
-              const playerExpBonus = 0.01 * Math.sqrt(expScore);
-              const shipXpBonus = Math.sqrt(s.expScore || 0) + (s.commandPoints || 0);
-              sensorRange *= (1 + playerTechBonus + playerExpBonus);
-              sensorRange *= (1 + 0.01 * shipXpBonus);
+              sensorRange *= (1 + playerTechBonus);
+              sensorRange *= (1 + 0.01 * (s.commandPoints || 0));
             }
             const pct = hazardSensorReductionPct(s.x, s.y, s.ownerId);
             sensorRange = Math.max(10, sensorRange * pct);

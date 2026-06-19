@@ -352,18 +352,14 @@ export class Ship {
     if (this.maxHealth <= 0) return 0;
     let baseCruiserRadar = 25 + this.maxHealth * 2;
     let range = baseCruiserRadar + 25 * (this.sensorarrays || 0);
-    range *= (1 + 0.10 * (this.sensorarrays || 0));
     if (this.isWarp) {
       range *= 0.25;
     }
     const techScore = this.owner ? (this.owner.techScore || 0) : 0;
-    const expScore = this.owner ? (this.owner.expScore || 0) : 0;
     const playerTechBonus = 0.01 * Math.floor(Math.sqrt(techScore));
-    const playerExpBonus = 0.01 * Math.sqrt(expScore);
-    const shipXpBonus = this.getLocalXpBonus();
 
-    range *= (1 + playerTechBonus + playerExpBonus);
-    range *= (1 + 0.01 * shipXpBonus);
+    range *= (1 + playerTechBonus);
+    range *= (1 + 0.01 * (this.commandPoints || 0));
     return range;
   }
 
