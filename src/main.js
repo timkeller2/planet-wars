@@ -4562,6 +4562,11 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastLaserCount = 0;
 
   socket.on('gameStateUpdate', (state) => {
+    const gameInProgressMsg = document.getElementById('game-in-progress-msg');
+    if (gameInProgressMsg) {
+      gameInProgressMsg.style.display = state.isRunning ? 'block' : 'none';
+    }
+
     if (state.gameStartTime !== undefined && state.gameStartTime !== lastGameStartTime) {
       lastGameStartTime = state.gameStartTime;
       hasCenteredOnHomeworld = false;

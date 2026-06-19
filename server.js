@@ -1708,11 +1708,26 @@ async function bootstrap() {
   const BROADCAST_EVERY_SLOW = 4;    // 5 FPS when a client is behind
   let lastTime = Date.now();
   let tickCount = 0;
+  let noClientStartTime = null;
 
   setInterval(() => {
     const currentTime = Date.now();
     const deltaTime = currentTime - lastTime;
     lastTime = currentTime;
+
+    // Check connection timeout victory:
+    const activeClientsCount = io.sockets.sockets.size;
+    if (game.isRunning && (!game.isPaused || game.pausedForAFK) && activeClientsCount === 0) {
+      if (noClientStartTime === null) {
+        noClientStartTime = currentTime;
+      } else if (currentTime - noClientStartTime >= 15 * 60 * 1000) { // 15 minutes
+        console.log(`[Connection Timeout] No clients connected to the running game for 15 minutes. Triggering time victory.`);
+        game.triggerTimedGameVictory();
+        noClientStartTime = null;
+      }
+    } else {
+      noClientStartTime = null;
+    }
 
     // Check AFK/Inactivity pause:
     if (game.isRunning && !game.isPaused) {
