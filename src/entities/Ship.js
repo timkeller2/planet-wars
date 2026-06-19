@@ -112,6 +112,8 @@ export class Ship {
     this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
     this.resourceAccumulators = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
     this.conversionTimer = 0;
+    this.waitingForSupplyFuelConversion = false;
+    this.suppliesConvertedToFuel = 0;
     this.crew = 0;
     this.marineCount = 0;
     this._cruiserStyle = null;
@@ -4204,11 +4206,11 @@ export class Ship {
       }
 
       let supplyShipForFuel = this.findNearbySupplyShip(allShips, true);
-      if (this.fuel_tanker > 0 && (this.supplies || 0) > 0 && (this.timeNotMoved || 0) >= 3.0) {
+      if (this.fuel_tanker > 0 && (this.supplies || 0) > 0 && ((this.timeNotMoved || 0) >= 3.0 || this.waitingForSupplyFuelConversion)) {
         supplyShipForFuel = this;
       }
       if (supplyShipForFuel === this) {
-        if ((this.fuel || 0) <= this.getMaxFuel() - 2) {
+        if (this.waitingForSupplyFuelConversion || (this.fuel || 0) <= this.getMaxFuel() - 2) {
           this.isSelfRefueling = true;
         } else if ((this.fuel || 0) >= this.getMaxFuel()) {
           this.isSelfRefueling = false;
@@ -4305,8 +4307,14 @@ export class Ship {
                 const suppliesUsed = amountRefueled * costMultiplier;
                 if (supplyShipForFuel.supplies >= suppliesUsed) {
                   supplyShipForFuel.supplies -= suppliesUsed;
+                  if (supplyShipForFuel === this && this.waitingForSupplyFuelConversion) {
+                    this.suppliesConvertedToFuel = (this.suppliesConvertedToFuel || 0) + suppliesUsed;
+                  }
                 } else {
                   const remainingRefuel = suppliesUsed - supplyShipForFuel.supplies;
+                  if (supplyShipForFuel === this && this.waitingForSupplyFuelConversion) {
+                    this.suppliesConvertedToFuel = (this.suppliesConvertedToFuel || 0) + supplyShipForFuel.supplies;
+                  }
                   supplyShipForFuel.supplies = 0;
                   if (hasExcessDeuterium && deuteriumSellPrice < 12) {
                     const consumed = (1/12) * remainingRefuel;
@@ -4345,6 +4353,12 @@ export class Ship {
               } else if (friendlyWellPlanet) {
                 friendlyWellPlanet.ships = Math.max(0, friendlyWellPlanet.ships - 1.0 * amountRefueled * costMultiplier);
               }
+            }
+          }
+          if (this.waitingForSupplyFuelConversion) {
+            if ((this.suppliesConvertedToFuel || 0) >= 1.0 || (this.supplies || 0) <= 0 || (this.fuel || 0) >= this.getMaxFuel()) {
+              this.waitingForSupplyFuelConversion = false;
+              this.suppliesConvertedToFuel = 0;
             }
           }
         }
@@ -4915,6 +4929,19 @@ export class Ship {
       }
     }
 
+    if (this.isCruiser && !this.isAmoeba) {
+      const wantsToMove = (moveDistanceToDest > 1.0);
+      if (wantsToMove && (this.fuel || 0) <= 0 && (this.supplies || 0) > 0) {
+        if (!this.waitingForSupplyFuelConversion) {
+          this.waitingForSupplyFuelConversion = true;
+          this.suppliesConvertedToFuel = 0;
+        }
+      } else if (!wantsToMove) {
+        this.waitingForSupplyFuelConversion = false;
+        this.suppliesConvertedToFuel = 0;
+      }
+    }
+
     const speedTechBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
     let effectiveSpeed = this.speed * (1 + speedTechBonus);
     let engineBonus = (this.engine || 0) * 3;
@@ -4937,7 +4964,7 @@ export class Ship {
         effectiveSpeed *= 0.5;
       }
     }
-    if (this.isRefueling) {
+    if (this.isRefueling || this.waitingForSupplyFuelConversion) {
       effectiveSpeed = 0;
     }
     if (this.maxHealth > 0 && this.fuel <= 0) {
