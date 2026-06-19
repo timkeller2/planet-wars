@@ -7980,8 +7980,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (key === 't' && planet.focusMode !== 'terraforming') {
           const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
           const techBonus = Math.floor(Math.sqrt((myPlayer ? myPlayer.techScore : 0) || 0));
-          const limit = Math.ceil(planet.habitability / 5);
-          if (techBonus > limit) {
+          if (planet.habitability < 10 * techBonus) {
             event.preventDefault();
             socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'terraforming' });
             focusModeActive = false;
@@ -9170,8 +9169,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           if (mode === 'terraforming') {
             const techBonus = Math.floor(Math.sqrt((myPlayer ? myPlayer.techScore : 0) || 0));
-            const limit = Math.ceil(selectedPlanetFocus.habitability / 9);
-            if (techBonus <= limit) {
+            if (selectedPlanetFocus.habitability >= 10 * techBonus) {
               shouldShow = false;
             }
           }

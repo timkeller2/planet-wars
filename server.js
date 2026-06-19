@@ -1372,8 +1372,7 @@ async function bootstrap() {
       if (data.focusMode === 'commerce' && planet.maxShips <= 100) return;
       if (data.focusMode === 'terraforming') {
         const techBonus = Math.floor(Math.sqrt(player.techScore || 0));
-        const limit = Math.ceil(planet.habitability / 5);
-        if (techBonus <= limit) return;
+        if (planet.habitability >= 10 * techBonus) return;
       }
       if (data.focusMode === 'homeworld') {
         const hasHomeworld = game.planets.some(p => p.homeworldOf === player.id);
