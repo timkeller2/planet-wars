@@ -4904,16 +4904,16 @@ export class Game {
         .reduce((sum, s) => sum + Math.floor((s.maxHealth || 0) / 10), 0);
     }
 
-    // Reduce game speed based on successful human players (more than 10 planets + cruisers, then 20, etc.)
+    // Reduce game speed based on successful human players (more than 5 planets + cruisers, then 10, etc.)
     for (const player of this.allPlayers) {
       if (player && !player.isAI) {
         const score = (player.planetCount || 0) + (player.cruiserCount || 0);
-        if (score > 10) {
-          const milestone = 10 + 10 * Math.floor((score - 10) / 10);
+        if (score > 5) {
+          const milestone = 5 + 5 * Math.floor((score - 5) / 5);
           this.highestSpeedMilestoneTriggered = this.highestSpeedMilestoneTriggered || 0;
           if (milestone > this.highestSpeedMilestoneTriggered) {
             this.highestSpeedMilestoneTriggered = milestone;
-            const newSpeed = Math.max(0.1, 1.0 - 0.1 * (milestone / 10));
+            const newSpeed = Math.max(0.1, 1.0 - 0.05 * (milestone / 5));
             this.gameSpeed = newSpeed;
             
             this.pendingChatMessages = this.pendingChatMessages || [];
