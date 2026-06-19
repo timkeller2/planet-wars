@@ -5916,7 +5916,7 @@ export class Game {
         const createdAt = order.createdAt || nowTimestamp;
         const elapsedMs = nowTimestamp - createdAt;
         const durationLimitMs = 3 * 60000 * order.price;
-        if (elapsedMs > durationLimitMs && order.price < 6) {
+        if (elapsedMs > durationLimitMs && order.price < 5) {
           const seller = this.allPlayers.find(p => p.id === order.ownerId);
           if (seller) {
             seller.credits = (seller.credits || 0) + order.price;
