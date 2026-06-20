@@ -6755,9 +6755,8 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      // 3.5 Cruiser Build Icon check
       for (const p of serverState.planets) {
-        if (p.ownerId === localPlayer.id && !p.inFog && !p.isSpeedPlanet) {
+        if (p.ownerId === localPlayer.id && !p.inFog) {
           const displayHomeworldOf = p.homeworldOf;
           const displayIsMilitary = p.isMilitary;
 
@@ -7937,7 +7936,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (cruiserBuildModeActive) {
       const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
-      if (selectedPlanetBuild && selectedPlanetBuild.ownerId === localPlayer.id && !selectedPlanetBuild.isSpeedPlanet) {
+      if (selectedPlanetBuild && selectedPlanetBuild.ownerId === localPlayer.id) {
         const key = event.key.toLowerCase();
         if (key === 'e' || key === 'escape') {
           event.preventDefault();
@@ -8321,7 +8320,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
     if (event.key.toLowerCase() === 'c') {
-      const hasCruiserBase = selectedPlanets.some(p => p.ownerId === localPlayer.id && !p.isSpeedPlanet && (p.isMilitary || (p.ships >= 50 && p.maxShips >= 57)));
+      const hasCruiserBase = selectedPlanets.some(p => p.ownerId === localPlayer.id && (p.isMilitary || (p.ships >= 50 && p.maxShips >= 57)));
       if (hasCruiserBase) {
         event.preventDefault();
         cruiserBuildModeActive = !cruiserBuildModeActive;
@@ -9129,7 +9128,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
     const focusQual = getSelectedPlanetFocusQualifiers();
     const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
-    if (!selectedPlanetBuild || selectedPlanetBuild.isSpeedPlanet || selectedPlanetBuild.ownerId !== localPlayer.id) {
+    if (!selectedPlanetBuild || selectedPlanetBuild.ownerId !== localPlayer.id) {
       cruiserBuildModeActive = false;
     }
     if (!cruiserBuildModeActive) {
@@ -9515,7 +9514,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (elFocusCancel) elFocusCancel.style.display = 'none';
 
       const hasMilitary = selectedPlanets.some(p => p.isMilitary);
-      const hasCruiserBase = selectedPlanets.some(p => p.ownerId === localPlayer.id && !p.isSpeedPlanet && (p.isMilitary || (p.ships >= 50 && p.maxShips >= 57)));
+      const hasCruiserBase = selectedPlanets.some(p => p.ownerId === localPlayer.id && (p.isMilitary || (p.ships >= 50 && p.maxShips >= 57)));
       if (!hasCruiserBase) {
         cruiserBuildModeActive = false;
       }

@@ -426,7 +426,7 @@
               <li><strong>R — Research:</strong> Toggles autonomous Research/Lab mode for selected cruiser(s) with Laboratories.</li>
               <li><strong>D — Dismantle:</strong> Dismantles selected cruiser if inside a friendly gravity well (cruisers with the Diplomat upgrade automatically perform diplomacy).</li>
               <li><strong>P — Patrol:</strong> Toggles autonomous Patrol mode for selected cruiser(s). Target-locking a planet automatically deactivates patrol.</li>
-              <li><strong>C — Cruiser Build:</strong> Opens the cruiser construction menu (requires 🚀 Military planet or Homeworld).</li>
+              <li><strong>C — Cruiser Build:</strong> Opens the cruiser construction menu (requires 🚀 Military planet, ⚡ Speed planet, or Homeworld).</li>
               <li><strong>O — Focus Mode:</strong> Opens the focus mode selector for a selected owned planet.</li>
               <li><strong>U — Upgrade Mode:</strong> Opens the cruiser upgrade menu (cruiser must be near a friendly planet).</li>
             </ul>
@@ -440,7 +440,17 @@
               <li><strong>Capacity Growth:</strong> Full planets slowly gain +1 max capacity (in Economy focus). Homeworlds gain <strong>+2</strong>. Research-focused planets earn Tech instead. Garrison-focused planets hold double capacity, don't grow, and grant a starting experience bonus (maxShips/10) to all launched fleets, cruisers, and capital ships built there. Commerce-focused planets generate credits instead.</li>
               <li><strong>Tech Score 🧪:</strong> Earned when planets at max capacity sit in <strong>Research</strong> focus. Human players have a failure chance based on galaxy capacity percentage (<code>failChance = capacityPercent × 2</code>). Success costs <strong>2 ships</strong> and grants +1 Tech (or +2 on 🔬 Research planets). Failure costs <strong>1 ship</strong> (🔬 Research planets still gain +1 on failure).</li>
               <li><strong>Tech Enhancement Bonuses:</strong> Each time your √Tech bonus increases by 1, you receive a random <strong>-10% upgrade cost discount</strong> on one upgrade category (down to -50% max). A floating text and chat message announce the discount.</li>
-              <li><strong>Exp Score 🎯:</strong> Earned through combat (every 20 kills = +1 Exp). Eliminating a player or destroying a Homeworld awards <strong>+100 Exp</strong>. Diplomats also earn Exp through sympathy generation.</li>
+              <li><strong>Exp Score 🎯:</strong> Earned via combat (every 20 kills = +1 Exp), player elimination (+100 Exp), homeworld destruction (+100 Exp), successful diplomat sympathy rolls (+1 Exp), and anomaly completion rewards. Exp is used to:
+                <ul style="margin-top: 4px; padding-left: 20px; list-style-type: circle;">
+                  <li>Add to Victory Points (<code>VP = √Tech + √Exp + √Happiness</code>) for leaderboard ranking and Experience Victory.</li>
+                  <li>Expand friendly planet gravity wells (by +1% per √Exp bonus).</li>
+                  <li>Mitigate Ion Storm and Minefield risk/damage (by -√Exp/2).</li>
+                  <li>Increase the safe flight time before fleet and deep-space attrition begins (+√Exp * 0.5 seconds).</li>
+                  <li>Improve Diplomat sympathy generation success rates and first-contact disposition rolls.</li>
+                  <li>Boost anomaly research tech-gain chances.</li>
+                  <li>Grant starting experience to newly built cruisers.</li>
+                </ul>
+              </li>
               <li><strong>Credits 💲:</strong> A currency earned by <strong>Commerce</strong>-focused planets. Credits can supplement ship costs when building cruisers, paying for upgrades, and transitioning focus modes — reducing the garrison drain. You can also establish trade with neutral planets where you have Sympathy; the maximum number of trade ships you can support on a neutral planet is capped at <strong>20 &times; your Effective Sympathy</strong> (limited by the actual ship count residing on that planet).</li>
               <li><strong>Resource Stockpile Capacity 📦:</strong> Caps the amount of resources you can stockpile before incurring storage fees. Capacity = Command Capacity + Trade Capacity.</li>
               <li><strong>Gravity Fields:</strong> Planets project gravity wells (radius = maxShips × 1.5, expanded by Tech/Exp). Military planets at full capacity get <strong>1.5× gravity radius</strong>. Garrison-focused planets at full capacity extend gravity by <strong>+ships/2</strong>. Friendly wells protect ships from attrition, allow cruiser healing/rearming, and grant starting experience bonuses.</li>
@@ -453,7 +463,7 @@
                 <ul style="margin-top: 6px;">
                   <li><strong>🔬 Research:</strong> Earns +2 Tech per successful tick instead of +1. Still earns +1 on failures.</li>
                   <li><strong>🚀 Military:</strong> Required to launch bombers and build cruisers. Full military planets get 1.5× gravity radius. Costs -1 max capacity per bombing launch. Explosions deal 3× damage in 600px radius.</li>
-                  <li><strong>⚡ Speed:</strong> Ships launched gain +15 flat speed bonus.</li>
+                  <li><strong>⚡ Speed:</strong> Ships launched gain +15 flat speed bonus. Speed worlds are also capable of constructing capital ships, which receive a flat +3 speed bonus instead of the standard +15.</li>
                 </ul>
               </li>
               <li><strong>Sympathy &amp; Revolts:</strong> Planets accumulate sympathy from nearby players (see 🤝 Diplomacy topic). When a non-owner's sympathy exceeds 1/3 of the planet's garrison, a revolt contest can trigger, potentially flipping ownership peacefully!</li>
@@ -508,7 +518,7 @@
           <!-- CRUISERS -->
           <div id="help-topic-cruisers" class="help-page hidden">
             <ul>
-              <li><strong>Building Cruisers 🛸:</strong> Built from 🚀 Military planets or your Homeworld. Press <strong>C</strong> to open the build menu. Choose from 5 hull classes (Corvette 15HP to Mammoth 55HP). Cost = ships + max capacity deducted from the planet. Starting XP is capped at the player's overall XP score (`player.expScore`), only consuming as much player `crewExperience` as needed. The planet must retain at least 55 max capacity after construction.</li>
+              <li><strong>Building Cruisers 🛸:</strong> Built from 🚀 Military planets, ⚡ Speed planets, or your Homeworld. Press <strong>C</strong> to open the build menu. Choose from 5 hull classes (Corvette 15HP to Mammoth 55HP). Cost = ships + max capacity deducted from the planet. Cruisers built from speed worlds receive a flat +3 speed bonus (instead of the +15 given to regular fleets). The planet must retain at least 55 max capacity after construction.</li>
               <li><strong>Hull Classes:</strong>
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
                   <li><strong>Corvette (S):</strong> 15 HP — 50 ships, 2 cap</li>
@@ -520,7 +530,7 @@
               </li>
               <li><strong>Movement &amp; Speed:</strong> Cruisers always launch at normal speed. Larger cruisers move slower. Engine upgrades add +3 speed per level. Damaged cruisers suffer a speed penalty. Moving at 1/2 or 1/4 speed settings grants hazard saving rolls (75% or 90% save chance).</li>
               <li><strong>Fuel System:</strong> Cruisers consume fuel outside friendly gravity wells. Flying costs <strong>4 fuel/tick</strong> (8 in warp). Stationary outside wells costs <strong>2 fuel/tick</strong>. Inside friendly wells, fuel regenerates. Base fuel capacity = maxHealth/5 (increased by Engine upgrades and Fuel Tanker).</li>
-              <li><strong>Out of Fuel Penalty:</strong> At 0 fuel, cruisers move at <strong>1/4 speed</strong> and take <strong>1d6 direct HP damage</strong> per tick outside friendly wells.</li>
+              <li><strong>Out of Fuel Penalty:</strong> At 0 fuel, cruisers move at <strong>1/4 speed</strong> and take <strong>1d6 direct HP damage</strong> per tick outside friendly wells. If a cruiser is moving and runs out of fuel but carries supplies, it automatically stops moving until it has converted at least 1 supply into fuel.</li>
               <li><strong>Fuel Transfer:</strong> Friendly cruisers within sensor range autonomously share fuel — if one has fuel &gt;1, it donates 1 to a stranded ally.</li>
               <li><strong>Multi-shot Weapons &amp; Range:</strong> Cruisers fire laser shots per second equal to their current health, targeting enemy ships, amoebas, and planets. <strong>Weapon range is determined by the cruiser class base range, upgraded via Sensor Array (+25%/level) and Targeting Computer (+5%/level), plus a tech bonus (+1/tech) and experience bonus (+0.01 per XP point).</strong></li>
               <li><strong>Bomb Sacs:</strong> Carry bombs = maxHealth/5 (increased by Munitions). Each bombardment volley on planets uses 1 bomb. Bombs reload inside friendly gravity wells.</li>
@@ -549,7 +559,7 @@
                   <li><strong>💣 Munition Pods (M):</strong> <strong>+1 bomb capacity and +1 splash damage per level</strong>. Splash destroys additional fleet ships or deals bonus HP damage to cruisers/amoebas (limited to 1/50th of target's size).</li>
                   <li><strong>🎯 Targeting Computer (T):</strong> <strong>+5% weapon range and +5% accuracy per level</strong>.</li>
                   <li><strong>🔧 Damage Control (D):</strong> <strong>+50% hull repair speed per level</strong> inside friendly wells (continues even while in combat). Enables deep-space healing at 20% per level. Mitigates damaged-cruiser speed and volley size reduction by <code>1/(1+level)</code>.</li>
-                  <li><strong>⛽ Fuel Tanker (F):</strong> <strong>+(maxHealth/5 + 10) fuel capacity</strong>, <strong>+15 maxsupplies</strong>, and <strong>+(25 + level*10)% supply cost discount</strong> per level. Reduces speed by -3, laser accuracy by -5%, and weapon range by -5 per level.</li>
+                  <li><strong>⛽ Fuel Tanker (F):</strong> <strong>+(maxHealth/5 + 10) fuel capacity</strong>, <strong>+15 maxsupplies</strong>, and <strong>+(25 + level*10)% supply cost discount</strong> per level. Reduces speed by -3, laser accuracy by -5%, and weapon range by -5 per level. If a cruiser is moving and runs out of fuel but has supplies, it automatically stops moving until it converts at least 1 supply to fuel.</li>
                   <li><strong>🤝 Diplomat (I):</strong> <strong>+1 diplomatic attempt per 60/level seconds</strong>. Generates sympathy on neutral and enemy planets in sensor range, potentially flipping them via revolt. Also reduces enemy sympathy on your own planets. Earns Exp on success. See 🤝 Diplomacy topic.</li>
                   <li><strong>🪖 Marines (R):</strong> <strong>Marine capacity = level × maxHealth</strong>. Automatically loads marines from nearby friendly planets (&gt;50% garrison). Marines launch fleet assaults on enemy planets when they outnumber defenders 3:1. Can also board enemy cruisers when marines exceed 2× enemy crew — capturing the ship! Consumes Tritanium (if available) to grant <strong>+400</strong> starting Exp to launched marine fleets.</li>
                 </ul>
@@ -605,6 +615,7 @@
               <li><strong>Bomb Sacs:</strong> Carry bombs equal to maxHealth. Regenerate 1 per 60 seconds without needing a gravity well.</li>
               <li><strong>Combat Value:</strong> Killing an Amoeba awards <strong>10 × maxHealth Exp</strong> — valuable targets!</li>
               <li><strong>Wandering AI:</strong> Amoebas roam toward planets, attacking non-Monster ships in range and bombarding unowned/enemy planets.</li>
+              <li><strong>Amoeba Avoidance:</strong> Cruisers and fleet ships retreating to refuel will automatically route around active space amoebas, keeping outside their weapon threat range (+45px buffer).</li>
             </ul>
           </div>
 

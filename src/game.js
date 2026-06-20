@@ -2731,7 +2731,7 @@ export class Game {
     const cfg = SHIP_CLASSES[classType];
     if (!cfg) return;
 
-    if (source.owner && !source.isSpeedPlanet) {
+    if (source.owner) {
       const owner = source.owner;
       if (owner) {
         owner.builtClasses = owner.builtClasses || {};
@@ -2830,6 +2830,9 @@ export class Game {
         if (ship.owner && ship.owner.id === 'monsters') {
           ship.speed = Math.max(5, ship.speed - 10);
         }
+        if (source.isSpeedPlanet) {
+          ship.speed += 3;
+        }
         ship.speedModifier = 1.0;
         
         let startingXp = 0;
@@ -2873,7 +2876,7 @@ export class Game {
     if (!cfg) return;
 
     const owner = source.owner;
-    if (source.owner && !source.isSpeedPlanet) {
+    if (source.owner) {
       if (owner) {
         owner.builtClasses = owner.builtClasses || {};
       }
@@ -3023,6 +3026,9 @@ export class Game {
         ship.speed = Math.max(5, ship.speed - 5 - basePower);
         if (ship.owner && ship.owner.id === 'monsters') {
           ship.speed = Math.max(5, ship.speed - 10);
+        }
+        if (source.isSpeedPlanet) {
+          ship.speed += 3;
         }
         ship.speedModifier = 1.0;
         
