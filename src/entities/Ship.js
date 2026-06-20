@@ -5098,8 +5098,108 @@ export class Ship {
     }
 
     if (moveDistanceToDest > 0 && !this.isAmoeba && !this.isUpgrading) {
-      const destX = this.targetPlanet ? (this.targetPlanet.x + (this.cruiserTargetOffsetX || 0)) : this.targetX;
-      const destY = this.targetPlanet ? (this.targetPlanet.y + (this.cruiserTargetOffsetY || 0)) : this.targetY;
+      let destX = this.targetPlanet ? (this.targetPlanet.x + (this.cruiserTargetOffsetX || 0)) : this.targetX;
+      let destY = this.targetPlanet ? (this.targetPlanet.y + (this.cruiserTargetOffsetY || 0)) : this.targetY;
+
+      const isRetreatingToRefuel = this.isRetreating ||
+                                   this.patrolFuelRetreating ||
+                                   this.scoutFuelRetreating ||
+                                   this.researchFuelRetreating ||
+                                   this.diplomacyFuelRetreating;
+
+      if (isRetreatingToRefuel && allShips && destX !== null && destY !== null) {
+        const activeAmoebas = allShips.filter(s => s.active && s.isAmoeba);
+        if (activeAmoebas.length > 0) {
+          const blockers = [];
+          const selfX = this.x;
+          const selfY = this.y;
+          const vX = destX - selfX;
+          const vY = destY - selfY;
+          const len = Math.sqrt(vX * vX + vY * vY);
+
+          if (len > 0.01) {
+            const uX = vX / len;
+            const uY = vY / len;
+
+            for (const amoeba of activeAmoebas) {
+              const amoebaRange = typeof amoeba.getWeaponRange === 'function' ? amoeba.getWeaponRange() : 40;
+              const dangerRadius = amoebaRange + 45;
+
+              const distToAmoeba = Math.sqrt((amoeba.x - selfX) * (amoeba.x - selfX) + (amoeba.y - selfY) * (amoeba.y - selfY));
+              
+              if (distToAmoeba < dangerRadius) {
+                // Already inside danger radius: flee directly away from it while heading towards target
+                const targetDirX = uX;
+                const targetDirY = uY;
+                
+                let repelDirX = selfX - amoeba.x;
+                let repelDirY = selfY - amoeba.y;
+                const repelLen = Math.sqrt(repelDirX * repelDirX + repelDirY * repelDirY);
+                if (repelLen > 0.01) {
+                  repelDirX /= repelLen;
+                  repelDirY /= repelLen;
+                }
+                
+                let blendedX = targetDirX + repelDirX * 2.0;
+                let blendedY = targetDirY + repelDirY * 2.0;
+                const blendedLen = Math.sqrt(blendedX * blendedX + blendedY * blendedY);
+                if (blendedLen > 0.01) {
+                  blendedX /= blendedLen;
+                  blendedY /= blendedLen;
+                }
+
+                destX = selfX + blendedX * 100;
+                destY = selfY + blendedY * 100;
+                blockers.length = 0;
+                break;
+              } else {
+                // Check if segment intersects the danger circle
+                const cX = amoeba.x - selfX;
+                const cY = amoeba.y - selfY;
+                const t = cX * uX + cY * uY;
+                const tClamped = Math.max(0, Math.min(len, t));
+                const pX = selfX + tClamped * uX;
+                const pY = selfY + tClamped * uY;
+                const distSq = (pX - amoeba.x) * (pX - amoeba.x) + (pY - amoeba.y) * (pY - amoeba.y);
+
+                if (distSq < dangerRadius * dangerRadius) {
+                  blockers.push({
+                    amoeba: amoeba,
+                    dangerRadius: dangerRadius,
+                    tClamped: tClamped,
+                    pX: pX,
+                    pY: pY
+                  });
+                }
+              }
+            }
+
+            if (blockers.length > 0) {
+              blockers.sort((a, b) => a.tClamped - b.tClamped);
+              const closestBlocker = blockers[0];
+              const amoeba = closestBlocker.amoeba;
+              const dangerRadius = closestBlocker.dangerRadius;
+              
+              let cpX = closestBlocker.pX - amoeba.x;
+              let cpY = closestBlocker.pY - amoeba.y;
+              const distCP = Math.sqrt(cpX * cpX + cpY * cpY);
+              
+              let perpX = 0;
+              let perpY = 0;
+              if (distCP > 0.01) {
+                perpX = cpX / distCP;
+                perpY = cpY / distCP;
+              } else {
+                perpX = -uY;
+                perpY = uX;
+              }
+
+              destX = amoeba.x + perpX * dangerRadius;
+              destY = amoeba.y + perpY * dangerRadius;
+            }
+          }
+        }
+      }
       
       if (this.circlingDestX !== destX || this.circlingDestY !== destY) {
         this.circling = false;
