@@ -7427,11 +7427,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let clickedId = null;
         let isOwned = false;
 
-        if (clickedAnomaly) {
-          clickedType = 'anomaly';
-          clickedId = clickedAnomalyPlanet.id;
-          isOwned = false;
-        } else if (clickedWreckage) {
+        if (clickedWreckage) {
           clickedType = 'wreckage';
           clickedId = clickedWreckage.id;
           isOwned = false;
@@ -7447,6 +7443,10 @@ function getPlanetTradeIncomePerMin(planet) {
           clickedType = 'fleet';
           clickedId = clickedShip.id;
           isOwned = localPlayer && (clickedShip.ownerId === localPlayer.id);
+        } else if (clickedAnomaly) {
+          clickedType = 'anomaly';
+          clickedId = clickedAnomalyPlanet.id;
+          isOwned = false;
         }
 
         if (clickedType && (clickedId !== null && clickedId !== undefined)) {
@@ -7760,11 +7760,7 @@ function getPlanetTradeIncomePerMin(planet) {
       let isAlreadySelected = false;
       let isOwned = false;
 
-      if (clickedAnomaly) {
-        tappedType = 'anomaly';
-        tappedId = clickedAnomalyPlanet.id;
-        isOwned = false;
-      } else if (clickedWreckage) {
+      if (clickedWreckage) {
         tappedType = 'wreckage';
         tappedId = clickedWreckage.id;
         isOwned = false;
@@ -7783,6 +7779,10 @@ function getPlanetTradeIncomePerMin(planet) {
         tappedId = clickedShip.id;
         isAlreadySelected = selectedShips.some(s => s.id === clickedShip.id);
         isOwned = localPlayer && (clickedShip.ownerId === localPlayer.id);
+      } else if (clickedAnomaly) {
+        tappedType = 'anomaly';
+        tappedId = clickedAnomalyPlanet.id;
+        isOwned = false;
       }
 
       handlePointerDown(cPos.x, cPos.y, event.shiftKey, true, 0);
@@ -9532,7 +9532,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (btnBomb) btnBomb.style.display = hasMilitary ? 'inline-flex' : 'none';
       if (btnBombShips) btnBombShips.style.display = hasMilitary ? 'inline-flex' : 'none';
       if (btnCruiser) {
-        btnCruiser.style.display = 'none';
+        btnCruiser.style.display = hasCruiserBase ? 'inline-flex' : 'none';
         btnCruiser.classList.toggle('action-btn-active', cruiserBuildModeActive);
       }
 

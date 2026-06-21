@@ -1686,7 +1686,7 @@ export class Game {
       player.happinessScore = 0;
       player.cruiserStyle = null;
       player.prevTechBonus = 0;
-      player.tradeLimitToggle = false;
+      player.tradeLimitToggle = true;
       player.credits = this.settings && this.settings.startingCredits !== undefined ? this.settings.startingCredits : 0;
       player.tradingBonus = 0;
       player.useCredits = true;
