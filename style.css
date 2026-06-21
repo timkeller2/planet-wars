@@ -476,6 +476,14 @@ canvas {
   text-shadow: 0 0 5px #0ff;
 }
 
+.action-btn-gray {
+  background: rgba(128, 128, 128, 0.3) !important;
+  border-color: #888 !important;
+  color: #aaa !important;
+  box-shadow: 0 0 8px rgba(128, 128, 128, 0.4), inset 0 0 6px rgba(128, 128, 128, 0.2) !important;
+  text-shadow: none !important;
+}
+
 @media (max-width: 600px) {
   /* 1. Global Viewport Adjustments */
   body, html {

@@ -1870,6 +1870,9 @@ export class Ship {
     } else if (this.maxHealth > 0) {
       maxShots = Math.max(1, Math.floor(this.health));
     }
+    if (this.scoutAttackEnabled === 'peace') {
+      maxShots = 0;
+    }
     const shotsPerVolley = maxShots;
     let shotsFired = 0;
 
@@ -2929,7 +2932,7 @@ export class Ship {
                 }
                 if (beingBoardedByUs) continue;
 
-                let allowedToPursue = this.scoutAttackEnabled;
+                let allowedToPursue = (this.scoutAttackEnabled === true);
                 if (!allowedToPursue) {
                   let inFriendlyGravityWell = false;
                   if (allPlanets) {
@@ -2997,7 +3000,7 @@ export class Ship {
       const needsRefuel = (this.fuel <= this.getMaxFuel() * 0.5) && !hasSupplies && !withinSensorRangeOfSupplyShip;
       const supplyShip = this.findNearbySupplyShip(allShips);
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
-      const needsRearm = this.scoutAttackEnabled && this.bombs <= 0 && !hasNearbySupply && !hasSupplies && !withinSensorRangeOfSupplyShip;
+      const needsRearm = (this.scoutAttackEnabled === true) && this.bombs <= 0 && !hasNearbySupply && !hasSupplies && !withinSensorRangeOfSupplyShip;
       const needsHealthRetreat = this.health < this.maxHealth * 0.5;
       const coolingScout = this.playerMoveOrderRetreatCooldown && this.playerMoveOrderRetreatCooldown > 0;
       if (!coolingScout && (needsRefuel || needsRearm || needsHealthRetreat)) {
@@ -3009,7 +3012,7 @@ export class Ship {
       // If we are fuel/rearm/health retreating, remain in this state until fuel, bombs (if attack is enabled), and health are fully replenished
       if (this.scoutFuelRetreating) {
         const fullyFueled = this.fuel >= this.getMaxFuel() * 0.97;
-        const fullyArmed = !this.scoutAttackEnabled || this.bombs >= this.getMaxBombs();
+        const fullyArmed = (this.scoutAttackEnabled !== true) || this.bombs >= this.getMaxBombs();
         const fullyHealed = this.health >= this.maxHealth;
         if (fullyFueled && fullyArmed && fullyHealed) {
           this.scoutFuelRetreating = false;
@@ -3196,7 +3199,7 @@ export class Ship {
                 const dx = other.x - this.x;
                 const dy = other.y - this.y;
                 const distSq = dx * dx + dy * dy;
-                const detectionRange = this.scoutAttackEnabled ? 500 : 300;
+                const detectionRange = (this.scoutAttackEnabled === true) ? 500 : 300;
                 if (distSq <= detectionRange * detectionRange && distSq < closestEnemyDistSq) {
                   closestEnemyDistSq = distSq;
                   enemyNearby = other;
@@ -3207,7 +3210,7 @@ export class Ship {
         }
 
         if (enemyNearby) {
-          if (this.scoutAttackEnabled && this.bombs > 0) {
+          if ((this.scoutAttackEnabled === true) && this.bombs > 0) {
             // ENGAGE: Lock onto the closest enemy unit
             this.cruiserTargetType = 'ship';
             this.cruiserTargetId = enemyNearby.id;

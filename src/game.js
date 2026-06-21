@@ -4408,7 +4408,7 @@ export class Game {
                 ship.accumulatedTech -= completions;
                 ship.gainXp(completions, this, ship.x, ship.y);
                 
-                if (ship.scoutAttackEnabled) {
+                if (ship.scoutAttackEnabled === true) {
                   const cap = Math.floor(ship.health - 2);
                   let volleySize = Math.max(1, Math.floor((ship.maxHealth + ship.health) / 6));
                   if (volleySize > cap) volleySize = cap;
@@ -5985,7 +5985,8 @@ export class Game {
       for (const order of this.sellOrders) {
         const isNeutral = order.ownerId === 'neutral';
         const isAI = this.aiPlayers.some(p => p.id === order.ownerId);
-        if ((isNeutral || isAI) && order.id !== orderId) {
+        const isHuman = this.allPlayers.some(p => p.id === order.ownerId && !p.isAI);
+        if ((isNeutral || isAI) && !isHuman && order.id !== orderId) {
           const oldPrice = order.price;
           const pct = 0.10 + Math.random() * 0.20;
           const decrease = Math.max(1, Math.round(oldPrice * pct));
@@ -6106,6 +6107,13 @@ export class Game {
                 const seller = this.allPlayers.find(p => p.id === order.ownerId);
                 if (seller) {
                   seller.credits = (seller.credits || 0) + order.price;
+                  if (!seller.isAI && seller.id !== 'monsters') {
+                    if (!this.pendingChatMessages) this.pendingChatMessages = [];
+                    this.pendingChatMessages.push({
+                      playerId: seller.id,
+                      text: `${player.name || player.id} purchased your sell order of 1 ${order.resource} for ${order.price} credits.`
+                    });
+                  }
                 }
               }
 
@@ -6829,7 +6837,7 @@ export class Game {
 
       // Direct ship targeting launch check (Moved outside of hasEnoughMarines block to fix logic contradiction)
       let targetShip = null;
-      if ((ship.marineCount || 0) > 0 && ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
+      if (ship.scoutAttackEnabled !== 'peace' && (ship.marineCount || 0) > 0 && ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
         const enemy = this.ships.find(s => s.id === ship.cruiserTargetId && s.active);
         if (enemy && enemy.owner && (enemy.owner.id !== ship.owner.id || enemy.isAmoeba)) {
           targetShip = enemy;
@@ -6865,7 +6873,7 @@ export class Game {
       }
 
       // 5. Boarding Trigger Checks
-      if ((ship.marineCount || 0) > 0 && (ship.marines || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
+      if (ship.scoutAttackEnabled !== 'peace' && (ship.marineCount || 0) > 0 && (ship.marines || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
         // Find enemy cruiser in full scan range of attacking cruiser
         for (const enemy of cruisers) {
           if (enemy.owner.id !== ship.owner.id && !enemy.isAmoeba) {

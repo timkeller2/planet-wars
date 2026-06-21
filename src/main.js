@@ -300,6 +300,8 @@ function getPlanetTradeIncomePerMin(planet) {
   let warpOrderNext = false;
   let controlGroups = {}; // RTS control groups for fleets/cruisers
   let lastKnownPlanets = {}; // Cache of last-known states for planets under Fog of War
+  let lastKnownHazards = {}; // Cache of last-known states for hazards (nebulae, minefields, storms) under Fog of War
+
 
   function resetClientModeFlags() {
     selectedPlanets = [];
@@ -317,6 +319,65 @@ function getPlanetTradeIncomePerMin(planet) {
     lastSelectedCruiserId = null;
     lastSelectedCruiserIdsStr = "";
   }
+
+  function isClientPositionVisible(x, y) {
+    if (!serverState) return false;
+    if (!serverState.settings || !serverState.settings.fogOfWar) return true;
+    if (!localPlayer) return true;
+
+    // Check friendly planets gravity wells
+    if (serverState.planets) {
+      for (const p of serverState.planets) {
+        if (p.ownerId === localPlayer.id) {
+          let baseRadius = p.maxShips * 1.5;
+          if (p.isMilitary && p.ships >= p.maxShips) {
+            baseRadius *= 1.5;
+          }
+          const plOwner = serverState.players ? serverState.players.find(o => o.id === p.ownerId) : null;
+          if (plOwner && p.focusMode === 'garrison' && p.ships >= p.maxShips) {
+            baseRadius += (p.ships / 2);
+          }
+          const tb = 0.01 * Math.sqrt(plOwner ? (plOwner.techScore || 0) : 0);
+          const eb = 0.01 * Math.sqrt(plOwner ? (plOwner.expScore || 0) : 0);
+          const gr = baseRadius * (1 + tb + eb);
+
+          const dx = p.x - x;
+          const dy = p.y - y;
+          if (dx * dx + dy * dy <= gr * gr) return true;
+        }
+      }
+    }
+
+    // Check friendly ships radar range
+    if (serverState.ships) {
+      for (const s of serverState.ships) {
+        if (s.active && s.ownerId === localPlayer.id) {
+          let radarRange = 50;
+          if (s.isCruiser || (s.maxHealth && s.maxHealth > 0)) {
+            radarRange = Math.min(250, 5 * (s.maxHealth || s.health || 0));
+          }
+          const extendedRadar = radarRange * 1.5;
+          const dx = s.x - x;
+          const dy = s.y - y;
+          if (dx * dx + dy * dy <= extendedRadar * extendedRadar) return true;
+        }
+      }
+    }
+
+    // Check friendly fleets radar range
+    if (serverState.fleets) {
+      for (const f of serverState.fleets) {
+        if (f.ownerId === localPlayer.id) {
+          const dx = f.x - x;
+          const dy = f.y - y;
+          if (dx * dx + dy * dy <= f.radarRange * f.radarRange) return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
 
   let transparentPlanetsCanvas = null;
   const planetSpriteSheet = new Image();
@@ -4011,6 +4072,7 @@ function getPlanetTradeIncomePerMin(planet) {
       hasCenteredOnHomeworld = false;
       serverState = null;
       lastKnownPlanets = {};
+      lastKnownHazards = {};
       socket.emit('restartGame', payload);
     } else {
       socket.emit('enterGame', payload);
@@ -4268,6 +4330,7 @@ function getPlanetTradeIncomePerMin(planet) {
     hasCenteredOnHomeworld = false;
     resetClientModeFlags();
     lastKnownPlanets = {};
+    lastKnownHazards = {};
   });
 
   socket.on('spectator', () => {
@@ -4578,6 +4641,7 @@ function getPlanetTradeIncomePerMin(planet) {
       hasCenteredOnHomeworld = false;
       resetClientModeFlags();
       lastKnownPlanets = {};
+      lastKnownHazards = {};
     }
 
     if (state.players && localPlayer) {
@@ -5077,6 +5141,25 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     serverState = state;
+
+    if (state.storms) {
+      for (const storm of state.storms) {
+        lastKnownHazards[storm.id] = { ...storm };
+      }
+    }
+
+    // Clean up ion storms that have moved out of their last known position
+    // (if that position is currently visible but the storm is not there)
+    for (const [id, storm] of Object.entries(lastKnownHazards)) {
+      if (storm.type === 'storm') {
+        const isCurrentlyVisible = state.storms && state.storms.some(s => s.id === storm.id);
+        if (!isCurrentlyVisible) {
+          if (isClientPositionVisible(storm.x, storm.y)) {
+            delete lastKnownHazards[id];
+          }
+        }
+      }
+    }
 
     if (state.ships) {
       selectedShips = selectedShips.map(sel => state.ships.find(s => s.id === sel.id)).filter(Boolean);
@@ -6520,6 +6603,68 @@ function getPlanetTradeIncomePerMin(planet) {
       playerMod = playerObj.upgradeModifiers[normType];
     }
     return Math.round(playerMod * 100);
+  }
+
+  function hasCruiserUpgradeCapacity(ship) {
+    if (!ship) return false;
+    const hasTokens = (ship.upgradeTokens || 0) > 0;
+    const maxIndividualLevel = Math.floor((ship.maxHealth || 0) / 10);
+    const maxTotalUpgrades = Math.floor((ship.maxHealth || 0) / 5);
+
+    const totalUpgrades = (ship.sensorarrays || 0) +
+                          (ship.labs || 0) +
+                          (ship.armor || 0) +
+                          (ship.shields || 0) +
+                          (ship.engine || 0) +
+                          (ship.munitions || 0) +
+                          (ship.targeting || 0) +
+                          (ship.damagecontrol || 0) +
+                          (ship.fuel_tanker || 0) +
+                          (ship.diplomat || 0) +
+                          (ship.marines || 0) +
+                          (ship.command || 0);
+
+    const validProps = [
+      'sensorarrays', 'labs', 'armor', 'shields', 'engine',
+      'munitions', 'targeting', 'damagecontrol', 'fuel_tanker',
+      'diplomat', 'marines', 'command'
+    ];
+
+    for (const prop of validProps) {
+      const currentVal = ship[prop] || 0;
+      const nextLevel = currentVal + 1;
+      
+      // Individual level cap check
+      if (nextLevel > Math.min(5, maxIndividualLevel)) {
+        continue;
+      }
+
+      // Total level cap check (only applies if we have no tokens)
+      if (!hasTokens && (totalUpgrades + 1) > maxTotalUpgrades) {
+        continue;
+      }
+
+      // Shields 90% deflection cap check
+      if (prop === 'shields') {
+        const playerTech = ship.ownerId && serverState.players ? (serverState.players.find(p => p.id === ship.ownerId)?.techScore || 0) : 0;
+        const playerExp = ship.ownerId && serverState.players ? (serverState.players.find(p => p.id === ship.ownerId)?.expScore || 0) : 0;
+        const shipExp = ship.expScore || 0;
+        const techBonus = Math.sqrt(playerTech);
+        const expBonus = Math.sqrt(playerExp);
+        const shipExpBonus = Math.sqrt(shipExp);
+        const baseDeflection = ship.maxHealth + (techBonus + expBonus + shipExpBonus);
+        const deflectionRem = 100 - baseDeflection;
+        const nextShieldDeflectionBonus = nextLevel * (deflectionRem / 5);
+        const newDeflection = baseDeflection + nextShieldDeflectionBonus;
+        if (newDeflection > 90) {
+          continue;
+        }
+      }
+
+      return true;
+    }
+
+    return false;
   }
 
   function getSelectedCruiserUpgradeQualifiers() {
@@ -8297,8 +8442,8 @@ function getPlanetTradeIncomePerMin(planet) {
       const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id);
       if (selectedCruisers.length > 0) {
         event.preventDefault();
-        const anyNotAttacking = selectedCruisers.some(c => !c.scoutAttackEnabled);
-        const nextState = anyNotAttacking;
+        const anyActiveOrPeace = selectedCruisers.some(c => c.scoutAttackEnabled === true || c.scoutAttackEnabled === 'peace');
+        const nextState = anyActiveOrPeace ? false : true;
         selectedCruisers.forEach(ship => {
           ship.scoutAttackEnabled = nextState;
           socket.emit('toggleCruiserScoutAttack', { shipId: ship.id, enabled: nextState });
@@ -8607,14 +8752,30 @@ function getPlanetTradeIncomePerMin(planet) {
   bindActionClick('btn-cruiser-attack', () => {
     const selectedCruisers = getSelectedCruisers();
     if (selectedCruisers.length > 0) {
-      const anyNotAttacking = selectedCruisers.some(c => !c.scoutAttackEnabled);
-      const nextState = anyNotAttacking;
+      const anyActiveOrPeace = selectedCruisers.some(c => c.scoutAttackEnabled === true || c.scoutAttackEnabled === 'peace');
+      const nextState = anyActiveOrPeace ? false : true;
       for (const ship of selectedCruisers) {
         ship.scoutAttackEnabled = nextState;
         socket.emit('toggleCruiserScoutAttack', { shipId: ship.id, enabled: nextState });
       }
     }
   });
+
+  const btnCruiserAttackEl = document.getElementById('btn-cruiser-attack');
+  if (btnCruiserAttackEl) {
+    btnCruiserAttackEl.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const selectedCruisers = getSelectedCruisers();
+      if (selectedCruisers.length > 0) {
+        const anyNotPeace = selectedCruisers.some(c => c.scoutAttackEnabled !== 'peace');
+        const nextState = anyNotPeace ? 'peace' : false;
+        for (const ship of selectedCruisers) {
+          ship.scoutAttackEnabled = nextState;
+          socket.emit('toggleCruiserScoutAttack', { shipId: ship.id, enabled: nextState });
+        }
+      }
+    });
+  }
 
   bindActionClick('btn-cruiser-use-resources', () => {
     const selectedCruisers = getSelectedCruisers();
@@ -9078,6 +9239,7 @@ function getPlanetTradeIncomePerMin(planet) {
     resetClientModeFlags();
     serverState = null;
     lastKnownPlanets = {}; // Clear cached planet details
+    lastKnownHazards = {};
     socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin });
   });
 
@@ -9468,7 +9630,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (btnUpgradeMode) {
         btnUpgradeMode.style.display = 'none';
         const iconSpan = btnUpgradeMode.querySelector('.btn-icon');
-        if (upgradeQual) {
+        if (upgradeQual && hasCruiserUpgradeCapacity(upgradeQual.ship)) {
           btnUpgradeMode.style.display = 'inline-flex';
           const validProps = [
             'sensorarrays', 'labs', 'armor', 'shields', 'engine',
@@ -9618,8 +9780,15 @@ function getPlanetTradeIncomePerMin(planet) {
       if (btnCruiserAttack) {
         btnCruiserAttack.style.display = selectedCruisers.length > 0 ? 'inline-flex' : 'none';
         if (selectedCruisers.length > 0) {
-          const anyAttacking = selectedCruisers.some(c => c.scoutAttackEnabled);
+          const anyAttacking = selectedCruisers.some(c => c.scoutAttackEnabled === true);
+          const anyPeace = selectedCruisers.some(c => c.scoutAttackEnabled === 'peace');
           btnCruiserAttack.classList.toggle('action-btn-active', anyAttacking);
+          btnCruiserAttack.classList.toggle('action-btn-gray', anyPeace);
+          if (anyPeace) {
+            btnCruiserAttack.title = "Scout Attack (Hold Fire) (A)";
+          } else {
+            btnCruiserAttack.title = "Scout Attack (A)";
+          }
         }
       }
 
@@ -9781,21 +9950,29 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       // Draw hazard circles (background)
-      if (serverState.storms) {
-        for (const storm of serverState.storms) {
-          const t = storm.type || 'storm';
-          const fillColor = t === 'minefield' ? 'rgba(80, 80, 255, 0.08)' : t === 'nebula' ? 'rgba(255, 60, 60, 0.08)' : 'rgba(255, 255, 0, 0.08)';
-          const strokeColor = t === 'minefield' ? 'rgba(80, 80, 255, 0.3)' : t === 'nebula' ? 'rgba(255, 60, 60, 0.3)' : 'rgba(255, 255, 0, 0.3)';
-          ctx.beginPath();
-          ctx.arc(storm.x, storm.y, storm.radius, 0, Math.PI * 2);
-          ctx.fillStyle = fillColor;
-          ctx.fill();
-          ctx.strokeStyle = strokeColor;
-          ctx.lineWidth = 2;
-          ctx.setLineDash([8, 6]);
-          ctx.stroke();
-          ctx.setLineDash([]);
+      for (const stormId of Object.keys(lastKnownHazards)) {
+        const storm = lastKnownHazards[stormId];
+        const isCurrentlyVisible = serverState && serverState.storms && serverState.storms.some(s => s.id === storm.id);
+        const t = storm.type || 'storm';
+        
+        let fillColor, strokeColor;
+        if (!isCurrentlyVisible && t === 'storm') {
+          fillColor = 'rgba(128, 128, 128, 0.04)';
+          strokeColor = 'rgba(128, 128, 128, 0.15)';
+        } else {
+          fillColor = t === 'minefield' ? 'rgba(80, 80, 255, 0.08)' : t === 'nebula' ? 'rgba(255, 60, 60, 0.08)' : 'rgba(255, 255, 0, 0.08)';
+          strokeColor = t === 'minefield' ? 'rgba(80, 80, 255, 0.3)' : t === 'nebula' ? 'rgba(255, 60, 60, 0.3)' : 'rgba(255, 255, 0, 0.3)';
         }
+
+        ctx.beginPath();
+        ctx.arc(storm.x, storm.y, storm.radius, 0, Math.PI * 2);
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 6]);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
 
 
@@ -14354,47 +14531,55 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       // Draw hazard text (foreground, on top of planets/ships)
-      if (serverState.storms) {
-        for (const storm of serverState.storms) {
-          const t = storm.type || 'storm';
-          const textColor = t === 'minefield' ? '#66f' : t === 'nebula' ? '#f66' : '#ff0';
-          const dimColor = t === 'minefield' ? 'rgba(100, 100, 255, 0.7)' : t === 'nebula' ? 'rgba(255, 100, 100, 0.7)' : 'rgba(255, 255, 0, 0.7)';
-          ctx.fillStyle = textColor;
-          ctx.font = 'bold 12px Orbitron';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
+      for (const stormId of Object.keys(lastKnownHazards)) {
+        const storm = lastKnownHazards[stormId];
+        const isCurrentlyVisible = serverState && serverState.storms && serverState.storms.some(s => s.id === storm.id);
+        const t = storm.type || 'storm';
+        
+        let textColor, dimColor;
+        if (!isCurrentlyVisible && t === 'storm') {
+          textColor = '#888';
+          dimColor = 'rgba(128, 128, 128, 0.6)';
+        } else {
+          textColor = t === 'minefield' ? '#66f' : t === 'nebula' ? '#f66' : '#ff0';
+          dimColor = t === 'minefield' ? 'rgba(100, 100, 255, 0.7)' : t === 'nebula' ? 'rgba(255, 100, 100, 0.7)' : 'rgba(255, 255, 0, 0.7)';
+        }
 
-          let maxShipExp = 0;
-          if (selectedShips && selectedShips.length > 0) {
-            for (const s of selectedShips) {
-              if ((s.expScore || 0) > maxShipExp) maxShipExp = s.expScore || 0;
-            }
-          }
-          let tR = 0, eR = 0;
-          if (localPlayer) {
-            const lp = serverState.players.find(p => p.id === localPlayer.id);
-            if (lp) {
-              tR = Math.sqrt(lp.techScore || 0);
-              eR = Math.sqrt(lp.expScore || 0);
-            }
-          }
-          const sR = Math.sqrt(maxShipExp);
-          const effKnowledge = (storm.knowledge || 0) + (tR + eR) / 2 + sR;
-          const effIntensity = Math.max(0, storm.intensity - effKnowledge);
+        ctx.fillStyle = textColor;
+        ctx.font = 'bold 12px Orbitron';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
 
-          if (t === 'minefield') {
-            ctx.fillText('Ancient Minefield', storm.x, storm.y - 16);
-            ctx.font = '10px Rajdhani';
-            ctx.fillText(`Mines: ${storm.mines ?? 0}  Intensity: ${storm.intensity} (${Math.round(effIntensity)})`, storm.x, storm.y);
-          } else if (t === 'nebula') {
-            ctx.fillText(`${storm.name} Nebula`, storm.x, storm.y - 8);
-            ctx.font = '10px Rajdhani';
-            ctx.fillText(`Intensity: ${storm.intensity} (${Math.round(effIntensity)})`, storm.x, storm.y + 8);
-          } else {
-            ctx.fillText(`Ion Storm ${storm.name}`, storm.x, storm.y - 8);
-            ctx.font = '10px Rajdhani';
-            ctx.fillText(`Intensity: ${storm.intensity} (${Math.round(effIntensity)})  speed: ${storm.speed.toFixed(1)}  Heading: ${Math.round(storm.heading)}\u00B0`, storm.x, storm.y + 8);
+        let maxShipExp = 0;
+        if (selectedShips && selectedShips.length > 0) {
+          for (const s of selectedShips) {
+            if ((s.expScore || 0) > maxShipExp) maxShipExp = s.expScore || 0;
           }
+        }
+        let tR = 0, eR = 0;
+        if (localPlayer) {
+          const lp = serverState && serverState.players ? serverState.players.find(p => p.id === localPlayer.id) : null;
+          if (lp) {
+            tR = Math.sqrt(lp.techScore || 0);
+            eR = Math.sqrt(lp.expScore || 0);
+          }
+        }
+        const sR = Math.sqrt(maxShipExp);
+        const effKnowledge = (storm.knowledge || 0) + (tR + eR) / 2 + sR;
+        const effIntensity = Math.max(0, storm.intensity - effKnowledge);
+
+        if (t === 'minefield') {
+          ctx.fillText('Ancient Minefield', storm.x, storm.y - 16);
+          ctx.font = '10px Rajdhani';
+          ctx.fillText(`Mines: ${storm.mines ?? 0}  Intensity: ${storm.intensity} (${Math.round(effIntensity)})`, storm.x, storm.y);
+        } else if (t === 'nebula') {
+          ctx.fillText(`${storm.name} Nebula`, storm.x, storm.y - 8);
+          ctx.font = '10px Rajdhani';
+          ctx.fillText(`Intensity: ${storm.intensity} (${Math.round(effIntensity)})`, storm.x, storm.y + 8);
+        } else {
+          ctx.fillText(`Ion Storm ${storm.name}${!isCurrentlyVisible ? ' [Last Known]' : ''}`, storm.x, storm.y - 8);
+          ctx.font = '10px Rajdhani';
+          ctx.fillText(`Intensity: ${storm.intensity} (${Math.round(effIntensity)})  speed: ${storm.speed.toFixed(1)}  Heading: ${Math.round(storm.heading)}\u00B0`, storm.x, storm.y + 8);
         }
       }
 

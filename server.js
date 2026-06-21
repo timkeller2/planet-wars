@@ -950,7 +950,11 @@ async function bootstrap() {
 
       const ship = game.ships.find(s => s.id === shipId);
       if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
-        ship.scoutAttackEnabled = !!enabled;
+        if (enabled === 'peace') {
+          ship.scoutAttackEnabled = 'peace';
+        } else {
+          ship.scoutAttackEnabled = !!enabled;
+        }
       }
     });
 
@@ -1219,12 +1223,7 @@ async function bootstrap() {
           
           if (!game.sellOrders) game.sellOrders = [];
           const orderId = "order_" + Math.random().toString(36).substring(2, 9);
-          let startPrice = player.sellPriceSetting || 1;
-          const maxSoldPrice = game.getMaxSoldPriceInLast5Minutes(data.resource);
-          if (maxSoldPrice > 0) {
-            const minStartPrice = Math.round(maxSoldPrice * 1.35);
-            startPrice = Math.max(startPrice, minStartPrice);
-          }
+          const startPrice = player.sellPriceSetting || 1;
 
           game.sellOrders.push({
             id: orderId,
@@ -1305,13 +1304,20 @@ async function bootstrap() {
             player.credits -= order.price;
             player.resources[order.resource] = (player.resources[order.resource] || 0) + 1.0;
             
-            // Pay credits to seller if not neutral
-            if (order.ownerId !== 'neutral') {
-              const seller = game.allPlayers.find(p => p.id === order.ownerId);
-              if (seller) {
-                seller.credits = (seller.credits || 0) + order.price;
-              }
-            }
+             // Pay credits to seller if not neutral
+             if (order.ownerId !== 'neutral') {
+               const seller = game.allPlayers.find(p => p.id === order.ownerId);
+               if (seller) {
+                 seller.credits = (seller.credits || 0) + order.price;
+                 if (!seller.isAI && seller.id !== 'monsters') {
+                   if (!game.pendingChatMessages) game.pendingChatMessages = [];
+                   game.pendingChatMessages.push({
+                     playerId: seller.id,
+                     text: `${player.name || player.id} purchased your sell order of 1 ${order.resource} for ${order.price} credits.`
+                   });
+                 }
+               }
+             }
             
             game.recordMarketSale(order.resource, order.price);
             game.sellOrders.splice(idx, 1);
