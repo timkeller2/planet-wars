@@ -2149,7 +2149,18 @@ export class Ship {
         let cooldownMultiplier = 1.0;
         const hasSupplies = (this.supplies || 0) > 0;
         if (this.maxHealth > 0 && !this.isAmoeba && this.bombs <= 0 && !hasSupplies) {
-          cooldownMultiplier = 2.0;
+          const isFirstVal = (this.volleyShotIndex === 0 || this.volleyShotIndex === undefined);
+          if (isFirstVal && validTargets.length > 0) {
+            if ((this.fuel || 0) >= 0.05) {
+              this.fuel = Math.max(0, this.fuel - 0.05);
+              this.volleyPaidFuel = true;
+            } else {
+              this.volleyPaidFuel = false;
+            }
+          }
+          if (!this.volleyPaidFuel) {
+            cooldownMultiplier = 2.0;
+          }
         }
         this.fireCooldown = (shotsPerVolley > 1 ? (1.0 / shotsPerVolley) : 1.0) * cooldownMultiplier;
         maxShots = 1; // Fire only 1 shot per trigger
