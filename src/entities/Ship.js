@@ -599,6 +599,9 @@ export class Ship {
       if (this.specialbombs && this.specialbombs > 0) {
         hitChance += 0.10;
       }
+      if (this.bombs <= 0 && this.fuel <= 0) {
+        hitChance *= 0.5;
+      }
       return Math.min(1.0, Math.max(0.0, hitChance));
     } else {
       const bombBonus = (this.bombs && this.bombs > 0) ? (this.bombs * 3) : 0;
@@ -640,6 +643,9 @@ export class Ship {
         effectiveRange *= 0.5;
       } else if (this.package === 'sniper') {
         effectiveRange *= 1.5;
+      }
+      if (this.bombs <= 0 && this.fuel <= 0) {
+        effectiveRange *= 0.75;
       }
       effectiveRange = Math.floor(effectiveRange);
     }
