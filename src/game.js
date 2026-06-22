@@ -5930,6 +5930,13 @@ export class Game {
           const seller = this.allPlayers.find(p => p.id === order.ownerId);
           if (seller) {
             seller.credits = (seller.credits || 0) + order.price;
+            if (!seller.isAI && seller.id !== 'monsters') {
+              this.pendingChatMessages = this.pendingChatMessages || [];
+              this.pendingChatMessages.push({
+                playerId: seller.id,
+                text: `The Market automatically purchased your sell order of 1 ${order.resource} for ${order.price} credits.`
+              });
+            }
             console.log(`[Market Direct Purchase] Market bought player order ${order.id} for ${order.price} credits.`);
           }
           this.recordMarketSale(order.resource, order.price);
