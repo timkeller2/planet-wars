@@ -4381,19 +4381,6 @@ export class Ship {
           if (this.isWarp) {
             this.isWarp = false;
           }
-          const d6 = Math.floor(Math.random() * 6) + 1;
-          this.health -= d6 * (deltaTime / 60000);
-          if (this.health <= 0) {
-            this.active = false;
-            if (explosions) {
-              explosions.push({
-                x: this.x,
-                y: this.y,
-                color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
-                age: 0
-              });
-            }
-          }
         }
       }
 
