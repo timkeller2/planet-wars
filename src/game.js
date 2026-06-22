@@ -806,6 +806,14 @@ export class Game {
 
       if (hwSizeSetting === 'pioneers-corvettes') {
         const angles = [0, 120, 240];
+        const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
+        
+        let firstStyle = player.cruiserStyle;
+        if (!firstStyle) {
+          firstStyle = styles[Math.floor(Math.random() * styles.length)];
+          player.cruiserStyle = firstStyle;
+        }
+
         for (let i = 0; i < 3; i++) {
           const angleRad = (angles[i] * Math.PI) / 180;
           const sx = bestPos.x + Math.cos(angleRad) * 20;
@@ -814,6 +822,11 @@ export class Game {
           let upgrades = {};
           for (const up of potentialUpgrades) {
             upgrades[up] = 0;
+          }
+
+          let assignedStyle = firstStyle;
+          if (i > 0) {
+            assignedStyle = styles[Math.floor(Math.random() * styles.length)];
           }
 
           this.pendingPioneerSpawns.push({
@@ -825,7 +838,8 @@ export class Game {
             upgrades: upgrades,
             timer: i * 30000, // 30 seconds apart: 0s, 30s, 60s
             isAdditional: i > 0,
-            Pioneer: true
+            Pioneer: true,
+            cruiserStyle: assignedStyle
           });
         }
 
@@ -3820,7 +3834,7 @@ export class Game {
             }
             ship.speedModifier = 1.0;
             ship.expScore = 0;
-            ship.cruiserStyle = player.cruiserStyle;
+            ship.cruiserStyle = pSpawn.cruiserStyle || player.cruiserStyle || 'Federation';
             ship.count = 1;
             ship.upgradeTokens = pSpawn.upgradeTokens || 0;
             ship.Pioneer = pSpawn.Pioneer || false;
