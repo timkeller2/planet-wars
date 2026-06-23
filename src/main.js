@@ -7085,7 +7085,7 @@ function getPlanetTradeIncomePerMin(planet) {
           const dx = planet.x - clickPos.x;
           const dy = planet.y - clickPos.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          const targetRadius = Math.max(15, 0.65 * planet.radius);
+          const targetRadius = 15;
           if (dist <= targetRadius) {
             const surfaceDist = dist - targetRadius;
             if (surfaceDist < bestSurfaceDist) {
