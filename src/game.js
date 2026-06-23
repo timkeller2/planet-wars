@@ -886,6 +886,8 @@ export class Game {
       player.needsPlanet = false;
       player.totalCapacity = 0;
       player.isAlive = true;
+      player.isEliminated = false;
+      player.lastAttackerPlayer = null;
       this.recalculateResourceRarities();
       return true;
     }
@@ -1188,6 +1190,8 @@ export class Game {
       player.needsPlanet = false;
       player.totalCapacity = totalCapacity;
       player.isAlive = true;
+      player.isEliminated = false;
+      player.lastAttackerPlayer = null;
       this.recalculateResourceRarities();
       return true;
     }
@@ -3786,6 +3790,10 @@ export class Game {
   }
 
   update(deltaTime) {
+    for (const player of this.allPlayers) {
+      player.wasAlive = player.isAlive !== false;
+    }
+
     if (!this.wreckages) this.wreckages = [];
     if (!this.pendingPioneerSpawns) this.pendingPioneerSpawns = [];
 
@@ -4294,6 +4302,30 @@ export class Game {
           }
         }
         let completedOrResearchedAnomalyOrWreckage = false;
+
+        // Targeted anomaly within 50px check (research even if not idle / moving)
+        if (hasLabs && !completedOrResearchedAnomalyOrWreckage) {
+          let targetedAnomalyPlanet = null;
+          if (ship.targetPlanet && ship.targetPlanet.anomaly && !ship.targetPlanet.anomaly.researched) {
+            targetedAnomalyPlanet = ship.targetPlanet;
+          }
+          if (!targetedAnomalyPlanet && ship.cruiserTargetType === 'planet' && ship.cruiserTargetId !== null) {
+            const p = this.planets.find(pl => pl.id === ship.cruiserTargetId);
+            if (p && p.anomaly && !p.anomaly.researched) {
+              targetedAnomalyPlanet = p;
+            }
+          }
+          if (targetedAnomalyPlanet) {
+            const adx = ship.x - targetedAnomalyPlanet.anomaly.x;
+            const ady = ship.y - targetedAnomalyPlanet.anomaly.y;
+            const aDist = Math.sqrt(adx * adx + ady * ady);
+            if (aDist <= 50) {
+              this.researchAnomaly(targetedAnomalyPlanet, ship, deltaTime);
+              completedOrResearchedAnomalyOrWreckage = true;
+            }
+          }
+        }
+
         if (completingPlanet) {
           const dx = ship.x - completingPlanet.anomaly.x;
           const dy = ship.y - completingPlanet.anomaly.y;
@@ -5624,6 +5656,11 @@ export class Game {
                 }
                 const actualKilled = oldShips - targetPlanet.ships;
                 targetPlanet.addExperience(actualKilled);
+
+                const sourceShip = this.ships.find(sh => sh.id === laser.sourceShipId);
+                if (sourceShip && sourceShip.owner && targetPlanet.owner && targetPlanet.owner !== sourceShip.owner) {
+                  targetPlanet.owner.lastAttackerPlayer = sourceShip.owner;
+                }
                 
                 if (targetPlanet.ships <= 0) {
                   targetPlanet.ships = 0;
@@ -5648,6 +5685,9 @@ export class Game {
                       } else if (roll < 0.30) {
                         targetPlanet.isSpeedPlanet = true;
                       }
+                    }
+                    if (previousOwner) {
+                      previousOwner.lastAttackerPlayer = sourceShip.owner;
                     }
                     targetPlanet.owner = sourceShip.owner;
                     targetPlanet.rampageBoost = false;
@@ -6181,12 +6221,91 @@ export class Game {
       }
     }
 
-    if (this.onScoreUpdate) {
-      const pCount = this.planets.filter(p => p.owner === this.humanPlayer).length;
-      const aiCount = this.planets.filter(p => p.owner && p.owner !== this.humanPlayer).length;
-      this.onScoreUpdate(pCount, aiCount);
-    }
-  }
+     if (this.onScoreUpdate) {
+       const pCount = this.planets.filter(p => p.owner === this.humanPlayer).length;
+       const aiCount = this.planets.filter(p => p.owner && p.owner !== this.humanPlayer).length;
+       this.onScoreUpdate(pCount, aiCount);
+     }
+
+     // Check for player elimination
+     for (const player of this.allPlayers) {
+       if (player.wasAlive && !player.isAlive && player.id !== 'monsters') {
+         let conqueror = player.lastAttackerPlayer || null;
+         this.eliminatePlayer(player, conqueror);
+       }
+     }
+   }
+
+   eliminatePlayer(eliminatedPlayer, conqueror) {
+     if (!eliminatedPlayer || eliminatedPlayer.id === 'monsters') return;
+
+     if (eliminatedPlayer.isEliminated) return;
+     eliminatedPlayer.isEliminated = true;
+
+     const stolenCredits = Math.max(0, eliminatedPlayer.credits || 0);
+     eliminatedPlayer.credits = 0;
+
+     const resourcesGained = {};
+     const resourceKeys = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+     for (const key of resourceKeys) {
+       if (eliminatedPlayer.resources && eliminatedPlayer.resources[key] !== undefined) {
+         const amt = Math.max(0, eliminatedPlayer.resources[key]);
+         resourcesGained[key] = amt;
+         eliminatedPlayer.resources[key] = 0;
+         if (conqueror) {
+           if (!conqueror.resources) conqueror.resources = {};
+           conqueror.resources[key] = (conqueror.resources[key] || 0) + amt;
+         }
+       }
+     }
+
+     if (conqueror) {
+       conqueror.credits = (conqueror.credits || 0) + stolenCredits;
+     }
+
+     // Only award XP and send chat messages if the conquering player is human
+     if (conqueror && !conqueror.isAI) {
+       const xpGained = 100;
+       conqueror.expScore = (conqueror.expScore || 0) + xpGained;
+
+       // Build resource string for chat message
+       const resParts = [];
+       if (stolenCredits > 0) {
+         resParts.push(`${Math.round(stolenCredits)} Credits`);
+       }
+       const resourceEmojis = {
+         dilithium: '💎 Dilithium',
+         merculite: '☄️ Merculite',
+         duranium: '🔲 Duranium',
+         tritanium: '🔩 Tritanium',
+         antimatter: '🌀 Antimatter',
+         deuterium: '💧 Deuterium',
+         latinum: '🏺 Latinum'
+       };
+       for (const [key, amt] of Object.entries(resourcesGained)) {
+         if (amt > 0) {
+           resParts.push(`${Math.round(amt)} ${resourceEmojis[key] || key}`);
+         }
+       }
+       const resString = resParts.length > 0 ? resParts.join(', ') : 'no assets';
+
+       const messageText = `🏆 ${conqueror.name || conqueror.id} has eliminated ${eliminatedPlayer.name || eliminatedPlayer.id}! Captured ${resString} and gained ${xpGained} XP!`;
+
+       if (!this.pendingChatMessages) this.pendingChatMessages = [];
+       this.pendingChatMessages.push({
+         playerId: 'all',
+         text: messageText
+       });
+     } else {
+       // If AI conquered them or they died to other forces, send simple system message
+       const messageText = `💀 ${eliminatedPlayer.name || eliminatedPlayer.id} has been eliminated!`;
+       if (!this.pendingChatMessages) this.pendingChatMessages = [];
+       this.pendingChatMessages.push({
+         playerId: 'all',
+         text: messageText
+       });
+     }
+   }
 
   triggerDiplomacyEvent(ship, targetPlanet) {
     const expBonus = Math.sqrt(ship.owner.expScore || 0);
