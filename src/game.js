@@ -887,7 +887,7 @@ export class Game {
       player.totalCapacity = 0;
       player.isAlive = true;
       player.isEliminated = false;
-      player.lastAttackerPlayer = null;
+      player.lastAttackerPlayerId = null;
       this.recalculateResourceRarities();
       return true;
     }
@@ -1191,7 +1191,7 @@ export class Game {
       player.totalCapacity = totalCapacity;
       player.isAlive = true;
       player.isEliminated = false;
-      player.lastAttackerPlayer = null;
+      player.lastAttackerPlayerId = null;
       this.recalculateResourceRarities();
       return true;
     }
@@ -5659,7 +5659,7 @@ export class Game {
 
                 const sourceShip = this.ships.find(sh => sh.id === laser.sourceShipId);
                 if (sourceShip && sourceShip.owner && targetPlanet.owner && targetPlanet.owner !== sourceShip.owner) {
-                  targetPlanet.owner.lastAttackerPlayer = sourceShip.owner;
+                  targetPlanet.owner.lastAttackerPlayerId = sourceShip.owner.id;
                 }
                 
                 if (targetPlanet.ships <= 0) {
@@ -5687,7 +5687,7 @@ export class Game {
                       }
                     }
                     if (previousOwner) {
-                      previousOwner.lastAttackerPlayer = sourceShip.owner;
+                      previousOwner.lastAttackerPlayerId = sourceShip.owner.id;
                     }
                     targetPlanet.owner = sourceShip.owner;
                     targetPlanet.rampageBoost = false;
@@ -6230,7 +6230,8 @@ export class Game {
      // Check for player elimination
      for (const player of this.allPlayers) {
        if (player.wasAlive && !player.isAlive && player.id !== 'monsters') {
-         let conqueror = player.lastAttackerPlayer || null;
+         let conquerorId = player.lastAttackerPlayerId || null;
+         let conqueror = conquerorId ? this.allPlayers.find(p => p.id === conquerorId) : null;
          this.eliminatePlayer(player, conqueror);
        }
      }

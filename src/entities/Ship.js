@@ -4749,7 +4749,7 @@ export class Ship {
                   const currentTimer = this.owner.attackedPlanets.get(this.targetPlanet.id) || 0;
                   this.owner.attackedPlanets.set(this.targetPlanet.id, currentTimer + numToConsume * 60000);
                   if (this.targetPlanet.owner && this.targetPlanet.owner !== this.owner) {
-                    this.targetPlanet.owner.lastAttackerPlayer = this.owner;
+                    this.targetPlanet.owner.lastAttackerPlayerId = this.owner.id;
                   }
                 }
                 
@@ -4820,7 +4820,7 @@ export class Ship {
             if (this.owner) {
               this.owner.addExperience(actualKilled);
               if (this.targetPlanet.owner && this.targetPlanet.owner !== this.owner) {
-                this.targetPlanet.owner.lastAttackerPlayer = this.owner;
+                this.targetPlanet.owner.lastAttackerPlayerId = this.owner.id;
               }
               if (this.sourceShipId && allShips) {
                 const launcher = allShips.find(sh => sh.id === this.sourceShipId && sh.active);
@@ -5484,7 +5484,7 @@ export class Ship {
         if (attacker.owner !== this.owner) {
           this.lastTimeAttacked = Date.now();
           if (this.owner && attacker.owner) {
-            this.owner.lastAttackerPlayer = attacker.owner;
+            this.owner.lastAttackerPlayerId = attacker.owner.id;
           }
         }
         attacker.lastAttackTimeOnShip = attacker.lastAttackTimeOnShip || {};
