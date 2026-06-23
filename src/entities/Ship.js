@@ -2677,10 +2677,12 @@ export class Ship {
     
     if (this.maxHealth > 0 && this.labs > 0 && !this.isAmoeba && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
       const isIdle = !this.isPatrolling && !this.isScouting && !this.isDiplomacy && !this.isRetreating &&
-                     (this.targetX === null || this.targetY === null) &&
+                     this.targetX === null && this.targetY === null && this.targetPlanet === null &&
                      (!this.orderQueue || this.orderQueue.length === 0);
       if (isIdle) {
         this.isResearching = true;
+      } else {
+        this.isResearching = false;
       }
     }
 
