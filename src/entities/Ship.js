@@ -97,7 +97,8 @@ export class Ship {
     this.splashDamage = 0;
     this.targeting = 0;
     this.damagecontrol = 0;
-    this.fuel_tanker = 0;
+    this.supply_ship = 0;
+    this.extended_fuel = 0;
     this.supplies = 0;
     this.maxsupplies = 0;
     this.diplomat = 0;
@@ -321,7 +322,14 @@ export class Ship {
 
   getMaxFuel() {
     const baseFuel = this.maxHealth / 5;
-    return baseFuel + (this.fuel_tanker || 0) * 5;
+    return baseFuel + (this.extended_fuel || 0) * baseFuel;
+  }
+
+  getMaxShields() {
+    const techScore = this.owner ? (this.owner.techScore || 0) : 0;
+    const playerTechBonus = Math.floor(Math.sqrt(techScore));
+    const shieldPerLevel = Math.ceil(2 + playerTechBonus / 5);
+    return shieldPerLevel * (this.shields || 0);
   }
 
   getMaxSpeed() {
@@ -333,8 +341,8 @@ export class Ship {
     if (this.isWarp) {
       maxSp += this.warpBonus || 0;
     }
-    if (this.fuel_tanker && this.fuel_tanker > 0) {
-      maxSp = Math.max(5, maxSp - this.fuel_tanker * 3);
+    if (this.supply_ship && this.supply_ship > 0) {
+      maxSp = Math.max(5, maxSp - this.supply_ship * 3);
     }
     if (this.specialfuel && this.specialfuel > 0) {
       maxSp += 10;
@@ -362,6 +370,9 @@ export class Ship {
 
     range *= (1 + playerTechBonus);
     range *= (1 + 0.01 * (this.commandPoints || 0));
+    if (this.supply_ship && this.supply_ship > 0) {
+      range = Math.max(25, range - this.supply_ship * 20);
+    }
     return range;
   }
 
@@ -374,8 +385,8 @@ export class Ship {
     if (isWarp) {
       effectiveSpeed += this.warpBonus || 0;
     }
-    if (this.fuel_tanker && this.fuel_tanker > 0) {
-      effectiveSpeed = Math.max(5, effectiveSpeed - this.fuel_tanker * 3);
+    if (this.supply_ship && this.supply_ship > 0) {
+      effectiveSpeed = Math.max(5, effectiveSpeed - this.supply_ship * 3);
     }
     if (this.specialfuel && this.specialfuel > 0) {
       effectiveSpeed += 10;
@@ -593,8 +604,8 @@ export class Ship {
       hitChance += (techBonus + expBonus + shipExpBonus) / 100;
       const targetingBonus = (this.targeting || 0) * 0.05;
       hitChance += targetingBonus;
-      if (this.fuel_tanker && this.fuel_tanker > 0) {
-        hitChance -= this.fuel_tanker * 0.05;
+      if (this.supply_ship && this.supply_ship > 0) {
+        hitChance -= this.supply_ship * 0.05;
       }
       if (this.specialbombs && this.specialbombs > 0) {
         hitChance += 0.10;
@@ -633,8 +644,8 @@ export class Ship {
       }
       const targetingRangeBonus = (this.targeting || 0) * 0.05;
       effectiveRange *= (1 + targetingRangeBonus);
-      if (this.fuel_tanker && this.fuel_tanker > 0) {
-        effectiveRange = Math.max(5, effectiveRange - this.fuel_tanker * 5);
+      if (this.supply_ship && this.supply_ship > 0) {
+        effectiveRange = Math.max(5, effectiveRange - this.supply_ship * 5);
       }
       if (this.specialbombs && this.specialbombs > 0) {
         effectiveRange += 10;
@@ -855,11 +866,13 @@ export class Ship {
                 this.armorPoints = (this.armorPoints || 0) + bonus;
               } else if (key === 'munitions') {
                 this.splashDamage = val;
-              } else if (key === 'fuel_tanker') {
-                this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + 5 * val);
-                this.maxsupplies = val * 15;
+              } else if (key === 'supply_ship') {
+                this.maxsupplies = val * 20;
+              } else if (key === 'extended_fuel') {
+                const baseFuel = this.maxHealth / 5;
+                this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + baseFuel * val);
               } else if (key === 'shields') {
-                this.shieldPoints = 3 * val;
+                this.shieldPoints = this.getMaxShields();
               }
             }
           }
@@ -907,7 +920,7 @@ export class Ship {
       const hasSupplies = (this.supplies || 0) > 0;
       const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
       
-      const lowFuel = (this.fuel < maxFuel * 0.5) && !hasSupplies && !withinSensorRangeOfSupplyShip;
+      const lowFuel = false; // Disable auto-retreat for low fuel
       const emptyBombs = maxBombs > 0 && this.bombs <= 0 && !hasSupplies && !withinSensorRangeOfSupplyShip;
       const lowHealth = this.health < this.maxHealth * 0.5;
 
@@ -1464,14 +1477,15 @@ export class Ship {
           } else if (prop === 'munitions') {
             this.splashDamage = this.munitions;
             this.bombs = this.getMaxBombs();
-          } else if (prop === 'fuel_tanker') {
-            this.maxsupplies = (this.fuel_tanker || 0) * 15;
-            this.fuel = this.getMaxFuel();
+          } else if (prop === 'supply_ship') {
+            this.maxsupplies = (this.supply_ship || 0) * 20;
             this.supplies = this.maxsupplies;
+          } else if (prop === 'extended_fuel') {
+            this.fuel = this.getMaxFuel();
           } else if (prop === 'marines') {
             this.marineCount = (this.marines || 0) * this.maxHealth;
           } else if (prop === 'shields') {
-            this.shieldPoints = 3 * this.shields;
+            this.shieldPoints = this.getMaxShields();
           }
           
           console.log(`[Cruiser Token Upgrade Complete] Ship ${this.id} upgraded ${prop} to level ${this[prop]}`);
@@ -1530,13 +1544,16 @@ export class Ship {
               this.armorPoints = (this.armorPoints || 0) + bonus;
             } else if (this.upgradeProp === 'munitions') {
               this.splashDamage = this.munitions;
-            } else if (this.upgradeProp === 'fuel_tanker') {
-              this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + 5);
-              this.maxsupplies = (this.fuel_tanker || 0) * 15;
+            } else if (this.upgradeProp === 'supply_ship') {
+              this.maxsupplies = (this.supply_ship || 0) * 20;
+              this.supplies = this.maxsupplies;
+            } else if (this.upgradeProp === 'extended_fuel') {
+              const baseFuel = this.maxHealth / 5;
+              this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + baseFuel);
             } else if (this.upgradeProp === 'marines') {
               // Just capacity increases; do not load free marines upon upgrade completion
             } else if (this.upgradeProp === 'shields') {
-              this.shieldPoints = 3 * this.shields;
+              this.shieldPoints = this.getMaxShields();
             }
             
             console.log(`[Cruiser Upgrade Complete] Ship ${this.id} upgraded ${this.upgradeProp} to level ${this[this.upgradeProp]}`);
@@ -1797,8 +1814,8 @@ export class Ship {
       }
       const targetingRangeBonus = (this.targeting || 0) * 0.05;
       effectiveRange *= (1 + targetingRangeBonus);
-      if (this.fuel_tanker && this.fuel_tanker > 0) {
-        effectiveRange = Math.max(5, effectiveRange - this.fuel_tanker * 5);
+      if (this.supply_ship && this.supply_ship > 0) {
+        effectiveRange = Math.max(5, effectiveRange - this.supply_ship * 5);
       }
       if (this.specialbombs && this.specialbombs > 0) {
         effectiveRange += 10;
@@ -1832,8 +1849,8 @@ export class Ship {
       hitChance += (techBonus + expBonus + shipExpBonus) / 100;
       const targetingBonus = (this.targeting || 0) * 0.05;
       hitChance += targetingBonus;
-      if (this.fuel_tanker && this.fuel_tanker > 0) {
-        hitChance -= this.fuel_tanker * 0.05;
+      if (this.supply_ship && this.supply_ship > 0) {
+        hitChance -= this.supply_ship * 0.05;
       }
       if (this.specialbombs && this.specialbombs > 0) {
         hitChance += 0.10;
@@ -1871,6 +1888,9 @@ export class Ship {
         const absoluteCap = Math.max(1, Math.floor(this.health - 1));
         if (maxShots > absoluteCap) {
           maxShots = absoluteCap;
+        }
+        if (this.supply_ship && this.supply_ship > 0) {
+          maxShots = Math.max(1, maxShots - 2 * this.supply_ship);
         }
       }
     } else if (this.maxHealth > 0) {
@@ -2669,7 +2689,7 @@ export class Ship {
       // Check if fuel is 1 or less while patrolling
       const hasSupplies = (this.supplies || 0) > 0;
       const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
-      if (this.fuel <= 1 && !hasSupplies && !withinSensorRangeOfSupplyShip && (!this.playerMoveOrderRetreatCooldown || this.playerMoveOrderRetreatCooldown <= 0)) {
+      if (false && this.fuel <= 1 && !hasSupplies && !withinSensorRangeOfSupplyShip && (!this.playerMoveOrderRetreatCooldown || this.playerMoveOrderRetreatCooldown <= 0)) {
         this.patrolFuelRetreating = true;
         this.patrolReloading = false;
         this.patrolReloadTargetPlanetId = null;
@@ -3014,7 +3034,7 @@ export class Ship {
       // 1. Refueling & Rearming & Health Retreat Check: if fuel is half or less, OR if attack is on and bombs are depleted, OR health is below 1/2 maxhealth
       const hasSupplies = (this.supplies || 0) > 0;
       const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
-      const needsRefuel = (this.fuel <= this.getMaxFuel() * 0.5) && !hasSupplies && !withinSensorRangeOfSupplyShip;
+      const needsRefuel = false; // Disable auto-retreat for low fuel
       const supplyShip = this.findNearbySupplyShip(allShips);
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
       const needsRearm = (this.scoutAttackEnabled === true) && this.bombs <= 0 && !hasNearbySupply && !hasSupplies && !withinSensorRangeOfSupplyShip;
@@ -4124,7 +4144,7 @@ export class Ship {
         while (this.supplyLoadAccumulator >= 5000 && this.supplies < this.maxsupplies) {
           const owner = this.owner;
           if (owner) {
-            const discount = (this.fuel_tanker || 0) > 0 ? (0.25 + 0.10 * this.fuel_tanker) : 0;
+            const discount = (this.supply_ship || 0) > 0 ? (0.25 + 0.10 * this.supply_ship) : 0;
             const costMultiplier = Math.max(0, 1.0 - discount);
             let loaded = false;
 
@@ -4226,7 +4246,7 @@ export class Ship {
       }
 
       let supplyShipForFuel = this.findNearbySupplyShip(allShips, true);
-      if (this.fuel_tanker > 0 && (this.supplies || 0) > 0 && ((this.timeNotMoved || 0) >= 3.0 || this.waitingForSupplyFuelConversion)) {
+      if (this.supply_ship > 0 && (this.supplies || 0) > 0 && ((this.timeNotMoved || 0) >= 3.0 || this.waitingForSupplyFuelConversion)) {
         supplyShipForFuel = this;
       }
       if (supplyShipForFuel === this) {
@@ -4319,8 +4339,8 @@ export class Ship {
                 }
               }
               let costMultiplier = 1.0;
-              if (this.fuel_tanker && this.fuel_tanker > 0) {
-                costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.fuel_tanker));
+              if (this.supply_ship && this.supply_ship > 0) {
+                costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.supply_ship));
               }
 
               if (supplyShipForFuel && (supplyShipForFuel.supplies || 0) > 0) {
@@ -4476,12 +4496,11 @@ export class Ship {
       }
 
       // Shield regeneration
-      const maxShields = 3 * (this.shields || 0);
+      const maxShields = this.getMaxShields();
       if ((this.shields || 0) > 0 && (this.shieldPoints || 0) < maxShields) {
         if (!this.inEffectiveStorm && (this.fuel || 0) > 0) {
-          const baseHealRateInFriendlyWell = 6 * (1 + 0.50 * (this.damagecontrol || 0));
-          const shieldRegenRatePerMin = 4 * baseHealRateInFriendlyWell;
-          let shieldRegenAmount = (deltaTime / 60000) * shieldRegenRatePerMin;
+          const regenRatePerSec = 0.05 * maxShields * (1 + 0.50 * (this.damagecontrol || 0));
+          let shieldRegenAmount = (deltaTime / 1000) * regenRatePerSec;
           const neededShields = maxShields - (this.shieldPoints || 0);
           shieldRegenAmount = Math.min(shieldRegenAmount, neededShields);
           const maxShieldsFromFuel = (this.fuel || 0) / 0.1;
@@ -4957,8 +4976,8 @@ export class Ship {
     if (this.isWarp) {
       effectiveSpeed += this.warpBonus || 0;
     }
-    if (this.fuel_tanker && this.fuel_tanker > 0) {
-      effectiveSpeed = Math.max(5, effectiveSpeed - this.fuel_tanker * 3);
+    if (this.supply_ship && this.supply_ship > 0) {
+      effectiveSpeed = Math.max(5, effectiveSpeed - this.supply_ship * 3);
     }
     if (this.specialfuel && this.specialfuel > 0) {
       effectiveSpeed += 10;
@@ -5412,8 +5431,8 @@ export class Ship {
 
     if (this.fuel > (this.specialfuel || 0)) {
       let costMultiplier = 1.0;
-      if (this.fuel_tanker && this.fuel_tanker > 0) {
-        costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.fuel_tanker));
+      if (this.supply_ship && this.supply_ship > 0) {
+        costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.supply_ship));
       }
       const consumed = ((1/12) * costMultiplier) / 3;
       if ((this.owner.resources.deuterium || 0) >= consumed) {

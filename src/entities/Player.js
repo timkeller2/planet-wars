@@ -18,7 +18,8 @@ export class Player {
       munitions: 0,
       targeting: 0,
       damagecontrol: 0,
-      fueltanker: 0,
+      supplyship: 0,
+      extendedfuel: 0,
       diplomat: 0,
       marines: 0
     };

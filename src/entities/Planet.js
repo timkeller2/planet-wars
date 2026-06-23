@@ -293,7 +293,7 @@ export class Planet {
     // Increase max capacity, tech score, or maintain garrison mode if full
     const isFull = this.owner && (this.ships >= (isHuman && focus === 'garrison' ? this.maxShips * 2 : this.maxShips));
     if (isFull || (this.owner && this.owner.isAI && this.ships >= this.maxShips)) {
-      const timeToIncrease = focus === 'terraforming' ? (this.maxShips / 10) * 3 : this.maxShips / 10;
+      const timeToIncrease = focus === 'terraforming' ? 30 : 10;
       this.capacityProgress += (deltaTime / 1000);
       if (this.capacityProgress >= timeToIncrease) {
         if (isHuman) {

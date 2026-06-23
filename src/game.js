@@ -252,7 +252,8 @@ export class Game {
       munitions: getRandMod(),
       targeting: getRandMod(),
       damagecontrol: getRandMod(),
-      fueltanker: getRandMod(),
+      supplyship: getRandMod(),
+      extendedfuel: getRandMod(),
       diplomat: getRandMod(),
       marines: getRandMod()
     };
@@ -357,7 +358,8 @@ export class Game {
                           (ship.munitions || 0) +
                           (ship.targeting || 0) +
                           (ship.damagecontrol || 0) +
-                          (ship.fuel_tanker || 0) +
+                          (ship.supply_ship || 0) +
+                          (ship.extended_fuel || 0) +
                           (ship.diplomat || 0) +
                           (ship.marines || 0) +
                           (ship.command || 0);
@@ -372,7 +374,8 @@ export class Game {
       munitions: 'munitions',
       targeting: 'targeting',
       damagecontrol: 'damagecontrol',
-      fuel_tanker: 'fueltanker',
+      supply_ship: 'supplyship',
+      extended_fuel: 'extendedfuel',
       diplomat: 'diplomat',
       marines: 'marines',
       command: 'command',
@@ -380,7 +383,8 @@ export class Game {
       sensorarray: 'sensorarray',
       lab: 'lab',
       shield: 'shield',
-      fueltanker: 'fueltanker'
+      supplyship: 'supplyship',
+      extendedfuel: 'extendedfuel'
     };
     const normType = typeKeyMap[type] || type;
     
@@ -400,7 +404,7 @@ export class Game {
   getCruiserTotalUpgradeCost(ship) {
     const upgradeProps = [
       'sensorarrays', 'labs', 'armor', 'shields', 'engine', 
-      'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 
+      'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel', 
       'diplomat', 'marines', 'command'
     ];
     let totalSpent = 0;
@@ -434,7 +438,8 @@ export class Game {
         munitions: 'munitions',
         targeting: 'targeting',
         damagecontrol: 'damagecontrol',
-        fuel_tanker: 'fueltanker',
+        supply_ship: 'supplyship',
+        extended_fuel: 'extendedfuel',
         diplomat: 'diplomat',
         marines: 'marines'
       };
@@ -802,7 +807,7 @@ export class Game {
         player.resources[bombResource] = 3;
       }
 
-      const potentialUpgrades = ['sensorarrays', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 'marines', 'command', 'labs', 'diplomat'];
+      const potentialUpgrades = ['sensorarrays', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel', 'marines', 'command', 'labs', 'diplomat'];
 
       if (hwSizeSetting === 'pioneers-corvettes') {
         const angles = [0, 120, 240];
@@ -853,7 +858,7 @@ export class Game {
         for (const up of potentialUpgrades) {
           upgrades[up] = 0;
         }
-        upgrades['fuel_tanker'] = 2;
+        upgrades['supply_ship'] = 2;
         upgrades['diplomat'] = 2;
         upgrades['sensorarrays'] = 1;
         upgrades['labs'] = 1;
@@ -1722,7 +1727,8 @@ export class Game {
         munitions: 0,
         targeting: 0,
         damagecontrol: 0,
-        fueltanker: 0,
+        supplyship: 0,
+        extendedfuel: 0,
         diplomat: 0,
         marines: 0
       };
@@ -1802,7 +1808,8 @@ export class Game {
       munitions: getRandMod(),
       targeting: getRandMod(),
       damagecontrol: getRandMod(),
-      fueltanker: getRandMod(),
+      supplyship: getRandMod(),
+      extendedfuel: getRandMod(),
       diplomat: getRandMod(),
       marines: getRandMod()
     };
@@ -2939,7 +2946,7 @@ export class Game {
       // Calculate configuration upgrade costs
       const upgradeProps = [
         'sensorarrays', 'labs', 'armor', 'shields', 'engine', 
-        'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 
+        'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel', 
         'diplomat', 'marines', 'command'
       ];
       let totalUpgradeCost = 0;
@@ -2976,7 +2983,8 @@ export class Game {
           munitions: 'munitions',
           targeting: 'targeting',
           damagecontrol: 'damagecontrol',
-          fuel_tanker: 'fueltanker',
+          supply_ship: 'supplyship',
+          extended_fuel: 'extendedfuel',
           diplomat: 'diplomat',
           marines: 'marines',
           command: 'command'
@@ -3855,8 +3863,8 @@ export class Game {
             if (ship.munitions) {
               ship.splashDamage = ship.munitions;
             }
-            if (ship.fuel_tanker) {
-              ship.maxsupplies = ship.fuel_tanker * 15;
+            if (ship.supply_ship) {
+              ship.maxsupplies = ship.supply_ship * 20;
             }
 
             // Load full supplies/marines/bombs/fuel/shields
@@ -4426,6 +4434,9 @@ export class Game {
                   const cap = Math.floor(ship.health - 2);
                   let volleySize = Math.max(1, Math.floor((ship.maxHealth + ship.health) / 6));
                   if (volleySize > cap) volleySize = cap;
+                  if (ship.supply_ship && ship.supply_ship > 0) {
+                    volleySize = Math.max(1, volleySize - 2 * ship.supply_ship);
+                  }
                   if (ship.health <= 2) volleySize = 0;
 
                   const hitChance = Math.min(1.0, Math.max(0.0, ship.getAccuracy() + 0.10 * ship.labs));
@@ -5883,7 +5894,8 @@ export class Game {
                 munitions: 'Munitions',
                 targeting: 'Targeting',
                 damagecontrol: 'Damage Control',
-                fueltanker: 'Fuel Tanker',
+                supplyship: 'Supply Ship',
+                extendedfuel: 'Extended Fuel',
                 diplomat: 'Diplomat',
                 marines: 'Marines'
               }[chosenType] || chosenType;
@@ -6363,7 +6375,7 @@ export class Game {
 
     if (rewardType === 'discount') {
       const numDiscounts = Math.max(1, 1 + Math.floor(difficulty / 20));
-      const categories = ['sensorarray', 'lab', 'armor', 'shield', 'engine', 'munitions', 'targeting', 'damagecontrol', 'fueltanker', 'diplomat', 'marines'];
+      const categories = ['sensorarray', 'lab', 'armor', 'shield', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supplyship', 'extendedfuel', 'diplomat', 'marines'];
       const categoryNames = {
         sensorarray: 'Sensor Array',
         lab: 'Science Lab',
@@ -6373,7 +6385,8 @@ export class Game {
         munitions: 'Munitions',
         targeting: 'Targeting',
         damagecontrol: 'Damage Control',
-        fueltanker: 'Fuel Tanker',
+        supplyship: 'Supply Ship',
+        extendedfuel: 'Extended Fuel',
         diplomat: 'Diplomat',
         marines: 'Marines'
       };
@@ -7225,6 +7238,21 @@ export class Game {
         this.gameOverMessage = `${(player.name || player.id).toUpperCase()} IS VICTORIOUS!\n(ECONOMIC DOMINATION)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
         return;
+      }
+    }
+
+    // 6. Financial Victory: player's credits exceeds target amount
+    if (this.settings && this.settings.financialVictoryTarget && this.settings.financialVictoryTarget !== 'none') {
+      const target = parseFloat(this.settings.financialVictoryTarget);
+      if (!isNaN(target)) {
+        for (const player of this.allPlayers) {
+          if (player.isAlive && (player.credits || 0) >= target) {
+            this.stop();
+            this.gameOverMessage = `${(player.name || player.id).toUpperCase()} IS VICTORIOUS!\n(FINANCIAL VICTORY)`;
+            if (this.onGameOver) this.onGameOver(this.gameOverMessage);
+            return;
+          }
+        }
       }
     }
   }

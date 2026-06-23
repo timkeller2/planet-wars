@@ -16,6 +16,41 @@ if (!fs.existsSync(savesDir)) {
   fs.mkdirSync(savesDir, { recursive: true });
 }
 
+const shipConfigsDir = path.join(savesDir, 'ship_configs');
+if (!fs.existsSync(shipConfigsDir)) {
+  fs.mkdirSync(shipConfigsDir, { recursive: true });
+}
+
+function getConfigsForPlayer(playerName) {
+  if (!playerName) return [];
+  const sanitized = playerName.replace(/[^a-z0-9_-]/gi, '_');
+  const filePath = path.join(shipConfigsDir, `${sanitized}.json`);
+  try {
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    }
+  } catch (e) {
+    console.error('[Load Ship Configs Error]', e);
+  }
+  return [];
+}
+
+function saveConfigsForPlayer(playerName, configs) {
+  if (!playerName) return;
+  const sanitized = playerName.replace(/[^a-z0-9_-]/gi, '_');
+  const filePath = path.join(shipConfigsDir, `${sanitized}.json`);
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(configs, null, 2), 'utf8');
+  } catch (e) {
+    console.error('[Save Ship Configs Error]', e);
+  }
+}
+
+function sendShipConfigs(socket, playerName) {
+  const configs = getConfigsForPlayer(playerName);
+  socket.emit('shipConfigsList', configs);
+}
+
 async function bootstrap() {
   const app = express();
   const server = createServer(app);
@@ -370,7 +405,8 @@ async function bootstrap() {
           munitions: 'munitions',
           targeting: 'targeting',
           damagecontrol: 'damagecontrol',
-          fueltanker: 'fuel_tanker',
+          supplyship: 'supply_ship',
+          extendedfuel: 'extended_fuel',
           diplomat: 'diplomat',
           marines: 'marines',
           command: 'command'
@@ -385,7 +421,8 @@ async function bootstrap() {
                                 (ship.munitions || 0) +
                                 (ship.targeting || 0) +
                                 (ship.damagecontrol || 0) +
-                                (ship.fuel_tanker || 0) +
+                                (ship.supply_ship || 0) +
+                                (ship.extended_fuel || 0) +
                                 (ship.diplomat || 0) +
                                 (ship.marines || 0) +
                                 (ship.command || 0);
@@ -501,7 +538,8 @@ async function bootstrap() {
               munitions: 'munitions',
               targeting: 'targeting',
               damagecontrol: 'damagecontrol',
-              fuel_tanker: 'fueltanker',
+              supply_ship: 'supplyship',
+              extended_fuel: 'extendedfuel',
               diplomat: 'diplomat',
               marines: 'marines',
               command: 'command',
@@ -509,7 +547,8 @@ async function bootstrap() {
               sensorarray: 'sensorarray',
               lab: 'lab',
               shield: 'shield',
-              fueltanker: 'fueltanker'
+              supplyship: 'supplyship',
+              extendedfuel: 'extendedfuel'
             };
             const normType = typeKeyMap[data.type] || data.type;
             game.globalUpgradeModifiers[normType] = (game.globalUpgradeModifiers[normType] || 0) + 0.05;
@@ -1018,7 +1057,33 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (player && name && typeof name === 'string') {
         player.name = name.substring(0, 16); // limit length
+        sendShipConfigs(socket, player.name);
       }
+    });
+
+    socket.on('saveShipConfig', (configData) => {
+      const player = connectedClients.get(socket.id);
+      if (!player || !player.name || !configData || !configData.name) return;
+      
+      let configs = getConfigsForPlayer(player.name);
+      configs = configs.filter(c => c.name !== configData.name);
+      configs.push({
+        name: configData.name,
+        classType: configData.classType,
+        upgrades: configData.upgrades
+      });
+      saveConfigsForPlayer(player.name, configs);
+      sendShipConfigs(socket, player.name);
+    });
+
+    socket.on('deleteShipConfig', (configName) => {
+      const player = connectedClients.get(socket.id);
+      if (!player || !player.name || !configName) return;
+      
+      let configs = getConfigsForPlayer(player.name);
+      configs = configs.filter(c => c.name !== configName);
+      saveConfigsForPlayer(player.name, configs);
+      sendShipConfigs(socket, player.name);
     });
 
     // Sci-Fi Planetary Resources System Event Listeners
@@ -1561,6 +1626,7 @@ async function bootstrap() {
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
           startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 0,
+          financialVictoryTarget: options && options.financialVictoryTarget !== undefined ? options.financialVictoryTarget : "none",
           graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
           enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false,
           aiEntry: options && options.aiEntry !== undefined ? options.aiEntry : 'mid',
@@ -1635,6 +1701,7 @@ async function bootstrap() {
           timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
           homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
           startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 0,
+          financialVictoryTarget: options && options.financialVictoryTarget !== undefined ? options.financialVictoryTarget : "none",
           graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
           enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false,
           aiEntry: options && options.aiEntry !== undefined ? options.aiEntry : 'mid',
@@ -2124,7 +2191,8 @@ async function bootstrap() {
           splashDamage: s.splashDamage || 0,
           targeting: s.targeting || 0,
           damagecontrol: s.damagecontrol || 0,
-          fuel_tanker: s.fuel_tanker || 0,
+          supply_ship: s.supply_ship || 0,
+          extended_fuel: s.extended_fuel || 0,
           supplies: s.supplies || 0,
           maxsupplies: s.maxsupplies || 0,
           specialfuel: s.specialfuel || 0,

@@ -2,7 +2,17 @@ import { io } from 'socket.io-client';
 const keysDown = {};
 const AMOEBA_COS = [1, 0.70710678, 0, -0.70710678, -1, -0.70710678, 0, 0.70710678];
 const AMOEBA_SIN = [0, 0.70710678, 1, 0.70710678, 0, -0.70710678, -1, -0.70710678];
-window.addEventListener('keydown', e => keysDown[e.key] = true);
+window.addEventListener('keydown', e => {
+  const startScreen = document.getElementById('start-screen');
+  if (startScreen && !startScreen.classList.contains('hidden')) return;
+  if (document.activeElement && 
+      (document.activeElement.tagName === 'INPUT' || 
+       document.activeElement.tagName === 'SELECT' || 
+       document.activeElement.tagName === 'TEXTAREA')) {
+    return;
+  }
+  keysDown[e.key] = true;
+});
 window.addEventListener('keyup', e => keysDown[e.key] = false);
 
 const habIcons = {
@@ -71,6 +81,30 @@ function checkMusicRotation() {
   // Disabled as the intro piece is looping indefinitely.
 }
 
+function getShipRadarRange(s) {
+  if (!s) return 50;
+  if (s.isCruiser || (s.maxHealth && s.maxHealth > 0)) {
+    if (s.maxHealth <= 0) return 0;
+    let baseCruiserRadar = 25 + s.maxHealth * 2;
+    let range = baseCruiserRadar + 25 * (s.sensorarrays || 0);
+    if (s.isWarp) {
+      range *= 0.25;
+    }
+    const owner = serverState && serverState.players ? serverState.players.find(p => p.id === s.ownerId) : null;
+    if (owner) {
+      const techScore = owner.techScore || 0;
+      const playerTechBonus = 0.01 * Math.floor(Math.sqrt(techScore));
+      range *= (1 + playerTechBonus);
+      range *= (1 + 0.01 * (s.commandPoints || 0));
+    }
+    if (s.supply_ship && s.supply_ship > 0) {
+      range = Math.max(25, range - s.supply_ship * 20);
+    }
+    return range;
+  }
+  return 50;
+}
+
 function getEffectiveSympathyClient(pl, playerId) {
   const baseSympathy = pl.sympathy?.[playerId] || 0;
   let extraSympathy = 0;
@@ -91,10 +125,7 @@ function getEffectiveSympathyClient(pl, playerId) {
               const dy = ship.y - pl.y;
               const distSq = dx * dx + dy * dy;
               
-              let radarRange = 50;
-              if (ship.isCruiser || (ship.maxHealth && ship.maxHealth > 0)) {
-                radarRange = Math.min(250, 5 * (ship.maxHealth || ship.health || 0));
-              }
+              let radarRange = getShipRadarRange(ship);
               const extendedRadar = radarRange * 1.5;
               if (distSq <= extendedRadar * extendedRadar) {
                 isKnown = true;
@@ -270,6 +301,7 @@ function getPlanetTradeIncomePerMin(planet) {
   if (savedPlayerName) {
     const nameInput = document.getElementById('player-name-input');
     if (nameInput) nameInput.value = savedPlayerName;
+    socket.emit('setName', savedPlayerName);
   }
 
   const savedPlayerRace = localStorage.getItem('planetWarsPlayerRace');
@@ -280,6 +312,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
   let localPlayer = null;
   let serverState = null;
+  let serverSavedConfigs = [];
   let lastGameStartTime = null;
   let lastSelectedCruiserId = null;
   let selectedPlanets = [];
@@ -352,10 +385,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (serverState.ships) {
       for (const s of serverState.ships) {
         if (s.active && s.ownerId === localPlayer.id) {
-          let radarRange = 50;
-          if (s.isCruiser || (s.maxHealth && s.maxHealth > 0)) {
-            radarRange = Math.min(250, 5 * (s.maxHealth || s.health || 0));
-          }
+          let radarRange = getShipRadarRange(s);
           const extendedRadar = radarRange * 1.5;
           const dx = s.x - x;
           const dy = s.y - y;
@@ -511,7 +541,15 @@ function getPlanetTradeIncomePerMin(planet) {
 
   const getMaxFuel = (s) => {
     const baseFuel = s.maxHealth / 5;
-    return baseFuel + (s.fuel_tanker || 0) * 5;
+    return baseFuel + (s.extended_fuel || 0) * baseFuel;
+  };
+
+  const getMaxShields = (s) => {
+    const owner = s.ownerId && serverState.players ? serverState.players.find(p => p.id === s.ownerId) : null;
+    const techScore = owner ? (owner.techScore || 0) : 0;
+    const playerTechBonus = Math.floor(Math.sqrt(techScore));
+    const shieldPerLevel = Math.ceil(2 + playerTechBonus / 5);
+    return shieldPerLevel * (s.shields || 0);
   };
 
   const getMaxBombs = (s) => {
@@ -1803,7 +1841,8 @@ function getPlanetTradeIncomePerMin(planet) {
           if ((s.munitions || 0) > 0) activeUpgrades.push({ symbol: '💣', count: s.munitions });
           if ((s.targeting || 0) > 0) activeUpgrades.push({ symbol: '🎯', count: s.targeting });
           if ((s.damagecontrol || 0) > 0) activeUpgrades.push({ symbol: '🔧', count: s.damagecontrol });
-          if ((s.fuel_tanker || 0) > 0) activeUpgrades.push({ symbol: '⛽', count: s.fuel_tanker });
+          if ((s.supply_ship || 0) > 0) activeUpgrades.push({ symbol: '📦', count: s.supply_ship });
+          if ((s.extended_fuel || 0) > 0) activeUpgrades.push({ symbol: '⛽', count: s.extended_fuel });
           if ((s.diplomat || 0) > 0) activeUpgrades.push({ symbol: '🤝', count: s.diplomat });
           if ((s.marines || 0) > 0) activeUpgrades.push({ symbol: '🪖', count: s.marines });
           if ((s.command || 0) > 0) activeUpgrades.push({ symbol: '👑', count: s.command });
@@ -3098,7 +3137,8 @@ function getPlanetTradeIncomePerMin(planet) {
                                 (hs.munitions || 0) +
                                 (hs.targeting || 0) +
                                 (hs.damagecontrol || 0) +
-                                (hs.fuel_tanker || 0) +
+                                (hs.supply_ship || 0) +
+                                (hs.extended_fuel || 0) +
                                 (hs.diplomat || 0) +
                                 (hs.marines || 0) +
                                 (hs.command || 0);
@@ -3131,6 +3171,10 @@ function getPlanetTradeIncomePerMin(planet) {
             armorLabel += '*';
           }
           lines.push({ label: armorLabel, value: Math.floor(hs.armorPoints) + ' / ' + Math.floor(hs.maxArmor), color: '#b0bec5' });
+        }
+
+        if (hs.shields && hs.shields > 0) {
+          lines.push({ label: `Cruiser Shields (${hs.shields})`, value: Math.floor(hs.shieldPoints) + ' / ' + Math.floor(getMaxShields(hs)), color: '#ffff00' });
         }
 
         let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(2 * hs.health)}`;
@@ -3186,8 +3230,8 @@ function getPlanetTradeIncomePerMin(planet) {
           effectiveRange += baseDogfightRange * 0.10;
         }
         effectiveRange = Math.floor(effectiveRange * (1 + targetingRangeBonus));
-        if (hs.fuel_tanker && hs.fuel_tanker > 0) {
-          effectiveRange = Math.max(5, effectiveRange - hs.fuel_tanker * 5);
+        if (hs.supply_ship && hs.supply_ship > 0) {
+          effectiveRange = Math.max(5, effectiveRange - hs.supply_ship * 5);
         }
         if (hs.specialbombs && hs.specialbombs > 0) {
           effectiveRange += 10;
@@ -3221,8 +3265,8 @@ function getPlanetTradeIncomePerMin(planet) {
 
         let hitChanceValue = 10 + targetingBonus + bombAccuracyBonus;
         hitChanceValue += techBonus + expBonus + shipExpBonus;
-        if (hs.fuel_tanker && hs.fuel_tanker > 0) {
-          hitChanceValue -= hs.fuel_tanker * 5;
+        if (hs.supply_ship && hs.supply_ship > 0) {
+          hitChanceValue -= hs.supply_ship * 5;
         }
         if (hs.specialbombs && hs.specialbombs > 0) {
           hitChanceValue += 10;
@@ -3287,6 +3331,9 @@ function getPlanetTradeIncomePerMin(planet) {
         let volleySizeVal = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
         const cap = Math.floor(hs.health - 2);
         if (volleySizeVal > cap) volleySizeVal = cap;
+        if (hs.supply_ship && hs.supply_ship > 0) {
+          volleySizeVal = Math.max(1, volleySizeVal - 2 * hs.supply_ship);
+        }
         if (hs.health <= 2) volleySizeVal = 0;
         const volleySize = volleySizeVal === 0 ? '0 (Disabled)' : volleySizeVal;
         let rangeLabel = 'Range';
@@ -3319,7 +3366,15 @@ function getPlanetTradeIncomePerMin(planet) {
         if (hs.sensorarrays > 0) lines.push({ label: `Sensor Array (${hs.sensorarrays})`, value: `📡 Active`, color: '#ffb300' });
         if (hs.labs > 0) lines.push({ label: `Laboratories (${hs.labs})`, value: `🔬 Active`, color: '#00e5ff' });
         if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
-        if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ ${25 + hs.fuel_tanker * 10}% Savings`, color: '#ffa500' });
+        if (hs.supply_ship > 0) {
+          lines.push({ label: `Supply Ship (${hs.supply_ship})`, value: `📦 ${25 + hs.supply_ship * 10}% Savings`, color: '#ffa500' });
+          lines.push({
+            label: `  Penalties`,
+            value: `Speed -${hs.supply_ship * 3} | Acc -${hs.supply_ship * 5}% | Range -${hs.supply_ship * 5}px | Sensors -${hs.supply_ship * 20}px | Volleys -${hs.supply_ship * 2}`,
+            color: '#ff5555'
+          });
+        }
+        if (hs.extended_fuel > 0) lines.push({ label: `Extended Fuel (${hs.extended_fuel})`, value: `⛽ Active`, color: '#ffa500' });
         if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
         if (hs.command > 0) lines.push({ label: `Command (${hs.command})`, value: `👑 Active`, color: '#ffeb3b' });
       } else {
@@ -3840,6 +3895,10 @@ function getPlanetTradeIncomePerMin(planet) {
   const customStartingCreditsContainer = document.getElementById('custom-starting-credits-container');
   const startingCreditsInput = document.getElementById('starting-credits-input');
 
+  const financialVictorySelect = document.getElementById('financial-victory-select');
+  const customFinancialVictoryContainer = document.getElementById('custom-financial-victory-container');
+  const financialVictoryInput = document.getElementById('financial-victory-input');
+
   const aiEntrySelect = document.getElementById('ai-entry-select');
   const customAiEntryContainer = document.getElementById('custom-ai-entry-container');
   const customAiEntryInput = document.getElementById('custom-ai-entry-input');
@@ -3961,6 +4020,19 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   }
 
+  if (financialVictorySelect) {
+    financialVictorySelect.addEventListener('change', () => {
+      if (financialVictorySelect.value === 'custom') {
+        if (customFinancialVictoryContainer) customFinancialVictoryContainer.style.display = 'flex';
+      } else {
+        if (customFinancialVictoryContainer) customFinancialVictoryContainer.style.display = 'none';
+        if (financialVictoryInput) {
+          financialVictoryInput.value = financialVictorySelect.value;
+        }
+      }
+    });
+  }
+
 
 
   const setupNewGameBtn = document.getElementById('setup-new-game-btn');
@@ -4056,6 +4128,12 @@ function getPlanetTradeIncomePerMin(planet) {
       const customCredits = startingCreditsInput ? parseInt(startingCreditsInput.value, 10) : 0;
       startingCreditsVal = isNaN(customCredits) ? "0" : String(customCredits);
     }
+    let financialVictoryTargetVal = financialVictorySelect ? financialVictorySelect.value : "none";
+    if (financialVictoryTargetVal === 'custom') {
+      const customVal = financialVictoryInput ? parseInt(financialVictoryInput.value, 10) : 1000;
+      financialVictoryTargetVal = isNaN(customVal) ? "none" : String(customVal);
+    }
+
     const raceSelect = document.getElementById('player-race-select');
     const selectedRace = raceSelect ? raceSelect.value : 'Random';
     if (raceSelect) {
@@ -4066,7 +4144,7 @@ function getPlanetTradeIncomePerMin(planet) {
     const customAiEntryIn = document.getElementById('custom-ai-entry-input');
     const customAiEntryMin = customAiEntryIn ? parseFloat(customAiEntryIn.value) : 5;
 
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, enableCheats, race: selectedRace, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin };
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), financialVictoryTarget: financialVictoryTargetVal, graphicalMode: !!graphicalMode, enableCheats, race: selectedRace, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
@@ -4091,23 +4169,16 @@ function getPlanetTradeIncomePerMin(planet) {
         e.stopPropagation();
         const name = configNameInput.value.trim();
         if (name && pendingShipConfig) {
-          const savedConfigs = JSON.parse(localStorage.getItem('planetwars_ship_configs') || '[]');
-          const newConfig = {
+          socket.emit('saveShipConfig', {
             name: name.substring(0, 30),
             classType: pendingShipConfig.classType,
             upgrades: pendingShipConfig.upgrades
-          };
-          savedConfigs.push(newConfig);
-          localStorage.setItem('planetwars_ship_configs', JSON.stringify(savedConfigs));
+          });
           
           configNameInput.value = '';
           configNameInput.classList.add('hidden');
           configNameInput.blur();
           pendingShipConfig = null;
-
-          const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
-          const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
-          updateConfigBuildButtons(myPlayer, selectedPlanetBuild);
         }
       } else if (e.key === 'Escape') {
         e.stopPropagation();
@@ -4265,6 +4336,13 @@ function getPlanetTradeIncomePerMin(planet) {
 
   socket.on('assignedPlayer', (player) => {
     localPlayer = player;
+  });
+
+  socket.on('shipConfigsList', (configs) => {
+    serverSavedConfigs = configs || [];
+    const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+    const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
+    updateConfigBuildButtons(myPlayer, selectedPlanetBuild);
   });
 
   socket.on('saveGamesList', (saves) => {
@@ -6037,6 +6115,8 @@ function getPlanetTradeIncomePerMin(planet) {
         artSrc = '/Art/victory_happiness.png';
       } else if (msg.includes('(ECONOMIC DOMINATION)')) {
         artSrc = '/Art/victory_economic.png';
+      } else if (msg.includes('(FINANCIAL VICTORY)')) {
+        artSrc = '/Art/victory_financial.png';
       } else if (msg.includes('(SCORE VICTORY)')) {
         artSrc = '/Art/victory_score.png';
       } else if (msg.includes('(TIMED GAME VICTORY)')) {
@@ -6161,7 +6241,8 @@ function getPlanetTradeIncomePerMin(planet) {
                           (ship.munitions || 0) +
                           (ship.targeting || 0) +
                           (ship.damagecontrol || 0) +
-                          (ship.fuel_tanker || 0) +
+                          (ship.supply_ship || 0) +
+                          (ship.extended_fuel || 0) +
                           (ship.diplomat || 0) +
                           (ship.marines || 0);
     const baseCost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
@@ -6175,14 +6256,16 @@ function getPlanetTradeIncomePerMin(planet) {
       munitions: 'munitions',
       targeting: 'targeting',
       damagecontrol: 'damagecontrol',
-      fuel_tanker: 'fueltanker',
+      supply_ship: 'supplyship',
+      extended_fuel: 'extendedfuel',
       diplomat: 'diplomat',
       marines: 'marines',
       
       sensorarray: 'sensorarray',
       lab: 'lab',
       shield: 'shield',
-      fueltanker: 'fueltanker'
+      supplyship: 'supplyship',
+      extendedfuel: 'extendedfuel'
     };
     const normType = typeKeyMap[type] || type;
     
@@ -6210,7 +6293,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
     const upgradeProps = [
       'sensorarrays', 'labs', 'armor', 'shields', 'engine', 
-      'munitions', 'targeting', 'damagecontrol', 'fuel_tanker', 
+      'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel', 
       'diplomat', 'marines', 'command'
     ];
     let totalUpgradeCost = 0;
@@ -6245,7 +6328,8 @@ function getPlanetTradeIncomePerMin(planet) {
         munitions: 'munitions',
         targeting: 'targeting',
         damagecontrol: 'damagecontrol',
-        fuel_tanker: 'fueltanker',
+        supply_ship: 'supplyship',
+        extended_fuel: 'extendedfuel',
         diplomat: 'diplomat',
         marines: 'marines',
         command: 'command'
@@ -6292,7 +6376,8 @@ function getPlanetTradeIncomePerMin(planet) {
       munitions: '💣',
       targeting: '🎯',
       damagecontrol: '🔧',
-      fuel_tanker: '⛽',
+      supply_ship: '📦',
+      extended_fuel: '⛽',
       diplomat: '🤝',
       marines: '🪖',
       command: '👑'
@@ -6324,7 +6409,7 @@ function getPlanetTradeIncomePerMin(planet) {
       return;
     }
 
-    const savedConfigs = JSON.parse(localStorage.getItem('planetwars_ship_configs') || '[]');
+    const savedConfigs = serverSavedConfigs;
     const activeConfigs = savedConfigs
       .map((cfg, originalIdx) => ({ ...cfg, originalIdx }))
       .filter(cfg => cfg.classType === activeConfigClassType);
@@ -6521,16 +6606,10 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   function deleteConfig(idx) {
-    const savedConfigs = JSON.parse(localStorage.getItem('planetwars_ship_configs') || '[]');
-    savedConfigs.splice(idx, 1);
-    localStorage.setItem('planetwars_ship_configs', JSON.stringify(savedConfigs));
-    const container = document.getElementById('config-build-buttons');
-    if (container) {
-      container.innerHTML = '';
+    const config = serverSavedConfigs[idx];
+    if (config) {
+      socket.emit('deleteShipConfig', config.name);
     }
-    const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
-    const selectedPlanetBuild = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
-    updateConfigBuildButtons(myPlayer, selectedPlanetBuild);
   }
 
   const triggerSaveConfig = (shipId) => {
@@ -6548,13 +6627,14 @@ function getPlanetTradeIncomePerMin(planet) {
       munitions: parseInt(liveShip.munitions, 10) || 0,
       targeting: parseInt(liveShip.targeting, 10) || 0,
       damagecontrol: parseInt(liveShip.damagecontrol, 10) || 0,
-      fuel_tanker: parseInt(liveShip.fuel_tanker, 10) || 0,
+      supply_ship: parseInt(liveShip.supply_ship, 10) || 0,
+      extended_fuel: parseInt(liveShip.extended_fuel, 10) || 0,
       diplomat: parseInt(liveShip.diplomat, 10) || 0,
       marines: parseInt(liveShip.marines, 10) || 0,
       command: parseInt(liveShip.command, 10) || 0
     };
 
-    const savedConfigs = JSON.parse(localStorage.getItem('planetwars_ship_configs') || '[]');
+    const savedConfigs = serverSavedConfigs;
     const exists = savedConfigs.some(cfg => {
       if (cfg.classType !== classType) return false;
       for (const key of Object.keys(upgrades)) {
@@ -6587,14 +6667,16 @@ function getPlanetTradeIncomePerMin(planet) {
       munitions: 'munitions',
       targeting: 'targeting',
       damagecontrol: 'damagecontrol',
-      fuel_tanker: 'fueltanker',
+      supply_ship: 'supplyship',
+      extended_fuel: 'extendedfuel',
       diplomat: 'diplomat',
       marines: 'marines',
       
       sensorarray: 'sensorarray',
       lab: 'lab',
       shield: 'shield',
-      fueltanker: 'fueltanker'
+      supplyship: 'supplyship',
+      extendedfuel: 'extendedfuel'
     };
     const normType = typeKeyMap[type] || type;
     let playerMod = 0.0;
@@ -6619,14 +6701,15 @@ function getPlanetTradeIncomePerMin(planet) {
                           (ship.munitions || 0) +
                           (ship.targeting || 0) +
                           (ship.damagecontrol || 0) +
-                          (ship.fuel_tanker || 0) +
+                          (ship.supply_ship || 0) +
+                          (ship.extended_fuel || 0) +
                           (ship.diplomat || 0) +
                           (ship.marines || 0) +
                           (ship.command || 0);
 
     const validProps = [
       'sensorarrays', 'labs', 'armor', 'shields', 'engine',
-      'munitions', 'targeting', 'damagecontrol', 'fuel_tanker',
+      'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel',
       'diplomat', 'marines', 'command'
     ];
 
@@ -6679,7 +6762,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
     const validProps = [
       'sensorarrays', 'labs', 'armor', 'shields', 'engine',
-      'munitions', 'targeting', 'damagecontrol', 'fuel_tanker',
+      'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel',
       'diplomat', 'marines', 'command'
     ];
     let minCost = Infinity;
@@ -7235,6 +7318,8 @@ function getPlanetTradeIncomePerMin(planet) {
     } else if (hoveredPlanet) {
       hoveredShip = null; // Planet overrides non-cruiser ships
       hoveredWreckage = null;
+    } else if (hoveredShip) {
+      hoveredWreckage = null;
     } else if (hoveredWreckage) {
       hoveredPlanet = null;
       hoveredShip = null;
@@ -7572,11 +7657,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let clickedId = null;
         let isOwned = false;
 
-        if (clickedWreckage) {
-          clickedType = 'wreckage';
-          clickedId = clickedWreckage.id;
-          isOwned = false;
-        } else if (clickedShip && clickedShip.isCruiser) {
+        if (clickedShip && clickedShip.isCruiser) {
           clickedType = 'ship';
           clickedId = clickedShip.id;
           isOwned = localPlayer && (clickedShip.ownerId === localPlayer.id);
@@ -7591,6 +7672,10 @@ function getPlanetTradeIncomePerMin(planet) {
         } else if (clickedAnomaly) {
           clickedType = 'anomaly';
           clickedId = clickedAnomalyPlanet.id;
+          isOwned = false;
+        } else if (clickedWreckage) {
+          clickedType = 'wreckage';
+          clickedId = clickedWreckage.id;
           isOwned = false;
         }
 
@@ -7905,11 +7990,7 @@ function getPlanetTradeIncomePerMin(planet) {
       let isAlreadySelected = false;
       let isOwned = false;
 
-      if (clickedWreckage) {
-        tappedType = 'wreckage';
-        tappedId = clickedWreckage.id;
-        isOwned = false;
-      } else if (clickedShip && clickedShip.isCruiser) {
+      if (clickedShip && clickedShip.isCruiser) {
         tappedType = 'ship';
         tappedId = clickedShip.id;
         isAlreadySelected = selectedShips.some(s => s.id === clickedShip.id);
@@ -7927,6 +8008,10 @@ function getPlanetTradeIncomePerMin(planet) {
       } else if (clickedAnomaly) {
         tappedType = 'anomaly';
         tappedId = clickedAnomalyPlanet.id;
+        isOwned = false;
+      } else if (clickedWreckage) {
+        tappedType = 'wreckage';
+        tappedId = clickedWreckage.id;
         isOwned = false;
       }
 
@@ -8014,8 +8099,14 @@ function getPlanetTradeIncomePerMin(planet) {
   });
 
   window.addEventListener('keydown', (event) => {
-    if (document.activeElement === document.getElementById('chat-input') ||
-        document.activeElement === document.getElementById('config-name-input')) {
+    const startScreen = document.getElementById('start-screen');
+    if (startScreen && !startScreen.classList.contains('hidden')) {
+      return;
+    }
+    if (document.activeElement && 
+        (document.activeElement.tagName === 'INPUT' || 
+         document.activeElement.tagName === 'SELECT' || 
+         document.activeElement.tagName === 'TEXTAREA')) {
       return;
     }
     if (event.repeat) return;
@@ -8199,7 +8290,8 @@ function getPlanetTradeIncomePerMin(planet) {
                                 (ship.munitions || 0) +
                                 (ship.targeting || 0) +
                                 (ship.damagecontrol || 0) +
-                                (ship.fuel_tanker || 0) +
+                                (ship.supply_ship || 0) +
+                                (ship.extended_fuel || 0) +
                                 (ship.diplomat || 0) +
                                 (ship.marines || 0) +
                                 (ship.command || 0);
@@ -8276,9 +8368,14 @@ function getPlanetTradeIncomePerMin(planet) {
             if (isAllowed('damagecontrol')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'damagecontrol' });
             triggered = true;
           }
+          if (key === 'y') {
+            event.preventDefault();
+            if (isAllowed('supply_ship')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'supplyship' });
+            triggered = true;
+          }
           if (key === 'f') {
             event.preventDefault();
-            if (isAllowed('fuel_tanker')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'fueltanker' });
+            if (isAllowed('extended_fuel')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'extendedfuel' });
             triggered = true;
           }
           if (key === 'i') {
@@ -8518,7 +8615,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (!selectedPlanetBuild) return;
 
     // Check if there are saved configurations for this class
-    const savedConfigs = JSON.parse(localStorage.getItem('planetwars_ship_configs') || '[]');
+    const savedConfigs = serverSavedConfigs;
     const classConfigs = savedConfigs.filter(cfg => cfg.classType === classType);
 
     if (classConfigs.length === 0) {
@@ -9083,7 +9180,8 @@ function getPlanetTradeIncomePerMin(planet) {
     munitions: 'munitions',
     targeting: 'targeting',
     damagecontrol: 'damagecontrol',
-    fuel_tanker: 'fueltanker',
+    supply_ship: 'supplyship',
+    extended_fuel: 'extendedfuel',
     diplomat: 'diplomat',
     marines: 'marines',
     command: 'command'
@@ -9102,7 +9200,8 @@ function getPlanetTradeIncomePerMin(planet) {
                               (ship.munitions || 0) +
                               (ship.targeting || 0) +
                               (ship.damagecontrol || 0) +
-                              (ship.fuel_tanker || 0) +
+                              (ship.supply_ship || 0) +
+                              (ship.extended_fuel || 0) +
                               (ship.diplomat || 0) +
                               (ship.marines || 0) +
                               (ship.command || 0);
@@ -9162,7 +9261,8 @@ function getPlanetTradeIncomePerMin(planet) {
   registerUpgradeBtn('btn-up-munitions', 'munitions');
   registerUpgradeBtn('btn-up-targeting', 'targeting');
   registerUpgradeBtn('btn-up-damagecontrol', 'damagecontrol');
-  registerUpgradeBtn('btn-up-fueltanker', 'fuel_tanker');
+  registerUpgradeBtn('btn-up-supplyship', 'supply_ship');
+  registerUpgradeBtn('btn-up-extendedfuel', 'extended_fuel');
   registerUpgradeBtn('btn-up-diplomat', 'diplomat');
   registerUpgradeBtn('btn-up-marines', 'marines');
   registerUpgradeBtn('btn-up-command', 'command');
@@ -9309,7 +9409,8 @@ function getPlanetTradeIncomePerMin(planet) {
       'btn-up-munitions': 'munitions',
       'btn-up-targeting': 'targeting',
       'btn-up-damagecontrol': 'damagecontrol',
-      'btn-up-fueltanker': 'fuel_tanker',
+      'btn-up-supplyship': 'supply_ship',
+      'btn-up-extendedfuel': 'extended_fuel',
       'btn-up-diplomat': 'diplomat',
       'btn-up-marines': 'marines',
       'btn-up-command': 'command'
@@ -9402,7 +9503,8 @@ function getPlanetTradeIncomePerMin(planet) {
         'btn-up-munitions': 'Munitions (M)',
         'btn-up-targeting': 'Targeting Computer (T)',
         'btn-up-damagecontrol': 'Damage Control (D)',
-        'btn-up-fueltanker': 'Fuel Tanker (F)',
+        'btn-up-supplyship': 'Supply Ship (Y)',
+        'btn-up-extendedfuel': 'Extended Fuel (F)',
         'btn-up-diplomat': 'Diplomat (I)',
         'btn-up-marines': 'Marines (R)',
         'btn-up-command': 'Command (C)'
@@ -9412,12 +9514,13 @@ function getPlanetTradeIncomePerMin(planet) {
         'sensorarrays': 'Adds +25 to base sensor range and +10% total range per level to reveal the fog of war',
         'labs': 'Adds +1 Lab research tick speed per level (up to +5) to generate tech points',
         'armor': 'Adds +4 flat + 10% max health armor points per level to withstand damage',
-        'shields': 'Shield deflection increases by 1/5 of remaining deflection per level with no cap',
+        'shields': 'Provides energy shield points that absorb damage first. Max capacity: (2 + 1/5 player tech bonus, rounded up) per level. Regens anywhere at 5%/sec.',
         'engine': 'Adds +3 speed and +3°/sec turn rate per level for highly responsive steering',
         'munitions': 'Adds +1 bomb capacity and +1 splash damage rating per level to standard weapon dogfights',
         'targeting': 'Adds +5% weapon range and +5% laser accuracy hit chance per level in combat',
-        'damagecontrol': 'Adds +50% out-of-combat repair and +20% deep-space/in-combat repair rate per level',
-        'fuel_tanker': 'Adds +5 fuel capacity, +15 max supplies, and +(25 + level*10)% supply cost discount per level. Reduces speed by -3, accuracy by -5, range by -5 per level',
+        'damagecontrol': 'Adds +50% out-of-combat repair and +20% deep-space repair rate per level. Also increases shield regen rate by +50% of the base rate per level.',
+        'supply_ship': 'Adds +20 max supplies, and +(25 + level*10)% supply cost discount per level. Penalties: -3 speed, -5% accuracy, -5 weapon range, -20 sensor range (min 25), -2 weapon volleys (min 1) per level',
+        'extended_fuel': 'Each level increases the maximum fuel capacity for the cruiser by the base amount at no penalty',
         'diplomat': 'Adds diplomat subversion to project 1 passive sympathy/min or reduce 1 enemy sympathy/min',
         'marines': 'Adds +1 marine capacity factor per level to drastically boost planetary boarding success',
         'command': 'Gives command points equal to (xp bonus * level) / 4 to ships in sensor range. Stacks. Caps at 1.5 * highest xp bonus among commanders. Points act as local xp bonus and add 1/2 value to speed'
@@ -9431,7 +9534,8 @@ function getPlanetTradeIncomePerMin(planet) {
                             (selectedCruiser.munitions || 0) +
                             (selectedCruiser.targeting || 0) +
                             (selectedCruiser.damagecontrol || 0) +
-                            (selectedCruiser.fuel_tanker || 0) +
+                            (selectedCruiser.supply_ship || 0) +
+                            (selectedCruiser.extended_fuel || 0) +
                             (selectedCruiser.diplomat || 0) +
                             (selectedCruiser.marines || 0) +
                             (selectedCruiser.command || 0);
@@ -9634,7 +9738,7 @@ function getPlanetTradeIncomePerMin(planet) {
           btnUpgradeMode.style.display = 'inline-flex';
           const validProps = [
             'sensorarrays', 'labs', 'armor', 'shields', 'engine',
-            'munitions', 'targeting', 'damagecontrol', 'fuel_tanker',
+            'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel',
             'diplomat', 'marines'
           ];
           let minCost = Infinity;
@@ -12256,7 +12360,8 @@ function getPlanetTradeIncomePerMin(planet) {
                                     (hs.munitions || 0) +
                                     (hs.targeting || 0) +
                                     (hs.damagecontrol || 0) +
-                                    (hs.fuel_tanker || 0) +
+                                    (hs.supply_ship || 0) +
+                                    (hs.extended_fuel || 0) +
                                     (hs.diplomat || 0) +
                                     (hs.marines || 0) +
                                     (hs.command || 0);
@@ -12286,7 +12391,8 @@ function getPlanetTradeIncomePerMin(planet) {
             if (hs.sensorarrays > 0) lines.push({ label: `Sensor Array (${hs.sensorarrays})`, value: `📡 Active`, color: '#ffb300' });
             if (hs.labs > 0) lines.push({ label: `Laboratories (${hs.labs})`, value: `🔬 Active`, color: '#00e5ff' });
             if (hs.damagecontrol > 0) lines.push({ label: `Damage Control (${hs.damagecontrol})`, value: `🔧 Active`, color: '#69f0ae' });
-            if (hs.fuel_tanker > 0) lines.push({ label: `Fuel Tanker (${hs.fuel_tanker})`, value: `⛽ ${25 + hs.fuel_tanker * 10}% Savings`, color: '#ffa500' });
+            if (hs.supply_ship > 0) lines.push({ label: `Supply Ship (${hs.supply_ship})`, value: `📦 ${25 + hs.supply_ship * 10}% Savings`, color: '#ffa500' });
+            if (hs.extended_fuel > 0) lines.push({ label: `Extended Fuel (${hs.extended_fuel})`, value: `⛽ Active`, color: '#ffa500' });
             if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
 
             let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(2 * hs.health)}`;
@@ -12343,8 +12449,8 @@ function getPlanetTradeIncomePerMin(planet) {
               effectiveRange += baseDogfightRange * 0.10;
             }
             effectiveRange = Math.floor(effectiveRange * (1 + targetingRangeBonus));
-            if (hs.fuel_tanker && hs.fuel_tanker > 0) {
-              effectiveRange = Math.max(5, effectiveRange - hs.fuel_tanker * 5);
+            if (hs.supply_ship && hs.supply_ship > 0) {
+              effectiveRange = Math.max(5, effectiveRange - hs.supply_ship * 5);
             }
             if (hs.specialbombs && hs.specialbombs > 0) {
               effectiveRange += 10;
@@ -12378,8 +12484,8 @@ function getPlanetTradeIncomePerMin(planet) {
 
             let hitChanceValue = 10 + targetingBonus + bombAccuracyBonus;
             hitChanceValue += techBonus + expBonus + shipExpBonus;
-            if (hs.fuel_tanker && hs.fuel_tanker > 0) {
-              hitChanceValue -= hs.fuel_tanker * 5;
+            if (hs.supply_ship && hs.supply_ship > 0) {
+              hitChanceValue -= hs.supply_ship * 5;
             }
             if (hs.specialbombs && hs.specialbombs > 0) {
               hitChanceValue += 10;
@@ -12445,6 +12551,9 @@ function getPlanetTradeIncomePerMin(planet) {
             let volleySizeVal = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
             const cap = Math.floor(hs.health - 2);
             if (volleySizeVal > cap) volleySizeVal = cap;
+            if (hs.supply_ship && hs.supply_ship > 0) {
+              volleySizeVal = Math.max(1, volleySizeVal - 2 * hs.supply_ship);
+            }
             if (hs.health <= 2) volleySizeVal = 0;
             const volleySize = volleySizeVal === 0 ? '0 (Disabled)' : volleySizeVal;
             let rangeLabel = 'Range';
@@ -12983,8 +13092,8 @@ function getPlanetTradeIncomePerMin(planet) {
             // Apply targeting range bonus consistent with Ship.js
             const targetingRangeBonus = (s.targeting || 0) * 0.05;
             range *= (1 + targetingRangeBonus);
-            if (s.fuel_tanker && s.fuel_tanker > 0) {
-              range = Math.max(5, range - s.fuel_tanker * 5);
+            if (s.supply_ship && s.supply_ship > 0) {
+              range = Math.max(5, range - s.supply_ship * 5);
             }
             if (s.specialbombs && s.specialbombs > 0) {
               range += 10;
@@ -13226,15 +13335,7 @@ function getPlanetTradeIncomePerMin(planet) {
             }
             
             // Draw cyan sensor range circle (outline only, no fill!)
-            let baseCruiserRadar = 25 + s.maxHealth * 2;
-            let sensorRange = baseCruiserRadar + 25 * (s.sensorarrays || 0);
-            if (s.isWarp) sensorRange *= 0.25;
-            if (owner) {
-              const techScore = owner.techScore || 0;
-              const playerTechBonus = 0.01 * Math.floor(Math.sqrt(techScore));
-              sensorRange *= (1 + playerTechBonus);
-              sensorRange *= (1 + 0.01 * (s.commandPoints || 0));
-            }
+            let sensorRange = getShipRadarRange(s);
             const pct = hazardSensorReductionPct(s.x, s.y, s.ownerId);
             sensorRange = Math.max(10, sensorRange * pct);
             
@@ -13722,22 +13823,11 @@ function getPlanetTradeIncomePerMin(planet) {
 
           // Draw Cruiser Shields as a yellow circle around the ship if within 30s of firing/being fired upon
           if (s.isCruiser && (s.shields || 0) > 0 && (s.shieldShowTimer || 0) > 0 && (s.shieldPoints || 0) > 0) {
-            const maxShields = 3 * s.shields;
-            const shieldPct = s.shieldPoints / maxShields;
-            
             ctx.save();
             ctx.beginPath();
             ctx.arc(s.x, s.y, size + 5, 0, Math.PI * 2);
             ctx.strokeStyle = '#ffff00'; // Yellow
-            
-            if (shieldPct > 0.66) {
-              ctx.lineWidth = 2.5; // Normal width
-            } else if (shieldPct > 0.33) {
-              ctx.lineWidth = 1.25; // Narrow line
-            } else {
-              ctx.lineWidth = 0.5; // Very thin line
-            }
-            
+            ctx.lineWidth = Math.ceil(Math.sqrt(s.shieldPoints));
             ctx.stroke();
             ctx.restore();
           }
@@ -13764,7 +13854,8 @@ function getPlanetTradeIncomePerMin(planet) {
           if ((s.munitions || 0) > 0) activeUpgrades.push({ symbol: '💣', count: s.munitions });
           if ((s.targeting || 0) > 0) activeUpgrades.push({ symbol: '🎯', count: s.targeting });
           if ((s.damagecontrol || 0) > 0) activeUpgrades.push({ symbol: '🔧', count: s.damagecontrol });
-          if ((s.fuel_tanker || 0) > 0) activeUpgrades.push({ symbol: '⛽', count: s.fuel_tanker });
+          if ((s.supply_ship || 0) > 0) activeUpgrades.push({ symbol: '📦', count: s.supply_ship });
+          if ((s.extended_fuel || 0) > 0) activeUpgrades.push({ symbol: '⛽', count: s.extended_fuel });
           if ((s.diplomat || 0) > 0) activeUpgrades.push({ symbol: '🤝', count: s.diplomat });
           if ((s.marines || 0) > 0) activeUpgrades.push({ symbol: '🪖', count: s.marines });
           if ((s.command || 0) > 0) activeUpgrades.push({ symbol: '👑', count: s.command });

@@ -142,6 +142,22 @@
             <input type="number" id="starting-credits-input" value="0" min="0" max="1000000" style="width: 80px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
             Custom Starting Credits
           </label>
+          <label style="cursor: pointer; display: flex; align-items: center;">
+            <select id="financial-victory-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
+              <option value="none" selected>None</option>
+              <option value="1000">Short: 1000</option>
+              <option value="2500">Medium: 2500</option>
+              <option value="5000">Standard: 5000</option>
+              <option value="10000">Long: 10000</option>
+              <option value="25000">Epic: 25000</option>
+              <option value="custom">Custom</option>
+            </select>
+            Financial Victory
+          </label>
+          <label id="custom-financial-victory-container" style="display: none; cursor: pointer; align-items: center;">
+            <input type="number" id="financial-victory-input" value="1000" min="1" max="10000000" style="width: 80px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            Custom Financial Victory
+          </label>
           <!-- Saved Missions Panel -->
           <div id="save-games-section" style="margin-top: 25px; display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 320px; align-self: center;">
             <h3 style="font-family: 'Orbitron', sans-serif; color: #0ff; text-shadow: 0 0 5px #0ff; font-size: 1.1rem; margin-bottom: 10px; letter-spacing: 1px; text-transform: uppercase;">Saved Missions</h3>
@@ -304,7 +320,8 @@
             <button id="btn-up-munitions" class="cyber-btn action-btn-icon" style="display: none;" title="Munitions (M)"><span class="btn-icon">💣</span>M<span class="btn-cost"></span><span class="btn-discount"></span></button>
             <button id="btn-up-targeting" class="cyber-btn action-btn-icon" style="display: none;" title="Targeting Computer (T)"><span class="btn-icon">🎯</span>T<span class="btn-cost"></span><span class="btn-discount"></span></button>
             <button id="btn-up-damagecontrol" class="cyber-btn action-btn-icon" style="display: none;" title="Damage Control (D)"><span class="btn-icon">🔧</span>D<span class="btn-cost"></span><span class="btn-discount"></span></button>
-            <button id="btn-up-fueltanker" class="cyber-btn action-btn-icon" style="display: none;" title="Fuel Tanker (F)"><span class="btn-icon">⛽</span>F<span class="btn-cost"></span><span class="btn-discount"></span></button>
+            <button id="btn-up-supplyship" class="cyber-btn action-btn-icon" style="display: none;" title="Supply Ship (Y)"><span class="btn-icon">📦</span>Y<span class="btn-cost"></span><span class="btn-discount"></span></button>
+            <button id="btn-up-extendedfuel" class="cyber-btn action-btn-icon" style="display: none;" title="Extended Fuel (F)"><span class="btn-icon">⛽</span>F<span class="btn-cost"></span><span class="btn-discount"></span></button>
             <button id="btn-up-diplomat" class="cyber-btn action-btn-icon" style="display: none;" title="Diplomat (I)"><span class="btn-icon">🤝</span>I<span class="btn-cost"></span><span class="btn-discount"></span></button>
             <button id="btn-up-marines" class="cyber-btn action-btn-icon" style="display: none;" title="Marines (R)"><span class="btn-icon">🪖</span>R<span class="btn-cost"></span><span class="btn-discount"></span></button>
             <button id="btn-up-command" class="cyber-btn action-btn-icon" style="display: none;" title="Command (C)"><span class="btn-icon">👑</span>C<span class="btn-cost"></span><span class="btn-discount"></span></button>
@@ -534,7 +551,7 @@
               <li><strong>Fuel Transfer:</strong> Friendly cruisers within sensor range autonomously share fuel — if one has fuel &gt;1, it donates 1 to a stranded ally.</li>
               <li><strong>Multi-shot Weapons &amp; Range:</strong> Cruisers fire laser shots per second equal to their current health, targeting enemy ships, amoebas, and planets. <strong>Weapon range is determined by the cruiser class base range, upgraded via Sensor Array (+25%/level) and Targeting Computer (+5%/level), plus a tech bonus (+1/tech) and experience bonus (+0.01 per XP point).</strong></li>
               <li><strong>Bomb Sacs:</strong> Carry bombs = maxHealth/5 (increased by Munitions). Each bombardment volley on planets uses 1 bomb. Bombs reload inside friendly gravity wells.</li>
-              <li><strong>Armor Deflection:</strong> Base shrug chance = <strong>(MaxHealth + √Tech + √Exp + √ShipExp)%</strong>, capped at <strong>90%</strong>. Shields upgrade closes the deflection gap by <strong>20% of the remaining gap</strong> to 100% per level. Carrying Duranium resource adds a flat <strong>+10%</strong> shrug chance. If out of bombs (0), deflection is <strong>halved</strong> — keep them loaded!</li>
+              <li><strong>Armor Deflection:</strong> Base shrug chance = <strong>(MaxHealth + √Tech + √Exp + √ShipExp)%</strong>, capped at <strong>90%</strong>. Carrying Duranium resource adds a flat <strong>+10%</strong> shrug chance. If out of bombs (0), deflection is <strong>halved</strong> — keep them loaded!</li>
               <li><strong>Crew System:</strong> Cruisers have crew (up to 2× current health). Crew restores at 1/sec inside friendly wells when no enemies are within <strong>100px</strong>. Crew is consumed during boarding combat.</li>
               <li><strong>Patrol Mode (P):</strong> Toggled via <strong>P</strong> key or button. Cruiser attacks enemies in sensor range, flies to a nearby friendly well to rearm, then returns to its patrol station. Target-locking a planet automatically deactivates patrol mode.</li>
               <li><strong>Bombardment Threat Safety:</strong> Cruisers automatically <strong>suspend bombardment</strong> when any enemy ship or Amoeba is within sensor range, switching to defensive engagement.</li>
@@ -554,12 +571,13 @@
                   <li><strong>📡 Sensor Array (S):</strong> <strong>+25% scan/weapon range per level</strong>. Expands the cruiser's detection, attack, and diplomacy radius.</li>
                   <li><strong>🔬 Laboratories (L):</strong> <strong>+1 lab per level</strong>. Labs accumulate hazard knowledge when near storms/nebulae, reducing their danger. Uses 🔬 icon.</li>
                   <li><strong>🛡️ Armor Plating (A):</strong> <strong>+4 flat + 10% maxHealth</strong> armor capacity per level. Consuming Duranium resource (if available in player stockpile) boosts this armor capacity bonus by <strong>+50%</strong>. Absorbs damage before hull.</li>
-                  <li><strong>🌀 Energy Shields (H):</strong> Closes the deflection gap by <strong>20% of the remaining gap</strong> to 100% per level. Cannot purchase if the next level would exceed the hard cap of <strong>90%</strong> total deflection.</li>
+                  <li><strong>🌀 Energy Shields (H):</strong> Provides energy shield points that absorb incoming damage first. Max capacity is <strong>(2 + 1/5 player tech bonus, rounded up) per level</strong>. Regenerates anywhere at <strong>5% of max shields per second</strong> (requires fuel, pauses in Ion Storms).</li>
                   <li><strong>🚀 Overcharged Engine (E):</strong> <strong>+3 speed and +3°/sec turn rate per level</strong>. Also adds +2/+1/+1 bonus fuel capacity at Levels 1/2/3.</li>
                   <li><strong>💣 Munition Pods (M):</strong> <strong>+1 bomb capacity and +1 splash damage per level</strong>. Splash destroys additional fleet ships or deals bonus HP damage to cruisers/amoebas (limited to 1/50th of target's size).</li>
                   <li><strong>🎯 Targeting Computer (T):</strong> <strong>+5% weapon range and +5% accuracy per level</strong>.</li>
-                  <li><strong>🔧 Damage Control (D):</strong> <strong>+50% hull repair speed per level</strong> inside friendly wells (continues even while in combat). Enables deep-space healing at 20% per level. Mitigates damaged-cruiser speed and volley size reduction by <code>1/(1+level)</code>.</li>
-                  <li><strong>⛽ Fuel Tanker (F):</strong> <strong>+(maxHealth/5 + 10) fuel capacity</strong>, <strong>+15 maxsupplies</strong>, and <strong>+(25 + level*10)% supply cost discount</strong> per level. Reduces speed by -3, laser accuracy by -5%, and weapon range by -5 per level. If a cruiser is moving and runs out of fuel but has supplies, it automatically stops moving until it converts at least 1 supply to fuel.</li>
+                  <li><strong>🔧 Damage Control (D):</strong> <strong>+50% hull repair speed per level</strong> inside friendly wells (continues even while in combat). Enables deep-space healing at 20% per level. Also increases shield regeneration rate by <strong>+50% of the base rate per level</strong>, and mitigates damaged-cruiser speed and volley size reduction by <code>1/(1+level)</code>.</li>
+                  <li><strong>📦 Supply Ship (Y):</strong> <strong>+20 max supplies</strong>, and <strong>+(25 + level*10)% supply cost discount</strong> per level. Penalties per level: -3 speed, -5% weapon accuracy, -5 weapon range, -20 sensor range (min 25), and -2 weapon volleys (min 1). If a cruiser is moving and runs out of fuel but has supplies, it automatically stops moving until it converts at least 1 supply to fuel.</li>
+                  <li><strong>⛽ Extended Fuel (F):</strong> Increases the cruiser's maximum fuel capacity by the base amount per level at no penalty.</li>
                   <li><strong>🤝 Diplomat (I):</strong> <strong>+1 diplomatic attempt per 60/level seconds</strong>. Generates sympathy on neutral and enemy planets in sensor range, potentially flipping them via revolt. Also reduces enemy sympathy on your own planets. Earns Exp on success. See 🤝 Diplomacy topic.</li>
                   <li><strong>🪖 Marines (R):</strong> <strong>Marine capacity = level × maxHealth</strong>. Automatically loads marines from nearby friendly planets (&gt;50% garrison). Marines launch fleet assaults on enemy planets when they outnumber defenders 3:1. Can also board enemy cruisers when marines exceed 2× enemy crew — capturing the ship! Consumes Tritanium (if available) to grant <strong>+400</strong> starting Exp to launched marine fleets.</li>
                 </ul>
