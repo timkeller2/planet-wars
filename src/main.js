@@ -5278,12 +5278,12 @@ function getPlanetTradeIncomePerMin(planet) {
             startY: startY,
             text: hIcon,
             type: 'happiness_icon',
-            age: -j * 0.15,
-            duration: 2.5,
+            age: -j * 0.3,
+            duration: 5.0,
             color: ev.color || '#ffeb3b',
             driftAngle: -Math.PI / 2 + (Math.random() - 0.5) * 0.8,
-            driftSpeed: 30 + Math.random() * 20,
-            spinSpeed: (Math.random() - 0.5) * 4
+            driftSpeed: 15 + Math.random() * 10,
+            spinSpeed: (Math.random() - 0.5) * 2
           });
         }
       }
