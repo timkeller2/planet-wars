@@ -486,7 +486,7 @@ async function bootstrap() {
           let closestDistSq = Infinity;
 
           for (const p of game.planets) {
-            const creditsAvailable = player.useCredits !== false ? (player.credits - minAllowedCredits) : 0;
+            const creditsAvailable = (player.credits || 0) - minAllowedCredits;
             if (p.owner && p.owner.id === player.id && (p.ships + creditsAvailable) >= cost) {
               const gravityRadius = p.getGravityRadius();
               
@@ -512,7 +512,7 @@ async function bootstrap() {
                 // Rule: Limit such a garrison world from paying upgrade costs unless the upgrading ship is within 25px of the garrison world.
                 // Exception: If the player has enough credits to cover the cost of the upgrade.
                 const isSuchGarrisonWorld = (p.isMilitary || p.focusMode === 'garrison') && (p.ships >= p.maxShips * 2 - 10);
-                const hasEnoughCredits = player.useCredits !== false && player.credits >= cost;
+                const hasEnoughCredits = creditsAvailable >= cost;
                 if (isSuchGarrisonWorld && distSq > 25 * 25 && !hasEnoughCredits) {
                   continue;
                 }
