@@ -6103,6 +6103,14 @@ function getPlanetTradeIncomePerMin(planet) {
       const requiredLead = (isUnlimited || isNaN(limitSecs)) ? 15 : (11 + (limitSecs / 60) / 30);
       const bullseyeLead = requiredLead * 0.75;
 
+      const leaderboardHeader = document.getElementById('leaderboard-header');
+      if (leaderboardHeader) {
+        const titleSpan = leaderboardHeader.querySelector('span');
+        if (titleSpan) {
+          titleSpan.textContent = `LEADERBOARD (lead by ${requiredLead})`;
+        }
+      }
+
       // Determine bullseye targets
       const bullseyeIds = new Set();
 
