@@ -270,23 +270,8 @@ export class Planet {
         if (this.productionProgress >= 1) {
           let newShips = Math.floor(this.productionProgress);
           this.productionProgress -= newShips;
-          if (this.owner.credits < 0) {
-            let shipsBuilt = 0;
-            for (let i = 0; i < newShips; i++) {
-              if (this.owner.credits < 0) {
-                this.owner.credits += 1;
-              } else {
-                shipsBuilt++;
-              }
-            }
-            this.ships += shipsBuilt;
-            if (shipsBuilt > 0) {
-              this.decreaseMaxShips(0.04 * shipsBuilt, true);
-            }
-          } else {
-            this.ships += newShips;
-            this.decreaseMaxShips(0.04 * newShips, true);
-          }
+          this.ships += newShips;
+          this.decreaseMaxShips(0.04 * newShips, true);
         }
       } else {
         this.productionProgress = 0;
