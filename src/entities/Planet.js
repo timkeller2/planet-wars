@@ -156,7 +156,12 @@ export class Planet {
 
     if (this.owner && this.focusMode === 'terraforming') {
       const techBonus = Math.floor(Math.sqrt(this.owner.techScore || 0));
-      if (this.habitability > 10 * techBonus) {
+      const isUnlimited = !settings || !settings.timedGameLimit || settings.timedGameLimit === 'unlimited';
+      const timedLimitSecs = !isUnlimited ? parseFloat(settings.timedGameLimit) : null;
+      const durationInMinutes = timedLimitSecs ? (timedLimitSecs / 60) : null;
+      const multiplier = (durationInMinutes && durationInMinutes > 0) ? (600 / durationInMinutes) : 5;
+      const capVal = Math.round(multiplier * techBonus);
+      if (this.habitability > capVal) {
         this.focusMode = 'economy';
         this.focusTransition = null;
       }

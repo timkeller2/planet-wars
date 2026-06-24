@@ -2799,7 +2799,12 @@ function getPlanetTradeIncomePerMin(planet) {
       const techBonusVal = hpOwner ? Math.sqrt(hpOwner.techScore || 0) : 0;
       const softCap = Math.round(p.sizeClass * ((p.habitability + techBonusVal) / 100));
       const techBonusInt = Math.floor(techBonusVal);
-      const maxTerraformedVal = techBonusInt * 10;
+      const settings = serverState ? serverState.settings : null;
+      const isUnlimited = !settings || !settings.timedGameLimit || settings.timedGameLimit === 'unlimited';
+      const timedLimitSecs = !isUnlimited ? parseFloat(settings.timedGameLimit) : null;
+      const durationInMinutes = timedLimitSecs ? (timedLimitSecs / 60) : null;
+      const multiplier = (durationInMinutes && durationInMinutes > 0) ? (600 / durationInMinutes) : 5;
+      const maxTerraformedVal = Math.round(multiplier * techBonusInt);
       const improvementRateText = owner ? `${p.habitability}/${maxTerraformedVal}` : `${p.habitability}`;
       lines.push({ label: `Improvement Rate: ${improvementRateText}`, value: `Potential: ${softCap}`, color: '#ffb74d' });
 
