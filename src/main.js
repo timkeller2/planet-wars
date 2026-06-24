@@ -5260,6 +5260,35 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
 
+    if (state.happinessEvents && state.happinessEvents.length > 0) {
+      for (const ev of state.happinessEvents) {
+        const count = Math.max(1, Math.round(ev.amount));
+        const hName = getHabName(ev.habitability);
+        const hIcon = habIcons[hName] || '🪐';
+        for (let j = 0; j < count; j++) {
+          const angle = Math.random() * Math.PI * 2;
+          const distance = Math.random() * 15;
+          const startX = ev.x + Math.cos(angle) * distance;
+          const startY = ev.y + Math.sin(angle) * distance;
+          
+          floatingAnimations.push({
+            x: startX,
+            y: startY,
+            startX: startX,
+            startY: startY,
+            text: hIcon,
+            type: 'happiness_icon',
+            age: -j * 0.15,
+            duration: 2.5,
+            color: ev.color || '#ffeb3b',
+            driftAngle: -Math.PI / 2 + (Math.random() - 0.5) * 0.8,
+            driftSpeed: 30 + Math.random() * 20,
+            spinSpeed: (Math.random() - 0.5) * 4
+          });
+        }
+      }
+    }
+
     if (state.accuracyEvents && state.accuracyEvents.length > 0) {
       for (const ev of state.accuracyEvents) {
         if (ev.attackerShipId) {
@@ -6018,27 +6047,33 @@ function getPlanetTradeIncomePerMin(planet) {
       const happySorted = [...alivePlayers].sort((a, b) => getHappinessBonus(b) - getHappinessBonus(a));
       const vpSorted = [...alivePlayers].sort((a, b) => getVictoryScore(b) - getVictoryScore(a));
 
-      // Determine bullseye targets: 75% of any victory condition
+      // Calculate dynamic required lead for Tech, Experience, and Happiness victories
+      const isUnlimited = !serverState.settings || !serverState.settings.timedGameLimit || serverState.settings.timedGameLimit === 'unlimited';
+      const limitSecs = serverState.settings ? parseFloat(serverState.settings.timedGameLimit) : NaN;
+      const requiredLead = (isUnlimited || isNaN(limitSecs)) ? 15 : (11 + (limitSecs / 60) / 30);
+      const bullseyeLead = requiredLead * 0.75;
+
+      // Determine bullseye targets
       const bullseyeIds = new Set();
 
-      // 1. Tech Victory: 75% of 12 points lead = 9 points lead
-      if (techSorted.length > 1 && (getTechBonus(techSorted[0]) - getTechBonus(techSorted[1]) >= 9)) {
+      // 1. Tech Victory
+      if (techSorted.length > 1 && (getTechBonus(techSorted[0]) - getTechBonus(techSorted[1]) >= bullseyeLead)) {
         bullseyeIds.add(techSorted[0].id);
-      } else if (techSorted.length === 1 && getTechBonus(techSorted[0]) >= 9) {
+      } else if (techSorted.length === 1 && getTechBonus(techSorted[0]) >= bullseyeLead) {
         bullseyeIds.add(techSorted[0].id);
       }
 
-      // 2. Experience Victory: 75% of 12 points lead = 9 points lead
-      if (expSorted.length > 1 && (getExpBonus(expSorted[0]) - getExpBonus(expSorted[1]) >= 9)) {
+      // 2. Experience Victory
+      if (expSorted.length > 1 && (getExpBonus(expSorted[0]) - getExpBonus(expSorted[1]) >= bullseyeLead)) {
         bullseyeIds.add(expSorted[0].id);
-      } else if (expSorted.length === 1 && getExpBonus(expSorted[0]) >= 9) {
+      } else if (expSorted.length === 1 && getExpBonus(expSorted[0]) >= bullseyeLead) {
         bullseyeIds.add(expSorted[0].id);
       }
 
-      // 3. Happiness Victory: 75% of 12 points lead = 9 points lead
-      if (happySorted.length > 1 && (getHappinessBonus(happySorted[0]) - getHappinessBonus(happySorted[1]) >= 9)) {
+      // 3. Happiness Victory
+      if (happySorted.length > 1 && (getHappinessBonus(happySorted[0]) - getHappinessBonus(happySorted[1]) >= bullseyeLead)) {
         bullseyeIds.add(happySorted[0].id);
-      } else if (happySorted.length === 1 && getHappinessBonus(happySorted[0]) >= 9) {
+      } else if (happySorted.length === 1 && getHappinessBonus(happySorted[0]) >= bullseyeLead) {
         bullseyeIds.add(happySorted[0].id);
       }
 
@@ -14683,10 +14718,19 @@ function getPlanetTradeIncomePerMin(planet) {
           continue;
         }
 
+        if (anim.age < 0) {
+          continue;
+        }
+
         const progress = anim.age / anim.duration;
 
         let drawX = anim.x;
         let drawY = anim.y;
+        if (anim.type === 'happiness_icon') {
+          const driftDist = anim.driftSpeed * progress * anim.duration;
+          drawX = anim.startX + Math.cos(anim.driftAngle) * driftDist;
+          drawY = anim.startY + Math.sin(anim.driftAngle) * driftDist;
+        }
         if (anim.shipId && anim.type !== 'diplomacy_success' && serverState && serverState.ships) {
           const ship = serverState.ships.find(s => s.id === anim.shipId);
           if (ship) {
@@ -14773,6 +14817,8 @@ function getPlanetTradeIncomePerMin(planet) {
           yOffset = progress * 60; // drifts up nicely
         } else if (anim.type === 'anomaly_completion') {
           yOffset = progress * 70; // drifts up nicely
+        } else if (anim.type === 'happiness_icon') {
+          yOffset = 0;
         }
 
         // Grow font
@@ -14805,6 +14851,12 @@ function getPlanetTradeIncomePerMin(planet) {
            fontsize = 18 + (progress * 22); // starts at 18px, grows to 40px
         } else if (anim.type === 'anomaly_completion') {
            fontsize = 14 + (progress * 12); // starts at 14px, grows to 26px
+        } else if (anim.type === 'happiness_icon') {
+          if (progress < 0.3) {
+            fontsize = 10 + (progress / 0.3) * 14;
+          } else {
+            fontsize = 24 - ((progress - 0.3) / 0.7) * 8;
+          }
         }
 
         ctx.font = `bold ${fontsize}px Orbitron`; // growing font
@@ -14892,6 +14944,14 @@ function getPlanetTradeIncomePerMin(planet) {
           xOffset = 0;
           ctx.fillStyle = `rgba(0, 255, 204, ${alpha})`; // glowing teal
           ctx.shadowColor = `rgba(0, 255, 204, ${alpha})`;
+        } else if (anim.type === 'happiness_icon') {
+          xOffset = Math.sin(progress * Math.PI * 4) * 15;
+          let localAlpha = alpha;
+          if (progress < 0.2) {
+            localAlpha = (progress / 0.2) * alpha;
+          }
+          ctx.fillStyle = `rgba(255, 255, 255, ${localAlpha})`;
+          ctx.shadowColor = anim.color || '#ffeb3b';
         } else {
           xOffset = Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
@@ -14910,7 +14970,15 @@ function getPlanetTradeIncomePerMin(planet) {
           drawX = anim.startX + (anim.endX - anim.startX) * progress;
           drawY = anim.startY + (anim.endY - anim.startY) * progress;
         }
-        ctx.fillText(anim.text, drawX + xOffset, drawY - yOffset);
+        if (anim.type === 'happiness_icon') {
+          ctx.save();
+          ctx.translate(drawX + xOffset, drawY - yOffset);
+          ctx.rotate(progress * anim.spinSpeed);
+          ctx.fillText(anim.text, 0, 0);
+          ctx.restore();
+        } else {
+          ctx.fillText(anim.text, drawX + xOffset, drawY - yOffset);
+        }
         ctx.shadowBlur = 0;
       }
 

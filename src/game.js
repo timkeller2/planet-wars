@@ -259,6 +259,7 @@ export class Game {
     };
     this.upgradeEnhanceEvents = [];
     this.accuracyEvents = [];
+    this.happinessEvents = [];
     this.pendingChatMessages = [];
     this.pendingAnomalyCompletions = [];
     this.sellOrders = [];
@@ -6213,7 +6214,18 @@ export class Game {
         for (const planet of this.planets) {
           if (planet.owner && planet.owner.id === player.id && !planet.dead) {
             if (planet.ships >= planet.maxShips) {
-              happinessGained += planet.ships * 0.01 * (planet.habitability / 100);
+              const gained = planet.ships * 0.01 * (planet.habitability / 100);
+              happinessGained += gained;
+              
+              this.happinessEvents = this.happinessEvents || [];
+              this.happinessEvents.push({
+                planetId: planet.id,
+                x: planet.x,
+                y: planet.y,
+                amount: gained,
+                habitability: planet.habitability,
+                color: player.color || '#ffeb3b'
+              });
             }
           }
         }
@@ -7258,12 +7270,17 @@ export class Game {
     const getHappinessBonus = p => Math.sqrt(p.happinessScore !== undefined ? p.happinessScore : 0);
     const getVP = p => getTechBonus(p) + getExpBonus(p) + getHappinessBonus(p);
 
-    // 1. Tech Victory: leads by 12 Tech Bonus points
+    // Calculate dynamic required lead for Tech, Experience, and Happiness victories
+    const isUnlimited = !this.settings || !this.settings.timedGameLimit || this.settings.timedGameLimit === 'unlimited';
+    const limitSecs = this.settings ? parseFloat(this.settings.timedGameLimit) : NaN;
+    const requiredLead = (isUnlimited || isNaN(limitSecs)) ? 15 : (11 + (limitSecs / 60) / 30);
+
+    // 1. Tech Victory: leads by requiredLead Tech Bonus points
     const sortedByTech = [...alivePlayers].sort((a, b) => getTechBonus(b) - getTechBonus(a));
     if (sortedByTech.length >= 2) {
       const topPlayer = sortedByTech[0];
       const lead = getTechBonus(topPlayer) - getTechBonus(sortedByTech[1]);
-      if (lead >= 12) {
+      if (lead >= requiredLead) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7271,7 +7288,7 @@ export class Game {
       }
     } else if (sortedByTech.length === 1) {
       const topPlayer = sortedByTech[0];
-      if (getTechBonus(topPlayer) >= 12) {
+      if (getTechBonus(topPlayer) >= requiredLead) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7279,12 +7296,12 @@ export class Game {
       }
     }
 
-    // 2. Experience Victory: leads by 12 Experience Bonus points
+    // 2. Experience Victory: leads by requiredLead Experience Bonus points
     const sortedByExp = [...alivePlayers].sort((a, b) => getExpBonus(b) - getExpBonus(a));
     if (sortedByExp.length >= 2) {
       const topPlayer = sortedByExp[0];
       const lead = getExpBonus(topPlayer) - getExpBonus(sortedByExp[1]);
-      if (lead >= 12) {
+      if (lead >= requiredLead) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(EXPERIENCE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7292,7 +7309,7 @@ export class Game {
       }
     } else if (sortedByExp.length === 1) {
       const topPlayer = sortedByExp[0];
-      if (getExpBonus(topPlayer) >= 12) {
+      if (getExpBonus(topPlayer) >= requiredLead) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(EXPERIENCE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7300,12 +7317,12 @@ export class Game {
       }
     }
 
-    // 3. Happiness Victory: leads by 12 Happiness Bonus points
+    // 3. Happiness Victory: leads by requiredLead Happiness Bonus points
     const sortedByHappiness = [...alivePlayers].sort((a, b) => getHappinessBonus(b) - getHappinessBonus(a));
     if (sortedByHappiness.length >= 2) {
       const topPlayer = sortedByHappiness[0];
       const lead = getHappinessBonus(topPlayer) - getHappinessBonus(sortedByHappiness[1]);
-      if (lead >= 12) {
+      if (lead >= requiredLead) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(HAPPINESS VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7313,7 +7330,7 @@ export class Game {
       }
     } else if (sortedByHappiness.length === 1) {
       const topPlayer = sortedByHappiness[0];
-      if (getHappinessBonus(topPlayer) >= 12) {
+      if (getHappinessBonus(topPlayer) >= requiredLead) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(HAPPINESS VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);

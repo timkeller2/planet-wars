@@ -2714,6 +2714,13 @@ async function bootstrap() {
         return isVisible(ev.x, ev.y);
       });
 
+      const visibleHappinessEvents = (game.happinessEvents || []).filter(ev => {
+        const targetPlanet = game.planets.find(p => p.id === ev.planetId);
+        if (!targetPlanet) return false;
+        const hasSympathy = targetPlanet.sympathy && targetPlanet.sympathy[player.id] > 0;
+        return (targetPlanet.owner && targetPlanet.owner.id === player.id) || isVisible(targetPlanet.x, targetPlanet.y) || hasSympathy;
+      });
+
       const playerExploredCells = {};
       if (game.exploredGrid) {
         const prefix = `${player.id}_`;
@@ -2780,6 +2787,7 @@ async function bootstrap() {
         globalUpgradeModifiers: game.globalUpgradeModifiers,
         upgradeEnhanceEvents: visibleUpgradeEnhanceEvents,
         accuracyEvents: visibleAccuracyEvents,
+        happinessEvents: visibleHappinessEvents,
         galacticCapacity: game.galacticCapacity,
         sellOrders: [
           ...(player.autoBuyOrders || []),
@@ -2826,6 +2834,7 @@ async function bootstrap() {
     // Clear upgrade enhancement events after broadcasting to all clients
     game.upgradeEnhanceEvents = [];
     game.accuracyEvents = [];
+    game.happinessEvents = [];
     game.pendingHabClassChanges = [];
     
   }, TICK_RATE);
