@@ -62,6 +62,7 @@ export class Ship {
     this.scoutTargetY = null;
     this.scoutTargetIsUnexplored = false;
     this.scoutFuelRetreatTargetPlanetId = null;
+    this.scoutFuelRetreatTargetShipId = null;
     this.scoutAttackEnabled = false;
     this.useResources = false;
     this.isResearching = false;
@@ -437,6 +438,7 @@ export class Ship {
     this.savedBombardPlanetId = null;
     this.scoutFuelRetreating = false;
     this.scoutFuelRetreatTargetPlanetId = null;
+    this.scoutFuelRetreatTargetShipId = null;
     this.researchFuelRetreating = false;
     this.researchFuelRetreatTargetPlanetId = null;
     this.researchRearming = false;
@@ -2659,6 +2661,7 @@ export class Ship {
     if (!this.isScouting) {
       this.scoutFuelRetreating = false;
       this.scoutFuelRetreatTargetPlanetId = null;
+      this.scoutFuelRetreatTargetShipId = null;
       this.scoutTargetX = null;
       this.scoutTargetY = null;
     }
@@ -3036,7 +3039,8 @@ export class Ship {
       // 1. Refueling & Rearming & Health Retreat Check: if fuel is half or less, OR if attack is on and bombs are depleted, OR health is below 1/2 maxhealth
       const hasSupplies = (this.supplies || 0) > 0;
       const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
-      const needsRefuel = false; // Disable auto-retreat for low fuel
+      const maxFuel = this.getMaxFuel();
+      const needsRefuel = (this.fuel < maxFuel * 0.25) && !hasSupplies && !withinSensorRangeOfSupplyShip;
       const supplyShip = this.findNearbySupplyShip(allShips);
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
       const needsRearm = (this.scoutAttackEnabled === true) && this.bombs <= 0 && !hasNearbySupply && !hasSupplies && !withinSensorRangeOfSupplyShip;
@@ -3081,145 +3085,162 @@ export class Ship {
       };
 
       if (this.scoutFuelRetreating) {
-        let needNewTarget = this.targetX === null || this.targetY === null || !this.scoutFuelRetreatTargetPlanetId;
-        if (!needNewTarget && this.scoutFuelRetreatTargetPlanetId !== null && this.scoutFuelRetreatTargetPlanetId !== undefined) {
-          const tp = allPlanets ? allPlanets.find(p => p.id === this.scoutFuelRetreatTargetPlanetId) : null;
-          if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
-            needNewTarget = true;
+        let needNewTarget = this.targetX === null || this.targetY === null || (!this.scoutFuelRetreatTargetPlanetId && !this.scoutFuelRetreatTargetShipId);
+        if (!needNewTarget) {
+          if (this.scoutFuelRetreatTargetPlanetId !== null && this.scoutFuelRetreatTargetPlanetId !== undefined) {
+            const tp = allPlanets ? allPlanets.find(p => p.id === this.scoutFuelRetreatTargetPlanetId) : null;
+            if (!tp || !tp.owner || tp.owner.id !== this.owner.id) {
+              needNewTarget = true;
+            }
+          } else if (this.scoutFuelRetreatTargetShipId !== null && this.scoutFuelRetreatTargetShipId !== undefined) {
+            const ts = allShips ? allShips.find(s => s.id === this.scoutFuelRetreatTargetShipId) : null;
+            if (!ts || !ts.active || !ts.owner || ts.owner.id !== this.owner.id) {
+              needNewTarget = true;
+            } else {
+              // Update target coords dynamically to follow the moving ship!
+              this.targetX = ts.x;
+              this.targetY = ts.y;
+            }
           }
         }
 
         if (needNewTarget) {
-          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
-          let bestCandidate = null;
+          const candidates = [];
 
-          if (friendlyPlanets.length > 0) {
-            let closestEnemyUnit = null;
-            let closestEnemyDistSq = Infinity;
-            if (allShips) {
-              for (const other of allShips) {
-                if (other.active && other.id !== this.id) {
-                  const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
-                  if (isEnemy) {
-                    let isVisible = true;
-                    if (game && typeof game.isShipVisibleTo === 'function') {
-                      isVisible = game.isShipVisibleTo(other, this.owner);
-                    }
-                    if (!isVisible) continue;
-                    const edx = other.x - this.x;
-                    const edy = other.y - this.y;
-                    const distSq = edx * edx + edy * edy;
-                    if (distSq < closestEnemyDistSq) {
-                      closestEnemyDistSq = distSq;
-                      closestEnemyUnit = other;
-                    }
-                  }
+          // 1. Gather friendly ship candidates (supplies > 0 OR fuel > 4)
+          if (allShips && this.owner) {
+            for (const other of allShips) {
+              if (other.active && other !== this && other.isCruiser && other.owner && other.owner.id === this.owner.id) {
+                const hasS = (other.supplies || 0) > 0;
+                const hasF = (other.fuel || 0) > 4;
+                if (hasS || hasF) {
+                  const dx = other.x - this.x;
+                  const dy = other.y - this.y;
+                  candidates.push({
+                    type: 'ship',
+                    ship: other,
+                    x: other.x,
+                    y: other.y,
+                    distSq: dx * dx + dy * dy
+                  });
                 }
               }
             }
+          }
 
-            const findBestCandidate = (radius, minEnemyDistReq, strictSafe) => {
-              const candidates = [];
-              for (let attempt = 0; attempt < 250 && candidates.length < 15; attempt++) {
-                const p = friendlyPlanets[Math.floor(Math.random() * friendlyPlanets.length)];
-                const gRad = p.getGravityRadius();
+          // 2. Gather safe friendly gravity well candidates
+          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+          if (friendlyPlanets.length > 0) {
+            // Safe helper
+            const findSafeLocInWell = (planet, minEnemyDistReq, strictSafe) => {
+              const gRad = planet.getGravityRadius();
+              let bestLoc = null;
+              let maxMinEnemyDistSq = -1;
+              for (let attempt = 0; attempt < 50; attempt++) {
                 const theta = Math.random() * Math.PI * 2;
                 const r = Math.random() * gRad * 0.7;
-                const tx = p.x + r * Math.cos(theta);
-                const ty = p.y + r * Math.sin(theta);
+                const tx = planet.x + r * Math.cos(theta);
+                const ty = planet.y + r * Math.sin(theta);
                 
-                const dx = tx - this.x;
-                const dy = ty - this.y;
-                if (dx * dx + dy * dy <= radius * radius) {
-                  let minEnemyDistSq = Infinity;
-                  if (allShips) {
-                    for (const other of allShips) {
-                      if (other.active && other.id !== this.id) {
-                        const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
-                        if (isEnemy) {
-                          let isVisible = true;
-                          if (game && typeof game.isShipVisibleTo === 'function') {
-                            isVisible = game.isShipVisibleTo(other, this.owner);
-                          }
-                          if (!isVisible) continue;
-                          const edx = other.x - tx;
-                          const edy = other.y - ty;
-                          const distSq = edx * edx + edy * edy;
-                          if (distSq < minEnemyDistSq) {
-                            minEnemyDistSq = distSq;
-                          }
+                let minEnemyDistSq = Infinity;
+                if (allShips) {
+                  for (const other of allShips) {
+                    if (other.active && other.id !== this.id) {
+                      const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
+                      if (isEnemy) {
+                        let isVisible = true;
+                        if (game && typeof game.isShipVisibleTo === 'function') {
+                          isVisible = game.isShipVisibleTo(other, this.owner);
+                        }
+                        if (!isVisible) continue;
+                        const edx = other.x - tx;
+                        const edy = other.y - ty;
+                        const distSq = edx * edx + edy * edy;
+                        if (distSq < minEnemyDistSq) {
+                          minEnemyDistSq = distSq;
                         }
                       }
                     }
                   }
-                  
-                  if (!strictSafe || minEnemyDistSq >= minEnemyDistReq * minEnemyDistReq) {
-                    candidates.push({ x: tx, y: ty, planet: p, minEnemyDistSq });
+                }
+                
+                if (!strictSafe || minEnemyDistSq >= minEnemyDistReq * minEnemyDistReq) {
+                  if (minEnemyDistSq > maxMinEnemyDistSq) {
+                    maxMinEnemyDistSq = minEnemyDistSq;
+                    bestLoc = { x: tx, y: ty };
                   }
                 }
               }
-              
-              if (candidates.length > 0) {
-                if (closestEnemyUnit) {
-                  const edx = closestEnemyUnit.x - this.x;
-                  const edy = closestEnemyUnit.y - this.y;
-                  const oppositeCandidates = candidates.filter(c => {
-                    const cdx = c.x - this.x;
-                    const cdy = c.y - this.y;
-                    return (cdx * edx + cdy * edy) < 0;
-                  });
-                  if (oppositeCandidates.length > 0) {
-                    oppositeCandidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
-                    return oppositeCandidates[0];
-                  }
-                }
-                candidates.sort((a, b) => b.minEnemyDistSq - a.minEnemyDistSq);
-                return candidates[0];
-              }
-              return null;
+              return bestLoc;
             };
 
-            bestCandidate = findBestCandidate(300, 150, true);
-            if (!bestCandidate) bestCandidate = findBestCandidate(500, 150, true);
-            if (!bestCandidate) bestCandidate = findBestCandidate(300, 0, false);
-            if (!bestCandidate) bestCandidate = findBestCandidate(500, 0, false);
+            // First pass: try safe gravity wells
+            let wells = [];
+            for (const p of friendlyPlanets) {
+              const loc = findSafeLocInWell(p, 150, true);
+              if (loc) {
+                const dx = loc.x - this.x;
+                const dy = loc.y - this.y;
+                wells.push({
+                  type: 'planet',
+                  planet: p,
+                  x: loc.x,
+                  y: loc.y,
+                  distSq: dx * dx + dy * dy
+                });
+              }
+            }
+
+            // Fallback: if no strictly safe wells found, try unsafe wells
+            if (wells.length === 0) {
+              for (const p of friendlyPlanets) {
+                const loc = findSafeLocInWell(p, 0, false) || { x: p.x, y: p.y };
+                const dx = loc.x - this.x;
+                const dy = loc.y - this.y;
+                wells.push({
+                  type: 'planet',
+                  planet: p,
+                  x: loc.x,
+                  y: loc.y,
+                  distSq: dx * dx + dy * dy
+                });
+              }
+            }
+
+            candidates.push(...wells);
           }
-          
-          if (bestCandidate) {
-            this.targetPlanet = null;
-            this.scoutFuelRetreatTargetPlanetId = bestCandidate.planet.id;
-            this.targetX = bestCandidate.x;
-            this.targetY = bestCandidate.y;
+
+          // 3. Choose the closest candidate refueling source
+          if (candidates.length > 0) {
+            candidates.sort((a, b) => a.distSq - b.distSq);
+            const best = candidates[0];
+            if (best.type === 'ship') {
+              this.targetPlanet = null;
+              this.scoutFuelRetreatTargetShipId = best.ship.id;
+              this.scoutFuelRetreatTargetPlanetId = null;
+              this.targetX = best.x;
+              this.targetY = best.y;
+            } else {
+              this.targetPlanet = null;
+              this.scoutFuelRetreatTargetPlanetId = best.planet.id;
+              this.scoutFuelRetreatTargetShipId = null;
+              this.targetX = best.x;
+              this.targetY = best.y;
+            }
             this.cruiserTargetType = null;
             this.cruiserTargetId = null;
           } else {
-            let closestFriendly = null;
-            let minFriendlyDistSq = Infinity;
-            if (friendlyPlanets.length > 0) {
-              for (const p of friendlyPlanets) {
-                const dx = p.x - this.x;
-                const dy = p.y - this.y;
-                const distSq = dx * dx + dy * dy;
-                if (distSq < minFriendlyDistSq) {
-                  minFriendlyDistSq = distSq;
-                  closestFriendly = p;
-                }
-              }
-            }
-            if (closestFriendly) {
-              this.targetPlanet = closestFriendly;
-              this.targetX = closestFriendly.x;
-              this.targetY = closestFriendly.y;
-              this.scoutFuelRetreatTargetPlanetId = closestFriendly.id;
-              this.cruiserTargetType = null;
-              this.cruiserTargetId = null;
-            }
+            // Absolute fallback: if no candidate planets/ships exist, hold position
+            this.targetPlanet = null;
+            this.scoutFuelRetreatTargetPlanetId = null;
+            this.scoutFuelRetreatTargetShipId = null;
           }
         }
       } else {
         // Active Scouting (Not retreating)
         this.scoutFuelRetreating = false;
         this.scoutFuelRetreatTargetPlanetId = null;
+        this.scoutFuelRetreatTargetShipId = null;
         this.targetPlanet = null;
 
         // A. Attack / Engage Logic vs Flee Logic
