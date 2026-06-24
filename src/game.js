@@ -2804,9 +2804,6 @@ export class Game {
       const costCap = cfg.costCap;
       const maxHealth = cfg.hp;
 
-      let creditsAvailableForAffordability = 0;
-      let creditsAvailableForPayment = 0;
-
       let minAllowedCredits = 0;
       if (owner) {
         const ownsHomeworld = this.planets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id);
@@ -2815,17 +2812,10 @@ export class Game {
         }
       }
 
-      if (source.isMilitary) {
-        creditsAvailableForAffordability = (owner && owner.useCredits !== false) ? (owner.credits - minAllowedCredits) : 0;
-        creditsAvailableForPayment = creditsAvailableForAffordability;
-      } else {
-        const standardCredits = (owner && owner.useCredits !== false) ? (owner.credits || 0) : 0;
-        creditsAvailableForAffordability = (isFirst || !source.homeworldOf) ? standardCredits : 0;
-        creditsAvailableForPayment = standardCredits;
-      }
+      const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
 
-      if ((source.ships + creditsAvailableForAffordability) >= costShips && (source.maxShips - costCap) >= 55) {
-        const creditsPaid = Math.min(creditsAvailableForPayment, costShips);
+      if ((source.ships + creditsAvailable) >= costShips && (source.maxShips - costCap) >= 55) {
+        const creditsPaid = Math.min(creditsAvailable, costShips);
         const remainingCostShips = costShips - creditsPaid;
         const extraShips = source.ships - remainingCostShips;
         const bonusHp = Math.min(4, Math.floor(Math.max(0, extraShips) / 25));
@@ -3020,7 +3010,7 @@ export class Game {
         minAllowedCredits = -(1000 + Math.floor(owner.totalShips || 0));
       }
 
-      const creditsAvailable = (owner && owner.useCredits !== false) ? (owner.credits - minAllowedCredits) : 0;
+      const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
 
       if ((source.ships + creditsAvailable) >= finalCost && (source.maxShips - costCap) >= 55) {
         const creditsPaid = Math.min(creditsAvailable, finalCost);

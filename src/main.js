@@ -6460,7 +6460,7 @@ function getPlanetTradeIncomePerMin(planet) {
         minAllowedCredits = -(1000 + Math.floor(myPlayer.totalShips || 0));
       }
     }
-    return (myPlayer && myPlayer.useCredits !== false) ? ((myPlayer.credits || 0) - minAllowedCredits) : 0;
+    return myPlayer ? ((myPlayer.credits || 0) - minAllowedCredits) : 0;
   }
 
   function getUpgradeIconsHtml(upgrades) {
@@ -8762,11 +8762,7 @@ function getPlanetTradeIncomePerMin(planet) {
             costShips *= 2;
           }
 
-          const creditsAvailable = selectedPlanetBuild.isMilitary
-            ? getCreditsAvailableForConfig(myPlayer)
-            : ((isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf))
-              ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0)
-              : 0);
+          const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
           const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
           if (canAfford) {
             socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
@@ -8823,11 +8819,7 @@ function getPlanetTradeIncomePerMin(planet) {
               costShips *= 2;
             }
 
-            const creditsAvailable = selectedPlanetBuild.isMilitary
-              ? getCreditsAvailableForConfig(myPlayer)
-              : ((isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf))
-                ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0)
-                : 0);
+            const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
             const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
             if (canAfford) {
               socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
@@ -9763,11 +9755,7 @@ function getPlanetTradeIncomePerMin(planet) {
             el.style.boxShadow = '';
           }
 
-          const creditsAvailable = selectedPlanetBuild.isMilitary
-            ? getCreditsAvailableForConfig(myPlayer)
-            : ((isFirst || !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf))
-              ? ((myPlayer && myPlayer.useCredits !== false) ? (myPlayer.credits || 0) : 0)
-              : 0);
+          const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
           const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
 
           if (!canAfford) {
@@ -9790,7 +9778,7 @@ function getPlanetTradeIncomePerMin(planet) {
           } else if (activeConfigClassType === classType) {
             titleStr = `Build Basic ${baseName} (${shortcutKey}) (Cost: ${costShips} ships/credits, Cap: ${cfg.costCap})`;
           } else {
-            titleStr = `Build ${isFirst ? 'Prototype ' : ''}${baseName} (${shortcutKey}) (Credits allowed if toggled)`;
+            titleStr = `Build ${isFirst ? 'Prototype ' : ''}${baseName} (${shortcutKey}) (Always uses credits first down to debt limit)`;
           }
           el.setAttribute('title', titleStr);
 
