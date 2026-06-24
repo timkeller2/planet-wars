@@ -4802,7 +4802,7 @@ function getPlanetTradeIncomePerMin(planet) {
             text: '$$$',
             type: 'dollar',
             age: 0,
-            duration: 1.5
+            duration: 4.5
           });
         }
         if (!p.inFog && p.techIncreaseEvent) {
@@ -5278,12 +5278,12 @@ function getPlanetTradeIncomePerMin(planet) {
             startY: startY,
             text: hIcon,
             type: 'happiness_icon',
-            age: -j * 0.3,
-            duration: 5.0,
+            age: -j * 0.45,
+            duration: 7.0,
             color: ev.color || '#ffeb3b',
             driftAngle: -Math.PI / 2 + (Math.random() - 0.5) * 0.8,
-            driftSpeed: 15 + Math.random() * 10,
-            spinSpeed: (Math.random() - 0.5) * 2
+            driftSpeed: 10 + Math.random() * 6,
+            spinSpeed: (Math.random() - 0.5) * 1.5
           });
         }
       }
