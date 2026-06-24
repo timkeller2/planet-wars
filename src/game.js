@@ -3005,9 +3005,11 @@ export class Game {
       console.log(`[SERVER-CONFIG-COST] Name: ${configName}, classType: ${classType}, upgrades:`, JSON.stringify(upgrades), `baseCostShips: ${baseCostShips}, totalUpgradeCost: ${totalUpgradeCost}, finalCost: ${finalCost}`);
 
       let minAllowedCredits = 0;
-      const ownsHomeworld = this.planets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id);
-      if (ownsHomeworld) {
-        minAllowedCredits = -(1000 + Math.floor(owner.totalShips || 0));
+      if (owner) {
+        const ownsHomeworld = this.planets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id);
+        if (ownsHomeworld) {
+          minAllowedCredits = -(1000 + Math.floor(owner.totalShips || 0));
+        }
       }
 
       const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
