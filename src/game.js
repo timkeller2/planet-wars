@@ -3705,6 +3705,7 @@ export class Game {
   }
 
   researchAnomaly(p, ship, deltaTime) {
+    if (!p.anomaly || p.anomaly.completing || p.anomaly.researched) return;
     if (p.anomaly.difficulty <= 0) {
       p.anomaly.completing = true;
       p.anomaly.completingTimeLeft = 3000;
@@ -4307,12 +4308,12 @@ export class Game {
         // Targeted anomaly within 50px check (research even if not idle / moving)
         if (hasLabs && !completedOrResearchedAnomalyOrWreckage) {
           let targetedAnomalyPlanet = null;
-          if (ship.targetPlanet && ship.targetPlanet.anomaly && !ship.targetPlanet.anomaly.researched) {
+          if (ship.targetPlanet && ship.targetPlanet.anomaly && !ship.targetPlanet.anomaly.researched && !ship.targetPlanet.anomaly.completing) {
             targetedAnomalyPlanet = ship.targetPlanet;
           }
           if (!targetedAnomalyPlanet && ship.cruiserTargetType === 'planet' && ship.cruiserTargetId !== null) {
             const p = this.planets.find(pl => pl.id === ship.cruiserTargetId);
-            if (p && p.anomaly && !p.anomaly.researched) {
+            if (p && p.anomaly && !p.anomaly.researched && !p.anomaly.completing) {
               targetedAnomalyPlanet = p;
             }
           }
