@@ -1894,8 +1894,8 @@ function getPlanetTradeIncomePerMin(planet) {
           const activeUpgrades = [];
           if ((s.sensorarrays || 0) > 0) activeUpgrades.push({ symbol: '📡', count: s.sensorarrays });
           if ((s.labs || 0) > 0) activeUpgrades.push({ symbol: '🔬', count: s.labs });
-          if ((s.shields || 0) > 0) activeUpgrades.push({ symbol: '🌀', count: s.shields });
-          if ((s.armor || 0) > 0) activeUpgrades.push({ symbol: '🛡️', count: s.armor });
+          if ((s.shields || 0) > 0) activeUpgrades.push({ symbol: '🛡️', count: s.shields });
+          if ((s.armor || 0) > 0) activeUpgrades.push({ symbol: '⛨', count: s.armor });
           if ((s.engine || 0) > 0) activeUpgrades.push({ symbol: '🚀', count: s.engine });
           if ((s.munitions || 0) > 0) activeUpgrades.push({ symbol: '💣', count: s.munitions });
           if ((s.targeting || 0) > 0) activeUpgrades.push({ symbol: '🎯', count: s.targeting });
@@ -2131,8 +2131,8 @@ function getPlanetTradeIncomePerMin(planet) {
         const opacityStyle = isShiftSelectingInHUD && !hudSelectedSet.has(key) ? ' style="opacity: 0.5;"' : '';
 
         html += `
-          <div class="selection-tile${activeClass}" data-type="ship" data-id="${liveShip.id}"${opacityStyle} title="${liveShip.name ? shipClass + ' ' + liveShip.name : shipClass}">
-            <canvas class="selection-tile-canvas" width="120" height="120" style="width: 56px; height: 56px;"></canvas>
+          <div class="selection-tile ship-tile${activeClass}" data-type="ship" data-id="${liveShip.id}"${opacityStyle} title="${liveShip.name ? shipClass + ' ' + liveShip.name : shipClass}">
+            <canvas class="selection-tile-canvas" width="120" height="160" style="width: 56px; height: 74px;"></canvas>
           </div>
         `;
       }
@@ -6463,8 +6463,8 @@ function getPlanetTradeIncomePerMin(planet) {
     const emojiMap = {
       sensorarrays: '📡',
       labs: '🔬',
-      armor: '🛡️',
-      shields: '🌀',
+      armor: '⛨',
+      shields: '🛡️',
       engine: '🚀',
       munitions: '💣',
       targeting: '🎯',
@@ -13935,8 +13935,8 @@ function getPlanetTradeIncomePerMin(planet) {
           const activeUpgrades = [];
           if ((s.sensorarrays || 0) > 0) activeUpgrades.push({ symbol: '📡', count: s.sensorarrays });
           if ((s.labs || 0) > 0) activeUpgrades.push({ symbol: '🔬', count: s.labs });
-          if ((s.shields || 0) > 0) activeUpgrades.push({ symbol: '🌀', count: s.shields });
-          if ((s.armor || 0) > 0) activeUpgrades.push({ symbol: '🛡️', count: s.armor });
+          if ((s.shields || 0) > 0) activeUpgrades.push({ symbol: '🛡️', count: s.shields });
+          if ((s.armor || 0) > 0) activeUpgrades.push({ symbol: '⛨', count: s.armor });
           if ((s.engine || 0) > 0) activeUpgrades.push({ symbol: '🚀', count: s.engine });
           if ((s.munitions || 0) > 0) activeUpgrades.push({ symbol: '💣', count: s.munitions });
           if ((s.targeting || 0) > 0) activeUpgrades.push({ symbol: '🎯', count: s.targeting });

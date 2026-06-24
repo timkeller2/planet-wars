@@ -1048,6 +1048,11 @@ canvas {
   cursor: pointer;
   transition: all 0.2s ease;
   user-select: none;
+/* selection-tile style */
+}
+
+.selection-tile.ship-tile {
+  height: 80px;
 }
 
 .selection-tile:hover {
