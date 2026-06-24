@@ -6213,7 +6213,7 @@ export class Game {
         let happinessGained = 0;
         for (const planet of this.planets) {
           if (planet.owner && planet.owner.id === player.id && !planet.dead) {
-            if (planet.ships >= planet.maxShips) {
+            if (planet.ships >= planet.maxShips - 5) {
               const gained = planet.ships * 0.01 * (planet.habitability / 100);
               happinessGained += gained;
               
