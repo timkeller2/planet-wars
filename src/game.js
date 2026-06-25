@@ -2388,12 +2388,19 @@ export class Game {
     } else {
       // Standard ship payment or credits fallback
       const useCredits = source.owner && source.owner.useCredits !== false;
-      const playerCredits = source.owner ? (source.owner.credits || 0) : 0;
+      let minAllowedCredits = 0;
+      if (source.owner) {
+        const ownsHomeworld = this.planets.some(p => p.homeworldOf === source.owner.id && p.owner && p.owner.id === source.owner.id);
+        if (ownsHomeworld) {
+          minAllowedCredits = -(1000 + Math.floor(source.owner.totalShips || 0));
+        }
+      }
+      const creditsAvailable = source.owner ? (source.owner.credits - minAllowedCredits) : 0;
       let creditsPaid = 0;
       let shipLaunchCost = launchCost;
 
-      if (useCredits && playerCredits > 0) {
-        creditsPaid = Math.min(playerCredits, launchCost);
+      if (useCredits && creditsAvailable > 0) {
+        creditsPaid = Math.min(creditsAvailable, launchCost);
         shipLaunchCost = launchCost - creditsPaid;
       }
 
@@ -2666,12 +2673,19 @@ export class Game {
     } else {
       // Standard ship payment or credits fallback
       const useCredits = source.owner && source.owner.useCredits !== false;
-      const playerCredits = source.owner ? (source.owner.credits || 0) : 0;
+      let minAllowedCredits = 0;
+      if (source.owner) {
+        const ownsHomeworld = this.planets.some(p => p.homeworldOf === source.owner.id && p.owner && p.owner.id === source.owner.id);
+        if (ownsHomeworld) {
+          minAllowedCredits = -(1000 + Math.floor(source.owner.totalShips || 0));
+        }
+      }
+      const creditsAvailable = source.owner ? (source.owner.credits - minAllowedCredits) : 0;
       let creditsPaid = 0;
       let shipLaunchCost = launchCost;
 
-      if (useCredits && playerCredits > 0) {
-        creditsPaid = Math.min(playerCredits, launchCost);
+      if (useCredits && creditsAvailable > 0) {
+        creditsPaid = Math.min(creditsAvailable, launchCost);
         shipLaunchCost = launchCost - creditsPaid;
       }
 

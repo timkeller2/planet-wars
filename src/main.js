@@ -7408,8 +7408,8 @@ function getPlanetTradeIncomePerMin(planet) {
               launchCost = Math.min(250, launchCost);
 
               const useCredits = myPlayer && myPlayer.useCredits !== false;
-              const playerCredits = myPlayer ? (myPlayer.credits || 0) : 0;
-              const creditsPaid = useCredits ? Math.min(playerCredits, launchCost) : 0;
+              const creditsAvailable = myPlayer ? getCreditsAvailableForConfig(myPlayer) : 0;
+              const creditsPaid = (useCredits && creditsAvailable > 0) ? Math.min(creditsAvailable, launchCost) : 0;
               const shipLaunchCost = launchCost - creditsPaid;
 
               if (sourcePlanet.ships >= shipLaunchCost + 1) {
@@ -7463,8 +7463,8 @@ function getPlanetTradeIncomePerMin(planet) {
               launchCost = Math.min(250, launchCost);
 
               const useCredits = myPlayer && myPlayer.useCredits !== false;
-              const playerCredits = myPlayer ? (myPlayer.credits || 0) : 0;
-              const creditsPaid = useCredits ? Math.min(playerCredits, launchCost) : 0;
+              const creditsAvailable = myPlayer ? getCreditsAvailableForConfig(myPlayer) : 0;
+              const creditsPaid = (useCredits && creditsAvailable > 0) ? Math.min(creditsAvailable, launchCost) : 0;
               const shipLaunchCost = launchCost - creditsPaid;
 
               if (sourcePlanet.ships >= shipLaunchCost + 1) {
