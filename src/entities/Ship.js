@@ -5581,48 +5581,64 @@ export class Ship {
       }
     };
 
-    if (this.armorPoints > (this.specialduranium || 0)) {
-      const consumed = 1/12;
-      if ((this.owner.resources.duranium || 0) >= consumed) {
-        this.owner.resources.duranium -= consumed;
-        this.specialduranium = (this.specialduranium || 0) + 1;
-        initEvents();
-        this.resourceConsumeEvents.duranium = (this.resourceConsumeEvents.duranium || 0) + 1;
-        return;
-      }
+    if (this.nextConversionIndex === undefined) {
+      this.nextConversionIndex = 0;
     }
 
-    if (this.fuel > (this.specialfuel || 0)) {
-      let costMultiplier = 1.0;
-      if (this.supply_ship && this.supply_ship > 0) {
-        costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.supply_ship));
-      }
-      const consumed = ((1/12) * costMultiplier) / 3;
-      if ((this.owner.resources.deuterium || 0) >= consumed) {
-        this.owner.resources.deuterium -= consumed;
-        this.specialfuel = (this.specialfuel || 0) + 1;
-        initEvents();
-        this.resourceConsumeEvents.deuterium = (this.resourceConsumeEvents.deuterium || 0) + 1;
-        return;
-      }
-    }
+    for (let i = 0; i < 3; i++) {
+      const typeIndex = (this.nextConversionIndex + i) % 3;
+      
+      if (typeIndex === 0) {
+        // 0: Duranium -> specialduranium
+        if (this.armorPoints > (this.specialduranium || 0)) {
+          const consumed = 1/12;
+          if ((this.owner.resources.duranium || 0) >= consumed) {
+            this.owner.resources.duranium -= consumed;
+            this.specialduranium = (this.specialduranium || 0) + 1;
+            initEvents();
+            this.resourceConsumeEvents.duranium = (this.resourceConsumeEvents.duranium || 0) + 1;
+            this.nextConversionIndex = (typeIndex + 1) % 3;
+            return;
+          }
+        }
+      } else if (typeIndex === 1) {
+        // 1: Deuterium -> specialfuel
+        if (this.fuel > (this.specialfuel || 0)) {
+          let costMultiplier = 1.0;
+          if (this.supply_ship && this.supply_ship > 0) {
+            costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.supply_ship));
+          }
+          const consumed = ((1/12) * costMultiplier) / 3;
+          if ((this.owner.resources.deuterium || 0) >= consumed) {
+            this.owner.resources.deuterium -= consumed;
+            this.specialfuel = (this.specialfuel || 0) + 1;
+            initEvents();
+            this.resourceConsumeEvents.deuterium = (this.resourceConsumeEvents.deuterium || 0) + 1;
+            this.nextConversionIndex = (typeIndex + 1) % 3;
+            return;
+          }
+        }
+      } else if (typeIndex === 2) {
+        // 2: Weapon Resource -> specialbombs
+        let bombResource = 'merculite';
+        const style = this.cruiserStyle || (this.owner ? this.owner.cruiserStyle : null);
+        if (style === 'Romulan' || style === 'Gorn') {
+          bombResource = 'antimatter';
+        } else if (style === 'Tholian' || style === 'Lyran') {
+          bombResource = 'dilithium';
+        }
 
-    let bombResource = 'merculite';
-    const style = this.cruiserStyle || (this.owner ? this.owner.cruiserStyle : null);
-    if (style === 'Romulan' || style === 'Gorn') {
-      bombResource = 'antimatter';
-    } else if (style === 'Tholian' || style === 'Lyran') {
-      bombResource = 'dilithium';
-    }
-
-    if (this.bombs > (this.specialbombs || 0)) {
-      const consumed = (1/12) / 3;
-      if ((this.owner.resources[bombResource] || 0) >= consumed) {
-        this.owner.resources[bombResource] -= consumed;
-        this.specialbombs = (this.specialbombs || 0) + 1;
-        initEvents();
-        this.resourceConsumeEvents[bombResource] = (this.resourceConsumeEvents[bombResource] || 0) + 1;
-        return;
+        if (this.bombs > (this.specialbombs || 0)) {
+          const consumed = (1/12) / 3;
+          if ((this.owner.resources[bombResource] || 0) >= consumed) {
+            this.owner.resources[bombResource] -= consumed;
+            this.specialbombs = (this.specialbombs || 0) + 1;
+            initEvents();
+            this.resourceConsumeEvents[bombResource] = (this.resourceConsumeEvents[bombResource] || 0) + 1;
+            this.nextConversionIndex = (typeIndex + 1) % 3;
+            return;
+          }
+        }
       }
     }
   }

@@ -2475,10 +2475,10 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   function getAnomalyColor(diff) {
-    if (diff <= 0) return '#00ff88';
-    if (diff <= 6) return '#ffcc00';
-    if (diff <= 12) return '#00e5ff';
-    if (diff <= 24) return '#ff6d00';
+    if (diff < 4) return '#00ff88';
+    if (diff < 8) return '#ffcc00';
+    if (diff < 13) return '#00e5ff';
+    if (diff < 25) return '#ff6d00';
     return '#ff00ff';
   }
 
@@ -6822,7 +6822,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
       const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
       const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
-      const canAfford = isUnlocked && creditsAvailable >= finalCost && effectiveShips >= finalCost && (selectedPlanetBuild.maxShips - baseCfg.costCap) >= 5;
+      const canAfford = isUnlocked && creditsAvailable >= finalCost && effectiveShips >= baseCostShips && (selectedPlanetBuild.maxShips - baseCfg.costCap) >= 5;
 
       if (costMult > 1) {
         btn.style.borderColor = '#ffeb3b';
@@ -6853,7 +6853,8 @@ function getPlanetTradeIncomePerMin(planet) {
       if (!isUnlocked) {
         titleStr = `Build ${cfg.name} (LOCKED - ${lockReason})`;
       } else {
-        const reqStr = selectedPlanetBuild.isMilitary ? `Req: ${Math.ceil(finalCost / 2)} ships` : `Req: ${finalCost} ships`;
+        const reqRawShips = Math.ceil(baseCostShips / shipsFactor);
+        const reqStr = `Req: ${reqRawShips} ships`;
         titleStr = `Build ${isFirst ? 'Prototype ' : ''}${cfg.name} (Config of ${baseCfg.name}) (Cost: ${finalCost} credits, ${reqStr}, Cap: ${baseCfg.costCap}). Right-click or long-press to delete configuration.`;
       }
       btn.setAttribute('title', titleStr);
@@ -10699,13 +10700,13 @@ function getPlanetTradeIncomePerMin(planet) {
             }
 
             let anomalyColor = '#00ff88';
-            if (diff <= 0) {
+            if (diff < 4) {
               anomalyColor = '#00ff88';
-            } else if (diff <= 6) {
+            } else if (diff < 8) {
               anomalyColor = '#ffcc00';
-            } else if (diff <= 12) {
+            } else if (diff < 13) {
               anomalyColor = '#00e5ff';
-            } else if (diff <= 24) {
+            } else if (diff < 25) {
               anomalyColor = '#ff6d00';
             } else {
               anomalyColor = '#ff00ff';
@@ -10713,7 +10714,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
             ctx.save();
             
-            if (diff <= 0) {
+            if (diff < 4) {
               const scale = 1.0 + Math.sin(Date.now() / 250) * 0.2;
               const lineLength = 2.5 * scale * twinkle;
               ctx.strokeStyle = anomalyColor;
@@ -10738,7 +10739,7 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.moveTo(p.anomaly.x - offset, p.anomaly.y + offset);
               ctx.lineTo(p.anomaly.x + offset, p.anomaly.y - offset);
               ctx.stroke();
-            } else if (diff <= 6) {
+            } else if (diff < 8) {
               const scale = 1.0 + Math.sin(Date.now() / 150) * 0.3;
               const lineLength = 2.75 * scale * twinkle;
               ctx.strokeStyle = anomalyColor;
@@ -10768,7 +10769,7 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.beginPath();
               ctx.arc(p.anomaly.x, p.anomaly.y, 0.75 * twinkle, 0, Math.PI * 2);
               ctx.fill();
-            } else if (diff <= 12) {
+            } else if (diff < 13) {
               const scale = 1.0 + Math.sin(Date.now() / 120) * 0.35;
               const lineLength = 3.0 * scale * twinkle;
               ctx.strokeStyle = anomalyColor;
@@ -10797,7 +10798,7 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.moveTo(-offset, offset);
               ctx.lineTo(offset, -offset);
               ctx.stroke();
-            } else if (diff <= 24) {
+            } else if (diff < 25) {
               const scale = 1.0 + Math.sin(Date.now() / 80) * 0.4;
               const lineLength = 3.25 * scale * twinkle;
               ctx.strokeStyle = anomalyColor;
@@ -11257,13 +11258,13 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           let anomalyColor = '#00ff88';
-          if (diff <= 5) {
+          if (diff < 4) {
             anomalyColor = '#00ff88';
-          } else if (diff <= 17) {
+          } else if (diff < 8) {
             anomalyColor = '#ffcc00';
-          } else if (diff <= 30) {
+          } else if (diff < 13) {
             anomalyColor = '#00e5ff';
-          } else if (diff <= 42) {
+          } else if (diff < 25) {
             anomalyColor = '#ff6d00';
           } else {
             anomalyColor = '#ff00ff';
@@ -11271,7 +11272,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
           ctx.save();
           
-          if (diff <= 5) {
+          if (diff < 4) {
             // Tier 1: Faint Spark (Green, Slow Pulse)
             const scale = 1.0 + Math.sin(Date.now() / 250) * 0.2;
             const lineLength = 2.5 * scale * twinkle;
@@ -11286,7 +11287,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
             ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
             ctx.stroke();
-          } else if (diff <= 17) {
+          } else if (diff < 8) {
             // Tier 2: Glowing Core (Yellow, Medium Pulse + static center dot)
             const scale = 1.0 + Math.sin(Date.now() / 150) * 0.3;
             const lineLength = 2.75 * scale * twinkle;
@@ -11307,7 +11308,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.beginPath();
             ctx.arc(p.anomaly.x, p.anomaly.y, 0.75 * twinkle, 0, Math.PI * 2);
             ctx.fill();
-          } else if (diff <= 30) {
+          } else if (diff < 13) {
             // Tier 3: Pulsing Nova (Cyan, Medium Pulse + slight rotation over time)
             const scale = 1.0 + Math.sin(Date.now() / 120) * 0.35;
             const lineLength = 3.0 * scale * twinkle;
@@ -11327,7 +11328,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.moveTo(0, -lineLength);
             ctx.lineTo(0, lineLength);
             ctx.stroke();
-          } else if (diff <= 42) {
+          } else if (diff < 25) {
             // Tier 4: Radiant Star (Orange, Fast Pulse + outer ring)
             const scale = 1.0 + Math.sin(Date.now() / 80) * 0.4;
             const lineLength = 3.25 * scale * twinkle;

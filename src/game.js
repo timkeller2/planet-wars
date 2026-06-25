@@ -3025,7 +3025,7 @@ export class Game {
       const shipsFactor = source.isMilitary ? 2 : 1;
       const effectiveShips = source.ships * shipsFactor;
 
-      if (creditsAvailable >= finalCost && effectiveShips >= finalCost && (source.maxShips - costCap) >= 5) {
+      if (creditsAvailable >= finalCost && effectiveShips >= baseCostShips && (source.maxShips - costCap) >= 5) {
         const creditsPaid = finalCost;
         const remainingCostShips = 0;
         const extraShips = source.ships;
@@ -6050,7 +6050,7 @@ export class Game {
       this.fulfillOrders = [];
     }
 
-    // 1. Check expirations (15 minutes lifespan)
+    // 1. Check expirations (30 minutes lifespan)
     const nowTimestamp = Date.now();
     for (let i = this.sellOrders.length - 1; i >= 0; i--) {
       const order = this.sellOrders[i];
@@ -6066,8 +6066,8 @@ export class Game {
       } else if (order.ownerId !== 'neutral') {
         const createdAt = order.createdAt || nowTimestamp;
         const elapsedMs = nowTimestamp - createdAt;
-        const durationLimitMs = 3 * 60000 * order.price;
-        if (elapsedMs > durationLimitMs && order.price < 5) {
+        const durationLimitMs = 15000 * order.price * order.price;
+        if (elapsedMs > durationLimitMs) {
           const seller = this.allPlayers.find(p => p.id === order.ownerId);
           if (seller) {
             seller.credits = (seller.credits || 0) + order.price;
@@ -6125,7 +6125,7 @@ export class Game {
         resource: randomRes,
         price: startPrice,
         createdAt: nowTimestamp,
-        expiresAt: nowTimestamp + 15 * 60000 // 15 minutes in milliseconds
+        expiresAt: nowTimestamp + 30 * 60000 // 30 minutes in milliseconds
       });
       console.log(`[Neutral Market] Posted sell order ${orderId} for ${randomRes} at price ${startPrice}.`);
 
@@ -6201,7 +6201,7 @@ export class Game {
             resource: mostNumerousRes,
             price: startPrice,
             createdAt: nowTimestamp,
-            expiresAt: nowTimestamp + 15 * 60000 // 15 minutes
+            expiresAt: nowTimestamp + 30 * 60000 // 30 minutes
           });
           console.log(`[AI Market Post] AI Player ${aiPlayer.name} (${aiPlayer.id}) posted 1 ${mostNumerousRes} for ${startPrice} credits (stock remaining: ${aiPlayer.resources[mostNumerousRes]}, options remaining: ${aiPlayer.tradeOptions}).`);
         }

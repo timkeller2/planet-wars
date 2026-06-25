@@ -1297,7 +1297,7 @@ async function bootstrap() {
             resource: data.resource,
             price: startPrice,
             createdAt: Date.now(),
-            expiresAt: Date.now() + 15 * 60000 // 15 minutes
+            expiresAt: Date.now() + 30 * 60000 // 30 minutes
           });
           console.log(`[Market Post] Player ${player.id} posted 1 ${data.resource} for ${startPrice} credits.`);
         }
