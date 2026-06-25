@@ -45,30 +45,30 @@ function runTest() {
   assert.strictEqual(spawnedShip.buildCostCreditsTotal, 50, "Corvette should have cost 50 credits");
   assert.strictEqual(spawnedShip.buildCostShipsTotal, 0, "Corvette should have cost 0 ships");
 
-  // Let's test buildCapitalShip when near debt limit
-  // Set credits to -1080. Since minAllowedCredits is -1100, available credits is 20.
-  player.credits = -1080;
+  // Let's test buildCapitalShip for subsequent build (non-prototype)
+  // Even with credits available, subsequent corvette build should pay 100% in ships (50 ships on homeworld)
+  player.credits = 200;
+  const oldShips = planet.ships;
   game.buildCapitalShip(planet, 'corvette');
   
   const spawnedShip2 = game.ships[game.ships.length - 1];
-  console.log(`Second ship (near debt limit) cost credits: ${spawnedShip2.buildCostCreditsTotal}`);
-  console.log(`Second ship (near debt limit) cost ships: ${spawnedShip2.buildCostShipsTotal}`);
+  console.log(`Second ship (non-prototype) cost credits: ${spawnedShip2.buildCostCreditsTotal}`);
+  console.log(`Second ship (non-prototype) cost ships: ${spawnedShip2.buildCostShipsTotal}`);
   
-  assert.strictEqual(spawnedShip2.buildCostCreditsTotal, 20, "Should only pay 20 credits (bringing credits down to -1100 limit)");
-  assert.strictEqual(spawnedShip2.buildCostShipsTotal, 30, "Remaining 30 cost should be paid in ships");
+  assert.strictEqual(spawnedShip2.buildCostCreditsTotal, 0, "Subsequent corvette should cost 0 credits");
+  assert.strictEqual(spawnedShip2.buildCostShipsTotal, 50, "Subsequent corvette should cost 50 ships");
 
-  // Let's test buildCapitalShipConfig likewise
+  // Let's test buildCapitalShipConfig for a prototype of a new class (destroyer)
+  // Since destroyer is not built yet (prototype), it should pay with credits
   player.credits = 200;
-  player.useCredits = false;
-  game.buildCapitalShipConfig(planet, 'corvette', { shields: 1 }, "Custom Corvette");
+  game.buildCapitalShipConfig(planet, 'destroyer', { shields: 1 }, "Custom Destroyer");
   
   const spawnedShip3 = game.ships[game.ships.length - 1];
-  console.log(`Custom ship cost credits: ${spawnedShip3.buildCostCreditsTotal}`);
-  console.log(`Custom ship cost ships: ${spawnedShip3.buildCostShipsTotal}`);
+  console.log(`Custom prototype destroyer cost credits: ${spawnedShip3.buildCostCreditsTotal}`);
+  console.log(`Custom prototype destroyer cost ships: ${spawnedShip3.buildCostShipsTotal}`);
   
-  // Custom Corvette with shields will cost slightly more than 50
-  assert.ok(spawnedShip3.buildCostCreditsTotal > 0, "Custom ship should have paid with credits");
-  assert.strictEqual(spawnedShip3.buildCostShipsTotal, 0, "Custom ship should have paid 0 ships since credits were sufficient");
+  assert.ok(spawnedShip3.buildCostCreditsTotal > 0, "Custom prototype ship should have paid with credits");
+  assert.strictEqual(spawnedShip3.buildCostShipsTotal, 0, "Custom prototype ship should have paid 0 ships since credits were sufficient");
 
   console.log("All tests passed successfully!");
 }

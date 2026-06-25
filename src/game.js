@@ -2812,7 +2812,7 @@ export class Game {
         }
       }
 
-      const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
+      const creditsAvailable = (owner && isFirst) ? (owner.credits - minAllowedCredits) : 0;
 
       if ((source.ships + creditsAvailable) >= costShips && (source.maxShips - costCap) >= 55) {
         const creditsPaid = Math.min(creditsAvailable, costShips);
@@ -3012,7 +3012,7 @@ export class Game {
         }
       }
 
-      const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
+      const creditsAvailable = (owner && isFirst) ? (owner.credits - minAllowedCredits) : 0;
 
       if ((source.ships + creditsAvailable) >= finalCost && (source.maxShips - costCap) >= 55) {
         const creditsPaid = Math.min(creditsAvailable, finalCost);

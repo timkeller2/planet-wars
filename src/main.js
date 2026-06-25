@@ -6716,7 +6716,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const finalCost = Math.round((baseCostShips + totalUpgradeCost) * 0.8);
       console.log(`[CLIENT-CONFIG-COST] Name: ${cfg.name}, upgrades:`, JSON.stringify(cfg.upgrades), `baseCostShips: ${baseCostShips}, totalUpgradeCost: ${totalUpgradeCost}, finalCost: ${finalCost}`);
 
-      const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
+      const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
       const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= finalCost && (selectedPlanetBuild.maxShips - baseCfg.costCap) >= 55;
 
       if (costMult > 1) {
@@ -6748,7 +6748,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (!isUnlocked) {
         titleStr = `Build ${cfg.name} (LOCKED - ${lockReason})`;
       } else {
-        titleStr = `Build ${isFirst ? 'Prototype ' : ''}${cfg.name} (Config of ${baseCfg.name}) (Cost: ${finalCost} ships/credits, Cap: ${baseCfg.costCap}). Right-click or long-press to delete configuration.`;
+        titleStr = `Build ${isFirst ? 'Prototype ' : ''}${cfg.name} (Config of ${baseCfg.name}) (Cost: ${finalCost} ${isFirst ? 'ships/credits' : 'ships'}, Cap: ${baseCfg.costCap}). Right-click or long-press to delete configuration.`;
       }
       btn.setAttribute('title', titleStr);
     }
@@ -8813,7 +8813,7 @@ function getPlanetTradeIncomePerMin(planet) {
             costShips *= 2;
           }
 
-          const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
+          const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
           const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
           if (canAfford) {
             socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
@@ -8870,7 +8870,7 @@ function getPlanetTradeIncomePerMin(planet) {
               costShips *= 2;
             }
 
-            const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
+            const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
             const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
             if (canAfford) {
               socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
@@ -9812,7 +9812,7 @@ function getPlanetTradeIncomePerMin(planet) {
             el.style.boxShadow = '';
           }
 
-          const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
+          const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
           const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
 
           if (!canAfford) {
@@ -9833,9 +9833,11 @@ function getPlanetTradeIncomePerMin(planet) {
           if (!isUnlocked) {
             titleStr = `Build ${baseName} (LOCKED - ${lockReason})`;
           } else if (activeConfigClassType === classType) {
-            titleStr = `Build Basic ${baseName} (${shortcutKey}) (Cost: ${costShips} ships/credits, Cap: ${cfg.costCap})`;
+            titleStr = `Build Basic ${baseName} (${shortcutKey}) (Cost: ${costShips} ${isFirst ? 'ships/credits' : 'ships'}, Cap: ${cfg.costCap})`;
           } else {
-            titleStr = `Build ${isFirst ? 'Prototype ' : ''}${baseName} (${shortcutKey}) (Always uses credits first down to debt limit)`;
+            titleStr = isFirst 
+              ? `Build Prototype ${baseName} (${shortcutKey}) (Always uses credits first down to debt limit)`
+              : `Build ${baseName} (${shortcutKey}) (Must be paid in ships; cost: ${costShips} ships, Cap: ${cfg.costCap})`;
           }
           el.setAttribute('title', titleStr);
 
