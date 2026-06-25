@@ -4793,7 +4793,7 @@ export class Ship {
                 
                 if (ecoDamage > 0) {
                   this.targetPlanet.decreaseMaxShips(ecoDamage);
-                  if (this.targetPlanet.maxShips < 55) {
+                  if (this.targetPlanet.maxShips < 5) {
                     this.targetPlanet.dead = true;
                     if (this.targetPlanet.homeworldOf && this.owner) {
                       this.owner.expScore = (this.owner.expScore || 0) + 100;
@@ -4880,10 +4880,10 @@ export class Ship {
               capacityDrops += 1;
             }
             if (capacityDrops > 0 && this.targetPlanet.owner !== null) {
-              const actualDrops = Math.min(capacityDrops, this.targetPlanet.maxShips - 54);
+              const actualDrops = Math.min(capacityDrops, this.targetPlanet.maxShips - 4);
               if (actualDrops > 0) {
                 this.targetPlanet.decreaseMaxShips(actualDrops);
-                if (this.targetPlanet.maxShips < 55) {
+                if (this.targetPlanet.maxShips < 5) {
                   this.targetPlanet.dead = true;
                   if (this.targetPlanet.homeworldOf && this.owner) {
                     this.owner.expScore = (this.owner.expScore || 0) + 100;
@@ -4913,7 +4913,7 @@ export class Ship {
               const previousOwner = this.targetPlanet.owner;
               if (previousOwner !== null) {
                 this.targetPlanet.maxShips--;
-                if (this.targetPlanet.maxShips < 55) {
+                if (this.targetPlanet.maxShips < 5) {
                   this.targetPlanet.dead = true;
                   if (this.targetPlanet.homeworldOf && this.owner) {
                     this.owner.expScore = (this.owner.expScore || 0) + 100;

@@ -2441,13 +2441,13 @@ export class Game {
       const capDeduction = Math.floor(finalShipsToSend / 50);
       if (capDeduction > 0) {
         source.decreaseMaxShips(capDeduction);
-        if (source.maxShips < 55) source.dead = true;
+        if (source.maxShips < 5) source.dead = true;
       }
     }
     
     if (source.rampageEvent) {
       source.decreaseMaxShips(1);
-      if (source.maxShips < 55) source.dead = true;
+      if (source.maxShips < 5) source.dead = true;
     }
     
     if (isBombing) {
@@ -2699,13 +2699,13 @@ export class Game {
       const capDeduction = Math.floor(finalShipsToSend / 50);
       if (capDeduction > 0) {
         source.decreaseMaxShips(capDeduction);
-        if (source.maxShips < 55) source.dead = true;
+        if (source.maxShips < 5) source.dead = true;
       }
     }
     
     if (source.rampageEvent) {
       source.decreaseMaxShips(1);
-      if (source.maxShips < 55) source.dead = true;
+      if (source.maxShips < 5) source.dead = true;
     }
     
     if (isBombing) {
@@ -2814,7 +2814,7 @@ export class Game {
 
       const creditsAvailable = (owner && isFirst) ? (owner.credits - minAllowedCredits) : 0;
 
-      if ((source.ships + creditsAvailable) >= costShips && (source.maxShips - costCap) >= 55) {
+      if ((source.ships + creditsAvailable) >= costShips && (source.maxShips - costCap) >= 5) {
         const creditsPaid = Math.min(creditsAvailable, costShips);
         const remainingCostShips = costShips - creditsPaid;
         const extraShips = source.ships - remainingCostShips;
@@ -3014,7 +3014,7 @@ export class Game {
 
       const creditsAvailable = (owner && isFirst) ? (owner.credits - minAllowedCredits) : 0;
 
-      if ((source.ships + creditsAvailable) >= finalCost && (source.maxShips - costCap) >= 55) {
+      if ((source.ships + creditsAvailable) >= finalCost && (source.maxShips - costCap) >= 5) {
         const creditsPaid = Math.min(creditsAvailable, finalCost);
         const remainingCostShips = finalCost - creditsPaid;
         const extraShips = source.ships - remainingCostShips;
@@ -4912,7 +4912,7 @@ export class Game {
                 planet.capacityDecreaseEvent = true;
                 const limit = (planet.owner && !planet.owner.isAI && planet.focusMode === 'garrison') ? planet.maxShips * 2 : planet.maxShips;
                 if (planet.ships > limit) planet.ships = limit;
-                if (planet.maxShips < 55) {
+                if (planet.maxShips < 5) {
                   planet.dead = true;
                 }
                 // Lightning bolt effect
@@ -5732,7 +5732,7 @@ export class Game {
                     const previousOwner = targetPlanet.owner;
                     if (previousOwner !== null) {
                       targetPlanet.maxShips--;
-                      if (targetPlanet.maxShips < 55) {
+                      if (targetPlanet.maxShips < 5) {
                         targetPlanet.dead = true;
                         if (targetPlanet.homeworldOf) {
                           sourceShip.owner.expScore = (sourceShip.owner.expScore || 0) + 100;
@@ -5916,7 +5916,7 @@ export class Game {
                   nearby.ships = 0;
                   nearby.owner = null;
                 }
-                if (nearby.maxShips < 55) {
+                if (nearby.maxShips < 5) {
                   nearby.dead = true;
                 }
                 // Explosion effect on damaged planet

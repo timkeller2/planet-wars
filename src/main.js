@@ -6717,7 +6717,7 @@ function getPlanetTradeIncomePerMin(planet) {
       console.log(`[CLIENT-CONFIG-COST] Name: ${cfg.name}, upgrades:`, JSON.stringify(cfg.upgrades), `baseCostShips: ${baseCostShips}, totalUpgradeCost: ${totalUpgradeCost}, finalCost: ${finalCost}`);
 
       const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
-      const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= finalCost && (selectedPlanetBuild.maxShips - baseCfg.costCap) >= 55;
+      const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= finalCost && (selectedPlanetBuild.maxShips - baseCfg.costCap) >= 5;
 
       if (costMult > 1) {
         btn.style.borderColor = '#ffeb3b';
@@ -8814,7 +8814,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
-          const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+          const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
           if (canAfford) {
             socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
           }
@@ -8871,7 +8871,7 @@ function getPlanetTradeIncomePerMin(planet) {
             }
 
             const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
-            const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+            const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
             if (canAfford) {
               socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
             }
@@ -9813,7 +9813,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
-          const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 55;
+          const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
 
           if (!canAfford) {
             el.style.opacity = '0.5';

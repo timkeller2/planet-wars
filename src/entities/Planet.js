@@ -342,7 +342,7 @@ export class Planet {
             // Grow max capacity, no tech score
             if (this.rampageEvent) {
               this.decreaseMaxShips(1);
-              if (this.maxShips < 55) this.dead = true;
+              if (this.maxShips < 5) this.dead = true;
             } else {
               const increaseAmount = this.homeworldOf ? 2 : 1;
               this.increaseMaxShips(increaseAmount);
@@ -402,7 +402,7 @@ export class Planet {
           // AI controlled planets continue to operate as they have before
           if (this.rampageEvent) {
             this.decreaseMaxShips(1);
-            if (this.maxShips < 55) this.dead = true;
+            if (this.maxShips < 5) this.dead = true;
           } else {
             if (focus === 'terraforming') {
               const oldHab = this.habitability;
