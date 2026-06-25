@@ -87,7 +87,7 @@ function playRandomIntroTrack() {
 
   bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
   bgMusic.loop = true; // Loop so it doesn't go silent and trigger browser autoplay blocks
-  bgMusic.volume = getTargetMusicVolume(0.10);
+  bgMusic.volume = getTargetMusicVolume(0.40);
   bgMusic.play().catch(e => console.warn('Music play blocked:', e));
 
   lastMusicChangeTime = Date.now();
@@ -98,9 +98,7 @@ function checkMusicRotation() {
 }
 
 function updateAudioState() {
-  const isGamePaused = serverState && serverState.isPaused;
-  const isWindowInactive = document.hidden || !document.hasFocus();
-  const shouldPause = isGamePaused || isWindowInactive;
+  const shouldPause = document.hidden;
 
   // 1. Update background music
   const bgMusic = document.getElementById('bg-music');
@@ -183,10 +181,18 @@ const unlockAudio = () => {
   document.removeEventListener('click', unlockAudio);
   document.removeEventListener('touchstart', unlockAudio);
   document.removeEventListener('keydown', unlockAudio);
+  document.removeEventListener('mousedown', unlockAudio);
+  document.removeEventListener('pointerdown', unlockAudio);
+  document.removeEventListener('input', unlockAudio);
+  document.removeEventListener('change', unlockAudio);
 };
 document.addEventListener('click', unlockAudio);
 document.addEventListener('touchstart', unlockAudio);
 document.addEventListener('keydown', unlockAudio);
+document.addEventListener('mousedown', unlockAudio);
+document.addEventListener('pointerdown', unlockAudio);
+document.addEventListener('input', unlockAudio);
+document.addEventListener('change', unlockAudio);
 
 function getShipRadarRange(s) {
   if (!s) return 50;
@@ -4248,6 +4254,7 @@ function getPlanetTradeIncomePerMin(planet) {
         valSpan.textContent = savedVol + '%';
       }
     }
+    let lastVolumeSoundTime = 0;
     musicVolumeSlider.addEventListener('input', () => {
       const valSpan = document.getElementById('music-volume-val');
       if (valSpan) {
@@ -4256,13 +4263,21 @@ function getPlanetTradeIncomePerMin(planet) {
       localStorage.setItem('musicVolume', musicVolumeSlider.value);
       const bgMusic = document.getElementById('bg-music');
       if (bgMusic) {
-        let baseVolume = 0.10;
+        let baseVolume = 0.40;
         const curSrc = bgMusic.getAttribute('src') || '';
         if (curSrc.includes('Battletime') || curSrc.includes('Megalovania')) {
-          baseVolume = 0.125;
+          baseVolume = 0.45;
         }
         bgMusic.volume = getTargetMusicVolume(baseVolume);
       }
+      const now = Date.now();
+      if (now - lastVolumeSoundTime > 150) {
+        lastVolumeSoundTime = now;
+        playSound('laser');
+      }
+    });
+    musicVolumeSlider.addEventListener('change', () => {
+      playSound('laser');
     });
   }
 
@@ -4469,7 +4484,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (musicCheckbox && musicCheckbox.checked && bgMusic) {
           bgMusic.src = '/Music/Battletime.mp3';
           bgMusic.loop = false;
-          bgMusic.volume = getTargetMusicVolume(0.125);
+          bgMusic.volume = getTargetMusicVolume(0.45);
           updateAudioState();
         }
       }
@@ -4480,7 +4495,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (musicCheckbox && musicCheckbox.checked && bgMusic) {
           bgMusic.src = '/Music/Megalovania.mp3';
           bgMusic.loop = false;
-          bgMusic.volume = getTargetMusicVolume(0.125);
+          bgMusic.volume = getTargetMusicVolume(0.45);
           updateAudioState();
         }
       }
@@ -4652,15 +4667,17 @@ function getPlanetTradeIncomePerMin(planet) {
     laser: new Audio('/laser.wav'),
     explosion: new Audio('/explosion.wav'),
     trumpet: new Audio('/trumpet.wav'),
-    rampage: new Audio('/rampage.wav')
+    rampage: new Audio('/rampage.wav'),
+    chaching: new Audio('/chaching.wav')
   };
-  sounds.laser.volume = 0.3;
+  sounds.laser.volume = 0.8;
   sounds.explosion.volume = 1.0;
   sounds.trumpet.volume = 1.0;
   sounds.rampage.volume = 1.0;
+  sounds.chaching.volume = 0.8;
 
   function playSound(type) {
-    if ((serverState && serverState.isPaused) || document.hidden || !document.hasFocus()) return;
+    if (document.hidden) return;
     if (window.onPlaySound) {
       window.onPlaySound(type);
     }
@@ -4672,6 +4689,7 @@ function getPlanetTradeIncomePerMin(planet) {
       activeAudioClones.delete(clone);
     });
     clone.play().catch(e => {
+      console.warn('playSound failed:', type, e);
       activeAudioClones.delete(clone);
     });
   }
@@ -4687,7 +4705,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
   let lastScanningSoundTime = 0;
   function playScanningSound(isCompleting) {
-    if ((serverState && serverState.isPaused) || document.hidden || !document.hasFocus()) return;
+    if (document.hidden) return;
     const nowTime = Date.now();
     const interval = isCompleting ? 100 : 150;
     if (nowTime - lastScanningSoundTime < interval) return; // limit rate
@@ -4735,7 +4753,7 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   function playThudSound() {
-    if ((serverState && serverState.isPaused) || document.hidden || !document.hasFocus()) return;
+    if (document.hidden) return;
     try {
       if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -4772,7 +4790,7 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   function playChatNotificationSound() {
-    if ((serverState && serverState.isPaused) || document.hidden || !document.hasFocus()) return;
+    if (document.hidden) return;
     try {
       if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -4804,7 +4822,7 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   function playChaChingSound() {
-    if ((serverState && serverState.isPaused) || document.hidden || !document.hasFocus()) return;
+    if (document.hidden) return;
     try {
       if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -5083,7 +5101,7 @@ function getPlanetTradeIncomePerMin(planet) {
               if (musicCheckbox && musicCheckbox.checked && bgMusic) {
                 bgMusic.src = '/Music/Megalovania.mp3';
                 bgMusic.loop = false;
-                bgMusic.volume = getTargetMusicVolume(0.125);
+                bgMusic.volume = getTargetMusicVolume(0.45);
                 updateAudioState();
               }
             }

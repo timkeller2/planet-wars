@@ -343,8 +343,12 @@ export class Planet {
             const capacityPercent = galacticCapacity > 0 ? ((this.owner.totalCapacity || 0) / galacticCapacity) * 100 : 0;
             const failChance = capacityPercent * 2;
 
+            const r = this.ships / 100;
+            const shipsPercent = r <= 1.0 ? r : 1.0 + (r - 1.0) / 3;
+
             if (Math.random() * 100 >= failChance) {
-              const increaseAmount = this.isResearch ? 2 : 1;
+              const baseIncrease = this.isResearch ? 2 : 1;
+              const increaseAmount = baseIncrease * shipsPercent;
               this.owner.techScore = (this.owner.techScore || 0) + increaseAmount;
               if (this.isResearch) {
                 this.techDoubleIncreaseEvent = true;
@@ -470,8 +474,12 @@ export class Planet {
                 // Always deduct 2 ships on any tech increase attempt
                 this.ships = Math.max(0, this.ships - 2);
 
+                const r = this.ships / 100;
+                const shipsPercent = r <= 1.0 ? r : 1.0 + (r - 1.0) / 3;
+
                 if (Math.random() * 100 >= failChance) {
-                  const increaseAmount = this.isResearch ? 2 : 1;
+                  const baseIncrease = this.isResearch ? 2 : 1;
+                  const increaseAmount = baseIncrease * shipsPercent;
                   this.owner.techScore = (this.owner.techScore || 0) + increaseAmount;
                   if (this.isResearch) {
                     this.techDoubleIncreaseEvent = true;
