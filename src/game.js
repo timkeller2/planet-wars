@@ -1099,7 +1099,7 @@ export class Game {
         }
       }
       targetPlanet.maxShips = Math.max(15, targetPlanet.sizeClass - 20);
-      targetPlanet.supplies = Math.random() * targetPlanet.maxShips;
+      targetPlanet.supplies = targetPlanet.maxShips;
       targetPlanet.ships = targetPlanet.maxShips;
       targetPlanet.radius = Math.min(targetPlanet.sizeClass, targetPlanet.maxShips) / 4;
       targetPlanet.habitability = 100;
