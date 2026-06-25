@@ -4431,15 +4431,22 @@ export class Ship {
           fuelDrain *= 0.25;
         }
         const sizeModifier = (this.maxHealth || 25) / 25;
-        const fuelConsumed = sizeModifier * (deltaTime / 1000) / (60 / fuelDrain);
-        this.fuel = (this.fuel || 0) - fuelConsumed;
-        if (this.specialfuel && this.specialfuel > 0) {
-          this.specialfuel = Math.max(0, this.specialfuel - fuelConsumed);
+        let fuelConsumed = sizeModifier * (deltaTime / 1000) / (60 / fuelDrain);
+        if (this.isCruiser && (this.supplies || 0) > 0) {
+          const suppliesToDrain = Math.min(this.supplies, fuelConsumed);
+          this.supplies -= suppliesToDrain;
+          fuelConsumed -= suppliesToDrain;
         }
-        if (this.fuel <= 0) {
-          this.fuel = 0;
-          if (this.isWarp) {
-            this.isWarp = false;
+        if (fuelConsumed > 0) {
+          this.fuel = (this.fuel || 0) - fuelConsumed;
+          if (this.specialfuel && this.specialfuel > 0) {
+            this.specialfuel = Math.max(0, this.specialfuel - fuelConsumed);
+          }
+          if (this.fuel <= 0) {
+            this.fuel = 0;
+            if (this.isWarp) {
+              this.isWarp = false;
+            }
           }
         }
       }
@@ -4521,16 +4528,26 @@ export class Ship {
       // Shield regeneration
       const maxShields = this.getMaxShields();
       if ((this.shields || 0) > 0 && (this.shieldPoints || 0) < maxShields) {
-        if (!this.inEffectiveStorm && (this.fuel || 0) > 0) {
+        const hasFuelOrCruiserSupplies = (this.fuel || 0) > 0 || (this.isCruiser && (this.supplies || 0) > 0);
+        if (!this.inEffectiveStorm && hasFuelOrCruiserSupplies) {
           const regenRatePerSec = 0.05 * maxShields * (1 + 0.50 * (this.damagecontrol || 0));
           let shieldRegenAmount = (deltaTime / 1000) * regenRatePerSec;
           const neededShields = maxShields - (this.shieldPoints || 0);
           shieldRegenAmount = Math.min(shieldRegenAmount, neededShields);
-          const maxShieldsFromFuel = (this.fuel || 0) / 0.1;
-          shieldRegenAmount = Math.min(shieldRegenAmount, maxShieldsFromFuel);
+          const availableEnergy = (this.isCruiser && (this.supplies || 0) > 0) ? ((this.fuel || 0) + this.supplies) : (this.fuel || 0);
+          const maxShieldsFromEnergy = availableEnergy / 0.1;
+          shieldRegenAmount = Math.min(shieldRegenAmount, maxShieldsFromEnergy);
           if (shieldRegenAmount > 0) {
             this.shieldPoints = (this.shieldPoints || 0) + shieldRegenAmount;
-            this.fuel = Math.max(0, (this.fuel || 0) - 0.1 * shieldRegenAmount);
+            let energyToDrain = 0.1 * shieldRegenAmount;
+            if (this.isCruiser && (this.supplies || 0) > 0) {
+              const suppliesToDrain = Math.min(this.supplies, energyToDrain);
+              this.supplies -= suppliesToDrain;
+              energyToDrain -= suppliesToDrain;
+            }
+            if (energyToDrain > 0) {
+              this.fuel = Math.max(0, (this.fuel || 0) - energyToDrain);
+            }
           }
         }
       }
