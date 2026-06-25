@@ -5477,7 +5477,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (creditsDisplay) {
       const creditsVal = myPlayer.credits || 0;
 
-      const interestRatePerMin = creditsVal < 0 ? (creditsVal * 0.01) : (creditsVal * 0.005);
+      const interestRatePerMin = creditsVal < 0 ? (creditsVal * 0.05) : (creditsVal * 0.005);
       const stockpileMaintenanceRatePerMin = myPlayer.storageFeeRate || 0;
       const fleetCostRatePerMin = myPlayer.fleetCostRate || 0;
       let totalTradeRatePerMin = 0;
@@ -5542,7 +5542,7 @@ function getPlanetTradeIncomePerMin(planet) {
           limitHtml = `
             <div style="font-size: 0.75rem; color: #ff3333; margin-top: 8px; text-align: center; border-top: 1px dashed rgba(255, 51, 51, 0.2); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
               Debt Limit: -${limitVal} credits (1000 + total ships)<br>
-              Debt incurs 1%/min interest.<br>
+              Debt incurs 5%/min interest.<br>
               <span style="color: #4caf50;">Positive balance earns 0.5%/min interest.</span>
             </div>
           `;
