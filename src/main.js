@@ -11545,12 +11545,12 @@ function getPlanetTradeIncomePerMin(planet) {
           const barH = 3;
 
           ctx.save();
-          // Backdrop (dark transparent)
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+          // Backdrop (dark purple)
+          ctx.fillStyle = '#3a1a4a';
           ctx.fillRect(p.x - barW / 2, currentY - 1, barW, barH);
 
-          // Filled bar (Purple)
-          ctx.fillStyle = '#9c27b0';
+          // Filled bar (vibrant purple matching ship supplies)
+          ctx.fillStyle = '#a855f7';
           ctx.fillRect(p.x - barW / 2, currentY - 1, barW * suppliesRatio, barH);
           ctx.restore();
 
