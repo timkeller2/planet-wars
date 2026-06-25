@@ -788,15 +788,18 @@ export class Ship {
     this.isMovingBackward = false;
 
     let friendlyWellPlanet = null;
+    let neutralWellPlanet = null;
     if (allPlanets && this.owner) {
       for (const planet of allPlanets) {
-        if (planet.owner && planet.owner === this.owner) {
-          const pdx = this.x - planet.x;
-          const pdy = this.y - planet.y;
-          const gravityRadius = planet.getGravityRadius();
-          if (pdx * pdx + pdy * pdy < gravityRadius * gravityRadius) {
+        const pdx = this.x - planet.x;
+        const pdy = this.y - planet.y;
+        const gravityRadius = planet.getGravityRadius();
+        if (pdx * pdx + pdy * pdy < gravityRadius * gravityRadius) {
+          if (planet.owner && planet.owner === this.owner) {
             friendlyWellPlanet = planet;
             break;
+          } else if (!planet.owner && !planet.isDeepSpaceAnomaly) {
+            neutralWellPlanet = planet;
           }
         }
       }
@@ -4162,7 +4165,8 @@ export class Ship {
         }
       }
 
-      if (this.maxsupplies > 0 && this.supplies < this.maxsupplies && this.inFriendlyWell && !this.isWarp && !hasEnemyNear) {
+      const canResupply = this.inFriendlyWell || (neutralWellPlanet && (neutralWellPlanet.supplies || 0) >= 1.0);
+      if (this.maxsupplies > 0 && this.supplies < this.maxsupplies && canResupply && !this.isWarp && !hasEnemyNear) {
         this.supplyLoadAccumulator = (this.supplyLoadAccumulator || 0) + deltaTime;
         while (this.supplyLoadAccumulator >= 5000 && this.supplies < this.maxsupplies) {
           const owner = this.owner;
@@ -4172,6 +4176,8 @@ export class Ship {
             let loaded = false;
 
             let canAffordResupply = false;
+            let purchaseFromNeutral = false;
+
             if (friendlyWellPlanet && (friendlyWellPlanet.supplies || 0) >= 1.0) {
               if (owner.useCredits !== false) {
                 const costCredits = 1.0 * costMultiplier;
@@ -4181,20 +4187,34 @@ export class Ship {
               } else if (friendlyWellPlanet.ships >= 1.0 * costMultiplier) {
                 canAffordResupply = true;
               }
+            } else if (neutralWellPlanet && (neutralWellPlanet.supplies || 0) >= 1.0) {
+              const costCredits = 2.0 * costMultiplier;
+              if ((owner.credits || 0) >= costCredits) {
+                canAffordResupply = true;
+                purchaseFromNeutral = true;
+              }
             }
 
             if (canAffordResupply) {
-              friendlyWellPlanet.supplies = Math.max(0, friendlyWellPlanet.supplies - 1.0);
-              if (owner.useCredits !== false) {
-                const costCredits = 1.0 * costMultiplier;
+              if (purchaseFromNeutral) {
+                neutralWellPlanet.supplies = Math.max(0, neutralWellPlanet.supplies - 1.0);
+                const costCredits = 2.0 * costMultiplier;
                 owner.credits -= costCredits;
                 this.supplies++;
                 loaded = true;
-              } else if (friendlyWellPlanet) {
-                const costShips = 1.0 * costMultiplier;
-                friendlyWellPlanet.ships -= costShips;
-                this.supplies++;
-                loaded = true;
+              } else {
+                friendlyWellPlanet.supplies = Math.max(0, friendlyWellPlanet.supplies - 1.0);
+                if (owner.useCredits !== false) {
+                  const costCredits = 1.0 * costMultiplier;
+                  owner.credits -= costCredits;
+                  this.supplies++;
+                  loaded = true;
+                } else if (friendlyWellPlanet) {
+                  const costShips = 1.0 * costMultiplier;
+                  friendlyWellPlanet.ships -= costShips;
+                  this.supplies++;
+                  loaded = true;
+                }
               }
             }
 
