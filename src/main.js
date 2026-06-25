@@ -9534,7 +9534,13 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           if (mode === 'terraforming') {
             const techBonus = Math.floor(Math.sqrt((myPlayer ? myPlayer.techScore : 0) || 0));
-            if (selectedPlanetFocus.habitability >= 10 * techBonus) {
+            const settings = (serverState && serverState.settings) || {};
+            const isUnlimited = !settings.timedGameLimit || settings.timedGameLimit === 'unlimited';
+            const timedLimitSecs = !isUnlimited ? parseFloat(settings.timedGameLimit) : null;
+            const durationInMinutes = timedLimitSecs ? (timedLimitSecs / 60) : null;
+            const multiplier = (durationInMinutes && durationInMinutes > 0) ? (600 / durationInMinutes) : 5;
+            const capVal = Math.round(multiplier * techBonus);
+            if (selectedPlanetFocus.habitability > capVal) {
               shouldShow = false;
             }
           }
