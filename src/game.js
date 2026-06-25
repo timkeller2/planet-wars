@@ -7403,7 +7403,10 @@ export class Game {
     // 4. Score Victory: twice the victory points of the 2nd highest player and at least minScoreToWin (50, or timed game minutes)
     let minScoreToWin = 50;
     if (this.settings && this.settings.timedGameLimit && this.settings.timedGameLimit !== 'unlimited') {
-      minScoreToWin = Math.round(parseFloat(this.settings.timedGameLimit) / 60);
+      const limitSecs = parseFloat(this.settings.timedGameLimit);
+      if (!isNaN(limitSecs)) {
+        minScoreToWin = Math.round(15 + (limitSecs / 60) / 2);
+      }
     }
     const sortedByVP = [...alivePlayers].sort((a, b) => getVP(b) - getVP(a));
     if (sortedByVP.length >= 2) {
