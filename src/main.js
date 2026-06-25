@@ -2956,7 +2956,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let racialBonus = 0;
         if (selectedCruiser) {
           const shipOwner = serverState.players.find(pl => pl.id === selectedCruiser.ownerId);
-          if (selectedCruiser.cruiserStyle === p.racialAffinity || (shipOwner && shipOwner.cruiserStyle === p.racialAffinity)) {
+          if (p.racialAffinity && (selectedCruiser.cruiserStyle === p.racialAffinity || (shipOwner && shipOwner.cruiserStyle === p.racialAffinity))) {
             racialBonus = 20;
           }
         }
@@ -7705,36 +7705,44 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   }
 
-  function handleDoubleClickOrTap(x, y) {
+  function handleDoubleClickOrTap(x, y, isTouch = false) {
     if (!serverState || !localPlayer) return;
     const pos = getMouseServerPos(x, y);
 
-    // 1. Search for friendly cruiser at double-click/tap location
-    let clickedCruiser = null;
+    // 1. Search for any ship (cruiser or fleet) at double-click/tap location
+    let clickedShip = null;
     if (serverState && serverState.ships) {
       for (const ship of serverState.ships) {
-        if (!ship.active || ship.ownerId !== localPlayer.id) continue;
-        if (!ship.isCruiser) continue;
+        if (!ship.active) continue;
         const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
         const hitRadius = ship.count > 1 ? maxSpread + 10 : 25;
         const sdx = ship.x - pos.x;
         const sdy = ship.y - pos.y;
         if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
-          clickedCruiser = ship;
-          break;
+          if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
+            clickedShip = ship;
+          }
         }
       }
     }
 
-    if (clickedCruiser) {
-      selectedShips = [];
-      selectedPlanets = [];
-      for (const ship of serverState.ships) {
-        if (ship.active && ship.ownerId === localPlayer.id && ship.isCruiser) {
-          const dx = ship.x - clickedCruiser.x;
-          const dy = ship.y - clickedCruiser.y;
-          if (dx * dx + dy * dy <= 200 * 200) {
-            selectedShips.push(ship);
+    if (clickedShip) {
+      // On desktop, double click opens the tooltip for cruisers/fleets
+      if (!isTouch) {
+        openInfoPanel(clickedShip.isCruiser ? 'ship' : 'fleet', clickedShip.id);
+      }
+
+      // If friendly cruiser, also select nearby cruisers
+      if (clickedShip.ownerId === localPlayer.id && clickedShip.isCruiser) {
+        selectedShips = [];
+        selectedPlanets = [];
+        for (const ship of serverState.ships) {
+          if (ship.active && ship.ownerId === localPlayer.id && ship.isCruiser) {
+            const dx = ship.x - clickedShip.x;
+            const dy = ship.y - clickedShip.y;
+            if (dx * dx + dy * dy <= 200 * 200) {
+              selectedShips.push(ship);
+            }
           }
         }
       }
@@ -7762,7 +7770,7 @@ function getPlanetTradeIncomePerMin(planet) {
   canvas.addEventListener('dblclick', (event) => {
     // Info panels are now tooltips triggered by hover / single tap.
     const cPos = getCanvasPos(event.clientX, event.clientY);
-    handleDoubleClickOrTap(cPos.x, cPos.y);
+    handleDoubleClickOrTap(cPos.x, cPos.y, false);
   });
 
   let mouseTimeout = null;
@@ -7847,7 +7855,6 @@ function getPlanetTradeIncomePerMin(planet) {
   document.addEventListener('contextmenu', e => e.preventDefault());
 
   canvas.addEventListener('wheel', (event) => {
-    console.log('[DIAG] wheel', { deltaY: event.deltaY, cameraZoom });
     event.preventDefault();
     const cPos = getCanvasPos(event.clientX, event.clientY);
     const mouseX = cPos.x;
@@ -8017,7 +8024,9 @@ function getPlanetTradeIncomePerMin(planet) {
         }
 
         if (clickedType && (clickedId !== null && clickedId !== undefined)) {
-          if (!isOwned) {
+          if (clickedType === 'ship' || clickedType === 'fleet') {
+            closeInfoPanel();
+          } else if (!isOwned) {
             // Unowned entities: open tooltip on a single click
             if (activeInfoPanel && activeInfoPanel.type === clickedType && activeInfoPanel.id === clickedId) {
               closeInfoPanel();
@@ -8025,8 +8034,23 @@ function getPlanetTradeIncomePerMin(planet) {
               openInfoPanel(clickedType, clickedId);
             }
           } else {
-            // Owned entities: Don't show info tooltip on clicking on a selected unit.
-            closeInfoPanel();
+            // Owned entities: check specific conditional exceptions for showing tooltips
+            let shouldShowTooltip = false;
+            if (clickedType === 'planet') {
+              if (wasAlreadySelectedOnMouseDown) {
+                shouldShowTooltip = true;
+              }
+            }
+
+            if (shouldShowTooltip) {
+              if (activeInfoPanel && activeInfoPanel.type === clickedType && activeInfoPanel.id === clickedId) {
+                closeInfoPanel();
+              } else {
+                openInfoPanel(clickedType, clickedId);
+              }
+            } else {
+              closeInfoPanel();
+            }
           }
         } else {
           // Clicked empty space: close the tooltip
@@ -8347,7 +8371,9 @@ function getPlanetTradeIncomePerMin(planet) {
       handlePointerDown(cPos.x, cPos.y, event.shiftKey, true, 0);
 
       if (tappedType && (tappedId !== null && tappedId !== undefined)) {
-        if (!isOwned) {
+        if (tappedType === 'ship' || tappedType === 'fleet') {
+          closeInfoPanel();
+        } else if (!isOwned) {
           // Unowned entities: open tooltip on a single touch/tap
           if (activeInfoPanel && activeInfoPanel.type === tappedType && activeInfoPanel.id === tappedId) {
             closeInfoPanel();
@@ -8355,8 +8381,23 @@ function getPlanetTradeIncomePerMin(planet) {
             openInfoPanel(tappedType, tappedId);
           }
         } else {
-          // Owned entities: Don't show info tooltip on clicking on a selected unit.
-          closeInfoPanel();
+          // Owned entities: check specific conditional exceptions for showing tooltips
+          let shouldShowTooltip = false;
+          if (tappedType === 'planet') {
+            if (isAlreadySelected) {
+              shouldShowTooltip = true;
+            }
+          }
+
+          if (shouldShowTooltip) {
+            if (activeInfoPanel && activeInfoPanel.type === tappedType && activeInfoPanel.id === tappedId) {
+              closeInfoPanel();
+            } else {
+              openInfoPanel(tappedType, tappedId);
+            }
+          } else {
+            closeInfoPanel();
+          }
         }
       } else {
         if (activeInfoPanel) {
@@ -8372,7 +8413,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const distSq = dx * dx + dy * dy;
 
       if (timeDiff < 300 && distSq < 40 * 40) {
-        handleDoubleClickOrTap(cPos.x, cPos.y);
+        handleDoubleClickOrTap(cPos.x, cPos.y, true);
       }
 
       lastTapTime = now;
@@ -10403,6 +10444,11 @@ function getPlanetTradeIncomePerMin(planet) {
       // Draw hazard circles (background)
       for (const stormId of Object.keys(lastKnownHazards)) {
         const storm = lastKnownHazards[stormId];
+        // Frustum culling
+        const sRadius = storm.radius || 100;
+        if (storm.x + sRadius < viewMinX || storm.x - sRadius > viewMaxX || storm.y + sRadius < viewMinY || storm.y - sRadius > viewMaxY) {
+          continue;
+        }
         const isCurrentlyVisible = serverState && serverState.storms && serverState.storms.some(s => s.id === storm.id);
         const t = storm.type || 'storm';
         
@@ -10786,6 +10832,16 @@ function getPlanetTradeIncomePerMin(planet) {
 
 
       for (const p of serverState.planets) {
+        // Frustum culling: skip rendering if planet/anomaly is completely off-screen
+        const px = p.isDeepSpaceAnomaly ? (p.anomaly ? p.anomaly.x : p.x) : p.x;
+        const py = p.isDeepSpaceAnomaly ? (p.anomaly ? p.anomaly.y : p.y) : p.y;
+        const pr = p.radius || 20;
+        const buffer = 100; // safety margin for gravity wells, titles, or effects
+        const isOffscreen = px + pr < viewMinX - buffer || px - pr > viewMaxX + buffer || py + pr < viewMinY - buffer || py - pr > viewMaxY + buffer;
+        if (isOffscreen) {
+          continue;
+        }
+
         if (p.isDeepSpaceAnomaly) {
           if (p.anomaly && !p.anomaly.researched) {
             const diff = p.anomaly.difficulty;
@@ -10982,6 +11038,16 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.stroke();
               ctx.restore();
             }
+
+            // Draw difficulty subscript
+            ctx.save();
+            ctx.font = 'bold 7px Orbitron';
+            ctx.fillStyle = anomalyColor;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.shadowBlur = 0;
+            ctx.fillText(diff.toString(), p.anomaly.x + 8, p.anomaly.y + 2);
+            ctx.restore();
           }
           continue;
         }
@@ -11493,6 +11559,16 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.stroke();
             ctx.restore();
           }
+
+          // Draw difficulty subscript
+          ctx.save();
+          ctx.font = 'bold 7px Orbitron';
+          ctx.fillStyle = anomalyColor;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.shadowBlur = 0;
+          ctx.fillText(diff.toString(), p.anomaly.x + 8, p.anomaly.y + 2);
+          ctx.restore();
         }
 
         ctx.shadowBlur = 0;
@@ -12236,6 +12312,8 @@ function getPlanetTradeIncomePerMin(planet) {
             };
             const icon = raceIcons[hp.racialAffinity] || '';
             lines.push({ label: 'Planetary Environment', value: `${icon} ${hp.racialAffinity}`, color: '#e040fb' });
+          } else {
+            lines.push({ label: 'Planetary Environment', value: 'Unaligned', color: '#888' });
           }
 
           const resourceMeta = {

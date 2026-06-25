@@ -4960,8 +4960,8 @@ export class Ship {
             N_att = Math.min(this.count, N_att);
 
             let penalty = 0.01 * Math.floor(this.targetPlanet.ships / 5);
-            const matchesAttacker = (this.cruiserStyle === this.targetPlanet.racialAffinity) || (this.owner && this.owner.cruiserStyle === this.targetPlanet.racialAffinity);
-            let racialDefenseBonus = !matchesAttacker ? 0.15 : 0;
+            const matchesAttacker = this.targetPlanet.racialAffinity && ((this.cruiserStyle === this.targetPlanet.racialAffinity) || (this.owner && this.owner.cruiserStyle === this.targetPlanet.racialAffinity));
+            let racialDefenseBonus = (this.targetPlanet.racialAffinity && !matchesAttacker) ? 0.15 : 0;
 
             if (this.targetPlanet.inRevolt) {
               penalty *= 0.5;
@@ -5063,6 +5063,9 @@ export class Ship {
                 } else if (roll < 0.30) {
                   this.targetPlanet.isSpeedPlanet = true;
                 }
+              }
+              if (!this.targetPlanet.racialAffinity) {
+                this.targetPlanet.racialAffinity = this.cruiserStyle || (this.owner ? this.owner.cruiserStyle : null);
               }
               this.targetPlanet.owner = this.owner;
               this.targetPlanet.ships = 0; // starts at 0, next lines will reinforce if ships remaining

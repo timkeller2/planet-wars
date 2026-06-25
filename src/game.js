@@ -150,6 +150,25 @@ class SpatialGridArray extends Array {
 }
 
 export class Game {
+  static getRandomAnomalyRewardType() {
+    const roll = Math.random() * 100;
+    if (roll < 64) {
+      return 'credits';
+    } else if (roll < 70) {
+      return 'discount';
+    } else if (roll < 76) {
+      return 'tech';
+    } else if (roll < 82) {
+      return 'xp';
+    } else if (roll < 88) {
+      return 'hab';
+    } else if (roll < 94) {
+      return 'rare_resource_cache';
+    } else {
+      return 'upgrade_token';
+    }
+  }
+
   constructor(options) {
     if (options && options.getContext) {
       this.canvas = options;
@@ -2230,7 +2249,6 @@ export class Game {
 
     // Scatter ( map size / 100 ) anomalies randomly around the map at map creation
     const numScattered = Math.floor(this.width / 100);
-    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache', 'upgrade_token'];
     for (let i = 0; i < numScattered; i++) {
       const ax = Math.random() * this.width;
       const ay = Math.random() * this.height;
@@ -2239,7 +2257,7 @@ export class Game {
       const timedLimitSecs = !isUnlimited ? parseFloat(this.settings.timedGameLimit) : null;
       const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
       const difficulty = Math.max(1, Math.floor((Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff) / 2));
-      const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
+      const rewardType = Game.getRandomAnomalyRewardType();
 
       const planetId = 20000 + i;
       const deepSpacePlanet = new Planet(planetId, ax, ay, 0, null, 0, this.width, this.height);
@@ -3643,6 +3661,9 @@ export class Game {
         const oldShips = planet.ships;
         const originalOwner = planet.owner;
 
+        if (!planet.racialAffinity) {
+          planet.racialAffinity = winnerPlayer.cruiserStyle;
+        }
         planet.owner = winnerPlayer;
 
         planet.revoltWarmup = 0;
@@ -5796,6 +5817,9 @@ export class Game {
                     if (previousOwner) {
                       previousOwner.lastAttackerPlayerId = sourceShip.owner.id;
                     }
+                    if (!targetPlanet.racialAffinity) {
+                      targetPlanet.racialAffinity = sourceShip.cruiserStyle || (sourceShip.owner ? sourceShip.owner.cruiserStyle : null);
+                    }
                     targetPlanet.owner = sourceShip.owner;
                     targetPlanet.rampageBoost = false;
                     targetPlanet.rampageEvent = false;
@@ -6447,7 +6471,7 @@ export class Game {
     const chancePref = 30 + disposition + currentSym + (MathSquareBase * 3) + 10;
     
     let rawChance = hasPref ? chancePref : chanceBase;
-    if (ship.cruiserStyle === targetPlanet.racialAffinity || (ship.owner && ship.owner.cruiserStyle === targetPlanet.racialAffinity)) {
+    if (targetPlanet.racialAffinity && (ship.cruiserStyle === targetPlanet.racialAffinity || (ship.owner && ship.owner.cruiserStyle === targetPlanet.racialAffinity))) {
       rawChance += 20;
     }
     const chancePercent = Math.max(0, Math.round(rawChance));
@@ -6545,8 +6569,7 @@ export class Game {
     const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
     const difficulty = customDifficulty !== null ? customDifficulty : Math.max(1, Math.floor((Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff) / 2));
 
-    const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache', 'upgrade_token'];
-    const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
+    const rewardType = Game.getRandomAnomalyRewardType();
 
     const planetId = 30000 + this.planets.length;
     const deepSpacePlanet = new Planet(planetId, x, y, 0, null, 0, this.width, this.height);
@@ -6582,22 +6605,7 @@ export class Game {
     // Choose a random reward with 64% chance for credits and 6% chance for others:
     let rewardType = (planet.anomaly && planet.anomaly.rewardType) ? planet.anomaly.rewardType : null;
     if (!rewardType) {
-      const roll = Math.random() * 100;
-      if (roll < 64) {
-        rewardType = 'credits';
-      } else if (roll < 70) {
-        rewardType = 'discount';
-      } else if (roll < 76) {
-        rewardType = 'tech';
-      } else if (roll < 82) {
-        rewardType = 'xp';
-      } else if (roll < 88) {
-        rewardType = 'hab';
-      } else if (roll < 94) {
-        rewardType = 'rare_resource_cache';
-      } else {
-        rewardType = 'upgrade_token';
-      }
+      rewardType = Game.getRandomAnomalyRewardType();
     }
     
     let text = '';

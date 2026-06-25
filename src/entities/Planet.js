@@ -62,7 +62,7 @@ export class Planet {
     this.preferredResource = (Math.random() < 1/3) ? resourcesList[Math.floor(Math.random() * resourcesList.length)] : null;
     this.preferredResourceWantedEvent = false;
     const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
-    this.racialAffinity = styles[Math.floor(Math.random() * styles.length)];
+    this.racialAffinity = (Math.random() < 1/6) ? styles[Math.floor(Math.random() * styles.length)] : null;
     this.name = this.generatePlanetName();
     this.expScore = 0;
     this.expProgress = 0;

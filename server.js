@@ -2554,8 +2554,7 @@ async function bootstrap() {
               const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
               const difficulty = Math.max(1, Math.floor((Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff) / 2));
               
-              const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache', 'upgrade_token'];
-              const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
+              const rewardType = Game.getRandomAnomalyRewardType();
               
               p.anomaly = {
                 id: Math.random().toString(36).substr(2, 9),
