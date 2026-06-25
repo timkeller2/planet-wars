@@ -1099,6 +1099,7 @@ export class Game {
         }
       }
       targetPlanet.maxShips = Math.max(15, targetPlanet.sizeClass - 20);
+      targetPlanet.supplies = Math.random() * targetPlanet.maxShips;
       targetPlanet.ships = targetPlanet.maxShips;
       targetPlanet.radius = Math.min(targetPlanet.sizeClass, targetPlanet.maxShips) / 4;
       targetPlanet.habitability = 100;
@@ -1330,6 +1331,7 @@ export class Game {
         radius: p.radius,
         sizeClass: p.sizeClass,
         maxShips: p.maxShips,
+        supplies: p.supplies,
         ships: p.ships,
         ownerId: p.owner ? p.owner.id : null,
         focusMode: p.focusMode,
@@ -1503,6 +1505,7 @@ export class Game {
       p.isDeepSpaceAnomaly = pData.isDeepSpaceAnomaly || false;
       p.sizeClass = pData.sizeClass;
       p.maxShips = pData.maxShips;
+      p.supplies = pData.supplies !== undefined ? pData.supplies : (Math.random() * p.maxShips);
       p.focusMode = pData.focusMode;
       p.habitability = pData.habitability;
       p.isResearch = pData.isResearch;
@@ -1884,6 +1887,7 @@ export class Game {
           newPlanet.sizeClass = 200;
           newPlanet.habitability = 150;
           newPlanet.maxShips = spec.maxShips;
+          newPlanet.supplies = Math.random() * newPlanet.maxShips;
           newPlanet.radius = Math.min(newPlanet.sizeClass, newPlanet.maxShips) / 4;
         }
         return newPlanet;
@@ -2102,6 +2106,7 @@ export class Game {
             newPlanet.sizeClass = 200;
             newPlanet.habitability = 150;
             newPlanet.maxShips = radius * 4;
+            newPlanet.supplies = Math.random() * newPlanet.maxShips;
             newPlanet.radius = Math.min(newPlanet.sizeClass, newPlanet.maxShips) / 4;
           }
           this.planets.push(newPlanet);
@@ -2241,6 +2246,7 @@ export class Game {
       deepSpacePlanet.isDeepSpaceAnomaly = true;
       deepSpacePlanet.radius = 0;
       deepSpacePlanet.maxShips = 0;
+      deepSpacePlanet.supplies = 0;
       deepSpacePlanet.ships = 0;
       deepSpacePlanet.name = "Deep Space Anomaly";
       deepSpacePlanet.anomaly = {
@@ -6509,6 +6515,7 @@ export class Game {
     deepSpacePlanet.isDeepSpaceAnomaly = true;
     deepSpacePlanet.radius = 0;
     deepSpacePlanet.maxShips = 0;
+    deepSpacePlanet.supplies = 0;
     deepSpacePlanet.ships = 0;
     deepSpacePlanet.name = "Deep Space Anomaly";
     deepSpacePlanet.anomaly = {

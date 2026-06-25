@@ -11537,6 +11537,25 @@ function getPlanetTradeIncomePerMin(planet) {
             currentY += 14;
           }
 
+          // Supplies status bar below the resource icon area
+          const displaySupplies = isLastKnown ? (lastKnownPlanets[p.id]?.supplies || 0) : (p.supplies || 0);
+          const suppliesRatio = Math.max(0, Math.min(1.0, displaySupplies / (displayMaxShips || 1)));
+
+          const barW = Math.max(24, p.radius * 1.5);
+          const barH = 3;
+
+          ctx.save();
+          // Backdrop (dark transparent)
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+          ctx.fillRect(p.x - barW / 2, currentY - 1, barW, barH);
+
+          // Filled bar (Purple)
+          ctx.fillStyle = '#9c27b0';
+          ctx.fillRect(p.x - barW / 2, currentY - 1, barW * suppliesRatio, barH);
+          ctx.restore();
+
+          currentY += barH + 4;
+
           // B. Low Pop or XP Percentages
           if (!isLastKnown) {
             ctx.save();

@@ -45,6 +45,7 @@ export class Planet {
     this.ships = initialShips;
 
     this.maxShips = Math.max(15, this.radius * 4);
+    this.supplies = Math.random() * this.maxShips;
     this.productionProgress = 0;
     this.capacityProgress = 0;
     this.sacrificedShips = 0;
@@ -145,10 +146,26 @@ export class Planet {
     if (!silent) {
       this.capacityDecreaseEvent = true;
     }
+    if (this.supplies !== undefined) {
+      this.supplies = Math.min(this.supplies, this.maxShips);
+    }
   }
 
   update(deltaTime, allPlanets, settings, game) {
-    if (this.isDeepSpaceAnomaly) return;
+    if (this.isDeepSpaceAnomaly) {
+      this.supplies = 0;
+      return;
+    }
+    
+    if (this.maxShips <= 0) {
+      this.supplies = 0;
+    } else {
+      if (this.supplies === undefined) {
+        this.supplies = Math.random() * this.maxShips;
+      }
+      const regenRatePerMs = (3 * (this.maxShips / 100)) / 60000;
+      this.supplies = Math.min(this.maxShips, this.supplies + regenRatePerMs * deltaTime);
+    }
     this.prorateSympathiesIfNeeded();
 
     if (!this.dispositionTimers) this.dispositionTimers = {};
