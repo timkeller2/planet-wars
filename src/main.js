@@ -2518,6 +2518,34 @@ function getPlanetTradeIncomePerMin(planet) {
     updateInfoPanelContent();
   }
   window.openInfoPanel = openInfoPanel;
+  function toggleInfoForSelected() {
+    let type = null;
+    let id = null;
+
+    if (selectedShips.length > 0) {
+      const cruiser = selectedShips.find(s => s.isCruiser);
+      if (cruiser) {
+        type = 'ship';
+        id = cruiser.id;
+      } else {
+        const fleet = selectedShips[0];
+        type = 'fleet';
+        id = fleet.id;
+      }
+    } else if (selectedPlanets.length > 0) {
+      type = 'planet';
+      id = selectedPlanets[0].id;
+    }
+
+    if (type && id !== null && id !== undefined) {
+      if (activeInfoPanel && activeInfoPanel.type === type && activeInfoPanel.id === id) {
+        closeInfoPanel();
+      } else {
+        openInfoPanel(type, id);
+      }
+    }
+  }
+  window.toggleInfoForSelected = toggleInfoForSelected;
   window.getServerState = () => serverState;
   window.getLocalPlayer = () => localPlayer;
   window.getCameraPan = () => ({ x: cameraPanX, y: cameraPanY });
@@ -7944,16 +7972,8 @@ function getPlanetTradeIncomePerMin(planet) {
               openInfoPanel(clickedType, clickedId);
             }
           } else {
-            // Owned entities: require click on a selected unit (wasAlreadySelectedOnMouseDown)
-            if (wasAlreadySelectedOnMouseDown) {
-              if (activeInfoPanel && activeInfoPanel.type === clickedType && activeInfoPanel.id === clickedId) {
-                closeInfoPanel();
-              } else {
-                openInfoPanel(clickedType, clickedId);
-              }
-            } else {
-              closeInfoPanel();
-            }
+            // Owned entities: Don't show info tooltip on clicking on a selected unit.
+            closeInfoPanel();
           }
         } else {
           // Clicked empty space: close the tooltip
@@ -8282,16 +8302,8 @@ function getPlanetTradeIncomePerMin(planet) {
             openInfoPanel(tappedType, tappedId);
           }
         } else {
-          // Owned entities: require second tap (isAlreadySelected)
-          if (isAlreadySelected) {
-            if (activeInfoPanel && activeInfoPanel.type === tappedType && activeInfoPanel.id === tappedId) {
-              closeInfoPanel();
-            } else {
-              openInfoPanel(tappedType, tappedId);
-            }
-          } else {
-            closeInfoPanel();
-          }
+          // Owned entities: Don't show info tooltip on clicking on a selected unit.
+          closeInfoPanel();
         }
       } else {
         if (activeInfoPanel) {
@@ -8699,6 +8711,14 @@ function getPlanetTradeIncomePerMin(planet) {
       event.preventDefault();
       socket.emit('togglePause');
     }
+    if (event.key.toLowerCase() === 'i') {
+      const hasSelection = (selectedPlanets.length > 0 || selectedShips.length > 0);
+      if (hasSelection && !focusModeActive && !upgradeModeActive && !cruiserBuildModeActive) {
+        event.preventDefault();
+        toggleInfoForSelected();
+        return;
+      }
+    }
     if (event.key.toLowerCase() === 'w') {
       warpOrderNext = !warpOrderNext;
     }
@@ -8856,6 +8876,7 @@ function getPlanetTradeIncomePerMin(planet) {
       socket.emit('changeGameSpeed', { direction: 'down' });
     });
   }
+  bindActionClick('btn-info', () => { toggleInfoForSelected(); });
   bindActionClick('btn-warp', () => { warpOrderNext = !warpOrderNext; });
   bindActionClick('btn-bomb', () => { bombOrderNext = bombOrderNext === 'eco' ? false : 'eco'; });
   bindActionClick('btn-bomb-ships', () => { bombOrderNext = bombOrderNext === 'ships' ? false : 'ships'; });
@@ -9645,7 +9666,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
     const actionButtonsLeft = document.getElementById('action-buttons-left');
-    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-dismantle'];
+    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-dismantle', 'btn-info'];
     const upButtonsMap = {
       'btn-up-sensorarray': 'sensorarrays',
       'btn-up-lab': 'labs',
@@ -10181,6 +10202,28 @@ function getPlanetTradeIncomePerMin(planet) {
       for (const btnId of simpleStd) {
         const el = document.getElementById(btnId);
         if (el) el.style.display = 'inline-flex';
+      }
+
+      const btnInfo = document.getElementById('btn-info');
+      if (btnInfo) {
+        const hasSelection = (selectedPlanets.length > 0 || selectedShips.length > 0);
+        btnInfo.style.display = hasSelection ? 'inline-flex' : 'none';
+        if (hasSelection) {
+          let isInfoActive = false;
+          if (activeInfoPanel) {
+            if (selectedShips.length > 0) {
+              const cruiser = selectedShips.find(s => s.isCruiser);
+              if (cruiser) {
+                isInfoActive = (activeInfoPanel.type === 'ship' && activeInfoPanel.id === cruiser.id);
+              } else {
+                isInfoActive = (activeInfoPanel.type === 'fleet' && activeInfoPanel.id === selectedShips[0].id);
+              }
+            } else if (selectedPlanets.length > 0) {
+              isInfoActive = (activeInfoPanel.type === 'planet' && activeInfoPanel.id === selectedPlanets[0].id);
+            }
+          }
+          btnInfo.classList.toggle('action-btn-active', isInfoActive);
+        }
       }
 
       for (const btnId of Object.keys(upButtonsMap)) {
