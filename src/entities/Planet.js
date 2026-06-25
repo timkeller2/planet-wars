@@ -190,11 +190,20 @@ export class Planet {
         
         if (toConsume > 0) {
           let unpaid = toConsume;
-          const currentCredits = (this.owner.useCredits !== false) ? (this.owner.credits || 0) : 0;
-          if (currentCredits > 0) {
-            const creditsToUse = Math.min(currentCredits, unpaid);
-            this.owner.credits -= creditsToUse;
-            unpaid -= creditsToUse;
+          if (this.owner.useCredits !== false) {
+            let minAllowedCredits = 0;
+            if (game && game.planets) {
+              const ownsHw = game.planets.some(p => p.homeworldOf === this.owner.id && p.owner === this.owner);
+              if (ownsHw) {
+                minAllowedCredits = -(1000 + Math.floor(this.owner.totalShips || 0));
+              }
+            }
+            const currentCreditsAvailable = Math.max(0, (this.owner.credits || 0) - minAllowedCredits);
+            if (currentCreditsAvailable > 0) {
+              const creditsToUse = Math.min(currentCreditsAvailable, unpaid);
+              this.owner.credits -= creditsToUse;
+              unpaid -= creditsToUse;
+            }
           }
           if (unpaid > 0) {
             const actualConsume = Math.min(this.ships, unpaid);

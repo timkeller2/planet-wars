@@ -1465,7 +1465,14 @@ async function bootstrap() {
 
       if (planet.focusTransition) return; // Prevent concurrent focus shifts on same planet
       const cost = Math.floor(planet.maxShips / 2);
-      const creditsAvailable = player.useCredits !== false ? (player.credits || 0) : 0;
+      let minAllowedCredits = 0;
+      if (player.id !== 'monsters') {
+        const ownsHw = game.planets.some(p => p.homeworldOf === player.id && p.owner === player);
+        if (ownsHw) {
+          minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
+        }
+      }
+      const creditsAvailable = player.useCredits !== false ? Math.max(0, (player.credits || 0) - minAllowedCredits) : 0;
       if ((planet.ships + creditsAvailable) >= cost) {
         planet.focusTransition = {
           targetMode: data.focusMode,

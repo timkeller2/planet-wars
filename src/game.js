@@ -5134,7 +5134,7 @@ export class Game {
     // Dynamic calculations for player limits and trade options
     for (const player of this.allPlayers) {
       if ((player.credits || 0) < 0) {
-        player.credits += player.credits * (0.05 / 60000) * deltaTime;
+        player.credits += player.credits * (0.025 / 60000) * deltaTime;
       } else if ((player.credits || 0) > 0) {
         player.credits += player.credits * (0.005 / 60000) * deltaTime;
       }
