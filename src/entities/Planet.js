@@ -73,8 +73,15 @@ export class Planet {
     this.sizeClass = Math.floor(Math.random() * 91) + 60;
     this.habitability = Math.round(10 + Math.pow(Math.random(), 2) * 140);
 
+    const potential = this.sizeClass * (this.habitability / 100);
+    if (this.maxShips > potential) {
+      const excess = this.maxShips - potential;
+      this.maxShips = Math.max(15, this.maxShips - excess / 3);
+    }
+
     // Cap initial radius to sizeClass
     this.radius = Math.min(this.sizeClass, this.maxShips) / 4;
+    this.supplies = Math.random() * this.maxShips;
 
     // Sci-Fi Planetary Resources System
     // Cascading chance allocation: 60% in the middle, dwindling down to 20% at the edges/corners.
