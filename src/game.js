@@ -1505,7 +1505,7 @@ export class Game {
       p.isDeepSpaceAnomaly = pData.isDeepSpaceAnomaly || false;
       p.sizeClass = pData.sizeClass;
       p.maxShips = pData.maxShips;
-      p.supplies = pData.supplies !== undefined ? pData.supplies : (Math.random() * p.maxShips);
+      p.supplies = Math.min(p.maxShips, pData.supplies !== undefined ? pData.supplies : (Math.random() * p.maxShips));
       p.focusMode = pData.focusMode;
       p.habitability = pData.habitability;
       p.isResearch = pData.isResearch;

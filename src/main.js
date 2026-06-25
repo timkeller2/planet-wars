@@ -2989,6 +2989,15 @@ function getPlanetTradeIncomePerMin(planet) {
         lines.push({ label: 'Garrison', value: `${Math.floor(p.ships)} / ${Math.round(p.maxShips)}`, color: '#fff' });
       }
 
+      // Planet supplies status details on tooltip
+      const displaySuppliesVal = isLastKnown ? (lastKnownPlanets[p.id]?.supplies || 0) : (p.supplies || 0);
+      const displayMaxShipsVal = isLastKnown ? (lastKnownPlanets[p.id]?.maxShips || 1) : (p.maxShips || 1);
+      lines.push({
+        label: '📦 Supplies',
+        value: `${Math.floor(Math.min(displayMaxShipsVal, displaySuppliesVal))} / ${Math.round(displayMaxShipsVal)}`,
+        color: '#a855f7'
+      });
+
       let totalDefense = 0;
       const defenseLines = [];
 
@@ -11538,7 +11547,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           // Supplies status bar below the resource icon area
-          const displaySupplies = isLastKnown ? (lastKnownPlanets[p.id]?.supplies || 0) : (p.supplies || 0);
+          const displaySupplies = Math.min(displayMaxShips, isLastKnown ? (lastKnownPlanets[p.id]?.supplies || 0) : (p.supplies || 0));
           const suppliesRatio = Math.max(0, Math.min(1.0, displaySupplies / (displayMaxShips || 1)));
 
           const barW = Math.max(24, p.radius * 1.5);
