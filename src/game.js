@@ -3791,6 +3791,69 @@ export class Game {
     if (!this.wreckages) this.wreckages = [];
     if (!this.pendingPioneerSpawns) this.pendingPioneerSpawns = [];
 
+    const hwSizeSetting = this.settings && this.settings.homeworldSize;
+    const isPioneerMode = hwSizeSetting === 'pioneers' || hwSizeSetting === 'pioneers-corvettes';
+
+    if (isPioneerMode) {
+      for (const player of this.allPlayers) {
+        if (player.id === 'monsters') continue;
+
+        // 1. Never owned a planet
+        if (player.hasOwnedPlanet) continue;
+
+        // 2. Currently has 0 active cruisers
+        const hasActiveCruisers = this.ships.some(s => s.active && s.isCruiser && s.owner && s.owner.id === player.id);
+        if (hasActiveCruisers) continue;
+
+        // 3. Currently has 0 pending pioneer spawns
+        const hasPendingSpawns = this.pendingPioneerSpawns.some(ps => ps.ownerId === player.id);
+        if (hasPendingSpawns) continue;
+
+        // 4. Calculate debt limit
+        let minAllowedCredits = 0;
+        const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
+        if (ownsHomeworld) {
+          minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
+        }
+
+        // 5. Check if credits are above the debt limit (after subtracting 200)
+        if (player.credits - 200 >= minAllowedCredits) {
+          player.credits -= 200;
+
+          let upgrades = {};
+          const potentialUpgrades = ['sensorarrays', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel', 'marines', 'command', 'labs', 'diplomat'];
+          for (const up of potentialUpgrades) {
+            upgrades[up] = 0;
+          }
+
+          // Spawns off-screen and warps in to a random playable coordinate
+          const rx = 100 + Math.random() * (this.width - 200);
+          const ry = 100 + Math.random() * (this.height - 200);
+
+          this.pendingPioneerSpawns.push({
+            ownerId: player.id,
+            x: rx,
+            y: ry,
+            classType: 'corvette',
+            upgradeTokens: 3,
+            upgrades: upgrades,
+            timer: 1000, // 1 second delay
+            isAdditional: true,
+            Pioneer: true,
+            cruiserStyle: player.cruiserStyle || 'Federation'
+          });
+
+          this.pendingChatMessages = this.pendingChatMessages || [];
+          this.pendingChatMessages.push({
+            playerId: player.id,
+            text: "You ran out of cruisers! Spawning a new rescue Corvette with 3 upgrade tokens for 200 Credits."
+          });
+
+          console.log(`[Pioneer Rescue] Spawning rescue Corvette for player ${player.id}. Deducted 200 credits.`);
+        }
+      }
+    }
+
     // Process pending pioneer ship spawns
     if (this.pendingPioneerSpawns.length > 0) {
       for (let i = this.pendingPioneerSpawns.length - 1; i >= 0; i--) {
@@ -4973,6 +5036,12 @@ export class Game {
         if (!ship.isCruiser) {
           ship.owner.totalShips += (ship.count || 1);
         }
+      }
+    }
+
+    for (const player of this.allPlayers) {
+      if (this.pendingPioneerSpawns && this.pendingPioneerSpawns.some(ps => ps.ownerId === player.id)) {
+        player.isAlive = true;
       }
     }
 

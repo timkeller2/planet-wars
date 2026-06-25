@@ -25,11 +25,22 @@ function randomWeightedMiddle(min, max, iterations = 3) {
 
 
 export class Planet {
+  get owner() {
+    return this._owner;
+  }
+  set owner(val) {
+    this._owner = val;
+    if (val) {
+      val.hasOwnedPlanet = true;
+    }
+  }
+
   constructor(id, x, y, radius, owner, initialShips, mapWidth = 1920, mapHeight = 1620) {
     this.id = id;
     this.x = x;
     this.y = y;
     this.radius = radius;
+    this._owner = null;
     this.owner = owner; // Player object or null
     this.ships = initialShips;
 

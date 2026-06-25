@@ -9,6 +9,7 @@ export class Player {
     this.happinessScore = 0;
     this.cruiserStyle = null;
     this.credits = 0;
+    this.hasOwnedPlanet = false;
     this.upgradeModifiers = {
       sensorarray: 0,
       lab: 0,
