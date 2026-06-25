@@ -467,6 +467,54 @@ function getPlanetTradeIncomePerMin(planet) {
     return false;
   }
 
+  function isClientHazardVisible(storm) {
+    if (!serverState) return false;
+    if (!serverState.settings || !serverState.settings.fogOfWar) return true;
+    if (!localPlayer) return true;
+
+    // Check friendly planets gravity wells + storm radius
+    if (serverState.planets) {
+      for (const p of serverState.planets) {
+        if (p.ownerId === localPlayer.id) {
+          const getGravityRadiusClient = (pl) => {
+            let baseRadius = pl.maxShips * 1.5;
+            if (pl.isMilitary && pl.ships >= pl.maxShips) {
+              baseRadius *= 1.5;
+            }
+            const plOwner = serverState.players ? serverState.players.find(o => o.id === pl.ownerId) : null;
+            if (plOwner && pl.focusMode === 'garrison' && pl.ships >= pl.maxShips) {
+              baseRadius += (pl.ships / 2);
+            }
+            const tb = 0.01 * Math.sqrt(plOwner ? (plOwner.techScore || 0) : 0);
+            const eb = 0.01 * Math.sqrt(plOwner ? (plOwner.expScore || 0) : 0);
+            return baseRadius * (1 + tb + eb);
+          };
+          
+          const gr = getGravityRadiusClient(p);
+          const dx = p.x - storm.x;
+          const dy = p.y - storm.y;
+          const limit = gr + storm.radius;
+          if (dx * dx + dy * dy <= limit * limit) return true;
+        }
+      }
+    }
+
+    // Check friendly fleets + storm radius
+    if (serverState.fleets) {
+      for (const f of serverState.fleets) {
+        if (f.ownerId === localPlayer.id) {
+          const dx = f.x - storm.x;
+          const dy = f.y - storm.y;
+          const limit = f.radarRange + storm.radius;
+          if (dx * dx + dy * dy <= limit * limit) return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+
 
   let transparentPlanetsCanvas = null;
   const planetSpriteSheet = new Image();
@@ -3062,9 +3110,9 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      if (serverState.storms) {
+      if (lastKnownHazards) {
         const defenseOwner = owner || { techScore: 0, expScore: 0, id: 'neutral' };
-        for (const storm of serverState.storms) {
+        for (const storm of Object.values(lastKnownHazards)) {
           if (storm.type === 'minefield') continue;
           const sdx = p.x - storm.x;
           const sdy = p.y - storm.y;
@@ -3075,8 +3123,10 @@ function getPlanetTradeIncomePerMin(planet) {
             const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2);
             if (eff > 0) {
               totalDefense += eff;
-              const label = storm.type === 'nebula' ? 'Nebula Shielding' : 'Ion Interference';
-              defenseLines.push({ label: label, value: `${Math.round(eff)}%`, color: storm.type === 'nebula' ? '#ff4444' : '#ffff44' });
+              const isCurrentlyVisible = serverState && serverState.storms && serverState.storms.some(s => s.id === storm.id);
+              const label = (storm.type === 'nebula' ? 'Nebula Shielding' : 'Ion Interference') + (!isCurrentlyVisible ? ' [Last Known]' : '');
+              const color = !isCurrentlyVisible ? '#888' : (storm.type === 'nebula' ? '#ff4444' : '#ffff44');
+              defenseLines.push({ label: label, value: `${Math.round(eff)}%`, color: color });
             }
           }
         }
@@ -3093,13 +3143,14 @@ function getPlanetTradeIncomePerMin(planet) {
 
 
 
-      if (serverState.storms) {
-        for (const storm of serverState.storms) {
+      if (lastKnownHazards) {
+        for (const storm of Object.values(lastKnownHazards)) {
           if (storm.type === 'minefield') continue;
           const dx = p.x - storm.x, dy = p.y - storm.y;
           if (dx * dx + dy * dy <= storm.radius * storm.radius) {
-            const typeLabel = storm.type === 'nebula' ? 'Nebula' : 'Ion Storm';
-            const typeColor = storm.type === 'nebula' ? '#f66' : '#ff0';
+            const isCurrentlyVisible = serverState && serverState.storms && serverState.storms.some(s => s.id === storm.id);
+            const typeLabel = (storm.type === 'nebula' ? 'Nebula' : 'Ion Storm') + (!isCurrentlyVisible ? ' [Last Known]' : '');
+            const typeColor = !isCurrentlyVisible ? '#888' : (storm.type === 'nebula' ? '#f66' : '#ff0');
             lines.push({ label: `⚠️ ${typeLabel}`, value: `Int: ${storm.intensity}`, color: typeColor });
           }
         }
@@ -3375,8 +3426,8 @@ function getPlanetTradeIncomePerMin(planet) {
         }
         
         let hazardPenalty = 0;
-        if (serverState.storms) {
-          for (const storm of serverState.storms) {
+        if (lastKnownHazards) {
+          for (const storm of Object.values(lastKnownHazards)) {
             if (storm.type === 'minefield') continue;
             const sdx = hs.x - storm.x;
             const sdy = hs.y - storm.y;
@@ -3550,8 +3601,8 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
         let hazardPenalty = 0;
-        if (serverState.storms) {
-          for (const storm of serverState.storms) {
+        if (lastKnownHazards) {
+          for (const storm of Object.values(lastKnownHazards)) {
             if (storm.type === 'minefield') continue;
             const sdx = hs.x - storm.x;
             const sdy = hs.y - storm.y;
@@ -3634,12 +3685,13 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      if (serverState.storms) {
-        for (const storm of serverState.storms) {
+      if (lastKnownHazards) {
+        for (const storm of Object.values(lastKnownHazards)) {
           const dx = hs.x - storm.x, dy = hs.y - storm.y;
           if (dx * dx + dy * dy <= storm.radius * storm.radius) {
-            const typeLabel = storm.type === 'minefield' ? 'Minefield' : storm.type === 'nebula' ? 'Nebula' : 'Ion Storm';
-            const typeColor = storm.type === 'minefield' ? '#66f' : storm.type === 'nebula' ? '#f66' : '#ff0';
+            const isCurrentlyVisible = serverState && serverState.storms && serverState.storms.some(s => s.id === storm.id);
+            const typeLabel = (storm.type === 'minefield' ? 'Minefield' : storm.type === 'nebula' ? 'Nebula' : 'Ion Storm') + (!isCurrentlyVisible ? ' [Last Known]' : '');
+            const typeColor = !isCurrentlyVisible ? '#888' : (storm.type === 'minefield' ? '#66f' : storm.type === 'nebula' ? '#f66' : '#ff0');
             lines.push({ label: `⚠️ ${typeLabel}`, value: `Int: ${storm.intensity}`, color: typeColor });
           }
         }
@@ -5280,18 +5332,17 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
 
-    // Clean up ion storms that have moved out of their last known position
-    // (if that position is currently visible but the storm is not there)
+    // Clean up hazards that have moved or been destroyed/cleared
+    // (if that position is currently visible but the hazard is not there)
     for (const [id, storm] of Object.entries(lastKnownHazards)) {
-      if (storm.type === 'storm') {
-        const isCurrentlyVisible = state.storms && state.storms.some(s => s.id === storm.id);
-        if (!isCurrentlyVisible) {
-          if (isClientPositionVisible(storm.x, storm.y)) {
-            delete lastKnownHazards[id];
-          }
+      const isCurrentlyVisible = state.storms && state.storms.some(s => s.id === storm.id);
+      if (!isCurrentlyVisible) {
+        if (isClientHazardVisible(storm)) {
+          delete lastKnownHazards[id];
         }
       }
     }
+
 
     if (state.ships) {
       selectedShips = selectedShips.map(sel => state.ships.find(s => s.id === sel.id)).filter(Boolean);
@@ -10146,7 +10197,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const t = storm.type || 'storm';
         
         let fillColor, strokeColor;
-        if (!isCurrentlyVisible && t === 'storm') {
+        if (!isCurrentlyVisible) {
           fillColor = 'rgba(128, 128, 128, 0.04)';
           strokeColor = 'rgba(128, 128, 128, 0.15)';
         } else {
@@ -11785,8 +11836,8 @@ function getPlanetTradeIncomePerMin(planet) {
               const attackerHomeworldBonus = (humanInvolved && localPlayer && localPlayer.id === p.homeworldOf && (!owner || owner.id !== localPlayer.id)) ? 0.20 : 0;
 
               let hazardPenalty = 0;
-              if (serverState.storms) {
-                for (const storm of serverState.storms) {
+              if (lastKnownHazards) {
+                for (const storm of Object.values(lastKnownHazards)) {
                   if (storm.type === 'minefield') continue;
                   const dx = p.x - storm.x;
                   const dy = p.y - storm.y;
@@ -12172,9 +12223,9 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           // Storm / Nebula defensive support
-          if (serverState.storms) {
+          if (lastKnownHazards) {
             const defenseOwner = hpOwner || { techScore: 0, expScore: 0, id: 'neutral' };
-            for (const storm of serverState.storms) {
+            for (const storm of Object.values(lastKnownHazards)) {
               if (storm.type === 'minefield') continue;
               const sdx = hp.x - storm.x;
               const sdy = hp.y - storm.y;
@@ -12186,8 +12237,10 @@ function getPlanetTradeIncomePerMin(planet) {
                 const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
                 if (eff > 0) {
                   totalDefense += eff;
-                  const label = storm.type === 'nebula' ? 'Nebula Shielding' : 'Ion Interference';
-                  lines.push({ label: label, value: `${Math.round(eff)}%`, color: storm.type === 'nebula' ? '#ff4444' : '#ffff44' });
+                  const isCurrentlyVisible = serverState && serverState.storms && serverState.storms.some(s => s.id === storm.id);
+                  const label = (storm.type === 'nebula' ? 'Nebula Shielding' : 'Ion Interference') + (!isCurrentlyVisible ? ' [Last Known]' : '');
+                  const color = !isCurrentlyVisible ? '#888' : (storm.type === 'nebula' ? '#ff4444' : '#ffff44');
+                  lines.push({ label: label, value: `${Math.round(eff)}%`, color: color });
                 }
               }
             }
@@ -12263,12 +12316,13 @@ function getPlanetTradeIncomePerMin(planet) {
 
 
 
-          if (serverState.storms) {
-            for (const storm of serverState.storms) {
+          if (lastKnownHazards) {
+            for (const storm of Object.values(lastKnownHazards)) {
               const dx = hp.x - storm.x, dy = hp.y - storm.y;
               if (dx * dx + dy * dy <= storm.radius * storm.radius) {
-                const typeLabel = storm.type === 'minefield' ? 'Minefield' : storm.type === 'nebula' ? 'Nebula' : 'Ion Storm';
-                const typeColor = storm.type === 'minefield' ? '#66f' : storm.type === 'nebula' ? '#f66' : '#ff0';
+                const isCurrentlyVisible = serverState && serverState.storms && serverState.storms.some(s => s.id === storm.id);
+                const typeLabel = (storm.type === 'minefield' ? 'Minefield' : storm.type === 'nebula' ? 'Nebula' : 'Ion Storm') + (!isCurrentlyVisible ? ' [Last Known]' : '');
+                const typeColor = !isCurrentlyVisible ? '#888' : (storm.type === 'minefield' ? '#66f' : storm.type === 'nebula' ? '#f66' : '#ff0');
                 lines.push({ label: `⚠️ ${typeLabel}`, value: `Int: ${storm.intensity}`, color: typeColor });
               }
             }
@@ -12616,8 +12670,8 @@ function getPlanetTradeIncomePerMin(planet) {
             }
             
             let hazardPenalty = 0;
-            if (serverState.storms) {
-              for (const storm of serverState.storms) {
+            if (lastKnownHazards) {
+              for (const storm of Object.values(lastKnownHazards)) {
                 if (storm.type === 'minefield') continue;
                 const sdx = hs.x - storm.x;
                 const sdy = hs.y - storm.y;
@@ -12783,8 +12837,8 @@ function getPlanetTradeIncomePerMin(planet) {
               }
             }
             let hazardPenalty = 0;
-            if (serverState.storms) {
-              for (const storm of serverState.storms) {
+            if (lastKnownHazards) {
+              for (const storm of Object.values(lastKnownHazards)) {
                 if (storm.type === 'minefield') continue;
                 const sdx = hs.x - storm.x;
                 const sdy = hs.y - storm.y;
@@ -12878,12 +12932,13 @@ function getPlanetTradeIncomePerMin(planet) {
             }
 
           }
-          if (serverState.storms) {
-            for (const storm of serverState.storms) {
+          if (lastKnownHazards) {
+            for (const storm of Object.values(lastKnownHazards)) {
               const dx = hs.x - storm.x, dy = hs.y - storm.y;
               if (dx * dx + dy * dy <= storm.radius * storm.radius) {
-                const typeLabel = storm.type === 'minefield' ? 'Minefield' : storm.type === 'nebula' ? 'Nebula' : 'Ion Storm';
-                const typeColor = storm.type === 'minefield' ? '#66f' : storm.type === 'nebula' ? '#f66' : '#ff0';
+                const isCurrentlyVisible = serverState && serverState.storms && serverState.storms.some(s => s.id === storm.id);
+                const typeLabel = (storm.type === 'minefield' ? 'Minefield' : storm.type === 'nebula' ? 'Nebula' : 'Ion Storm') + (!isCurrentlyVisible ? ' [Last Known]' : '');
+                const typeColor = !isCurrentlyVisible ? '#888' : (storm.type === 'minefield' ? '#66f' : storm.type === 'nebula' ? '#f66' : '#ff0');
                 lines.push({ label: `⚠️ ${typeLabel}`, value: `Int: ${storm.intensity}`, color: typeColor });
               }
             }
@@ -14714,7 +14769,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const t = storm.type || 'storm';
         
         let textColor, dimColor;
-        if (!isCurrentlyVisible && t === 'storm') {
+        if (!isCurrentlyVisible) {
           textColor = '#888';
           dimColor = 'rgba(128, 128, 128, 0.6)';
         } else {
@@ -14746,11 +14801,11 @@ function getPlanetTradeIncomePerMin(planet) {
         const effIntensity = Math.max(0, storm.intensity - effKnowledge);
 
         if (t === 'minefield') {
-          ctx.fillText('Ancient Minefield', storm.x, storm.y - 16);
+          ctx.fillText(`Ancient Minefield${!isCurrentlyVisible ? ' [Last Known]' : ''}`, storm.x, storm.y - 16);
           ctx.font = '10px Rajdhani';
           ctx.fillText(`Mines: ${storm.mines ?? 0}  Intensity: ${storm.intensity} (${Math.round(effIntensity)})`, storm.x, storm.y);
         } else if (t === 'nebula') {
-          ctx.fillText(`${storm.name} Nebula`, storm.x, storm.y - 8);
+          ctx.fillText(`${storm.name} Nebula${!isCurrentlyVisible ? ' [Last Known]' : ''}`, storm.x, storm.y - 8);
           ctx.font = '10px Rajdhani';
           ctx.fillText(`Intensity: ${storm.intensity} (${Math.round(effIntensity)})`, storm.x, storm.y + 8);
         } else {
