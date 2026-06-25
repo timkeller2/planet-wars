@@ -44,6 +44,7 @@ export class Planet {
     this.owner = owner; // Player object or null
     this.ships = initialShips;
 
+    this.sizeClass = Math.max(15, Math.round(this.radius * 4));
     this.maxShips = Math.max(15, this.radius * 4);
     this.supplies = Math.random() * this.maxShips;
     this.productionProgress = 0;

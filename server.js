@@ -2131,6 +2131,7 @@ async function bootstrap() {
           preferredResourceWantedEvent: prwEvent,
           sizeClass: p.sizeClass || 0,
           habitability: p.habitability || 0,
+          supplies: p.supplies,
           diplomacyWarmupTimer: p.diplomacyWarmupTimer || 0,
           activeDiplomatId: p.activeDiplomatId || null,
           useResources: p.useResources || false,
