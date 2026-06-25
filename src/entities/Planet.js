@@ -44,7 +44,7 @@ export class Planet {
     this.owner = owner; // Player object or null
     this.ships = initialShips;
 
-    this.maxShips = Math.max(60, this.radius * 4);
+    this.maxShips = Math.max(15, this.radius * 4);
     this.productionProgress = 0;
     this.capacityProgress = 0;
     this.sacrificedShips = 0;
@@ -117,7 +117,7 @@ export class Planet {
   }
 
   setRadius(newRadius) {
-    this.maxShips = Math.max(60, newRadius * 4);
+    this.maxShips = Math.max(15, newRadius * 4);
     this.radius = this.sizeClass ? Math.min(this.sizeClass, this.maxShips) / 4 : newRadius;
   }
 

@@ -1098,7 +1098,7 @@ export class Game {
           targetPlanet.sizeClass = parsedVal;
         }
       }
-      targetPlanet.maxShips = Math.max(60, targetPlanet.sizeClass - 20);
+      targetPlanet.maxShips = Math.max(15, targetPlanet.sizeClass - 20);
       targetPlanet.ships = targetPlanet.maxShips;
       targetPlanet.radius = Math.min(targetPlanet.sizeClass, targetPlanet.maxShips) / 4;
       targetPlanet.habitability = 100;
@@ -1844,21 +1844,21 @@ export class Game {
       for (let i = 0; i < numPlanets; i++) {
         let generatedMaxShips;
         if (i < countMegaSuper) {
-          generatedMaxShips = 300;
+          generatedMaxShips = 260;
         } else if (i < countMegaSuper + countSuper) {
           if (width < 1600) {
-            generatedMaxShips = 200 + Math.floor(Math.random() * 21);
+            generatedMaxShips = 160 + Math.floor(Math.random() * 21);
           } else {
-            generatedMaxShips = 250;
+            generatedMaxShips = 210;
           }
         } else if (i < countMegaSuper + countSuper + countLarge) {
-          generatedMaxShips = 150 + Math.floor(Math.random() * 31);
+          generatedMaxShips = 110 + Math.floor(Math.random() * 31);
         } else if (i < countMegaSuper + countSuper + countLarge + countMedium) {
-          generatedMaxShips = 120 + Math.floor(Math.random() * 31);
+          generatedMaxShips = 80 + Math.floor(Math.random() * 31);
         } else if (i < countMegaSuper + countSuper + countLarge + countMedium + countSmall) {
-          generatedMaxShips = 75 + Math.floor(Math.random() * 41);
+          generatedMaxShips = 35 + Math.floor(Math.random() * 41);
         } else {
-          generatedMaxShips = 53 + Math.floor(Math.random() * 22);
+          generatedMaxShips = 13 + Math.floor(Math.random() * 22);
         }
         const radius = generatedMaxShips / 4;
         const isSuperPlanet = (i < countMegaSuper + countSuper);
@@ -2046,21 +2046,21 @@ export class Game {
         while (!valid && attempts < 100) {
           let generatedMaxShips;
           if (i < countMegaSuper) {
-            generatedMaxShips = 300;
+            generatedMaxShips = 260;
           } else if (i < countMegaSuper + countSuper) {
             if (width < 1600) {
-              generatedMaxShips = 200 + Math.floor(Math.random() * 21);
+              generatedMaxShips = 160 + Math.floor(Math.random() * 21);
             } else {
-              generatedMaxShips = 250;
+              generatedMaxShips = 210;
             }
           } else if (i < countMegaSuper + countSuper + countLarge) {
-            generatedMaxShips = 150 + Math.floor(Math.random() * 31);
+            generatedMaxShips = 110 + Math.floor(Math.random() * 31);
           } else if (i < countMegaSuper + countSuper + countLarge + countMedium) {
-            generatedMaxShips = 120 + Math.floor(Math.random() * 31);
+            generatedMaxShips = 80 + Math.floor(Math.random() * 31);
           } else if (i < countMegaSuper + countSuper + countLarge + countMedium + countSmall) {
-            generatedMaxShips = 75 + Math.floor(Math.random() * 41);
+            generatedMaxShips = 35 + Math.floor(Math.random() * 41);
           } else {
-            generatedMaxShips = 53 + Math.floor(Math.random() * 22);
+            generatedMaxShips = 13 + Math.floor(Math.random() * 22);
           }
           radius = generatedMaxShips / 4;
           x = radius + Math.random() * (width - radius * 2);
