@@ -1933,7 +1933,7 @@ async function bootstrap() {
           }
           
           for (const [owner, ships] of attackersByOwner.entries()) {
-            const penalty = 0.01 * Math.floor(p.ships / 5);
+            let penalty = 0.01 * Math.floor(p.ships / 5);
             
             let nearbyFriendlyCount = 0;
             for (const s of ships) {
@@ -1971,7 +1971,11 @@ async function bootstrap() {
                         mult = 0.003;
                       }
                     }
-                    defenderPlanetPenalty += mult * Math.floor(otherPlanet.ships / 10);
+                    let bonus = mult * Math.floor(otherPlanet.ships / 10);
+                    if (otherPlanet.inRevolt) {
+                      bonus *= 0.5;
+                    }
+                    defenderPlanetPenalty += bonus;
                   }
                 }
               }
@@ -1979,15 +1983,15 @@ async function bootstrap() {
             
             const attackerTechBonus = 0.01 * Math.sqrt(owner.techScore || 0);
             const attackerExpBonus = 0.01 * Math.sqrt(owner.expScore || 0);
-            const defenderTechPenalty = 0.01 * Math.sqrt(p.owner ? (p.owner.techScore || 0) : 0);
-            const defenderExpPenalty = 0.01 * Math.sqrt(p.owner ? (p.owner.expScore || 0) : 0);
+            let defenderTechPenalty = 0.01 * Math.sqrt(p.owner ? (p.owner.techScore || 0) : 0);
+            let defenderExpPenalty = 0.01 * Math.sqrt(p.owner ? (p.owner.expScore || 0) : 0);
             
             let maxShipExp = 0;
             for (const s of ships) {
               if (s.expScore > maxShipExp) maxShipExp = s.expScore;
             }
             const attackerLocalExpBonus = 0.01 * Math.sqrt(maxShipExp || 0);
-            const defenderLocalExpPenalty = 0.01 * Math.sqrt(p.expScore || 0);
+            let defenderLocalExpPenalty = 0.01 * Math.sqrt(p.expScore || 0);
             
             const humanInvolved = (!owner.isAI) || (p.owner && !p.owner.isAI);
             const humanVsHuman = (!owner.isAI) && (p.owner && !p.owner.isAI);
@@ -2002,10 +2006,10 @@ async function bootstrap() {
               }
               survivingAICount = aiOwners.size;
             }
-            const humanDefenderBonus = humanVsHuman ? (0.02 * survivingAICount) : 0;
+            let humanDefenderBonus = humanVsHuman ? (0.02 * survivingAICount) : 0;
             
-            const lastStandPenalty = (humanInvolved && p.owner && p.owner.planetCount === 1) ? 0.20 : 0;
-            const defenderHomeworldPenalty = (humanInvolved && p.owner && p.owner.id === p.homeworldOf) ? 0.20 : 0;
+            let lastStandPenalty = (humanInvolved && p.owner && p.owner.planetCount === 1) ? 0.20 : 0;
+            let defenderHomeworldPenalty = (humanInvolved && p.owner && p.owner.id === p.homeworldOf) ? 0.20 : 0;
             const attackerHomeworldBonus = (humanInvolved && owner.id === p.homeworldOf && p.owner !== owner) ? 0.20 : 0;
             
             let hazardPenalty = 0;
@@ -2027,7 +2031,20 @@ async function bootstrap() {
 
             const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
             const matchesAnyAttacker = ships.some(s => s.cruiserStyle === p.racialAffinity) || (owner && owner.cruiserStyle === p.racialAffinity);
-            const racialDefenseBonus = !matchesAnyAttacker ? 0.15 : 0;
+            let racialDefenseBonus = !matchesAnyAttacker ? 0.15 : 0;
+
+            if (p.inRevolt) {
+              penalty *= 0.5;
+              defenderPlanetPenalty *= 0.5;
+              defenderTechPenalty *= 0.5;
+              defenderExpPenalty *= 0.5;
+              defenderLocalExpPenalty *= 0.5;
+              lastStandPenalty *= 0.5;
+              defenderHomeworldPenalty *= 0.5;
+              humanDefenderBonus *= 0.5;
+              racialDefenseBonus *= 0.5;
+            }
+
             let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus - racialDefenseBonus);
             killChance = Math.max(minKillChance, killChance - hazardPenalty);
             if (maxKillChance === null || killChance > maxKillChance) {

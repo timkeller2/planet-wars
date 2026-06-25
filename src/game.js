@@ -5214,11 +5214,20 @@ export class Game {
           const storageFee = excess / (stockpileCapacity * 8);
           player.storageFeeRate = storageFee * 60;
 
-          if ((player.credits || 0) >= storageFee) {
-            player.credits -= storageFee;
+          let minAllowedCredits = 0;
+          const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
+          if (ownsHomeworld) {
+            minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
+          }
+
+          const creditsAvailable = Math.max(0, (player.credits || 0) - minAllowedCredits);
+          if (creditsAvailable >= storageFee) {
+            player.credits = (player.credits || 0) - storageFee;
           } else {
-            let remainingFee = storageFee - (player.credits || 0);
-            player.credits = 0;
+            let remainingFee = storageFee - creditsAvailable;
+            if (creditsAvailable > 0) {
+              player.credits = (player.credits || 0) - creditsAvailable;
+            }
 
             while (remainingFee > 0) {
               let highestRes = null;
@@ -5252,11 +5261,20 @@ export class Game {
           const fleetCost = (excess * 5) / 60;
           player.fleetCostRate = excess * 5;
 
-          if ((player.credits || 0) >= fleetCost) {
-            player.credits -= fleetCost;
+          let minAllowedCredits = 0;
+          const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
+          if (ownsHomeworld) {
+            minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
+          }
+
+          const creditsAvailable = Math.max(0, (player.credits || 0) - minAllowedCredits);
+          if (creditsAvailable >= fleetCost) {
+            player.credits = (player.credits || 0) - fleetCost;
           } else {
-            let remainingFee = fleetCost - (player.credits || 0);
-            player.credits = 0;
+            let remainingFee = fleetCost - creditsAvailable;
+            if (creditsAvailable > 0) {
+              player.credits = (player.credits || 0) - creditsAvailable;
+            }
 
             while (remainingFee > 0) {
               let highestRes = null;

@@ -581,7 +581,11 @@ export class Ship {
             mult = 0.003;
           }
         }
-        totalBonus += mult * Math.floor(gp.ships / 10);
+        let bonus = mult * Math.floor(gp.ships / 10);
+        if (gp.inRevolt) {
+          bonus *= 0.5;
+        }
+        totalBonus += bonus;
     }
     return totalBonus;
   }
@@ -4812,11 +4816,11 @@ export class Ship {
             const attackerTechBonus = 0.01 * Math.sqrt(this.owner.techScore || 0);
             const attackerExpBonus = 0.01 * Math.sqrt(this.owner.expScore || 0);
             
-            const defenderTechPenalty = 0.01 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.techScore || 0) : 0);
-            const defenderExpPenalty = 0.01 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.expScore || 0) : 0);
+            let defenderTechPenalty = 0.01 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.techScore || 0) : 0);
+            let defenderExpPenalty = 0.01 * Math.sqrt(this.targetPlanet.owner ? (this.targetPlanet.owner.expScore || 0) : 0);
             
             const attackerLocalExpBonus = 0.01 * this.getLocalXpBonus();
-            const defenderLocalExpPenalty = 0.01 * Math.sqrt(this.targetPlanet.expScore || 0);
+            let defenderLocalExpPenalty = 0.01 * Math.sqrt(this.targetPlanet.expScore || 0);
 
             const humanInvolved = (!this.owner.isAI) || (this.targetPlanet.owner && !this.targetPlanet.owner.isAI);
             const humanVsHuman = (!this.owner.isAI) && (this.targetPlanet.owner && !this.targetPlanet.owner.isAI);
@@ -4830,11 +4834,11 @@ export class Ship {
               }
               survivingAICount = aiOwners.size;
             }
-            const humanDefenderBonus = humanVsHuman ? (0.02 * survivingAICount) : 0;
+            let humanDefenderBonus = humanVsHuman ? (0.02 * survivingAICount) : 0;
             
-            const lastStandPenalty = (humanInvolved && this.targetPlanet.owner && this.targetPlanet.owner.planetCount === 1) ? 0.15 : 0;
+            let lastStandPenalty = (humanInvolved && this.targetPlanet.owner && this.targetPlanet.owner.planetCount === 1) ? 0.15 : 0;
             
-            const defenderHomeworldPenalty = (humanInvolved && this.targetPlanet.owner && this.targetPlanet.owner.id === this.targetPlanet.homeworldOf) ? 0.15 : 0;
+            let defenderHomeworldPenalty = (humanInvolved && this.targetPlanet.owner && this.targetPlanet.owner.id === this.targetPlanet.homeworldOf) ? 0.15 : 0;
             const attackerHomeworldBonus = (humanInvolved && this.owner && this.owner.id === this.targetPlanet.homeworldOf && this.targetPlanet.owner !== this.owner) ? 0.15 : 0;
 
             const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
@@ -4955,9 +4959,22 @@ export class Ship {
             let N_att = rate * dt;
             N_att = Math.min(this.count, N_att);
 
-            const penalty = 0.01 * Math.floor(this.targetPlanet.ships / 5);
+            let penalty = 0.01 * Math.floor(this.targetPlanet.ships / 5);
             const matchesAttacker = (this.cruiserStyle === this.targetPlanet.racialAffinity) || (this.owner && this.owner.cruiserStyle === this.targetPlanet.racialAffinity);
-            const racialDefenseBonus = !matchesAttacker ? 0.15 : 0;
+            let racialDefenseBonus = !matchesAttacker ? 0.15 : 0;
+
+            if (this.targetPlanet.inRevolt) {
+              penalty *= 0.5;
+              defenderPlanetPenalty *= 0.5;
+              defenderTechPenalty *= 0.5;
+              defenderExpPenalty *= 0.5;
+              defenderLocalExpPenalty *= 0.5;
+              lastStandPenalty *= 0.5;
+              defenderHomeworldPenalty *= 0.5;
+              humanDefenderBonus *= 0.5;
+              racialDefenseBonus *= 0.5;
+            }
+
             let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus - racialDefenseBonus);
             killChance = Math.max(minKillChance, killChance - hazardPenalty);
 

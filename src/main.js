@@ -3127,57 +3127,91 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
       
+      if (p.inRevolt) {
+        gravityWellBonusTotal *= 0.5;
+      }
       if (gravityWellBonusTotal > 0) {
         totalDefense += gravityWellBonusTotal;
         defenseLines.push({ label: 'Gravity Well Support', value: `${Math.round(gravityWellBonusTotal)}%`, color: '#00e676' });
       }
 
       // Garrison defense bonus
-      const garrisonBonus = Math.floor(p.ships / 5);
+      let garrisonBonus = Math.floor(p.ships / 5);
+      if (p.inRevolt) {
+        garrisonBonus *= 0.5;
+      }
       if (garrisonBonus > 0) {
         totalDefense += garrisonBonus;
         defenseLines.push({ label: 'Garrison Shielding', value: `${garrisonBonus}%`, color: '#4caf50' });
       }
 
       // Tech defense bonus
-      const techBonus = Math.round(Math.sqrt(hpOwner.techScore || 0));
+      let techBonus = Math.round(Math.sqrt(hpOwner.techScore || 0));
+      if (p.inRevolt) {
+        techBonus = Math.round(techBonus * 0.5);
+      }
       if (techBonus > 0) {
         totalDefense += techBonus;
       }
 
       // Owner Experience defense bonus
-      const expBonus = Math.round(Math.sqrt(hpOwner.expScore || 0));
+      let expBonus = Math.round(Math.sqrt(hpOwner.expScore || 0));
+      if (p.inRevolt) {
+        expBonus = Math.round(expBonus * 0.5);
+      }
       if (expBonus > 0) {
         totalDefense += expBonus;
       }
 
       // Planet Local Experience defense bonus
-      const planetExpBonus = Math.round(Math.sqrt(p.expScore || 0));
+      let planetExpBonus = Math.round(Math.sqrt(p.expScore || 0));
+      if (p.inRevolt) {
+        planetExpBonus *= 0.5;
+      }
       if (planetExpBonus > 0) {
         totalDefense += planetExpBonus;
         defenseLines.push({ label: 'Planet Exp Defense', value: `${planetExpBonus}%`, color: '#ffea00' });
       }
 
-      if (p.isMilitary) {
-        totalDefense += 15;
-        defenseLines.push({ label: 'Military Base', value: `15%`, color: '#ff5722' });
+      let mbBonus = p.isMilitary ? 15 : 0;
+      if (p.inRevolt) {
+        mbBonus *= 0.5;
+      }
+      if (mbBonus > 0) {
+        totalDefense += mbBonus;
+        defenseLines.push({ label: 'Military Base', value: `${mbBonus}%`, color: '#ff5722' });
       }
       
       const envLabel = p.preferredResource === 'deuterium' ? 'Frozen' : p.preferredResource === 'antimatter' ? 'Volcanic' : p.preferredResource === 'latinum' ? 'Oceanic' : 'Desert';
       const hasEnvDefense = (p.preferredResource === 'deuterium' || p.preferredResource === 'antimatter' || p.preferredResource === 'latinum');
       if (p.ownerId) {
-        if (hasEnvDefense) {
-          totalDefense += 15;
-          defenseLines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
+        let envBonus = hasEnvDefense ? 15 : 0;
+        if (p.inRevolt) {
+          envBonus *= 0.5;
         }
-        if (hpOwner.id === p.homeworldOf) {
-          totalDefense += 15;
-          defenseLines.push({ label: 'Homeworld', value: `15%`, color: '#ff0' });
+        if (envBonus > 0) {
+          totalDefense += envBonus;
+          defenseLines.push({ label: envLabel, value: `${envBonus}%`, color: '#e040fb' });
         }
-        if (hpOwner.planetCount === 1) {
-          totalDefense += 15;
-          defenseLines.push({ label: 'Last stand', value: `15%`, color: '#ff0' });
+
+        let hwBonus = (hpOwner.id === p.homeworldOf) ? 15 : 0;
+        if (p.inRevolt) {
+          hwBonus *= 0.5;
         }
+        if (hwBonus > 0) {
+          totalDefense += hwBonus;
+          defenseLines.push({ label: 'Homeworld', value: `${hwBonus}%`, color: '#ff0' });
+        }
+
+        let lsBonus = (hpOwner.planetCount === 1) ? 15 : 0;
+        if (p.inRevolt) {
+          lsBonus *= 0.5;
+        }
+        if (lsBonus > 0) {
+          totalDefense += lsBonus;
+          defenseLines.push({ label: 'Last stand', value: `${lsBonus}%`, color: '#ff0' });
+        }
+
         if (myPlayer && !myPlayer.isAI && !hpOwner.isAI) {
           const aiOwners = new Set();
           for (const plPlanet of serverState.planets) {
@@ -3186,16 +3220,23 @@ function getPlanetTradeIncomePerMin(planet) {
               if (plOwner && plOwner.isAI) aiOwners.add(plPlanet.ownerId);
             }
           }
-          const hvhBonus = aiOwners.size * 2;
+          let hvhBonus = aiOwners.size * 2;
+          if (p.inRevolt) {
+            hvhBonus *= 0.5;
+          }
           if (hvhBonus > 0) {
             totalDefense += hvhBonus;
             defenseLines.push({ label: 'PvP Defense', value: `${hvhBonus}%`, color: '#ff0' });
           }
         }
       } else {
-        if (hasEnvDefense) {
-          totalDefense += 15;
-          defenseLines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
+        let envBonus = hasEnvDefense ? 15 : 0;
+        if (p.inRevolt) {
+          envBonus *= 0.5;
+        }
+        if (envBonus > 0) {
+          totalDefense += envBonus;
+          defenseLines.push({ label: envLabel, value: `${envBonus}%`, color: '#e040fb' });
         } else {
           defenseLines.push({ label: 'Neutral', value: 'No defense bonuses', color: '#888' });
         }
@@ -3222,12 +3263,24 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
       }
+
+      if (p.inRevolt) {
+        defenseLines.unshift({ label: '✊ REVOLT ACTIVE', value: 'Defense Halved', color: '#ff3333' });
+      }
+
       lines.push({ label: 'Total Defense Modifier', value: totalDefense > 0 ? `🛡️ ${Math.round(totalDefense)}%` : '0%', color: '#fff', isHeader: true });
       lines.push(...defenseLines);
 
       if (owner) {
-        lines.push({ label: 'Owner Tech 🧪', value: `+${Math.round(Math.sqrt(owner.techScore))} (${owner.techScore})`, color: '#00e5ff' });
-        lines.push({ label: 'Owner Exp 🎯', value: `+${Math.round(Math.sqrt(owner.expScore))} (${owner.expScore})`, color: '#ffeb3b' });
+        if (p.inRevolt) {
+          const displayTechVal = Math.round(Math.sqrt(owner.techScore || 0) * 0.5);
+          lines.push({ label: 'Owner Tech 🧪', value: `+${displayTechVal} (halved from +${Math.round(Math.sqrt(owner.techScore || 0))})`, color: '#00e5ff' });
+          const displayExpVal = Math.round(Math.sqrt(owner.expScore || 0) * 0.5);
+          lines.push({ label: 'Owner Exp 🎯', value: `+${displayExpVal} (halved from +${Math.round(Math.sqrt(owner.expScore || 0))})`, color: '#ffeb3b' });
+        } else {
+          lines.push({ label: 'Owner Tech 🧪', value: `+${Math.round(Math.sqrt(owner.techScore || 0))} (${owner.techScore || 0})`, color: '#00e5ff' });
+          lines.push({ label: 'Owner Exp 🎯', value: `+${Math.round(Math.sqrt(owner.expScore || 0))} (${owner.expScore || 0})`, color: '#ffeb3b' });
+        }
       }
 
 
@@ -12263,7 +12316,10 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           // Garrison
-          const garrisonPenalty = Math.floor(hp.ships / 5);
+          let garrisonPenalty = Math.floor(hp.ships / 5);
+          if (hp.inRevolt) {
+            garrisonPenalty *= 0.5;
+          }
           if (garrisonPenalty > 0) {
             totalDefense += garrisonPenalty;
             lines.push({ label: 'Garrison Defense', value: `${garrisonPenalty}%`, color: '#4f4' });
@@ -12296,12 +12352,19 @@ function getPlanetTradeIncomePerMin(planet) {
                       mult = 0.003;
                     }
                   }
-                  defenderPlanetPenalty += mult * Math.floor(otherPlanet.ships / 10);
+                  let bonus = mult * Math.floor(otherPlanet.ships / 10);
+                  if (otherPlanet.inRevolt) {
+                    bonus *= 0.5;
+                  }
+                  defenderPlanetPenalty += bonus;
                 }
               }
             }
           }
-          const defPlanetPenaltyPct = Math.round(defenderPlanetPenalty * 100 * 10) / 10;
+          let defPlanetPenaltyPct = Math.round(defenderPlanetPenalty * 100 * 10) / 10;
+          if (hp.inRevolt) {
+            defPlanetPenaltyPct *= 0.5;
+          }
           if (defPlanetPenaltyPct > 0) {
             totalDefense += defPlanetPenaltyPct;
             lines.push({ label: 'Gravity Well Support', value: `${Math.round(defPlanetPenaltyPct)}%`, color: '#4f4' });
@@ -12332,35 +12395,54 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           if (hpOwner) {
-            const techDef = Math.round(Math.sqrt(hpOwner.techScore || 0) * 100) / 100;
+            let techDef = Math.round(Math.sqrt(hpOwner.techScore || 0) * 100) / 100;
+            if (hp.inRevolt) {
+              techDef *= 0.5;
+            }
             if (techDef > 0) {
               totalDefense += techDef;
             }
-            const expDef = Math.round(Math.sqrt(hpOwner.expScore || 0) * 100) / 100;
+            let expDef = Math.round(Math.sqrt(hpOwner.expScore || 0) * 100) / 100;
+            if (hp.inRevolt) {
+              expDef *= 0.5;
+            }
             if (expDef > 0) {
               totalDefense += expDef;
             }
-            const planetExp = Math.round(Math.sqrt(hp.expScore || 0) * 100) / 100;
+            let planetExp = Math.round(Math.sqrt(hp.expScore || 0) * 100) / 100;
+            if (hp.inRevolt) {
+              planetExp *= 0.5;
+            }
             if (planetExp > 0) {
               totalDefense += planetExp;
               lines.push({ label: 'Planet Exp', value: `${Math.round(planetExp)}%`, color: '#4f4' });
             }
 
-
-
-            if (hasEnvDefense) {
-              totalDefense += 15;
-              lines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
+            let envBonus = hasEnvDefense ? 15 : 0;
+            if (hp.inRevolt) {
+              envBonus *= 0.5;
+            }
+            if (envBonus > 0) {
+              totalDefense += envBonus;
+              lines.push({ label: envLabel, value: `${envBonus}%`, color: '#e040fb' });
             }
 
-            if (hpOwner.id === hp.homeworldOf) {
-              totalDefense += 15;
-              lines.push({ label: 'Homeworld', value: `15%`, color: '#ff0' });
+            let hwBonus = (hpOwner.id === hp.homeworldOf) ? 15 : 0;
+            if (hp.inRevolt) {
+              hwBonus *= 0.5;
+            }
+            if (hwBonus > 0) {
+              totalDefense += hwBonus;
+              lines.push({ label: 'Homeworld', value: `${hwBonus}%`, color: '#ff0' });
             }
 
-            if (hpOwner.planetCount === 1) {
-              totalDefense += 15;
-              lines.push({ label: 'Last stand', value: `15%`, color: '#ff0' });
+            let lsBonus = (hpOwner.planetCount === 1) ? 15 : 0;
+            if (hp.inRevolt) {
+              lsBonus *= 0.5;
+            }
+            if (lsBonus > 0) {
+              totalDefense += lsBonus;
+              lines.push({ label: 'Last stand', value: `${lsBonus}%`, color: '#ff0' });
             }
 
             // PvP defense bonus (Human vs Human)
@@ -12375,7 +12457,10 @@ function getPlanetTradeIncomePerMin(planet) {
                 }
               }
               const survivingAICount = aiOwners.size;
-              const hvhBonus = survivingAICount * 2;
+              let hvhBonus = survivingAICount * 2;
+              if (hp.inRevolt) {
+                hvhBonus *= 0.5;
+              }
               if (hvhBonus > 0) {
                 totalDefense += hvhBonus;
                 lines.push({ label: 'PvP Defense', value: `${hvhBonus}%`, color: '#ff0' });
@@ -12390,9 +12475,13 @@ function getPlanetTradeIncomePerMin(planet) {
               lines.push({ label: 'Focus Mode', value: `${capitalizedFocus} (Change: ${cost} 🪐)`, color: '#ffd740' });
             }
           } else {
-            if (hasEnvDefense) {
-              totalDefense += 15;
-              lines.push({ label: envLabel, value: `15%`, color: '#e040fb' });
+            let envBonus = hasEnvDefense ? 15 : 0;
+            if (hp.inRevolt) {
+              envBonus *= 0.5;
+            }
+            if (envBonus > 0) {
+              totalDefense += envBonus;
+              lines.push({ label: envLabel, value: `${envBonus}%`, color: '#e040fb' });
             } else {
               lines.push({ label: 'Neutral', value: 'No defense bonuses', color: '#888' });
             }
@@ -12420,6 +12509,10 @@ function getPlanetTradeIncomePerMin(planet) {
                 }
               }
             }
+          }
+
+          if (hp.inRevolt) {
+            lines.push({ label: '✊ REVOLT ACTIVE', value: 'Defense Halved', color: '#ff3333' });
           }
 
           lines[0].value = totalDefense > 0 ? `🛡️ ${Math.round(totalDefense)}%` : '';
