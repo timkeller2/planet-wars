@@ -2234,11 +2234,11 @@ export class Game {
     for (let i = 0; i < numScattered; i++) {
       const ax = Math.random() * this.width;
       const ay = Math.random() * this.height;
-      const minDiff = -10;
+      const minDiff = 1;
       const isUnlimited = !this.settings || !this.settings.timedGameLimit || this.settings.timedGameLimit === 'unlimited';
       const timedLimitSecs = !isUnlimited ? parseFloat(this.settings.timedGameLimit) : null;
       const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
-      const difficulty = Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff;
+      const difficulty = Math.max(1, Math.floor((Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff) / 2));
       const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];
 
       const planetId = 20000 + i;
@@ -2818,12 +2818,14 @@ export class Game {
         }
       }
 
-      const creditsAvailable = (owner && isFirst) ? (owner.credits - minAllowedCredits) : 0;
+      const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
+      const shipsFactor = source.isMilitary ? 2 : 1;
+      const effectiveShips = source.ships * shipsFactor;
 
-      if ((source.ships + creditsAvailable) >= costShips && (source.maxShips - costCap) >= 5) {
-        const creditsPaid = Math.min(creditsAvailable, costShips);
-        const remainingCostShips = costShips - creditsPaid;
-        const extraShips = source.ships - remainingCostShips;
+      if (creditsAvailable >= costShips && effectiveShips >= costShips && (source.maxShips - costCap) >= 5) {
+        const creditsPaid = costShips;
+        const remainingCostShips = 0;
+        const extraShips = source.ships;
         const bonusHp = Math.min(4, Math.floor(Math.max(0, extraShips) / 25));
         const finalMaxHealth = maxHealth + bonusHp;
 
@@ -2878,7 +2880,8 @@ export class Game {
 
         ship.isMaterializing = true;
         ship.materializeProgress = 0.0;
-        ship.materializeDuration = finalMaxHealth / 2;
+        const shipPct = Math.max(0.1, Math.min(1.0, source.ships / source.maxShips));
+        ship.materializeDuration = (finalMaxHealth / 2) / shipPct;
         ship.sourcePlanet = source;
         ship.buildCostShipsTotal = remainingCostShips;
         ship.buildCostCreditsTotal = creditsPaid;
@@ -3018,12 +3021,14 @@ export class Game {
         }
       }
 
-      const creditsAvailable = (owner && isFirst) ? (owner.credits - minAllowedCredits) : 0;
+      const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
+      const shipsFactor = source.isMilitary ? 2 : 1;
+      const effectiveShips = source.ships * shipsFactor;
 
-      if ((source.ships + creditsAvailable) >= finalCost && (source.maxShips - costCap) >= 5) {
-        const creditsPaid = Math.min(creditsAvailable, finalCost);
-        const remainingCostShips = finalCost - creditsPaid;
-        const extraShips = source.ships - remainingCostShips;
+      if (creditsAvailable >= finalCost && effectiveShips >= finalCost && (source.maxShips - costCap) >= 5) {
+        const creditsPaid = finalCost;
+        const remainingCostShips = 0;
+        const extraShips = source.ships;
         const bonusHp = Math.min(4, Math.floor(Math.max(0, extraShips) / 25));
         const finalMaxHealth = maxHealth + bonusHp;
 
@@ -3083,7 +3088,8 @@ export class Game {
         if (totalUpgradesCountOriginal > 2) {
           duration *= 2;
         }
-        ship.materializeDuration = duration;
+        const shipPct = Math.max(0.1, Math.min(1.0, source.ships / source.maxShips));
+        ship.materializeDuration = duration / shipPct;
         
         ship.sourcePlanet = source;
         ship.buildCostShipsTotal = remainingCostShips;
@@ -3725,7 +3731,7 @@ export class Game {
       const shipXp = ship.expScore || 0;
       const playerTech = ship.owner.techScore || 0;
       const playerXp = ship.owner.expScore || 0;
-      const threshold = (labs + shipXp + playerTech + playerXp) * 3;
+      const threshold = (labs + shipXp + playerTech + playerXp) * 1;
       
       let currentProgress = 0;
       if (p.anomaly.progress && typeof p.anomaly.progress === 'object') {
@@ -6502,10 +6508,10 @@ export class Game {
   spawnNewDeepSpaceAnomaly(x, y, player, shipName, customDifficulty = null) {
     const elapsedMinutes = (Date.now() - (this.gameStartTime || Date.now())) / 60000;
     const isUnlimited = !this.settings || !this.settings.timedGameLimit || this.settings.timedGameLimit === 'unlimited';
-    const minDiff = isUnlimited ? Math.floor(-10 - elapsedMinutes / 2) : -10;
+    const minDiff = 1;
     const timedLimitSecs = !isUnlimited ? parseFloat(this.settings.timedGameLimit) : null;
     const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
-    const difficulty = customDifficulty !== null ? customDifficulty : (Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff);
+    const difficulty = customDifficulty !== null ? customDifficulty : Math.max(1, Math.floor((Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff) / 2));
 
     const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache', 'upgrade_token'];
     const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];

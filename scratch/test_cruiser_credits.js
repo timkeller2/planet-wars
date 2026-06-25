@@ -2,7 +2,7 @@ import { Game } from '../src/game.js';
 import assert from 'assert';
 
 function runTest() {
-  console.log("Starting Cruiser Construction Credit Priority tests...");
+  console.log("Starting Updated Cruiser Construction Credit-Only & Garrison tests...");
 
   // 1. Initialize Game
   const game = new Game({ width: 1600, height: 1600 });
@@ -17,60 +17,99 @@ function runTest() {
   
   // Set up homeworld status to test minAllowedCredits / debt limit
   planet.homeworldOf = player.id;
+  planet.isMilitary = false;
   // minAllowedCredits = -(1000 + Math.floor(100)) = -1100
 
-  // Ensure planet has enough ships and maxShips room to build
-  planet.ships = 200;
+  // Scenario A: Player has enough credits (200) and planet has enough ships (60 >= 50)
+  planet.ships = 60;
   planet.maxShips = 300;
-
-  // Let's test buildCapitalShip with enough credits and useCredits = false
   player.credits = 200;
-  player.useCredits = false; // should be ignored
+  player.builtClasses = {};
+  player.buildCounts = {};
 
-  // Config for Corvette
-  const corvetteCostShips = 50; // default cost is 50, but let's check
-  console.log(`Initial Credits: ${player.credits}`);
-  console.log(`Initial Planet Ships: ${planet.ships}`);
-  
-  const initialShipCount = game.ships.length;
+  console.log("Testing Scenario A: Sufficient credits and sufficient ships...");
+  let initialShipCount = game.ships.length;
   game.buildCapitalShip(planet, 'corvette');
   
-  const newShipCount = game.ships.length;
-  assert.strictEqual(newShipCount, initialShipCount + 1, "A new ship should have been built");
-  
-  const spawnedShip = game.ships[game.ships.length - 1];
-  console.log(`Spawned ship cost credits: ${spawnedShip.buildCostCreditsTotal}`);
-  console.log(`Spawned ship cost ships: ${spawnedShip.buildCostShipsTotal}`);
-  
-  assert.strictEqual(spawnedShip.buildCostCreditsTotal, 50, "Corvette should have cost 50 credits");
-  assert.strictEqual(spawnedShip.buildCostShipsTotal, 0, "Corvette should have cost 0 ships");
+  assert.strictEqual(game.ships.length, initialShipCount + 1, "A new ship should have been built");
+  let spawnedShip = game.ships[game.ships.length - 1];
+  console.log(`- Credits total: ${spawnedShip.buildCostCreditsTotal}, Ships total: ${spawnedShip.buildCostShipsTotal}`);
+  assert.strictEqual(spawnedShip.buildCostCreditsTotal, 50, "Corvette should cost 50 credits");
+  assert.strictEqual(spawnedShip.buildCostShipsTotal, 0, "Corvette should cost 0 ships");
 
-  // Let's test buildCapitalShip for subsequent build (non-prototype)
-  // Even with credits available, subsequent corvette build should pay 100% in ships (50 ships on homeworld)
+  // Scenario B: Player does not have enough credits (-1080 credits, so only 20 above debt limit of -1100)
+  player.credits = -1080;
+  planet.ships = 60;
+  player.builtClasses = {};
+  player.buildCounts = {};
+  
+  console.log("Testing Scenario B: Insufficient credits above debt limit...");
+  initialShipCount = game.ships.length;
+  game.buildCapitalShip(planet, 'corvette');
+  assert.strictEqual(game.ships.length, initialShipCount, "Should NOT build a ship when credits are insufficient");
+
+  // Scenario C: Player has enough credits (200), but planet has insufficient ships (10 < 50)
   player.credits = 200;
-  const oldShips = planet.ships;
+  planet.ships = 10;
+  player.builtClasses = {};
+  player.buildCounts = {};
+  
+  console.log("Testing Scenario C: Insufficient planet ships...");
+  initialShipCount = game.ships.length;
+  game.buildCapitalShip(planet, 'corvette');
+  assert.strictEqual(game.ships.length, initialShipCount, "Should NOT build a ship when planet ships are insufficient");
+
+  // Scenario D: Player has enough credits (200), planet has 30 ships, planet IS a military world (30 * 2 = 60 >= 50)
+  player.credits = 200;
+  planet.ships = 30;
+  planet.isMilitary = true;
+  player.builtClasses = {};
+  player.buildCounts = {};
+  
+  console.log("Testing Scenario D: Military world double ship count...");
+  initialShipCount = game.ships.length;
+  game.buildCapitalShip(planet, 'corvette');
+  assert.strictEqual(game.ships.length, initialShipCount + 1, "Should build a ship on military world with half required ships");
+  spawnedShip = game.ships[game.ships.length - 1];
+  assert.strictEqual(spawnedShip.buildCostCreditsTotal, 50, "Corvette should cost 50 credits");
+  assert.strictEqual(spawnedShip.buildCostShipsTotal, 0, "Corvette should cost 0 ships");
+
+  // Scenario E: Subsequent builds should also pay 100% in credits
+  player.credits = 200;
+  planet.ships = 60;
+  planet.isMilitary = false;
+  // Mark Corvette as already built
+  player.builtClasses = { corvette: true };
+  player.buildCounts = { corvette: 1 };
+  
+  console.log("Testing Scenario E: Subsequent builds pay in credits...");
+  initialShipCount = game.ships.length;
   game.buildCapitalShip(planet, 'corvette');
   
-  const spawnedShip2 = game.ships[game.ships.length - 1];
-  console.log(`Second ship (non-prototype) cost credits: ${spawnedShip2.buildCostCreditsTotal}`);
-  console.log(`Second ship (non-prototype) cost ships: ${spawnedShip2.buildCostShipsTotal}`);
-  
-  assert.strictEqual(spawnedShip2.buildCostCreditsTotal, 0, "Subsequent corvette should cost 0 credits");
-  assert.strictEqual(spawnedShip2.buildCostShipsTotal, 50, "Subsequent corvette should cost 50 ships");
+  assert.strictEqual(game.ships.length, initialShipCount + 1, "Subsequent ship should have been built");
+  spawnedShip = game.ships[game.ships.length - 1];
+  console.log(`- Credits total: ${spawnedShip.buildCostCreditsTotal}, Ships total: ${spawnedShip.buildCostShipsTotal}`);
+  assert.strictEqual(spawnedShip.buildCostCreditsTotal, 50, "Subsequent build should also cost 50 credits");
+  assert.strictEqual(spawnedShip.buildCostShipsTotal, 0, "Subsequent build should cost 0 ships");
 
-  // Let's test buildCapitalShipConfig for a prototype of a new class (destroyer)
-  // Since destroyer is not built yet (prototype), it should pay with credits
+  // Scenario F: Custom configuration build
   player.credits = 200;
-  game.buildCapitalShipConfig(planet, 'destroyer', { shields: 1 }, "Custom Destroyer");
+  planet.ships = 120;
+  planet.isMilitary = false;
+  player.builtClasses = {};
+  player.buildCounts = {};
   
-  const spawnedShip3 = game.ships[game.ships.length - 1];
-  console.log(`Custom prototype destroyer cost credits: ${spawnedShip3.buildCostCreditsTotal}`);
-  console.log(`Custom prototype destroyer cost ships: ${spawnedShip3.buildCostShipsTotal}`);
+  console.log("Testing Scenario F: Custom configuration build...");
+  initialShipCount = game.ships.length;
+  game.buildCapitalShipConfig(planet, 'corvette', { shields: 1 }, "Custom Corvette");
   
-  assert.ok(spawnedShip3.buildCostCreditsTotal > 0, "Custom prototype ship should have paid with credits");
-  assert.strictEqual(spawnedShip3.buildCostShipsTotal, 0, "Custom prototype ship should have paid 0 ships since credits were sufficient");
+  assert.strictEqual(game.ships.length, initialShipCount + 1, "Config ship should have been built");
+  spawnedShip = game.ships[game.ships.length - 1];
+  console.log(`- Config Credits total: ${spawnedShip.buildCostCreditsTotal}, Config Ships total: ${spawnedShip.buildCostShipsTotal}`);
+  assert.ok(spawnedShip.buildCostCreditsTotal > 0, "Config ship should have cost > 0 credits");
+  assert.strictEqual(spawnedShip.buildCostShipsTotal, 0, "Config ship should cost 0 ships");
 
-  console.log("All tests passed successfully!");
+  console.log("All Cruiser Construction tests passed successfully!");
 }
 
 try {

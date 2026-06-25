@@ -2532,10 +2532,10 @@ async function bootstrap() {
               const ay = p.y + Math.sin(angle) * dist;
               const elapsedMinutes = (Date.now() - (game.gameStartTime || Date.now())) / 60000;
               const isUnlimited = !game.settings || !game.settings.timedGameLimit || game.settings.timedGameLimit === 'unlimited';
-              const minDiff = isUnlimited ? Math.floor(-10 - elapsedMinutes / 2) : -10;
+              const minDiff = 1;
               const timedLimitSecs = !isUnlimited ? parseFloat(game.settings.timedGameLimit) : null;
               const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
-              const difficulty = Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff;
+              const difficulty = Math.max(1, Math.floor((Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff) / 2));
               
               const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache', 'upgrade_token'];
               const rewardType = rewardOptions[Math.floor(Math.random() * rewardOptions.length)];

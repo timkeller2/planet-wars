@@ -1864,7 +1864,6 @@ export class Ship {
       const bombBonus = (this.bombs && this.bombs > 0) ? (this.bombs * 3) : 0;
       hitChance = (10 + techBonus + expBonus + shipExpBonus + this.maxHealth * 5 + bombBonus) / 100;
     }
-    hitChance = Math.min(1.0, hitChance);
 
     // Rate of Fire (maxShots)
     let maxShots = 1;
@@ -2097,7 +2096,7 @@ export class Ship {
           const bombBonusInFinal = ((this.bombs && this.bombs > 0) ? (this.bombs * 3) : 0) / 100;
           const nonBombHitChance = Math.max(0, hitChance - bombBonusInFinal);
           const baseHitChance = nonBombHitChance * falloff + bombBonusInFinal;
-          const finalHitChance = Math.min(1.0, Math.max(0.01, baseHitChance + friendlyPlanetBoost - defenderPlanetPenalty - hazardPenalty));
+          const finalHitChance = Math.max(0.01, baseHitChance + friendlyPlanetBoost - defenderPlanetPenalty - hazardPenalty);
           
           if (s === 0) {
             if (game && game.accuracyEvents) {
@@ -2118,8 +2117,10 @@ export class Ship {
           if (enemyShip.isCruiser) {
             enemyShip.shieldShowTimer = 30;
           }
-          if (Math.random() < finalHitChance) {
-            const damageDealt = enemyShip.takeDamage(explosions, this, false, targetData.targetType || 'side');
+          const roll = Math.random();
+          if (roll < finalHitChance) {
+            const rollMadeBy = finalHitChance - roll;
+            const damageDealt = enemyShip.takeDamage(explosions, this, false, targetData.targetType || 'side', rollMadeBy);
             if (damageDealt && this.owner) {
               this.owner.addExperience(1);
               if (this.sourceShipId && allShips) {
@@ -2360,7 +2361,7 @@ export class Ship {
           const friendlyPlanetBoost = this.getGravityWellBonusAt(this.x, this.y, this.owner, allPlanets);
           const defenderPlanetPenalty = this.getGravityWellBonusAt(enemyShip.x, enemyShip.y, enemyShip.owner, allPlanets);
           const minHitChance = (this.maxHealth > 0 && !this.isAmoeba) ? 0.10 : 0.01;
-          finalHitChance = Math.min(1.0, Math.max(minHitChance, finalHitChance + friendlyPlanetBoost - defenderPlanetPenalty - hazardPenalty));
+          finalHitChance = Math.max(minHitChance, finalHitChance + friendlyPlanetBoost - defenderPlanetPenalty - hazardPenalty);
           
           if (this.isCruiser) {
             this.shieldShowTimer = 30;
@@ -2368,7 +2369,8 @@ export class Ship {
           if (enemyShip.isCruiser) {
             enemyShip.shieldShowTimer = 30;
           }
-          const isHit = Math.random() < finalHitChance;
+          const roll = Math.random();
+          const isHit = roll < finalHitChance;
           if (isFirstVolleyShot) {
             if (game && game.accuracyEvents) {
               game.accuracyEvents.push({
@@ -2388,7 +2390,8 @@ export class Ship {
           }
 
           if (isHit) {
-            const damageDealt = enemyShip.takeDamage(explosions, this, false, targetType);
+            const rollMadeBy = finalHitChance - roll;
+            const damageDealt = enemyShip.takeDamage(explosions, this, false, targetType, rollMadeBy);
             if (damageDealt) {
               const isAttackerCruiser = this.maxHealth > 0 && !this.isAmoeba;
               if (isAttackerCruiser) {
@@ -4365,9 +4368,9 @@ export class Ship {
       if (this.inFriendlyWell || supplyShipForFuel || fuelSourceShip) {
         if (this.armorPoints < this.maxArmor && this.inFriendlyWell && friendlyWellPlanet && (friendlyWellPlanet.supplies || 0) > 0) {
           let armorHealRate = (deltaTime / 60000) * 3;
-          let costMultiplier = 1.0;
+          let costMultiplier = 0.3;
           if (this.supply_ship && this.supply_ship > 0) {
-            costMultiplier = Math.max(0, 1.0 - (0.50 + 0.10 * this.supply_ship));
+            costMultiplier = Math.max(0, 0.3 * (1.0 - (0.50 + 0.10 * this.supply_ship)));
           }
           
           const maxArmorFromSupplies = friendlyWellPlanet.supplies / costMultiplier;
@@ -5624,7 +5627,7 @@ export class Ship {
     }
   }
 
-  takeDamage(explosions, attacker = null, isHazard = false, targetType = null) {
+  takeDamage(explosions, attacker = null, isHazard = false, targetType = null, hitRollMadeBy = 0) {
     if (this.health >= 0) {
       if (this.isCruiser) {
         this.shieldShowTimer = 30;
@@ -5674,6 +5677,11 @@ export class Ship {
           shrugChance = Math.min(0.90, shrugChance);
         } else {
           shrugChance = Math.min(0.95, 0.50 + this.maxHealth * 0.01 + (techBonus + expBonus + shipExpBonus) * 0.01);
+        }
+        const isAttackerCruiser = attacker && attacker.maxHealth > 0 && !attacker.isAmoeba;
+        const isDefenderCruiserOrAmoeba = this.maxHealth > 0;
+        if (isAttackerCruiser && isDefenderCruiserOrAmoeba && hitRollMadeBy > 0) {
+          shrugChance = Math.max(0, shrugChance - hitRollMadeBy / 3);
         }
         if (Math.random() < shrugChance) {
           // Damage shrugged off

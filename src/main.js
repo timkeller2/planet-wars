@@ -49,6 +49,20 @@ function getHabName(habitability) {
 let playedIntroTracks = [];
 let lastMusicChangeTime = 0;
 
+function getSfxVolumeMultiplier() {
+  const musicVolumeSlider = document.getElementById('music-volume-slider');
+  const sliderVal = musicVolumeSlider ? parseFloat(musicVolumeSlider.value) : 25;
+  return sliderVal / 100;
+}
+
+function getTargetSfxVolume(baseVolume) {
+  return baseVolume * getSfxVolumeMultiplier();
+}
+
+function getTargetMusicVolume(baseVolume) {
+  return baseVolume * getSfxVolumeMultiplier();
+}
+
 function playRandomIntroTrack() {
   const musicCheckbox = document.getElementById('music-checkbox');
   const bgMusic = document.getElementById('bg-music');
@@ -73,7 +87,7 @@ function playRandomIntroTrack() {
 
   bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
   bgMusic.loop = true; // Loop so it doesn't go silent and trigger browser autoplay blocks
-  bgMusic.volume = 0.025;
+  bgMusic.volume = getTargetMusicVolume(0.10);
   bgMusic.play().catch(e => console.warn('Music play blocked:', e));
 
   lastMusicChangeTime = Date.now();
@@ -139,6 +153,40 @@ function updateAudioState() {
 window.addEventListener('focus', updateAudioState);
 window.addEventListener('blur', updateAudioState);
 document.addEventListener('visibilitychange', updateAudioState);
+
+const unlockAudio = () => {
+  if (!audioCtx) {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      console.warn('Web Audio Context not supported:', e);
+    }
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(e => console.warn('Failed to resume audioCtx:', e));
+  }
+  
+  const bgMusic = document.getElementById('bg-music');
+  const musicCheckbox = document.getElementById('music-checkbox');
+  if (bgMusic) {
+    const musicEnabled = musicCheckbox && musicCheckbox.checked;
+    if (musicEnabled) {
+      const curSrc = bgMusic.getAttribute('src') || '';
+      if (!bgMusic.src || curSrc === '/music.wav' || curSrc === '') {
+        playRandomIntroTrack();
+      } else if (bgMusic.paused) {
+        bgMusic.play().catch(e => console.warn('Music play failed on unlock:', e));
+      }
+    }
+  }
+
+  document.removeEventListener('click', unlockAudio);
+  document.removeEventListener('touchstart', unlockAudio);
+  document.removeEventListener('keydown', unlockAudio);
+};
+document.addEventListener('click', unlockAudio);
+document.addEventListener('touchstart', unlockAudio);
+document.addEventListener('keydown', unlockAudio);
 
 function getShipRadarRange(s) {
   if (!s) return 50;
@@ -2422,9 +2470,9 @@ function getPlanetTradeIncomePerMin(planet) {
 
   function getAnomalyColor(diff) {
     if (diff <= 0) return '#00ff88';
-    if (diff <= 12) return '#ffcc00';
-    if (diff <= 24) return '#00e5ff';
-    if (diff <= 48) return '#ff6d00';
+    if (diff <= 6) return '#ffcc00';
+    if (diff <= 12) return '#00e5ff';
+    if (diff <= 24) return '#ff6d00';
     return '#ff00ff';
   }
 
@@ -3451,7 +3499,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
 
-        const hitChance = Math.round(Math.min(100, Math.max(10.0, hitChanceValue + friendlyGrav - enemyGrav - hazardPenalty))) + '%';
+        const hitChance = Math.round(Math.max(10.0, hitChanceValue + friendlyGrav - enemyGrav - hazardPenalty)) + '%';
         let volleySizeVal = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
         const cap = Math.floor(hs.health - 2);
         if (volleySizeVal > cap) volleySizeVal = cap;
@@ -4190,6 +4238,34 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   }
 
+  const musicVolumeSlider = document.getElementById('music-volume-slider');
+  if (musicVolumeSlider) {
+    const savedVol = localStorage.getItem('musicVolume');
+    if (savedVol !== null) {
+      musicVolumeSlider.value = savedVol;
+      const valSpan = document.getElementById('music-volume-val');
+      if (valSpan) {
+        valSpan.textContent = savedVol + '%';
+      }
+    }
+    musicVolumeSlider.addEventListener('input', () => {
+      const valSpan = document.getElementById('music-volume-val');
+      if (valSpan) {
+        valSpan.textContent = musicVolumeSlider.value + '%';
+      }
+      localStorage.setItem('musicVolume', musicVolumeSlider.value);
+      const bgMusic = document.getElementById('bg-music');
+      if (bgMusic) {
+        let baseVolume = 0.10;
+        const curSrc = bgMusic.getAttribute('src') || '';
+        if (curSrc.includes('Battletime') || curSrc.includes('Megalovania')) {
+          baseVolume = 0.125;
+        }
+        bgMusic.volume = getTargetMusicVolume(baseVolume);
+      }
+    });
+  }
+
   bindActionClick(startBtn, () => {
     console.log('startBtn clicked!');
     megalovaniaPlayed = false;
@@ -4393,7 +4469,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (musicCheckbox && musicCheckbox.checked && bgMusic) {
           bgMusic.src = '/Music/Battletime.mp3';
           bgMusic.loop = false;
-          bgMusic.volume = 0.03125;
+          bgMusic.volume = getTargetMusicVolume(0.125);
           updateAudioState();
         }
       }
@@ -4404,7 +4480,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (musicCheckbox && musicCheckbox.checked && bgMusic) {
           bgMusic.src = '/Music/Megalovania.mp3';
           bgMusic.loop = false;
-          bgMusic.volume = 0.03125;
+          bgMusic.volume = getTargetMusicVolume(0.125);
           updateAudioState();
         }
       }
@@ -4578,10 +4654,10 @@ function getPlanetTradeIncomePerMin(planet) {
     trumpet: new Audio('/trumpet.wav'),
     rampage: new Audio('/rampage.wav')
   };
-  sounds.laser.volume = 0.075;
-  sounds.explosion.volume = 0.3;
-  sounds.trumpet.volume = 0.6;
-  sounds.rampage.volume = 0.8;
+  sounds.laser.volume = 0.3;
+  sounds.explosion.volume = 1.0;
+  sounds.trumpet.volume = 1.0;
+  sounds.rampage.volume = 1.0;
 
   function playSound(type) {
     if ((serverState && serverState.isPaused) || document.hidden || !document.hasFocus()) return;
@@ -4590,7 +4666,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
     if (!sounds[type]) return;
     const clone = sounds[type].cloneNode();
-    clone.volume = sounds[type].volume;
+    clone.volume = getTargetSfxVolume(sounds[type].volume);
     activeAudioClones.add(clone);
     clone.addEventListener('ended', () => {
       activeAudioClones.delete(clone);
@@ -4639,7 +4715,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const baseFreq = 500 + Math.sin(nowTime / 20) * 200;
         osc.frequency.setValueAtTime(baseFreq, now);
         osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.1);
-        gainNode.gain.setValueAtTime(0.06, now); // slightly louder
+        gainNode.gain.setValueAtTime(0.24 * getSfxVolumeMultiplier(), now); // slightly louder
         gainNode.gain.linearRampToValueAtTime(0.001, now + 0.1);
         osc.start(now);
         osc.stop(now + 0.1);
@@ -4648,7 +4724,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const freq = 350 + Math.sin(nowTime / 40) * 100;
         osc.frequency.setValueAtTime(freq, now);
         osc.frequency.linearRampToValueAtTime(freq + 50, now + 0.15);
-        gainNode.gain.setValueAtTime(0.03, now); // low volume
+        gainNode.gain.setValueAtTime(0.12 * getSfxVolumeMultiplier(), now); // low volume
         gainNode.gain.linearRampToValueAtTime(0.001, now + 0.15);
         osc.start(now);
         osc.stop(now + 0.15);
@@ -4680,7 +4756,7 @@ function getPlanetTradeIncomePerMin(planet) {
       osc.frequency.setValueAtTime(120, now);
       osc.frequency.exponentialRampToValueAtTime(30, now + 0.25);
       
-      gainNode.gain.setValueAtTime(0.15, now);
+      gainNode.gain.setValueAtTime(0.60 * getSfxVolumeMultiplier(), now);
       gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
       
       osc.start(now);
@@ -4689,7 +4765,7 @@ function getPlanetTradeIncomePerMin(planet) {
       console.warn('Web Audio synthesis failed, falling back to low volume explosion:', e);
       if (sounds.explosion) {
         const clone = sounds.explosion.cloneNode();
-        clone.volume = 0.05;
+        clone.volume = getTargetSfxVolume(0.20);
         clone.play().catch(err => {});
       }
     }
@@ -4717,7 +4793,7 @@ function getPlanetTradeIncomePerMin(planet) {
       osc.frequency.setValueAtTime(600, now);
       osc.frequency.exponentialRampToValueAtTime(900, now + 0.12);
       
-      gainNode.gain.setValueAtTime(0.08, now);
+      gainNode.gain.setValueAtTime(0.32 * getSfxVolumeMultiplier(), now);
       gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
       
       osc.start(now);
@@ -4747,7 +4823,7 @@ function getPlanetTradeIncomePerMin(planet) {
       osc1.type = 'triangle';
       osc1.frequency.setValueAtTime(880, now); // A5
       osc1.frequency.exponentialRampToValueAtTime(1320, now + 0.08); // E6
-      gain1.gain.setValueAtTime(0.06, now);
+      gain1.gain.setValueAtTime(0.24 * getSfxVolumeMultiplier(), now);
       gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
       osc1.start(now);
       osc1.stop(now + 0.15);
@@ -4761,7 +4837,7 @@ function getPlanetTradeIncomePerMin(planet) {
       osc2.frequency.setValueAtTime(1320, now + 0.08); // E6
       osc2.frequency.exponentialRampToValueAtTime(1760, now + 0.25); // A6
       gain2.gain.setValueAtTime(0.0, now);
-      gain2.gain.setValueAtTime(0.08, now + 0.08);
+      gain2.gain.setValueAtTime(0.32 * getSfxVolumeMultiplier(), now + 0.08);
       gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
       osc2.start(now + 0.08);
       osc2.stop(now + 0.35);
@@ -5007,7 +5083,7 @@ function getPlanetTradeIncomePerMin(planet) {
               if (musicCheckbox && musicCheckbox.checked && bgMusic) {
                 bgMusic.src = '/Music/Megalovania.mp3';
                 bgMusic.loop = false;
-                bgMusic.volume = 0.03125;
+                bgMusic.volume = getTargetMusicVolume(0.125);
                 updateAudioState();
               }
             }
@@ -6725,8 +6801,10 @@ function getPlanetTradeIncomePerMin(planet) {
       const finalCost = Math.round((baseCostShips + totalUpgradeCost) * 0.8);
       console.log(`[CLIENT-CONFIG-COST] Name: ${cfg.name}, upgrades:`, JSON.stringify(cfg.upgrades), `baseCostShips: ${baseCostShips}, totalUpgradeCost: ${totalUpgradeCost}, finalCost: ${finalCost}`);
 
-      const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
-      const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= finalCost && (selectedPlanetBuild.maxShips - baseCfg.costCap) >= 5;
+      const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
+      const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
+      const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
+      const canAfford = isUnlocked && creditsAvailable >= finalCost && effectiveShips >= finalCost && (selectedPlanetBuild.maxShips - baseCfg.costCap) >= 5;
 
       if (costMult > 1) {
         btn.style.borderColor = '#ffeb3b';
@@ -6757,7 +6835,8 @@ function getPlanetTradeIncomePerMin(planet) {
       if (!isUnlocked) {
         titleStr = `Build ${cfg.name} (LOCKED - ${lockReason})`;
       } else {
-        titleStr = `Build ${isFirst ? 'Prototype ' : ''}${cfg.name} (Config of ${baseCfg.name}) (Cost: ${finalCost} ${isFirst ? 'ships/credits' : 'ships'}, Cap: ${baseCfg.costCap}). Right-click or long-press to delete configuration.`;
+        const reqStr = selectedPlanetBuild.isMilitary ? `Req: ${Math.ceil(finalCost / 2)} ships` : `Req: ${finalCost} ships`;
+        titleStr = `Build ${isFirst ? 'Prototype ' : ''}${cfg.name} (Config of ${baseCfg.name}) (Cost: ${finalCost} credits, ${reqStr}, Cap: ${baseCfg.costCap}). Right-click or long-press to delete configuration.`;
       }
       btn.setAttribute('title', titleStr);
     }
@@ -8822,8 +8901,10 @@ function getPlanetTradeIncomePerMin(planet) {
             costShips *= 2;
           }
 
-          const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
-          const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
+          const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
+          const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
+          const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
+          const canAfford = creditsAvailable >= costShips && effectiveShips >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
           if (canAfford) {
             socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
           }
@@ -8879,8 +8960,10 @@ function getPlanetTradeIncomePerMin(planet) {
               costShips *= 2;
             }
 
-            const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
-            const canAfford = (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
+            const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
+            const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
+            const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
+            const canAfford = creditsAvailable >= costShips && effectiveShips >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
             if (canAfford) {
               socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
             }
@@ -9821,8 +9904,10 @@ function getPlanetTradeIncomePerMin(planet) {
             el.style.boxShadow = '';
           }
 
-          const creditsAvailable = isFirst ? getCreditsAvailableForConfig(myPlayer) : 0;
-          const canAfford = isUnlocked && (selectedPlanetBuild.ships + creditsAvailable) >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
+          const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
+          const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
+          const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
+          const canAfford = isUnlocked && creditsAvailable >= costShips && effectiveShips >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
 
           if (!canAfford) {
             el.style.opacity = '0.5';
@@ -9839,14 +9924,13 @@ function getPlanetTradeIncomePerMin(planet) {
           const baseName = cfg.name;
           const shortcutKey = cfg.key.toUpperCase();
           let titleStr = '';
+          const reqStr = selectedPlanetBuild.isMilitary ? `Req: ${Math.ceil(costShips / 2)} ships` : `Req: ${costShips} ships`;
           if (!isUnlocked) {
             titleStr = `Build ${baseName} (LOCKED - ${lockReason})`;
           } else if (activeConfigClassType === classType) {
-            titleStr = `Build Basic ${baseName} (${shortcutKey}) (Cost: ${costShips} ${isFirst ? 'ships/credits' : 'ships'}, Cap: ${cfg.costCap})`;
+            titleStr = `Build Basic ${baseName} (${shortcutKey}) (Cost: ${costShips} credits, ${reqStr}, Cap: ${cfg.costCap})`;
           } else {
-            titleStr = isFirst 
-              ? `Build Prototype ${baseName} (${shortcutKey}) (Always uses credits first down to debt limit)`
-              : `Build ${baseName} (${shortcutKey}) (Must be paid in ships; cost: ${costShips} ships, Cap: ${cfg.costCap})`;
+            titleStr = `Build ${isFirst ? 'Prototype ' : ''}${baseName} (${shortcutKey}) (Cost: ${costShips} credits, ${reqStr}, Cap: ${cfg.costCap})`;
           }
           el.setAttribute('title', titleStr);
 
@@ -10599,11 +10683,11 @@ function getPlanetTradeIncomePerMin(planet) {
             let anomalyColor = '#00ff88';
             if (diff <= 0) {
               anomalyColor = '#00ff88';
-            } else if (diff <= 12) {
+            } else if (diff <= 6) {
               anomalyColor = '#ffcc00';
-            } else if (diff <= 24) {
+            } else if (diff <= 12) {
               anomalyColor = '#00e5ff';
-            } else if (diff <= 48) {
+            } else if (diff <= 24) {
               anomalyColor = '#ff6d00';
             } else {
               anomalyColor = '#ff00ff';
@@ -10636,7 +10720,7 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.moveTo(p.anomaly.x - offset, p.anomaly.y + offset);
               ctx.lineTo(p.anomaly.x + offset, p.anomaly.y - offset);
               ctx.stroke();
-            } else if (diff <= 12) {
+            } else if (diff <= 6) {
               const scale = 1.0 + Math.sin(Date.now() / 150) * 0.3;
               const lineLength = 2.75 * scale * twinkle;
               ctx.strokeStyle = anomalyColor;
@@ -10666,7 +10750,7 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.beginPath();
               ctx.arc(p.anomaly.x, p.anomaly.y, 0.75 * twinkle, 0, Math.PI * 2);
               ctx.fill();
-            } else if (diff <= 24) {
+            } else if (diff <= 12) {
               const scale = 1.0 + Math.sin(Date.now() / 120) * 0.35;
               const lineLength = 3.0 * scale * twinkle;
               ctx.strokeStyle = anomalyColor;
@@ -10695,7 +10779,7 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.moveTo(-offset, offset);
               ctx.lineTo(offset, -offset);
               ctx.stroke();
-            } else if (diff <= 48) {
+            } else if (diff <= 24) {
               const scale = 1.0 + Math.sin(Date.now() / 80) * 0.4;
               const lineLength = 3.25 * scale * twinkle;
               ctx.strokeStyle = anomalyColor;
@@ -11155,13 +11239,13 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           let anomalyColor = '#00ff88';
-          if (diff <= 10) {
+          if (diff <= 5) {
             anomalyColor = '#00ff88';
-          } else if (diff <= 35) {
+          } else if (diff <= 17) {
             anomalyColor = '#ffcc00';
-          } else if (diff <= 60) {
+          } else if (diff <= 30) {
             anomalyColor = '#00e5ff';
-          } else if (diff <= 85) {
+          } else if (diff <= 42) {
             anomalyColor = '#ff6d00';
           } else {
             anomalyColor = '#ff00ff';
@@ -11169,7 +11253,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
           ctx.save();
           
-          if (diff <= 10) {
+          if (diff <= 5) {
             // Tier 1: Faint Spark (Green, Slow Pulse)
             const scale = 1.0 + Math.sin(Date.now() / 250) * 0.2;
             const lineLength = 2.5 * scale * twinkle;
@@ -11184,7 +11268,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
             ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
             ctx.stroke();
-          } else if (diff <= 35) {
+          } else if (diff <= 17) {
             // Tier 2: Glowing Core (Yellow, Medium Pulse + static center dot)
             const scale = 1.0 + Math.sin(Date.now() / 150) * 0.3;
             const lineLength = 2.75 * scale * twinkle;
@@ -11205,7 +11289,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.beginPath();
             ctx.arc(p.anomaly.x, p.anomaly.y, 0.75 * twinkle, 0, Math.PI * 2);
             ctx.fill();
-          } else if (diff <= 60) {
+          } else if (diff <= 30) {
             // Tier 3: Pulsing Nova (Cyan, Medium Pulse + slight rotation over time)
             const scale = 1.0 + Math.sin(Date.now() / 120) * 0.35;
             const lineLength = 3.0 * scale * twinkle;
@@ -11225,7 +11309,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.moveTo(0, -lineLength);
             ctx.lineTo(0, lineLength);
             ctx.stroke();
-          } else if (diff <= 85) {
+          } else if (diff <= 42) {
             // Tier 4: Radiant Star (Orange, Fast Pulse + outer ring)
             const scale = 1.0 + Math.sin(Date.now() / 80) * 0.4;
             const lineLength = 3.25 * scale * twinkle;
@@ -12716,7 +12800,7 @@ function getPlanetTradeIncomePerMin(planet) {
               }
             }
 
-            const hitChance = Math.round(Math.min(100, Math.max(10.0, hitChanceValue + friendlyGrav - enemyGrav - hazardPenalty))) + '%';
+            const hitChance = Math.round(Math.max(10.0, hitChanceValue + friendlyGrav - enemyGrav - hazardPenalty)) + '%';
 
             let volleySizeVal = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
             const cap = Math.floor(hs.health - 2);
