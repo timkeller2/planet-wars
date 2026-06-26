@@ -7412,15 +7412,15 @@ export class Game {
               ship.isRefueling = false;
             }
 
-            // Retain ship.maxHealth from the survivors as the new crew
-            const crewRetained = Math.min(M_atk, ship.maxHealth);
+            // Retain a small crew (e.g. 2) to operate the captured cruiser
+            const crewRetained = Math.min(M_atk, 2);
             ship.crew = crewRetained;
             ship.marineCount = 0;
 
             console.log(`[BOARDING SUCCESS] Cruiser ${ship.id} captured by player ${ship.owner.name}. Crew assigned: ${crewRetained}/${ship.maxHealth}.`);
 
             // Return prorated remaining survivors directly to the attacking cruisers
-            const M_return = M_atk - ship.maxHealth;
+            const M_return = M_atk - crewRetained;
             if (M_return > 0 && ship.boardingSourceContributions && ship.boardingSourceContributions.length > 0) {
               let totalDistributed = 0;
               const contributions = ship.boardingSourceContributions;
@@ -7433,8 +7433,7 @@ export class Game {
                   let share = Math.floor(M_return * (contrib.contributed / totalStart));
                   share = Math.min(contrib.contributed, share);
 
-                  const maxCapacity = (launcher.marines || 0) * launcher.maxHealth;
-                  launcher.marineCount = Math.min(maxCapacity, (launcher.marineCount || 0) + share);
+                  launcher.marineCount = (launcher.marineCount || 0) + share;
                   totalDistributed += share;
                   contrib.returnedShare = share;
                 }
@@ -7446,8 +7445,7 @@ export class Game {
                 for (const contrib of contributions) {
                   const launcher = this.ships.find(s => s.id === contrib.shipId && s.active);
                   if (launcher) {
-                    const maxCapacity = (launcher.marines || 0) * launcher.maxHealth;
-                    const canTake = Math.max(0, maxCapacity - (launcher.marineCount || 0));
+                    const canTake = Math.max(0, contrib.contributed - (launcher.marineCount || 0));
                     const added = Math.min(remainder, canTake);
                     launcher.marineCount += added;
                     remainder -= added;

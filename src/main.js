@@ -447,6 +447,37 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastSelectedCruiserId = null;
   let selectedPlanets = [];
   let selectedShips = [];
+  let recentAudioEvents = [];
+
+  function groupIntoFocusAreas(points, maxDistance = 300) {
+    const groups = [];
+    for (const p of points) {
+      let added = false;
+      for (const g of groups) {
+        const dx = p.x - g.center.x;
+        const dy = p.y - g.center.y;
+        if (Math.hypot(dx, dy) <= maxDistance) {
+          g.members.push(p);
+          let sumX = 0, sumY = 0;
+          for (const m of g.members) {
+            sumX += m.x;
+            sumY += m.y;
+          }
+          g.center = { x: sumX / g.members.length, y: sumY / g.members.length };
+          added = true;
+          break;
+        }
+      }
+      if (!added) {
+        groups.push({
+          center: { x: p.x, y: p.y },
+          members: [p]
+        });
+      }
+    }
+    return groups.map(g => g.center);
+  }
+
   const shipSelectionTimes = new Map();
   function updateSelectionTimes() {
     const currentSelectedIds = new Set(selectedShips.map(s => s.id));
@@ -5779,6 +5810,8 @@ function getPlanetTradeIncomePerMin(planet) {
 
         if (!window.playedExplosionKeys.has(key)) {
           if (e.age <= 0.15) {
+            recentAudioEvents.push({ x: e.x, y: e.y, timestamp: Date.now() });
+
             if (e.isCruiserDeath) {
               cruiserDeathMaxHealth = Math.max(cruiserDeathMaxHealth, e.maxHealth || 30);
             } else if (e.color === 'amoeba-shrug') {
@@ -5802,6 +5835,27 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
     lastExplosionCount = state.explosions ? state.explosions.length : 0;
+
+    const currentLaserKeys = new Set();
+    if (!window.playedLaserKeys) {
+      window.playedLaserKeys = new Set();
+    }
+    if (state.lasers) {
+      for (const laser of state.lasers) {
+        const key = `${laser.startX.toFixed(1)},${laser.startY.toFixed(1)},${laser.endX.toFixed(1)},${laser.endY.toFixed(1)}`;
+        currentLaserKeys.add(key);
+        if (!window.playedLaserKeys.has(key)) {
+          if (laser.age <= 0.15) {
+            recentAudioEvents.push({
+              x: (laser.startX + laser.endX) / 2,
+              y: (laser.startY + laser.endY) / 2,
+              timestamp: Date.now()
+            });
+          }
+        }
+      }
+    }
+    window.playedLaserKeys = currentLaserKeys;
 
     if (state.lasers && state.lasers.length > 0) {
       const delay = window.nextLaserDelay || 400;
@@ -9214,21 +9268,66 @@ function getPlanetTradeIncomePerMin(planet) {
             cameraPanY = mapHeight / 2 - targetFleet.y;
           }
         } else {
-          // Cycle planets
-          const myPlanets = serverState.planets.filter(p => p.ownerId === localPlayer.id);
-          if (myPlanets.length > 0) {
-            let currentIndex = myPlanets.findIndex(p => selectedPlanets.length === 1 && selectedPlanets[0].id === p.id);
-            let nextIndex = (currentIndex + 1) % myPlanets.length;
-            if (currentIndex === -1) nextIndex = 0;
-            
-            const targetPlanet = myPlanets[nextIndex];
-            selectedPlanets = [targetPlanet];
-            selectedShips = [];
-            
+          // Cycle focus areas
+          const now = Date.now();
+          recentAudioEvents = recentAudioEvents.filter(ev => now - ev.timestamp <= 10000);
+
+          // Get points for each category
+          const audioPoints = [...recentAudioEvents].sort((a, b) => b.timestamp - a.timestamp);
+          const myPlanets = serverState.planets
+            .filter(p => p.ownerId === localPlayer.id)
+            .sort((a, b) => a.id - b.id);
+          const myShips = serverState.ships
+            .filter(s => s.active && s.ownerId === localPlayer.id && !s.isReturnPod && !s.isBoardingFleet && !s.isAmoeba)
+            .sort((a, b) => a.id - b.id);
+
+          // Group into focus areas
+          const audioFocusAreas = groupIntoFocusAreas(audioPoints, 300);
+          const planetFocusAreas = groupIntoFocusAreas(myPlanets, 300);
+          const shipFocusAreas = groupIntoFocusAreas(myShips, 300);
+
+          // Build a single ordered sequence of focus areas
+          const focusAreas = [];
+          for (const center of audioFocusAreas) {
+            focusAreas.push({ type: 'audio', x: center.x, y: center.y });
+          }
+          for (const center of planetFocusAreas) {
+            focusAreas.push({ type: 'planet', x: center.x, y: center.y });
+          }
+          for (const center of shipFocusAreas) {
+            focusAreas.push({ type: 'ship', x: center.x, y: center.y });
+          }
+
+          if (focusAreas.length > 0) {
+            let nextIndex = 0;
+            if (typeof window.lastTabFocusIndex === 'number') {
+              nextIndex = (window.lastTabFocusIndex + 1) % focusAreas.length;
+            }
+            window.lastTabFocusIndex = nextIndex;
+
+            const target = focusAreas[nextIndex];
+
+            // Set selection based on the area's type
+            if (target.type === 'audio') {
+              selectedPlanets = [];
+              selectedShips = [];
+            } else if (target.type === 'planet') {
+              selectedPlanets = myPlanets.filter(p => Math.hypot(p.x - target.x, p.y - target.y) <= 300);
+              selectedShips = [];
+            } else if (target.type === 'ship') {
+              selectedPlanets = [];
+              selectedShips = myShips.filter(s => Math.hypot(s.x - target.x, s.y - target.y) <= 300);
+            }
+
+            // Pan camera to center on the focused area
             const mapWidth = serverState.width || 1920;
             const mapHeight = serverState.height || 1620;
-            cameraPanX = mapWidth / 2 - targetPlanet.x;
-            cameraPanY = mapHeight / 2 - targetPlanet.y;
+            cameraPanX = mapWidth / 2 - target.x;
+            cameraPanY = mapHeight / 2 - target.y;
+
+            updateSelectionTimes();
+            updateSelectionTiles();
+            updateButtonHighlights();
           }
         }
       }
