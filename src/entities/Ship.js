@@ -4182,9 +4182,34 @@ export class Ship {
       const canResupply = this.inFriendlyWell || (neutralWellPlanet && (neutralWellPlanet.supplies || 0) >= 1.0);
       if (this.maxsupplies > 0 && this.supplies < this.maxsupplies && canResupply && !this.isWarp && !hasEnemyNear) {
         const planetSource = friendlyWellPlanet || neutralWellPlanet;
-        if (planetSource) {
-          this.activeSupplySourceId = planetSource.id;
-          this.activeSupplySourceType = 'planet';
+        if (planetSource && (planetSource.supplies || 0) >= 1.0) {
+          const owner = this.owner;
+          const discount = (this.supply_ship || 0) > 0 ? (0.25 + 0.10 * this.supply_ship) : 0;
+          const costMultiplier = Math.max(0, 1.0 - discount);
+          
+          let canAfford = false;
+          if (friendlyWellPlanet) {
+            if (owner && owner.useCredits !== false) {
+              const costCredits = 1.0 * costMultiplier;
+              const minAllowedCredits = allPlanets && owner ? (allPlanets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id) ? -(1000 + Math.floor(owner.totalShips || 0)) : 0) : 0;
+              if ((owner.credits || 0) - costCredits >= minAllowedCredits) {
+                canAfford = true;
+              }
+            } else if (friendlyWellPlanet.ships >= 1.0 * costMultiplier) {
+              canAfford = true;
+            }
+          } else if (neutralWellPlanet) {
+            const costCredits = 2.0 * costMultiplier;
+            const minAllowedCredits = allPlanets && owner ? (allPlanets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id) ? -(1000 + Math.floor(owner.totalShips || 0)) : 0) : 0;
+            if (owner && (owner.credits || 0) - costCredits >= minAllowedCredits) {
+              canAfford = true;
+            }
+          }
+
+          if (canAfford) {
+            this.activeSupplySourceId = planetSource.id;
+            this.activeSupplySourceType = 'planet';
+          }
         }
         this.supplyLoadAccumulator = (this.supplyLoadAccumulator || 0) + deltaTime;
         while (this.supplyLoadAccumulator >= 5000 && this.supplies < this.maxsupplies) {
@@ -4197,10 +4222,12 @@ export class Ship {
             let canAffordResupply = false;
             let purchaseFromNeutral = false;
 
+            const minAllowedCredits = allPlanets && owner ? (allPlanets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id) ? -(1000 + Math.floor(owner.totalShips || 0)) : 0) : 0;
+
             if (friendlyWellPlanet && (friendlyWellPlanet.supplies || 0) >= 1.0) {
               if (owner.useCredits !== false) {
                 const costCredits = 1.0 * costMultiplier;
-                if ((owner.credits || 0) >= costCredits) {
+                if ((owner.credits || 0) - costCredits >= minAllowedCredits) {
                   canAffordResupply = true;
                 }
               } else if (friendlyWellPlanet.ships >= 1.0 * costMultiplier) {
@@ -4208,7 +4235,7 @@ export class Ship {
               }
             } else if (neutralWellPlanet && (neutralWellPlanet.supplies || 0) >= 1.0) {
               const costCredits = 2.0 * costMultiplier;
-              if ((owner.credits || 0) >= costCredits) {
+              if ((owner.credits || 0) - costCredits >= minAllowedCredits) {
                 canAffordResupply = true;
                 purchaseFromNeutral = true;
               }
@@ -4555,11 +4582,30 @@ export class Ship {
           if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
             activeBombSourceForRay = 'supplyShip';
           } else if (friendlyWellPlanet && (friendlyWellPlanet.supplies || 0) >= 1.0) {
-            activeBombSourceForRay = 'planet';
-          } else if (friendlyWellPlanet && this.owner && this.owner.useCredits !== false) {
-            activeBombSourceForRay = 'planet';
-          } else if (friendlyWellPlanet && friendlyWellPlanet.ships >= 1.0) {
-            activeBombSourceForRay = 'planet';
+            const owner = this.owner;
+            const style = this.cruiserStyle || (owner ? owner.cruiserStyle : null);
+            let bombResource = 'merculite';
+            if (style === 'Romulan' || style === 'Gorn') {
+              bombResource = 'antimatter';
+            } else if (style === 'Tholian' || style === 'Lyran') {
+              bombResource = 'dilithium';
+            }
+            const canUseRes = !!(this.useResources || (owner && owner.tradeLimitToggle === true));
+            const hasExcessResource = canUseRes && owner && owner.resources && (owner.resources[bombResource] || 0) >= 0.1;
+            const resourceSellPrice = owner ? (owner.offerPrice?.[bombResource] ?? 3) : 3;
+
+            if (owner && (owner.isMonster || owner.id === 'monsters')) {
+              activeBombSourceForRay = 'planet';
+            } else if (hasExcessResource && resourceSellPrice < 12) {
+              activeBombSourceForRay = 'planet';
+            } else if (owner && owner.useCredits !== false) {
+              const minAllowedCredits = allPlanets && owner ? (allPlanets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id) ? -(1000 + Math.floor(owner.totalShips || 0)) : 0) : 0;
+              if ((owner.credits || 0) - 1.0 >= minAllowedCredits) {
+                activeBombSourceForRay = 'planet';
+              }
+            } else if (friendlyWellPlanet.ships >= 1.0) {
+              activeBombSourceForRay = 'planet';
+            }
           }
           if (activeBombSourceForRay === 'supplyShip' && supplyShipForBombs && supplyShipForBombs !== this) {
             this.activeSupplySourceId = supplyShipForBombs.id;
@@ -4601,8 +4647,11 @@ export class Ship {
                 canAffordReload = true;
                 activeBombSource = 'planet';
               } else if (owner && owner.useCredits !== false) {
-                canAffordReload = true;
-                activeBombSource = 'planet';
+                const minAllowedCredits = allPlanets && owner ? (allPlanets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id) ? -(1000 + Math.floor(owner.totalShips || 0)) : 0) : 0;
+                if ((owner.credits || 0) - 1.0 >= minAllowedCredits) {
+                  canAffordReload = true;
+                  activeBombSource = 'planet';
+                }
               } else if (friendlyWellPlanet.ships >= 1.0) {
                 canAffordReload = true;
                 activeBombSource = 'planet';
