@@ -14289,8 +14289,56 @@ function getPlanetTradeIncomePerMin(planet) {
             const sin = Math.sin(s.angle || 0);
             const drawX = s.x + lx * cos - ly * sin;
             const drawY = s.y + lx * sin + ly * cos;
-            
-            if (s.isBomber) {
+            if (s.expScore > 99) {
+              let angle = s.angle || 0;
+              if (s.targetX !== null && s.targetY !== null && s.targetX !== undefined && s.targetY !== undefined) {
+                angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
+              }
+
+              ctx.save();
+              ctx.translate(drawX, drawY);
+              ctx.rotate(angle);
+
+              // Draw thruster flame at the rear of the shuttle
+              ctx.beginPath();
+              if (s.expScore > 399) {
+                ctx.moveTo(-3, -1.5);
+                ctx.lineTo(-5 - Math.random() * 2, 0);
+                ctx.lineTo(-3, 1.5);
+              } else {
+                ctx.moveTo(-2, -0.75);
+                ctx.lineTo(-3.5 - Math.random() * 1.5, 0);
+                ctx.lineTo(-2, 0.75);
+              }
+              ctx.closePath();
+              ctx.fillStyle = '#ff8800';
+              ctx.fill();
+
+              // Draw landing shuttle body (trapezoid with leading face shorter than rear face)
+              ctx.beginPath();
+              if (s.expScore > 399) {
+                ctx.moveTo(3, -1.25);
+                ctx.lineTo(3, 1.25);
+                ctx.lineTo(-3, 2.5);
+                ctx.lineTo(-3, -2.5);
+              } else {
+                ctx.moveTo(2, -0.75);
+                ctx.lineTo(2, 0.75);
+                ctx.lineTo(-2, 1.5);
+                ctx.lineTo(-2, -1.5);
+              }
+              ctx.closePath();
+
+              ctx.fillStyle = owner ? owner.color : '#fff';
+              ctx.fill();
+
+              // Subtle panel lining/border outline
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+              ctx.lineWidth = 0.5;
+              ctx.stroke();
+
+              ctx.restore();
+            } else if (s.isBomber) {
               let angle = 0;
               if (s.targetX !== undefined && s.targetY !== undefined) {
                 angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
