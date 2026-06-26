@@ -6994,6 +6994,30 @@ export class Game {
     for (const ship of cruisers) {
       if (ship.isUpgrading) continue;
 
+      // 0. Process queued marine launches
+      if (ship.pendingMarineLaunches && ship.pendingMarineLaunches.length > 0) {
+        for (let i = 0; i < ship.pendingMarineLaunches.length; i++) {
+          const launch = ship.pendingMarineLaunches[i];
+          launch.timer -= dt;
+          if (launch.timer <= 0) {
+            let success = false;
+            const batchSize = Math.min(launch.count, 20);
+            if (batchSize > 0) {
+              success = this.executeQueuedLaunch(ship, launch, batchSize);
+              if (success) {
+                launch.count -= batchSize;
+              }
+            }
+            if (launch.count <= 0 || !success) {
+              ship.pendingMarineLaunches.splice(i, 1);
+              i--;
+            } else {
+              launch.timer = 2.0;
+            }
+          }
+        }
+      }
+
       const radar = ship.cruiserRadarRange();
 
       // 2. Crew restoration
@@ -7194,30 +7218,17 @@ export class Game {
         }
 
         if (targetPlanet) {
-          // Launch standard fleet representing the marines
           const count = Math.floor(ship.marineCount);
-          const marineFleet = new Ship(this.nextShipId++, ship.x, ship.y, targetPlanet, ship.owner);
-          marineFleet.cruiserStyle = ship.cruiserStyle;
-          marineFleet.count = count;
-          marineFleet.speedModifier = 1.0;
-          marineFleet.isMarineFleet = true;
-          marineFleet.sourceShipId = ship.id;
-          marineFleet.speed = 35;
-
-          let startingExp = ship.expScore || 0;
-          const tritaniumCost = 0.01 * (count / 3);
-          const owner = ship.owner;
-          const canUseRes = !!(ship.useResources || (owner && owner.tradeLimitToggle === true));
-          if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && count > 0 && canUseRes) {
-            owner.resources.tritanium -= tritaniumCost;
-            startingExp += 400;
+          if (count > 0) {
+            this.queueMarineLaunch(ship, {
+              targetType: 'planet',
+              targetId: targetPlanet.id,
+              isBoardingFleet: false,
+              count: count
+            });
+            ship.marineCount = 0;
+            ship.marineLaunchCooldown = 15.0;
           }
-          marineFleet.expScore = startingExp;
-          this.ships.push(marineFleet);
-
-          console.log(`[MARINE PLANET INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to attack target planet ${targetPlanet.name}.`);
-          ship.marineCount = 0;
-          ship.marineLaunchCooldown = 15.0;
         }
       }
 
@@ -7225,7 +7236,7 @@ export class Game {
       if ((ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
         let revoltPlanet = null;
         for (const p of this.planets) {
-          if (p.inRevolt) {
+          if (p.inRevolt && p.revoltTimer <= 7500) {
             const dx = p.x - ship.x;
             const dy = p.y - ship.y;
             const distSq = dx * dx + dy * dy;
@@ -7242,26 +7253,12 @@ export class Game {
         if (revoltPlanet) {
           const count = Math.floor(ship.marineCount);
           if (count > 0) {
-            const marineFleet = new Ship(this.nextShipId++, ship.x, ship.y, revoltPlanet, ship.owner);
-            marineFleet.cruiserStyle = ship.cruiserStyle;
-            marineFleet.count = count;
-            marineFleet.speedModifier = 1.0;
-            marineFleet.isMarineFleet = true;
-            marineFleet.sourceShipId = ship.id;
-            marineFleet.speed = 35;
-
-            let startingExp = ship.expScore || 0;
-            const tritaniumCost = 0.01 * (count / 3);
-            const owner = ship.owner;
-            const canUseRes = !!(ship.useResources || (owner && owner.tradeLimitToggle === true));
-            if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && canUseRes) {
-              owner.resources.tritanium -= tritaniumCost;
-              startingExp += 400;
-            }
-            marineFleet.expScore = startingExp;
-            this.ships.push(marineFleet);
-
-            console.log(`[MARINE REVOLT PLANET ASSAULT] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to revolting planet ${revoltPlanet.name}.`);
+            this.queueMarineLaunch(ship, {
+              targetType: 'planet',
+              targetId: revoltPlanet.id,
+              isBoardingFleet: false,
+              count: count
+            });
             ship.marineCount = 0;
             ship.marineLaunchCooldown = 15.0;
           }
@@ -7280,29 +7277,16 @@ export class Game {
       if (targetShip) {
         // Only launch up to 3 times the defending crew
         const count = Math.min(Math.floor(ship.marineCount), Math.max(1, 3 * (targetShip.crew || 0)));
-        const marineFleet = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, targetShip.x, targetShip.y);
-        marineFleet.cruiserStyle = ship.cruiserStyle;
-        marineFleet.count = count;
-        marineFleet.speedModifier = 1.0;
-        marineFleet.isMarineFleet = true;
-        marineFleet.targetShipId = targetShip.id;
-        marineFleet.sourceShipId = ship.id;
-        marineFleet.speed = 35;
-
-        let startingExp = ship.expScore || 0;
-        const tritaniumCost = 0.01 * (count / 3);
-        const owner = ship.owner;
-        const canUseRes = !!(ship.useResources || (owner && owner.tradeLimitToggle === true));
-        if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && count > 0 && canUseRes) {
-          owner.resources.tritanium -= tritaniumCost;
-          startingExp += 400;
+        if (count > 0) {
+          this.queueMarineLaunch(ship, {
+            targetType: 'ship',
+            targetId: targetShip.id,
+            isBoardingFleet: false,
+            count: count
+          });
+          ship.marineCount = Math.max(0, ship.marineCount - count);
+          ship.marineLaunchCooldown = 15.0;
         }
-        marineFleet.expScore = startingExp;
-        this.ships.push(marineFleet);
-
-        console.log(`[MARINE SHIP INVASION] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to target ship ${targetShip.id}.`);
-        ship.marineCount = Math.max(0, ship.marineCount - count);
-        ship.marineLaunchCooldown = 15.0;
       }
 
       // 5. Boarding Trigger Checks
@@ -7318,20 +7302,17 @@ export class Game {
               if (isSelectedTarget || ship.marineCount > 0) {
                 // Launch Boarding Fleet Pod up to 3 times the defending crew
                 const launchCount = Math.min(Math.floor(ship.marineCount), Math.max(1, 3 * (enemy.crew || 0)));
-                const pod = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, enemy.x, enemy.y);
-                pod.cruiserStyle = ship.cruiserStyle;
-                pod.isBoardingFleet = true;
-                pod.targetShipId = enemy.id;
-                pod.sourceShipId = ship.id;
-                pod.marineCount = launchCount;
-                pod.speed = 25; // moves at custom speed
-                pod.isCruiser = false; // it is drawn uniquely, not as a cruiser body!
-                this.ships.push(pod);
-
-                console.log(`[BOARDING] Ship ${ship.id} launched pod targeting Ship ${enemy.id} carrying ${launchCount} marines.`);
-                ship.marineCount = Math.max(0, ship.marineCount - launchCount);
-                ship.marineLaunchCooldown = 15.0;
-                break;
+                if (launchCount > 0) {
+                  this.queueMarineLaunch(ship, {
+                    targetType: 'ship',
+                    targetId: enemy.id,
+                    isBoardingFleet: true,
+                    count: launchCount
+                  });
+                  ship.marineCount = Math.max(0, ship.marineCount - launchCount);
+                  ship.marineLaunchCooldown = 15.0;
+                  break;
+                }
               }
             }
           }
@@ -7415,6 +7396,85 @@ export class Game {
       }
     }
     this.updateBattlecam();
+  }
+
+  executeQueuedLaunch(ship, launch, batchSize) {
+    if (launch.isBoardingFleet) {
+      const enemy = this.ships.find(s => s.id === launch.targetId && s.active);
+      if (!enemy) return false;
+      const pod = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, enemy.x, enemy.y);
+      pod.cruiserStyle = ship.cruiserStyle;
+      pod.isBoardingFleet = true;
+      pod.targetShipId = enemy.id;
+      pod.sourceShipId = ship.id;
+      pod.marineCount = batchSize;
+      pod.speed = 25;
+      pod.isCruiser = false;
+      this.ships.push(pod);
+      console.log(`[BOARDING BATCH] Ship ${ship.id} launched pod targeting Ship ${enemy.id} carrying ${batchSize} marines.`);
+      return true;
+    } else {
+      let targetPlanet = null;
+      let targetShip = null;
+      if (launch.targetType === 'planet') {
+        targetPlanet = this.planets.find(p => p.id === launch.targetId);
+      } else if (launch.targetType === 'ship') {
+        targetShip = this.ships.find(s => s.id === launch.targetId && s.active);
+      }
+      
+      if (!targetPlanet && !targetShip) return false;
+      
+      const targetX = targetPlanet ? null : targetShip.x;
+      const targetY = targetPlanet ? null : targetShip.y;
+      
+      const marineFleet = new Ship(this.nextShipId++, ship.x, ship.y, targetPlanet, ship.owner, targetX, targetY);
+      marineFleet.cruiserStyle = ship.cruiserStyle;
+      marineFleet.count = batchSize;
+      marineFleet.speedModifier = 1.0;
+      marineFleet.isMarineFleet = true;
+      marineFleet.sourceShipId = ship.id;
+      marineFleet.speed = 35;
+      if (targetShip) {
+        marineFleet.targetShipId = targetShip.id;
+      }
+      
+      let startingExp = ship.expScore || 0;
+      const tritaniumCost = 0.01 * (batchSize / 3);
+      const owner = ship.owner;
+      const canUseRes = !!(ship.useResources || (owner && owner.tradeLimitToggle === true));
+      if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && batchSize > 0 && canUseRes) {
+        owner.resources.tritanium -= tritaniumCost;
+        startingExp += 400;
+      }
+      marineFleet.expScore = startingExp;
+      this.ships.push(marineFleet);
+      
+      console.log(`[MARINE BATCH] Cruiser ${ship.id} launched a fleet of ${batchSize} marines targeting ${targetPlanet ? 'planet ' + targetPlanet.name : 'ship ' + targetShip.id}.`);
+      return true;
+    }
+  }
+
+  queueMarineLaunch(ship, launchInfo) {
+    const totalCount = launchInfo.count;
+    if (totalCount <= 0) return;
+    
+    // Launch first batch immediately
+    const firstBatch = Math.min(totalCount, 20);
+    const immediateLaunchInfo = { ...launchInfo, count: firstBatch };
+    this.executeQueuedLaunch(ship, immediateLaunchInfo, firstBatch);
+    
+    // Queue the rest if any
+    const remaining = totalCount - firstBatch;
+    if (remaining > 0) {
+      ship.pendingMarineLaunches = ship.pendingMarineLaunches || [];
+      ship.pendingMarineLaunches.push({
+        targetType: launchInfo.targetType,
+        targetId: launchInfo.targetId,
+        isBoardingFleet: launchInfo.isBoardingFleet,
+        count: remaining,
+        timer: 2.0
+      });
+    }
   }
 
   draw() {
