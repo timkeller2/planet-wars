@@ -697,6 +697,12 @@ export class Game {
   }
 
   assignPlanet(player) {
+    const hasHomeworld = this.planets.some(p => p.homeworldOf === player.id);
+    if (hasHomeworld) {
+      console.log(`[Warning] Attempted to assign homeworld to player ${player.id} who already owns one.`);
+      return false;
+    }
+
     const hwSizeSetting = (this.settings && this.settings.homeworldSize) ? this.settings.homeworldSize : "120";
     const isNatural = hwSizeSetting === 'natural' || ((hwSizeSetting === 'pioneers' || hwSizeSetting === 'pioneers-corvettes') && player.isAI);
 

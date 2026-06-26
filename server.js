@@ -1668,7 +1668,7 @@ async function bootstrap() {
             connectedClients.set(socketId, newPlayer);
           }
         }
-        for (const p of connectedClients.values()) {
+        for (const p of new Set(connectedClients.values())) {
           p.isAI = false;
           p.isAlive = true;
           p.needsPlanet = true;
@@ -1744,7 +1744,7 @@ async function bootstrap() {
         }
       }
 
-      for (const p of connectedClients.values()) {
+      for (const p of new Set(connectedClients.values())) {
         p.isAI = false;
         p.isAlive = true;
         p.needsPlanet = true;
