@@ -436,6 +436,12 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastBoardingStateTime = 0;
   let startingOwnerId = null;
   let lastLaserSoundTime = 0;
+  let boardingAttackerName = '';
+  let boardingDefenderName = '';
+  let boardingAttackerColor = '#ff3366';
+  let boardingDefenderColor = '#ffffff';
+  let boardingAttackerCount = 0;
+  let boardingDefenderCount = 0;
   let serverSavedConfigs = [];
   let lastGameStartTime = null;
   let lastSelectedCruiserId = null;
@@ -5936,6 +5942,13 @@ function getPlanetTradeIncomePerMin(planet) {
     const M_def = cruiser.marineCount || 0;
     const C_def = cruiser.crew || 0;
     const M_atk = cruiser.boardingMarines || 0;
+
+    boardingDefenderName = cruiser.ownerId === 'monsters' ? 'MONSTERS' : (defender.name || defender.id || 'Defender');
+    boardingAttackerName = attacker.name || attacker.id || 'Attacker';
+    boardingDefenderColor = defender.color || '#ffffff';
+    boardingAttackerColor = attacker.color || '#ff3366';
+    boardingDefenderCount = M_def + C_def;
+    boardingAttackerCount = M_atk;
     
     const maxTroopsPerSide = 15;
     
@@ -5967,6 +5980,9 @@ function getPlanetTradeIncomePerMin(planet) {
     const M_def = cruiser.marineCount || 0;
     const C_def = cruiser.crew || 0;
     const M_atk = cruiser.boardingMarines || 0;
+
+    boardingDefenderCount = M_def + C_def;
+    boardingAttackerCount = M_atk;
     
     const timerSpan = document.getElementById('boarding-combat-timer');
     if (timerSpan) {
@@ -6175,6 +6191,44 @@ function getPlanetTradeIncomePerMin(planet) {
     ctx.moveTo(0, 125);
     ctx.lineTo(canvas.width, 125);
     ctx.stroke();
+
+    // Draw Defender Stats (Left)
+    ctx.save();
+    ctx.font = 'bold 11px Orbitron, sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    
+    // Shadow for name
+    ctx.fillStyle = '#000000';
+    ctx.fillText(`${boardingDefenderName.toUpperCase()} (DEFENDER)`, 16, 16);
+    ctx.fillStyle = boardingDefenderColor;
+    ctx.fillText(`${boardingDefenderName.toUpperCase()} (DEFENDER)`, 15, 15);
+    
+    // Shadow for troop count
+    ctx.font = '10px Orbitron, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 16, 31);
+    ctx.fillStyle = '#b0bec5';
+    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 15, 30);
+    
+    // Draw Attacker Stats (Right)
+    ctx.font = 'bold 11px Orbitron, sans-serif';
+    ctx.textAlign = 'right';
+    
+    // Shadow for name
+    ctx.fillStyle = '#000000';
+    ctx.fillText(`${boardingAttackerName.toUpperCase()} (ATTACKER)`, canvas.width - 14, 16);
+    ctx.fillStyle = boardingAttackerColor;
+    ctx.fillText(`${boardingAttackerName.toUpperCase()} (ATTACKER)`, canvas.width - 15, 15);
+    
+    // Shadow for troop count
+    ctx.font = '10px Orbitron, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 14, 31);
+    ctx.fillStyle = '#b0bec5';
+    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 15, 30);
+    
+    ctx.restore();
     
     boardingBlastParticles = boardingBlastParticles.filter(p => {
       p.age += dt;
