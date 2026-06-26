@@ -2239,7 +2239,7 @@ export class Game {
     
     if (Math.random() < 0.5) {
       this.assignPlanet(this.monsterPlayer);
-      const monsterHomeworld = this.planets.find(p => p.owner === this.monsterPlayer);
+      const monsterHomeworld = this.planets.find(p => p.owner && p.owner.id === this.monsterPlayer.id);
       if (monsterHomeworld) {
          monsterHomeworld.name = "Amoeba Hive";
          monsterHomeworld.isAmoebaHive = true;
@@ -3749,7 +3749,7 @@ export class Game {
         const originalOwner = planet.owner;
 
         if (!planet.racialAffinity) {
-          planet.racialAffinity = winnerPlayer.cruiserStyle;
+          planet.racialAffinity = winnerPlayer.cruiserStyle || 'Federation';
         }
         planet.owner = winnerPlayer;
 
@@ -4195,7 +4195,7 @@ export class Game {
     } else {
       // 1. Check if we need to select a new planet for incubation
       if (this.gameTime >= this.nextRampageSelectionTime && !this.incubatingPlanet) {
-        const unusedAIs = this.aiPlayers.filter(p => !this.planets.some(pl => pl.owner === p) && !p.isRampager);
+        const unusedAIs = this.aiPlayers.filter(p => !this.planets.some(pl => pl.owner && pl.owner.id === p.id) && !p.isRampager);
         if (unusedAIs.length > 0) {
           const neutralPlanets = this.planets.filter(p => p.owner === null && !p.rampageIncubating);
           if (neutralPlanets.length > 0) {
@@ -4247,7 +4247,7 @@ export class Game {
             target.rampageIncubating = false;
             this.incubatingPlanet = null;
 
-            const unusedAIs = this.aiPlayers.filter(p => !this.planets.some(pl => pl.owner === p) && !p.isRampager);
+            const unusedAIs = this.aiPlayers.filter(p => !this.planets.some(pl => pl.owner && pl.owner.id === p.id) && !p.isRampager);
             if (unusedAIs.length > 0 && target.owner === null) {
               const rampageAI = unusedAIs[0];
               target.owner = rampageAI;
@@ -5065,7 +5065,7 @@ export class Game {
 
     // Amoeba Hive Spawning
     for (const p of this.planets) {
-      if (p.isAmoebaHive && p.owner === this.monsterPlayer) {
+      if (p.isAmoebaHive && p.owner && p.owner.id === this.monsterPlayer.id) {
         p.amoebaSpawnTimer = (p.amoebaSpawnTimer || 0) + deltaTime;
         if (p.amoebaSpawnTimer >= 120000) {
           p.amoebaSpawnTimer -= 120000;
@@ -5111,7 +5111,7 @@ export class Game {
           this.aiSpawnTimer -= this.aiSpawnInterval;
           const aiToSpawn = this.pendingAIs.shift();
           if (this.assignPlanet(aiToSpawn)) {
-            const aiHomeworld = this.planets.find(p => p.owner === aiToSpawn);
+            const aiHomeworld = this.planets.find(p => p.owner && p.owner.id === aiToSpawn.id);
             if (aiHomeworld) {
               for (const storm of this.ionStorms) {
                 if (storm.type === 'minefield') {
@@ -5180,9 +5180,9 @@ export class Game {
     }
 
     for (const player of this.allPlayers) {
-      player.cruiserCount = this.ships.filter(s => s.active && s.owner === player && s.isCruiser).length;
+      player.cruiserCount = this.ships.filter(s => s.active && s.owner && s.owner.id === player.id && s.isCruiser).length;
       player.commandCount = this.ships
-        .filter(s => s.active && s.owner === player && s.isCruiser)
+        .filter(s => s.active && s.owner && s.owner.id === player.id && s.isCruiser)
         .reduce((sum, s) => sum + Math.floor((s.maxHealth || 0) / 10), 0);
     }
 
@@ -5279,7 +5279,7 @@ export class Game {
       let controlsOwnHomeworld = false;
 
       for (const planet of this.planets) {
-        if (planet.owner === player) {
+        if (planet.owner && planet.owner.id === player.id) {
           if (planet.focusMode === 'garrison') {
             garrisonWorlds++;
             if (planet.ships > planet.maxShips * 2 - 10) {
@@ -5710,8 +5710,6 @@ export class Game {
     }
 
     if (nonMovingCruisers.length > 1) {
-      const minDistance = 20; // minimum distance between cruiser centers
-      const minDistanceSq = minDistance * minDistance;
       let anyMoved = false;
       
       // Run relaxation at a gradual speed of 3 pixels per second per cruiser
@@ -5724,6 +5722,9 @@ export class Game {
             const dx = shipB.x - shipA.x;
             const dy = shipB.y - shipA.y;
             const distSq = dx * dx + dy * dy;
+            
+            const minDistance = Math.max(shipA.maxHealth || 0, shipB.maxHealth || 0);
+            const minDistanceSq = minDistance * minDistance;
             
             if (distSq < minDistanceSq) {
               // Stacked! Resolve by scooting them in opposite directions gradually.
@@ -5873,7 +5874,7 @@ export class Game {
                 targetPlanet.addExperience(actualKilled);
 
                 const sourceShip = this.ships.find(sh => sh.id === laser.sourceShipId);
-                if (sourceShip && sourceShip.owner && targetPlanet.owner && targetPlanet.owner !== sourceShip.owner) {
+                if (sourceShip && sourceShip.owner && targetPlanet.owner && targetPlanet.owner.id !== sourceShip.owner.id) {
                   targetPlanet.owner.lastAttackerPlayerId = sourceShip.owner.id;
                 }
                 
@@ -5912,8 +5913,8 @@ export class Game {
                     targetPlanet.rampageEvent = false;
                     
                     // Check previous owner elimination
-                    if (previousOwner && previousOwner !== sourceShip.owner) {
-                      const hasRemaining = this.planets.some(pl => pl !== targetPlanet && pl.owner === previousOwner);
+                    if (previousOwner && previousOwner.id !== sourceShip.owner.id) {
+                      const hasRemaining = this.planets.some(pl => pl !== targetPlanet && pl.owner && pl.owner.id === previousOwner.id);
                       if (!hasRemaining) {
                         targetPlanet.defeatEvent = { name: previousOwner.name, color: previousOwner.color };
                         sourceShip.owner.expScore = (sourceShip.owner.expScore || 0) + 100;
@@ -6214,6 +6215,12 @@ export class Game {
           const seller = this.allPlayers.find(p => p.id === order.ownerId);
           if (seller) {
             seller.credits = (seller.credits || 0) + order.price;
+            if (order.price > 5) {
+              if (seller.tradeOptions === undefined) {
+                seller.tradeOptions = seller.tradeCapacity || 5;
+              }
+              seller.tradeOptions -= 1;
+            }
             if (!seller.isAI && seller.id !== 'monsters') {
               this.pendingChatMessages = this.pendingChatMessages || [];
               this.pendingChatMessages.push({
@@ -6451,8 +6458,8 @@ export class Game {
     }
 
      if (this.onScoreUpdate) {
-       const pCount = this.planets.filter(p => p.owner === this.humanPlayer).length;
-       const aiCount = this.planets.filter(p => p.owner && p.owner !== this.humanPlayer).length;
+       const pCount = this.planets.filter(p => p.owner && p.owner.id === this.humanPlayer.id).length;
+       const aiCount = this.planets.filter(p => p.owner && p.owner.id !== this.humanPlayer.id).length;
        this.onScoreUpdate(pCount, aiCount);
      }
 

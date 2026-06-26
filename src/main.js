@@ -1025,10 +1025,18 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.lineTo(size * 0.8, size * 0.3);
         ctx.lineTo(size * 0.5, size * 0.3);
         ctx.lineTo(size * 0.5, size * 0.8);
+        ctx.lineTo(size * 0.48, size * 0.8);
+        ctx.lineTo(size * 0.48, size * 0.92);
+        ctx.lineTo(size * 0.38, size * 0.92);
+        ctx.lineTo(size * 0.38, size * 0.8);
         ctx.lineTo(size * 0.2, size * 0.8);
         ctx.lineTo(size * 0.2, size * 0.9);
         ctx.lineTo(-size * 0.2, size * 0.9);
         ctx.lineTo(-size * 0.2, size * 0.8);
+        ctx.lineTo(-size * 0.38, size * 0.8);
+        ctx.lineTo(-size * 0.38, size * 0.92);
+        ctx.lineTo(-size * 0.48, size * 0.92);
+        ctx.lineTo(-size * 0.48, size * 0.8);
         ctx.lineTo(-size * 0.5, size * 0.8);
         ctx.lineTo(-size * 0.5, size * 0.3);
         ctx.lineTo(-size * 0.8, size * 0.3);
@@ -8035,16 +8043,24 @@ function getPlanetTradeIncomePerMin(planet) {
 
         if (clickedType && (clickedId !== null && clickedId !== undefined)) {
           if (clickedType === 'ship' || clickedType === 'fleet') {
-            const selectTime = shipSelectionTimes.get(clickedId);
-            const isSelectedOverOneSec = wasAlreadySelectedOnMouseDown && selectTime && (Date.now() - selectTime > 1000);
-            if (isSelectedOverOneSec) {
+            if (clickedShip && clickedShip.isAmoeba) {
               if (activeInfoPanel && activeInfoPanel.type === clickedType && activeInfoPanel.id === clickedId) {
                 closeInfoPanel();
               } else {
                 openInfoPanel(clickedType, clickedId);
               }
             } else {
-              closeInfoPanel();
+              const selectTime = shipSelectionTimes.get(clickedId);
+              const isSelectedOverOneSec = wasAlreadySelectedOnMouseDown && selectTime && (Date.now() - selectTime > 1000);
+              if (isSelectedOverOneSec) {
+                if (activeInfoPanel && activeInfoPanel.type === clickedType && activeInfoPanel.id === clickedId) {
+                  closeInfoPanel();
+                } else {
+                  openInfoPanel(clickedType, clickedId);
+                }
+              } else {
+                closeInfoPanel();
+              }
             }
           } else if (!isOwned) {
             // Unowned entities: open tooltip on a single click
@@ -8392,7 +8408,15 @@ function getPlanetTradeIncomePerMin(planet) {
 
       if (tappedType && (tappedId !== null && tappedId !== undefined)) {
         if (tappedType === 'ship' || tappedType === 'fleet') {
-          closeInfoPanel();
+          if (clickedShip && clickedShip.isAmoeba) {
+            if (activeInfoPanel && activeInfoPanel.type === tappedType && activeInfoPanel.id === tappedId) {
+              closeInfoPanel();
+            } else {
+              openInfoPanel(tappedType, tappedId);
+            }
+          } else {
+            closeInfoPanel();
+          }
         } else if (!isOwned) {
           // Unowned entities: open tooltip on a single touch/tap
           if (activeInfoPanel && activeInfoPanel.type === tappedType && activeInfoPanel.id === tappedId) {
@@ -14304,7 +14328,14 @@ function getPlanetTradeIncomePerMin(planet) {
                   { x: -size * 0.5, y: size * 0.25 }
                 ];
               } else if (style === 'Gorn') {
-                engines = [{ x: 0, y: size * 0.8 }];
+                if (s.classType === 'battleship' || s.classType === 'titan') {
+                  engines = [
+                    { x: size * 0.43, y: size * 0.86 },
+                    { x: -size * 0.43, y: size * 0.86 }
+                  ];
+                } else {
+                  engines = [{ x: 0, y: size * 0.8 }];
+                }
               } else if (style === 'Tholian') {
                 engines = [{ x: 0, y: size * 0.6 }];
               } else if (style === 'Lyran') {

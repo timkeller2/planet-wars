@@ -799,7 +799,7 @@ export class Ship {
         const pdy = this.y - planet.y;
         const gravityRadius = planet.getGravityRadius();
         if (pdx * pdx + pdy * pdy < gravityRadius * gravityRadius) {
-          if (planet.owner && planet.owner === this.owner) {
+          if (planet.owner && this.owner && planet.owner.id === this.owner.id) {
             friendlyWellPlanet = planet;
             break;
           } else if (!planet.owner && !planet.isDeepSpaceAnomaly) {
@@ -820,7 +820,7 @@ export class Ship {
         if (this.buildCostShipsRemaining > 0) {
           const shipsDeduction = (this.buildCostShipsRemaining / (remainingProgressTime / dt));
           const actualDeduction = Math.min(this.buildCostShipsRemaining, shipsDeduction);
-          if (this.sourcePlanet && this.sourcePlanet.owner === this.owner) {
+          if (this.sourcePlanet && this.sourcePlanet.owner && this.owner && this.sourcePlanet.owner.id === this.owner.id) {
             this.sourcePlanet.ships = Math.max(0, this.sourcePlanet.ships - actualDeduction);
           }
           this.buildCostShipsRemaining = Math.max(0, this.buildCostShipsRemaining - actualDeduction);
@@ -842,7 +842,7 @@ export class Ship {
         }
       } else {
         if (this.buildCostShipsRemaining > 0) {
-          if (this.sourcePlanet && this.sourcePlanet.owner === this.owner) {
+          if (this.sourcePlanet && this.sourcePlanet.owner && this.owner && this.sourcePlanet.owner.id === this.owner.id) {
             this.sourcePlanet.ships = Math.max(0, this.sourcePlanet.ships - this.buildCostShipsRemaining);
           }
           this.buildCostShipsRemaining = 0;
@@ -1669,7 +1669,7 @@ export class Ship {
               : allShips;
 
             for (const other of candidateThreats) {
-              if (other.active && other.isCruiser && other.owner === this.originalAttackingPlayer && other !== originalTarget && !other.isMaterializing) {
+              if (other.active && other.isCruiser && other.owner && this.originalAttackingPlayer && other.owner.id === this.originalAttackingPlayer.id && other !== originalTarget && !other.isMaterializing) {
                 const dx = other.x - this.x;
                 const dy = other.y - this.y;
                 const distSq = dx * dx + dy * dy;
@@ -1693,7 +1693,7 @@ export class Ship {
             let nearestPlanetDistSq = Infinity;
             if (allPlanets) {
               for (const planet of allPlanets) {
-                if (planet.owner === this.originalAttackingPlayer) {
+                if (planet.owner && this.originalAttackingPlayer && planet.owner.id === this.originalAttackingPlayer.id) {
                   const dx = planet.x - this.x;
                   const dy = planet.y - this.y;
                   const distSq = dx * dx + dy * dy;
@@ -1933,7 +1933,7 @@ export class Ship {
           : allShips;
 
         for (const enemyShip of candidateShips) {
-          if (!enemyShip.active || enemyShip.owner === this.owner || enemyShip.isMaterializing) continue;
+          if (!enemyShip.active || (enemyShip.owner && this.owner && enemyShip.owner.id === this.owner.id) || enemyShip.isMaterializing) continue;
           if (this.isAmoeba && enemyShip.isAmoeba) continue;
           
           if (this.owner) {
@@ -2547,7 +2547,7 @@ export class Ship {
         if (!isCruiser || (isCruiserBombing && this.bombs >= 1 && (!this.planetBombardTimer || this.planetBombardTimer <= 0) && !enemyNearby)) {
           let validPlanets = [];
           for (const p of allPlanets) {
-            if (p.owner === this.owner) continue;
+            if (p.owner && this.owner && p.owner.id === this.owner.id) continue;
             if (this.isAmoeba && !p.owner && (this.amoebaGrowCooldown || 0) > 0) continue;
             if (p.ships > 0) {
               if (isCruiser && p.id !== this.cruiserTargetId) continue;
@@ -3708,7 +3708,7 @@ export class Ship {
         }
       }
       
-      if (targetObj && targetObj.active !== false && (!isPlanet || targetObj.owner === this.owner || (targetObj.owner !== this.owner && this.canSeeStats(targetObj, allPlanets, allShips, game)))) {
+      if (targetObj && targetObj.active !== false && (!isPlanet || (targetObj.owner && this.owner && targetObj.owner.id === this.owner.id) || (targetObj.owner && (!this.owner || targetObj.owner.id !== this.owner.id) && this.canSeeStats(targetObj, allPlanets, allShips, game)) || (!targetObj.owner && this.canSeeStats(targetObj, allPlanets, allShips, game)))) {
         // Target is valid! Calculate distance
         const tdx = tx - this.x;
         const tdy = ty - this.y;
@@ -3725,7 +3725,7 @@ export class Ship {
         const isTargetInFront = (Math.abs(diff) <= Math.PI / 4);
         
         if (isPlanet) {
-          const isOwnPlanet = targetObj.owner === this.owner;
+          const isOwnPlanet = !!(targetObj.owner && this.owner && targetObj.owner.id === this.owner.id);
           let stopDist = isOwnPlanet ? (targetObj.radius + 20) : ((effectiveRange + targetObj.radius) * 0.5);
           if (this.isPatrolling && this.bombs > 0 && this.package === 'brute') {
             stopDist = targetObj.radius + 15;
@@ -4764,7 +4764,7 @@ export class Ship {
                 : allShips;
 
               for (const ship of candidateFriendlies) {
-                if (ship !== this && ship.owner === this.owner && ship.active) {
+                if (ship !== this && ship.owner && this.owner && ship.owner.id === this.owner.id && ship.active) {
                   const sdx = ship.x - this.x;
                   const sdy = ship.y - this.y;
                   const sDistSq = sdx * sdx + sdy * sdy;
@@ -4786,7 +4786,7 @@ export class Ship {
                   const gravityRadius = planet.getGravityRadius();
                   
                   if (pDistSq < gravityRadius * gravityRadius) {
-                    if (planet.owner === this.owner) {
+                    if (planet.owner && this.owner && planet.owner.id === this.owner.id) {
                       let mult = 0.002;
                       if (planet.isMilitary || planet.focusMode === 'garrison') {
                         if (planet.ships >= planet.maxShips * 2 - 10) {
@@ -4796,7 +4796,7 @@ export class Ship {
                         }
                       }
                       friendlyPlanetBoost += mult * Math.floor(planet.ships / 10);
-                    } else if (planet.owner === this.targetPlanet.owner && this.targetPlanet.owner !== null) {
+                    } else if (planet.owner && this.targetPlanet.owner && planet.owner.id === this.targetPlanet.owner.id) {
                       let mult = 0.002;
                       if (planet.isMilitary || planet.focusMode === 'garrison') {
                         if (planet.ships >= planet.maxShips * 2 - 10) {
@@ -5711,6 +5711,9 @@ export class Ship {
             shrugChance += 0.10;
           }
           shrugChance = Math.min(0.90, shrugChance);
+          if (attacker && attacker.isAmoeba) {
+            shrugChance /= 2;
+          }
         } else {
           shrugChance = Math.min(0.95, 0.50 + this.maxHealth * 0.01 + (techBonus + expBonus + shipExpBonus) * 0.01);
         }

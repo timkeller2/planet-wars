@@ -47,6 +47,18 @@ async function runTest() {
     console.log(`Test Case B: healthBefore=${healthBeforeB}, healthAfter=${defender.health}`);
     assert.ok(defender.health < healthBeforeB, "Damage should NOT be shrugged off because shrugChance was reduced");
 
+    // Test Case C: Attacked by Amoeba (deflection halved)
+    // Base deflection = 30 / 100 = 0.30. Since attacker is Amoeba, shrugChance = 0.15.
+    // Math.random returns 0.20, which is > 0.15 -> Not shrugged off (damage is applied)
+    const amoebaAttacker = new Ship(5, 100, 100, null, player1, 500, 500);
+    amoebaAttacker.isAmoeba = true;
+    
+    defender.health = 30;
+    randomVal = 0.20;
+    defender.takeDamage(null, amoebaAttacker, false, null, 0);
+    console.log(`Test Case C (Amoeba attack): healthBefore=30, healthAfter=${defender.health}`);
+    assert.ok(defender.health < 30, "Damage should NOT be shrugged off because shrugChance was halved by Amoeba attack");
+
   } finally {
     Math.random = originalRandom;
   }
