@@ -4103,6 +4103,9 @@ export class Ship {
     }
 
     if (this.maxHealth > 0 && !this.isAmoeba) {
+      this.activeSupplySourceId = null;
+      this.activeSupplySourceType = null;
+      this.activeFuelDonorId = null;
       this.crew = Math.min(this.crew || 0, 2 * this.health);
       if (this.fuel < this.maxHealth && allShips) {
         const sensorRange = this.cruiserRadarRange();
@@ -4134,6 +4137,7 @@ export class Ship {
                   other.specialfuel = Math.max(0, donorSpecial - specTransfer);
                   this.specialfuel = (this.specialfuel || 0) + specTransfer;
                 }
+                this.activeFuelDonorId = other.id;
                 break;
               }
             }
@@ -4174,6 +4178,11 @@ export class Ship {
 
       const canResupply = this.inFriendlyWell || (neutralWellPlanet && (neutralWellPlanet.supplies || 0) >= 1.0);
       if (this.maxsupplies > 0 && this.supplies < this.maxsupplies && canResupply && !this.isWarp && !hasEnemyNear) {
+        const planetSource = friendlyWellPlanet || neutralWellPlanet;
+        if (planetSource) {
+          this.activeSupplySourceId = planetSource.id;
+          this.activeSupplySourceType = 'planet';
+        }
         this.supplyLoadAccumulator = (this.supplyLoadAccumulator || 0) + deltaTime;
         while (this.supplyLoadAccumulator >= 5000 && this.supplies < this.maxsupplies) {
           const owner = this.owner;
@@ -4290,20 +4299,14 @@ export class Ship {
           this.health = Math.min(this.maxHealth, this.health + healAmount);
           const amountHealed = this.health - oldHealth;
           if (amountHealed > 0) {
+            if (activeHealSource === 'supplyShip' && supplyShip !== this) {
+              this.activeSupplySourceId = supplyShip.id;
+              this.activeSupplySourceType = 'ship';
+            } else if (activeHealSource === 'planet' && friendlyWellPlanet) {
+              this.activeSupplySourceId = friendlyWellPlanet.id;
+              this.activeSupplySourceType = 'planet';
+            }
             if (activeHealSource === 'supplyShip') {
-              if (owner && !owner.isMonster && owner.id !== 'monsters') {
-                if (lasers && supplyShip !== this && Math.random() < 0.1) {
-                  lasers.push({
-                    startX: supplyShip.x,
-                    startY: supplyShip.y,
-                    endX: this.x,
-                    endY: this.y,
-                    color: 'resupply-beam',
-                    age: 0,
-                    duration: 0.3
-                  });
-                }
-              }
               const suppliesUsed = amountHealed;
               if (supplyShip.supplies >= suppliesUsed) {
                 supplyShip.supplies -= suppliesUsed;
@@ -4385,6 +4388,8 @@ export class Ship {
           const amountRepaired = this.armorPoints - oldArmor;
           
           if (amountRepaired > 0) {
+            this.activeSupplySourceId = friendlyWellPlanet.id;
+            this.activeSupplySourceType = 'planet';
             const suppliesUsed = amountRepaired * costMultiplier;
             friendlyWellPlanet.supplies = Math.max(0, friendlyWellPlanet.supplies - suppliesUsed);
           }
@@ -4443,30 +4448,14 @@ export class Ship {
             this.fuel = Math.min(this.getMaxFuel(), oldFuel + fuelToGain);
             const amountRefueled = (this.fuel || 0) - oldFuel;
             if (amountRefueled > 0) {
-              if (owner && !owner.isMonster && owner.id !== 'monsters') {
-                if (lasers && Math.random() < 0.1) {
-                  if (supplyShipForFuel && supplyShipForFuel !== this) {
-                    lasers.push({
-                      startX: supplyShipForFuel.x,
-                      startY: supplyShipForFuel.y,
-                      endX: this.x,
-                      endY: this.y,
-                      color: 'refuel-beam',
-                      age: 0,
-                      duration: 0.3
-                    });
-                  } else if (fuelSourceShip) {
-                    lasers.push({
-                      startX: fuelSourceShip.x,
-                      startY: fuelSourceShip.y,
-                      endX: this.x,
-                      endY: this.y,
-                      color: 'refuel-beam',
-                      age: 0,
-                      duration: 0.3
-                    });
-                  }
-                }
+              if (activeFuelSource === 'supplyShip' && supplyShipForFuel && supplyShipForFuel !== this) {
+                this.activeSupplySourceId = supplyShipForFuel.id;
+                this.activeSupplySourceType = 'ship';
+              } else if (activeFuelSource === 'planet' && friendlyWellPlanet) {
+                this.activeSupplySourceId = friendlyWellPlanet.id;
+                this.activeSupplySourceType = 'planet';
+              } else if (activeFuelSource === 'donorShip' && fuelSourceShip) {
+                this.activeFuelDonorId = fuelSourceShip.id;
               }
 
               if (activeFuelSource === 'supplyShip') {
@@ -4559,6 +4548,24 @@ export class Ship {
       if (!this.isWarp) {
         const supplyShipForBombs = this.findNearbySupplyShip(allShips);
         if (this.bombs < this.getMaxBombs() && (friendlyWellPlanet || supplyShipForBombs)) {
+          let activeBombSourceForRay = null;
+          if (supplyShipForBombs && supplyShipForBombs.supplies >= 1.0) {
+            activeBombSourceForRay = 'supplyShip';
+          } else if (friendlyWellPlanet && (friendlyWellPlanet.supplies || 0) >= 1.0) {
+            activeBombSourceForRay = 'planet';
+          } else if (friendlyWellPlanet && this.owner && this.owner.useCredits !== false) {
+            activeBombSourceForRay = 'planet';
+          } else if (friendlyWellPlanet && friendlyWellPlanet.ships >= 1.0) {
+            activeBombSourceForRay = 'planet';
+          }
+          if (activeBombSourceForRay === 'supplyShip' && supplyShipForBombs && supplyShipForBombs !== this) {
+            this.activeSupplySourceId = supplyShipForBombs.id;
+            this.activeSupplySourceType = 'ship';
+          } else if (activeBombSourceForRay === 'planet' && friendlyWellPlanet) {
+            this.activeSupplySourceId = friendlyWellPlanet.id;
+            this.activeSupplySourceType = 'planet';
+          }
+
           const maxBombs = this.getMaxBombs();
           const reloadMultiplier = 0.5 * (1 + 0.1 * maxBombs);
           const recoveryRate = (this.combatCooldown && this.combatCooldown > 0) ? 0.5 : 1.0;
@@ -4604,19 +4611,6 @@ export class Ship {
               this.bombs++;
 
               if (activeBombSource === 'supplyShip') {
-                if (owner && !owner.isMonster && owner.id !== 'monsters') {
-                  if (lasers && supplyShipForBombs !== this) {
-                    lasers.push({
-                      startX: supplyShipForBombs.x,
-                      startY: supplyShipForBombs.y,
-                      endX: this.x,
-                      endY: this.y,
-                      color: 'resupply-beam',
-                      age: 0,
-                      duration: 0.6
-                    });
-                  }
-                }
                 supplyShipForBombs.supplies -= 1.0;
               } else if (activeBombSource === 'planet') {
                 friendlyWellPlanet.supplies = Math.max(0, friendlyWellPlanet.supplies - 1.0);
@@ -5702,7 +5696,7 @@ export class Ship {
         const shipExpBonus = this.getLocalXpBonus();
         let shrugChance = 0;
         if (!this.isAmoeba) {
-          const baseDeflection = this.maxHealth + (techBonus + expBonus + shipExpBonus);
+          const baseDeflection = this.maxHealth + (techBonus + shipExpBonus);
           shrugChance = baseDeflection / 100;
           if ((this.bombs || 0) < 1) {
             shrugChance /= 2;
@@ -5846,12 +5840,24 @@ export class Ship {
       if (this.health < 0) {
         this.active = false;
         if (explosions) {
-          explosions.push({
-            x: this.x,
-            y: this.y,
-            color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
-            age: 0
-          });
+          if (isCruiser) {
+            explosions.push({
+              x: this.x,
+              y: this.y,
+              color: this.owner ? this.owner.color : '#fff',
+              age: 0,
+              isCruiserDeath: true,
+              maxHealth: this.maxHealth || 30,
+              duration: 1.0 + (this.maxHealth || 30) * 0.005
+            });
+          } else {
+            explosions.push({
+              x: this.x,
+              y: this.y,
+              color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
+              age: 0
+            });
+          }
         }
       } else if ((isCruiser || isAmoeba) && explosions) {
         explosions.push({

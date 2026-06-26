@@ -2298,7 +2298,10 @@ async function bootstrap() {
           cruiserStyle: s.cruiserStyle || null,
           package: s.package || 'ranged',
           tactics: s.tactics || 'normal',
-          strategy: s.strategy || 'normal'
+          strategy: s.strategy || 'normal',
+          activeSupplySourceId: s.activeSupplySourceId || null,
+          activeSupplySourceType: s.activeSupplySourceType || null,
+          activeFuelDonorId: s.activeFuelDonorId || null
         };
       } else {
         return null;

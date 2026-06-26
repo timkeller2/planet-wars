@@ -184,7 +184,7 @@ export class Game {
     
     this.humanPlayer = new Player('p1', '#0ff', false);
     this.monsterPlayer = new Player('monsters', '#006400', true);
-    this.monsterPlayer.name = 'Monsters';
+    this.monsterPlayer.name = 'The Golden Amoeba';
     
     const allColors = [
       '#f0f', '#ff0', '#f00', '#0f0', '#00f', '#f80', '#80f', // Original 7
@@ -4446,7 +4446,17 @@ export class Game {
         p.anomaly.researchingShipIds = [];
       }
     }
-    this.wreckages = this.wreckages.filter(w => (w.amoebaDamage || 0) > 0 || (w.cruiserDamage || 0) > 0);
+    const wreckageNow = Date.now();
+    this.wreckages = this.wreckages.filter(w => {
+      if ((w.amoebaDamage || 0) <= 0 && (w.cruiserDamage || 0) <= 0) return false;
+      const isLocked = (wreckageNow - w.lastFightingTime) < 5000;
+      if (!isLocked) {
+        if ((w.amoebaDamage || 0) <= 0 && (w.cruiserDamage || 0) < 4) {
+          return false;
+        }
+      }
+      return true;
+    });
     for (const w of this.wreckages) {
       w.beingScanned = false;
       w.scanningShipId = null;
@@ -4454,7 +4464,6 @@ export class Game {
     }
     
     // Combat lockout for wreckage
-    const wreckageNow = Date.now();
     for (const w of this.wreckages) {
       let fightingNearby = false;
       for (const ship of this.ships) {
@@ -4464,7 +4473,7 @@ export class Game {
           if (dx * dx + dy * dy <= 200 * 200) {
             const timeSinceAttack = wreckageNow - (ship.lastTimeAttacking || 0);
             const timeSinceAttacked = wreckageNow - (ship.lastTimeAttacked || 0);
-            if (timeSinceAttack < 10000 || timeSinceAttacked < 10000) {
+            if (timeSinceAttack < 5000 || timeSinceAttacked < 5000) {
               fightingNearby = true;
               break;
             }
@@ -4548,7 +4557,7 @@ export class Game {
           let claimableWreckage = null;
           let minWreckDistSq = Infinity;
           for (const w of this.wreckages) {
-            const isLocked = (wreckageNow - w.lastFightingTime) < 10000;
+            const isLocked = (wreckageNow - w.lastFightingTime) < 5000;
             if (!isLocked && !w.beingScanned) {
               const dx = w.x - ship.x;
               const dy = w.y - ship.y;
@@ -5830,7 +5839,9 @@ export class Game {
     // Update and remove explosions
     for (let i = this.explosions.length - 1; i >= 0; i--) {
       this.explosions[i].age += deltaTime / 1000;
-      const maxAge = this.explosions[i].isDollarSign ? 5.0 : 1.0;
+      const maxAge = this.explosions[i].duration !== undefined 
+        ? this.explosions[i].duration 
+        : (this.explosions[i].isDollarSign ? 5.0 : 1.0);
       if (this.explosions[i].age > maxAge) {
         this.explosions.splice(i, 1);
       }

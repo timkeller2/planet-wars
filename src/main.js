@@ -2186,6 +2186,23 @@ function getPlanetTradeIncomePerMin(planet) {
             ctxTile.restore();
           }
           ctxTile.restore();
+        } else {
+          let angle = s.angle || 0;
+          if (s.targetX !== undefined && s.targetY !== undefined) {
+            angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
+          }
+          const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
+          if (sheet) {
+            ctxTile.save();
+            ctxTile.translate(s.x, s.y);
+            ctxTile.rotate(angle + Math.PI / 2);
+            ctxTile.drawImage(sheet, 0, 0, 16, 16, -8, -8, 16, 16);
+            ctxTile.restore();
+          } else {
+            ctxTile.beginPath();
+            ctxTile.arc(s.x, s.y, 1.5, 0, Math.PI * 2);
+            ctxTile.fill();
+          }
         }
       }
     }
@@ -4893,6 +4910,81 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   }
 
+  function playCruiserDeathSound(maxHealth) {
+    if (document.hidden) return;
+    try {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      
+      const now = audioCtx.currentTime;
+      
+      // Determine size factors based on maxHealth (30 = small, 100 = medium, 250+ = large/titan)
+      const sizeFactor = Math.min(3.0, Math.max(0.6, maxHealth / 80));
+      const duration = 0.5 + sizeFactor * 0.6; // 0.8s to 2.3s
+      const baseFreq = Math.max(25, 120 - sizeFactor * 30); // deeper for larger ships (e.g. 100Hz down to 30Hz)
+      
+      // Node creation
+      const osc = audioCtx.createOscillator();
+      const noise = audioCtx.createBufferSource();
+      const oscGain = audioCtx.createGain();
+      const noiseGain = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
+      const masterGain = audioCtx.createGain();
+      
+      // Connect nodes
+      osc.connect(oscGain);
+      oscGain.connect(masterGain);
+      
+      noise.connect(noiseGain);
+      noiseGain.connect(filter);
+      filter.connect(masterGain);
+      
+      masterGain.connect(audioCtx.destination);
+      
+      // 1. Bass Rumble component (sine or triangle wave ramping down)
+      osc.type = sizeFactor > 1.5 ? 'sawtooth' : 'triangle';
+      osc.frequency.setValueAtTime(baseFreq * 1.5, now);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.2, now + duration * 0.8);
+      
+      oscGain.gain.setValueAtTime(0.8, now);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.8);
+      
+      // 2. Exploding noise component (white noise with filter sweep)
+      const bufferSize = audioCtx.sampleRate * duration;
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      noise.buffer = buffer;
+      
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(800 / sizeFactor, now);
+      filter.frequency.exponentialRampToValueAtTime(80 / sizeFactor, now + duration);
+      
+      noiseGain.gain.setValueAtTime(0.7, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      
+      // 3. Master gain with scale
+      const volumeScale = Math.min(1.0, 0.4 + sizeFactor * 0.2); // louder for larger ships
+      masterGain.gain.setValueAtTime(volumeScale * getSfxVolumeMultiplier(), now);
+      
+      // Start and Stop
+      osc.start(now);
+      osc.stop(now + duration);
+      noise.start(now);
+      noise.stop(now + duration);
+    } catch (e) {
+      console.warn('Cruiser death sound synthesis failed:', e);
+      // Fallback
+      playSound('explosion');
+    }
+  }
+
   function playChatNotificationSound() {
     if (document.hidden) return;
     try {
@@ -5623,6 +5715,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (state.explosions) {
       let playNormalExplosion = false;
       let playThud = false;
+      let cruiserDeathMaxHealth = 0;
       const currentExplosionKeys = new Set();
       if (!window.playedExplosionKeys) {
         window.playedExplosionKeys = new Set();
@@ -5634,7 +5727,9 @@ function getPlanetTradeIncomePerMin(planet) {
 
         if (!window.playedExplosionKeys.has(key)) {
           if (e.age <= 0.15) {
-            if (e.color === 'amoeba-shrug') {
+            if (e.isCruiserDeath) {
+              cruiserDeathMaxHealth = Math.max(cruiserDeathMaxHealth, e.maxHealth || 30);
+            } else if (e.color === 'amoeba-shrug') {
               playThud = true;
             } else {
               playNormalExplosion = true;
@@ -5644,6 +5739,9 @@ function getPlanetTradeIncomePerMin(planet) {
       }
       window.playedExplosionKeys = currentExplosionKeys;
 
+      if (cruiserDeathMaxHealth > 0) {
+        playCruiserDeathSound(cruiserDeathMaxHealth);
+      }
       if (playThud) {
         playThudSound();
       }
@@ -10770,6 +10868,136 @@ function getPlanetTradeIncomePerMin(planet) {
         playScanningSound(false);
       }
 
+      // Draw purple resupply rays and orange fuel sharing rays
+      if (serverState.ships) {
+        for (const ship of serverState.ships) {
+          if (ship.activeSupplySourceId) {
+            let sourceX = null;
+            let sourceY = null;
+            if (ship.activeSupplySourceType === 'planet') {
+              const planet = serverState.planets.find(p => p.id === ship.activeSupplySourceId);
+              if (planet) {
+                sourceX = planet.x;
+                sourceY = planet.y;
+              }
+            } else if (ship.activeSupplySourceType === 'ship') {
+              const otherShip = serverState.ships.find(s => s.id === ship.activeSupplySourceId);
+              if (otherShip) {
+                sourceX = otherShip.x;
+                sourceY = otherShip.y;
+              }
+            }
+
+            if (sourceX !== null && sourceY !== null) {
+              const sx = sourceX;
+              const sy = sourceY;
+              const tx = ship.x;
+              const ty = ship.y;
+
+              const angle = Math.atan2(ty - sy, tx - sx);
+              ctx.save();
+              const shimmer = 0.5 + 0.3 * Math.sin(Date.now() / 50) + 0.2 * Math.random();
+              const alpha = 0.5 * shimmer;
+
+              // Draw cone (a wedge from supplier to ship being supplied)
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              const coneWidth = 6;
+              const perpAngle = angle + Math.PI / 2;
+              const tx1 = tx - Math.cos(perpAngle) * coneWidth;
+              const ty1 = ty - Math.sin(perpAngle) * coneWidth;
+              const tx2 = tx + Math.cos(perpAngle) * coneWidth;
+              const ty2 = ty + Math.sin(perpAngle) * coneWidth;
+              ctx.lineTo(tx1, ty1);
+              ctx.lineTo(tx2, ty2);
+              ctx.closePath();
+
+              const grad = ctx.createLinearGradient(sx, sy, tx, ty);
+              grad.addColorStop(0, `rgba(186, 85, 211, 0.05)`);
+              grad.addColorStop(0.3, `rgba(186, 85, 211, ${alpha * 0.7})`);
+              grad.addColorStop(1, `rgba(186, 85, 211, ${alpha})`);
+              ctx.fillStyle = grad;
+              ctx.fill();
+
+              // Core beam line
+              ctx.strokeStyle = `rgba(224, 176, 255, ${alpha * 0.8})`;
+              ctx.lineWidth = 1 + Math.random() * 1.5;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx, ty);
+              ctx.stroke();
+
+              // Outer edges
+              ctx.strokeStyle = `rgba(186, 85, 211, ${alpha * 0.4})`;
+              ctx.lineWidth = 0.8;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx1, ty1);
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx2, ty2);
+              ctx.stroke();
+
+              ctx.restore();
+            }
+          }
+
+          if (ship.activeFuelDonorId) {
+            const donor = serverState.ships.find(s => s.id === ship.activeFuelDonorId);
+            if (donor) {
+              const sx = donor.x;
+              const sy = donor.y;
+              const tx = ship.x;
+              const ty = ship.y;
+
+              const angle = Math.atan2(ty - sy, tx - sx);
+              ctx.save();
+              const shimmer = 0.5 + 0.3 * Math.sin(Date.now() / 50) + 0.2 * Math.random();
+              const alpha = 0.5 * shimmer;
+
+              // Draw cone
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              const coneWidth = 4;
+              const perpAngle = angle + Math.PI / 2;
+              const tx1 = tx - Math.cos(perpAngle) * coneWidth;
+              const ty1 = ty - Math.sin(perpAngle) * coneWidth;
+              const tx2 = tx + Math.cos(perpAngle) * coneWidth;
+              const ty2 = ty + Math.sin(perpAngle) * coneWidth;
+              ctx.lineTo(tx1, ty1);
+              ctx.lineTo(tx2, ty2);
+              ctx.closePath();
+
+              const grad = ctx.createLinearGradient(sx, sy, tx, ty);
+              grad.addColorStop(0, `rgba(255, 140, 0, 0.05)`);
+              grad.addColorStop(0.3, `rgba(255, 140, 0, ${alpha * 0.7})`);
+              grad.addColorStop(1, `rgba(255, 140, 0, ${alpha})`);
+              ctx.fillStyle = grad;
+              ctx.fill();
+
+              // Core beam line
+              ctx.strokeStyle = `rgba(255, 165, 0, ${alpha * 0.8})`;
+              ctx.lineWidth = 1 + Math.random() * 1.5;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx, ty);
+              ctx.stroke();
+
+              // Outer edges
+              ctx.strokeStyle = `rgba(255, 140, 0, ${alpha * 0.4})`;
+              ctx.lineWidth = 0.8;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx1, ty1);
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx2, ty2);
+              ctx.stroke();
+
+              ctx.restore();
+            }
+          }
+        }
+      }
+
       // Draw wreckages
       if (serverState.wreckages) {
         for (const w of serverState.wreckages) {
@@ -13595,7 +13823,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
         const maxSpread = Math.min(60, 10 + Math.sqrt(s.count || 1) * 2.5);
 
-        if (s.count > 1 || s.isCruiser || s.isAmoeba) {
+        if (s.count >= 1 || s.isCruiser || s.isAmoeba) {
           let laserTechBonus = 0;
           let expBonus = 0;
           if (owner) {
@@ -14047,7 +14275,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
         ctx.fillStyle = owner ? owner.color : '#fff';
         
-        if (s.count > 1 && !s.isCruiser && !s.isAmoeba) {
+        if (s.count >= 1 && !s.isCruiser && !s.isAmoeba) {
           let maxRender = 40;
           if (cameraZoom < 0.4) {
             maxRender = 10;
@@ -14907,46 +15135,8 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.lineWidth = 0.4;
             ctx.fill();
             ctx.stroke();
-          } else if (laser.color === 'refuel-beam') {
-            ctx.save();
-            ctx.beginPath();
-            ctx.moveTo(laser.startX, laser.startY);
-            ctx.lineTo(laser.endX, laser.endY);
-            ctx.strokeStyle = `rgba(0, 255, 255, ${(0.4 + Math.random() * 0.4) * (1.0 - progress)})`;
-            ctx.lineWidth = 1.5;
-            ctx.shadowColor = '#00ffff';
-            ctx.shadowBlur = 8;
-            ctx.stroke();
-
-            // Energy spark traveling down the beam
-            const pulseX = laser.startX + (laser.endX - laser.startX) * progress;
-            const pulseY = laser.startY + (laser.endY - laser.startY) * progress;
-            ctx.beginPath();
-            ctx.arc(pulseX, pulseY, 3, 0, Math.PI * 2);
-            ctx.fillStyle = '#ffffff';
-            ctx.shadowColor = '#00ffff';
-            ctx.shadowBlur = 10;
-            ctx.fill();
-            ctx.restore();
-          } else if (laser.color === 'resupply-beam') {
-            ctx.save();
-            ctx.beginPath();
-            ctx.moveTo(laser.startX, laser.startY);
-            ctx.lineTo(laser.endX, laser.endY);
-            ctx.strokeStyle = `rgba(0, 255, 128, ${(0.4 + Math.random() * 0.4) * (1.0 - progress)})`;
-            ctx.lineWidth = 1.5;
-            ctx.shadowColor = '#00ff80';
-            ctx.shadowBlur = 8;
-            ctx.stroke();
-
-            // Supply package/spark traveling down the beam
-            const pulseX = laser.startX + (laser.endX - laser.startX) * progress;
-            const pulseY = laser.startY + (laser.endY - laser.startY) * progress;
-            ctx.fillStyle = '#ffffff';
-            ctx.shadowColor = '#00ff80';
-            ctx.shadowBlur = 10;
-            ctx.fillRect(pulseX - 2.5, pulseY - 2.5, 5, 5);
-            ctx.restore();
+          } else if (laser.color === 'refuel-beam' || laser.color === 'resupply-beam') {
+            // Removed in favor of continuous rays
           } else {
             // Cinematic staggered normal lasers
             const totalDuration = laser.duration || 0.8;
@@ -15147,6 +15337,59 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.strokeStyle = '#0f0';
             ctx.lineWidth = 1.0;
             ctx.stroke();
+          } else if (exp.isCruiserDeath) {
+            const maxExplosionRadius = 25 + (exp.maxHealth || 30) * 0.8;
+            const duration = exp.duration || 1.0;
+            const progress = exp.age / duration;
+            if (progress < 1.0) {
+              const alpha = Math.max(0, 1 - progress);
+              ctx.save();
+              
+              // 1. Bright white/orange expanding core glow
+              ctx.beginPath();
+              ctx.arc(exp.x, exp.y, progress * maxExplosionRadius * 0.6, 0, Math.PI * 2);
+              const grad = ctx.createRadialGradient(exp.x, exp.y, 0, exp.x, exp.y, progress * maxExplosionRadius * 0.6);
+              grad.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+              grad.addColorStop(0.3, `rgba(255, 160, 0, ${alpha * 0.8})`);
+              grad.addColorStop(1, `rgba(255, 50, 0, 0)`);
+              ctx.fillStyle = grad;
+              ctx.fill();
+              
+              // 2. Expanding shockwave ring (custom ship color)
+              ctx.beginPath();
+              ctx.arc(exp.x, exp.y, progress * maxExplosionRadius, 0, Math.PI * 2);
+              ctx.strokeStyle = exp.color;
+              ctx.lineWidth = 4 + (exp.maxHealth || 30) * 0.03 * alpha;
+              ctx.shadowColor = exp.color;
+              ctx.shadowBlur = 10 * alpha;
+              ctx.stroke();
+
+              // 3. Shrapnel particles flying outwards
+              const seed = Math.floor(exp.x + exp.y); // stable seed based on coords
+              const shardCount = 8 + Math.floor((exp.maxHealth || 30) * 0.08); // more shards for larger ships
+              ctx.strokeStyle = '#ffb74d';
+              ctx.lineWidth = 2;
+              for (let s = 0; s < shardCount; s++) {
+                // Pseudo-random angle and speed based on shard index and seed
+                const angle = (s / shardCount) * Math.PI * 2 + Math.sin(seed + s) * 0.5;
+                const speed = 0.5 + Math.cos(seed * 2 + s) * 0.3; // multiplier for maxExplosionRadius
+                
+                const currentDist = progress * maxExplosionRadius * speed * 1.2;
+                const trailLength = maxExplosionRadius * 0.25 * alpha;
+                
+                const startX = exp.x + Math.cos(angle) * Math.max(0, currentDist - trailLength);
+                const startY = exp.y + Math.sin(angle) * Math.max(0, currentDist - trailLength);
+                const endX = exp.x + Math.cos(angle) * currentDist;
+                const endY = exp.y + Math.sin(angle) * currentDist;
+                
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+              }
+              
+              ctx.restore();
+            }
           } else {
             ctx.beginPath();
             const maxRadius = exp.isMassive ? 400 : 35;
