@@ -7334,7 +7334,7 @@ export class Game {
 
               ship.isUnderBoarding = true;
               ship.boardingPlayer = bestPlayer;
-              ship.boardingTimer = 10.0;
+              ship.boardingTimer = 5.0;
 
               const contributions = [];
               let totalAttackingMarines = 0;
@@ -7360,7 +7360,7 @@ export class Game {
       // 6. Boarding Battle Combat resolution
       if (ship.isUnderBoarding && ship.boardingMarines > 0) {
         if (ship.boardingTimer === undefined) {
-          ship.boardingTimer = 10.0;
+          ship.boardingTimer = 5.0;
         }
 
         ship.boardingTimer = Math.max(0, ship.boardingTimer - dt);
@@ -7369,9 +7369,9 @@ export class Game {
         let M_def = ship.marineCount || 0;
         let C_def = ship.crew || 0;
 
-        // Symmetric combat tick during the 10 seconds, only if defenders are alive
+        // Symmetric combat tick during the 5 seconds, only if defenders are alive
         if (ship.boardingTimer > 0 && M_atk > 0 && (M_def > 0 || C_def > 0)) {
-          const pacingFactor = 0.5; // pacing factor to stretch casualties over 10s
+          const pacingFactor = 1.0; // pacing factor to stretch casualties over 5s
           const killRateAtk = Math.max(0.05, Math.min(0.95, (50 + M_atk - C_def - M_def) / 100));
           const defendersKilled = M_atk * killRateAtk * dt * pacingFactor;
 
