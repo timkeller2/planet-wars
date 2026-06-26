@@ -1179,3 +1179,79 @@ canvas {
   0% { opacity: 0.3; }
   100% { opacity: 1.0; }
 }
+
+/* Boarding Combat Window Styles */
+.boarding-combat-window {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  width: 380px;
+  background: rgba(8, 20, 28, 0.95);
+  border: 2px solid #00e5ff;
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.4), inset 0 0 15px rgba(0, 229, 255, 0.2);
+  z-index: 10005;
+  font-family: 'Orbitron', sans-serif;
+  color: #fff;
+  padding: 12px;
+  backdrop-filter: blur(8px);
+  display: none;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.boarding-combat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid rgba(0, 229, 255, 0.3);
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+  letter-spacing: 1px;
+  font-weight: bold;
+  text-shadow: 0 0 5px rgba(0, 229, 255, 0.5);
+}
+
+.boarding-combat-close-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.4rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.boarding-combat-close-btn:hover {
+  color: #ff3366;
+  text-shadow: 0 0 8px #ff3366;
+}
+
+.boarding-combat-body {
+  position: relative;
+  width: 100%;
+}
+
+#boardingCombatCanvas {
+  display: block;
+  width: 100%;
+  height: 160px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.boarding-combat-result {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.5rem;
+  font-weight: bold;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  pointer-events: none;
+  white-space: nowrap;
+}

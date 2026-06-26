@@ -1940,13 +1940,13 @@ export class Ship {
             let targetedByOurBoarding = false;
             if (allShips) {
               for (const other of allShips) {
-                if (other.active && other.isBoardingFleet && other.targetShipId === enemyShip.id && other.owner && other.owner.id === this.owner.id) {
+                if (other.active && (other.isBoardingFleet || other.isMarineFleet) && other.targetShipId === enemyShip.id && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner)) {
                   targetedByOurBoarding = true;
                   break;
                 }
               }
             }
-            if (enemyShip.isUnderBoarding && enemyShip.boardingPlayer && enemyShip.boardingPlayer.id === this.owner.id && (enemyShip.boardingMarines || 0) > 0) {
+            if (!targetedByOurBoarding && enemyShip.isUnderBoarding && enemyShip.boardingPlayer && (enemyShip.boardingPlayer.id === this.owner.id || enemyShip.boardingPlayer === this.owner || enemyShip.boardingPlayer === this.owner.id)) {
               targetedByOurBoarding = true;
             }
             if (targetedByOurBoarding) continue;
@@ -1958,7 +1958,7 @@ export class Ship {
             // 1. Cruiser with marines is nearby (within 500px)
             if (allShips) {
               for (const other of allShips) {
-                if (other.active && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.marineCount || 0) > 0) {
+                if (other.active && other.isCruiser && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner) && (other.marineCount || 0) > 0) {
                   const dx = other.x - enemyShip.x;
                   const dy = other.y - enemyShip.y;
                   if (dx * dx + dy * dy <= 500 * 500) {
@@ -1972,7 +1972,7 @@ export class Ship {
             // 2. Marines in flight (boarding fleet)
             if (!attemptBoarding && allShips) {
               for (const other of allShips) {
-                if (other.active && other.isBoardingFleet && other.targetShipId === enemyShip.id && other.owner && other.owner.id === this.owner.id) {
+                if (other.active && (other.isBoardingFleet || other.isMarineFleet) && other.targetShipId === enemyShip.id && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner)) {
                   attemptBoarding = true;
                   break;
                 }
@@ -1980,7 +1980,7 @@ export class Ship {
             }
             
             // 3. Marines actively attacking (already boarding)
-            if (!attemptBoarding && enemyShip.isUnderBoarding && enemyShip.boardingPlayer && enemyShip.boardingPlayer.id === this.owner.id && (enemyShip.boardingMarines || 0) > 0) {
+            if (!attemptBoarding && enemyShip.isUnderBoarding && enemyShip.boardingPlayer && (enemyShip.boardingPlayer.id === this.owner.id || enemyShip.boardingPlayer === this.owner || enemyShip.boardingPlayer === this.owner.id)) {
               attemptBoarding = true;
             }
             
@@ -2973,13 +2973,13 @@ export class Ship {
                 let beingBoardedByUs = false;
                 if (allShips) {
                   for (const pod of allShips) {
-                    if (pod.active && pod.isBoardingFleet && pod.targetShipId === other.id && pod.owner && pod.owner.id === this.owner.id) {
+                    if (pod.active && (pod.isBoardingFleet || pod.isMarineFleet) && pod.targetShipId === other.id && pod.owner && (pod.owner.id === this.owner.id || pod.owner === this.owner)) {
                       beingBoardedByUs = true;
                       break;
                     }
                   }
                 }
-                if (other.isUnderBoarding && other.boardingPlayer && other.boardingPlayer.id === this.owner.id && (other.boardingMarines || 0) > 0) {
+                if (!beingBoardedByUs && other.isUnderBoarding && other.boardingPlayer && (other.boardingPlayer.id === this.owner.id || other.boardingPlayer === this.owner || other.boardingPlayer === this.owner.id)) {
                   beingBoardedByUs = true;
                 }
                 if (beingBoardedByUs) continue;
@@ -4106,7 +4106,7 @@ export class Ship {
       this.activeSupplySourceId = null;
       this.activeSupplySourceType = null;
       this.activeFuelDonorId = null;
-      this.crew = Math.min(this.crew || 0, 2 * this.health);
+      this.crew = Math.min(this.crew || 0, this.maxHealth + this.health);
       if (this.fuel < this.maxHealth && allShips) {
         const sensorRange = this.cruiserRadarRange();
         const rangeSq = sensorRange * sensorRange;

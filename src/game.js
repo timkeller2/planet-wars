@@ -2413,7 +2413,7 @@ export class Game {
           ship.speed = 22; // Cruisers default to speed 22 before reductions
           ship.maxHealth = maxHealth;
           ship.health = maxHealth;
-          ship.crew = 2 * maxHealth;
+          ship.crew = ship.maxHealth + ship.health;
           ship.fuel = basePower;
           ship.speed = Math.max(5, ship.speed - 10 - basePower);
           if (ship.owner && ship.owner.id === 'monsters') {
@@ -2721,7 +2721,7 @@ export class Game {
           ship.speed = 22; // Cruisers default to speed 22 before reductions
           ship.maxHealth = cruiserMaxHealth;
           ship.health = cruiserMaxHealth;
-          ship.crew = 2 * cruiserMaxHealth;
+          ship.crew = ship.maxHealth + ship.health;
           ship.fuel = health;
           ship.speed = Math.max(5, ship.speed - 10 - health);
           if (ship.owner && ship.owner.id === 'monsters') {
@@ -2965,7 +2965,7 @@ export class Game {
         ship.classType = classType;
         ship.maxHealth = finalMaxHealth;
         ship.health = 1;
-        ship.crew = 2 * finalMaxHealth;
+        ship.crew = ship.maxHealth + ship.health;
         
         const basePower = Math.floor(finalMaxHealth / 5);
         ship.fuel = basePower * 5;
@@ -3168,7 +3168,7 @@ export class Game {
         ship.classType = classType;
         ship.maxHealth = finalMaxHealth;
         ship.health = 1;
-        ship.crew = 2 * finalMaxHealth;
+        ship.crew = ship.maxHealth + ship.health;
         
         const basePower = Math.floor(finalMaxHealth / 5);
         ship.fuel = basePower * 5;
@@ -4024,7 +4024,7 @@ export class Game {
             ship.classType = classType;
             ship.maxHealth = hp;
             ship.health = hp;
-            ship.crew = 2 * hp;
+            ship.crew = ship.maxHealth + ship.health;
             
             const basePower = Math.floor(hp / 5);
             ship.fuel = basePower * 5;
@@ -4369,7 +4369,7 @@ export class Game {
           pirate.count = 1;
           pirate.maxHealth = maxHealth;
           pirate.health = maxHealth;
-          pirate.crew = 2 * maxHealth;
+          pirate.crew = pirate.maxHealth + pirate.health;
           pirate.cruiserStyle = randomStyle;
           pirate.fuel = pirate.getMaxFuel();
           pirate.bombs = pirate.getMaxBombs();
@@ -7017,7 +7017,7 @@ export class Game {
       }
 
       if (ship.inFriendlyWell && !enemyNearby) {
-        ship.crew = Math.min(2 * ship.health, (ship.crew || 0) + 1 * dt);
+        ship.crew = Math.min(ship.maxHealth + ship.health, (ship.crew || 0) + 1 * dt);
       }
 
       // 3. Load Marines
@@ -7221,6 +7221,53 @@ export class Game {
         }
       }
 
+      // 4c. Marine Revolt Planet Assault Check
+      if ((ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
+        let revoltPlanet = null;
+        for (const p of this.planets) {
+          if (p.inRevolt) {
+            const dx = p.x - ship.x;
+            const dy = p.y - ship.y;
+            const distSq = dx * dx + dy * dy;
+            const gr = p.getGravityRadius();
+            if (distSq < gr * gr) {
+              if (ship.marineCount >= 0.5 * p.ships) {
+                revoltPlanet = p;
+                break;
+              }
+            }
+          }
+        }
+
+        if (revoltPlanet) {
+          const count = Math.floor(ship.marineCount);
+          if (count > 0) {
+            const marineFleet = new Ship(this.nextShipId++, ship.x, ship.y, revoltPlanet, ship.owner);
+            marineFleet.cruiserStyle = ship.cruiserStyle;
+            marineFleet.count = count;
+            marineFleet.speedModifier = 1.0;
+            marineFleet.isMarineFleet = true;
+            marineFleet.sourceShipId = ship.id;
+            marineFleet.speed = 35;
+
+            let startingExp = ship.expScore || 0;
+            const tritaniumCost = 0.01 * (count / 3);
+            const owner = ship.owner;
+            const canUseRes = !!(ship.useResources || (owner && owner.tradeLimitToggle === true));
+            if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && canUseRes) {
+              owner.resources.tritanium -= tritaniumCost;
+              startingExp += 400;
+            }
+            marineFleet.expScore = startingExp;
+            this.ships.push(marineFleet);
+
+            console.log(`[MARINE REVOLT PLANET ASSAULT] Cruiser ${ship.id} launched a fleet of ${marineFleet.count} marines to revolting planet ${revoltPlanet.name}.`);
+            ship.marineCount = 0;
+            ship.marineLaunchCooldown = 15.0;
+          }
+        }
+      }
+
       // Direct ship targeting launch check (Moved outside of hasEnoughMarines block to fix logic contradiction)
       let targetShip = null;
       if (ship.scoutAttackEnabled !== 'peace' && (ship.marineCount || 0) > 0 && ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
@@ -7277,7 +7324,7 @@ export class Game {
                 pod.targetShipId = enemy.id;
                 pod.sourceShipId = ship.id;
                 pod.marineCount = launchCount;
-                pod.speed = 60; // moves at fast pace
+                pod.speed = 25; // moves at custom speed
                 pod.isCruiser = false; // it is drawn uniquely, not as a cruiser body!
                 this.ships.push(pod);
 
@@ -7341,7 +7388,7 @@ export class Game {
           }
           
           // Crew from survivors
-          const crewNeeded = 2 * ship.health;
+          const crewNeeded = ship.maxHealth + ship.health;
           const crewAssigned = Math.min(M_atk, crewNeeded);
           ship.crew = crewAssigned;
           M_atk -= crewAssigned;
@@ -7359,7 +7406,7 @@ export class Game {
               rPod.targetShipId = launcher.id;
               rPod.sourceShipId = ship.id;
               rPod.marineCount = M_atk;
-              rPod.speed = 60;
+              rPod.speed = 25;
               this.ships.push(rPod);
               console.log(`[RETURN POD] Returning ${M_atk} survivors from Ship ${ship.id} to Ship ${launcher.id}.`);
             }

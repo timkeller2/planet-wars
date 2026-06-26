@@ -425,6 +425,17 @@ function getPlanetTradeIncomePerMin(planet) {
 
   let localPlayer = null;
   let serverState = null;
+  let activeBoardingShipId = null;
+  let boardingCombatClosed = false;
+  let boardingTroops = [];
+  let boardingLasers = [];
+  let boardingBlastParticles = [];
+  let boardingWinnerMessage = '';
+  let boardingWinnerTime = 0;
+  let boardingAnimFrame = null;
+  let lastBoardingStateTime = 0;
+  let startingOwnerId = null;
+  let lastLaserSoundTime = 0;
   let serverSavedConfigs = [];
   let lastGameStartTime = null;
   let lastSelectedCruiserId = null;
@@ -1506,7 +1517,7 @@ function getPlanetTradeIncomePerMin(planet) {
       } else {
         path = 'M 16,2 L 30,22 L 22,22 L 16,14 L 10,22 L 2,22 Z';
       }
-    } else if (s.isMarineFleet) {
+    } else if (s.isMarineFleet || s.isBoardingFleet) {
       path = 'M 16,4 Q 26,4 26,18 L 22,18 L 22,24 L 10,24 L 10,18 L 6,18 Q 6,4 16,4 Z';
     }
     return `
@@ -1797,15 +1808,44 @@ function getPlanetTradeIncomePerMin(planet) {
       if (s.count > 1 && !s.isCruiser && !s.isAmoeba) {
         const maxSpread = Math.min(60, 10 + Math.sqrt(s.count || 1) * 2.5);
         let maxRender = 40;
-        const renderCount = Math.min(maxRender, s.count);
+        let renderCount = Math.min(maxRender, s.count);
+        let activeMaxSpread = maxSpread;
+        if (s.expScore > 99) {
+          renderCount = Math.min(maxRender, Math.ceil(s.count / 5));
+          activeMaxSpread = Math.min(90, (10 + Math.sqrt(s.count || 1) * 2.5) * 1.55);
+        }
         for (let i = 0; i < renderCount; i++) {
-          const { lx, ly } = getFormationOffset(s.formation, i, renderCount, maxSpread, s.isInterceptor, s.isBomber);
+          const { lx, ly } = getFormationOffset(s.formation, i, renderCount, activeMaxSpread, s.isInterceptor, s.isBomber);
           const cos = Math.cos(s.angle || 0);
           const sin = Math.sin(s.angle || 0);
           const drawX = s.x + lx * cos - ly * sin;
           const drawY = s.y + lx * sin + ly * cos;
           
-          if (s.isBomber) {
+          if (s.expScore > 99) {
+            let angle = s.angle || 0;
+            if (s.targetX !== null && s.targetY !== null && s.targetX !== undefined && s.targetY !== undefined) {
+              angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
+            }
+            ctxTile.save();
+            ctxTile.translate(drawX, drawY);
+            ctxTile.rotate(angle);
+            ctxTile.beginPath();
+            if (s.expScore > 399) {
+              ctxTile.moveTo(3, -1.25);
+              ctxTile.lineTo(3, 1.25);
+              ctxTile.lineTo(-3, 2.5);
+              ctxTile.lineTo(-3, -2.5);
+            } else {
+              ctxTile.moveTo(2, -0.75);
+              ctxTile.lineTo(2, 0.75);
+              ctxTile.lineTo(-2, 1.5);
+              ctxTile.lineTo(-2, -1.5);
+            }
+            ctxTile.closePath();
+            ctxTile.fillStyle = owner ? owner.color : '#fff';
+            ctxTile.fill();
+            ctxTile.restore();
+          } else if (s.isBomber) {
             let angle = 0;
             if (s.targetX !== undefined && s.targetY !== undefined) {
               angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
@@ -1859,13 +1899,19 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
 
-        if (s.count > renderCount) {
+        let countToCompare = s.count;
+        let renderCountToCompare = renderCount;
+        if (s.expScore > 99) {
+          countToCompare = Math.ceil(s.count / 5);
+          renderCountToCompare = renderCount;
+        }
+        if (countToCompare > renderCountToCompare) {
           ctxTile.save();
           ctxTile.font = 'bold 8px Orbitron';
           ctxTile.fillStyle = owner ? owner.color : '#ffffff';
           ctxTile.textAlign = 'center';
           ctxTile.textBaseline = 'bottom';
-          ctxTile.fillText(`+${Math.round(s.count - renderCount)}`, s.x, s.y - maxSpread - 4);
+          ctxTile.fillText(`+${Math.round(countToCompare - renderCountToCompare)}`, s.x, s.y - activeMaxSpread - 4);
           ctxTile.restore();
         }
       } else {
@@ -3476,7 +3522,7 @@ function getPlanetTradeIncomePerMin(planet) {
           lines.push({ label: `Cruiser Shields (${hs.shields})`, value: Math.floor(hs.shieldPoints) + ' / ' + Math.floor(getMaxShields(hs)), color: '#ffff00' });
         }
 
-        let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(2 * hs.health)}`;
+        let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(hs.maxHealth + hs.health)}`;
         if (hs.marines > 0) {
           crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${hs.marines * hs.maxHealth}`;
         }
@@ -5788,9 +5834,453 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
 
+    updateBoardingOverlay(state);
     updateUI();
     updateAudioState();
   });
+
+  function ensureBoardingCombatWindowExists() {
+    let overlay = document.getElementById('boarding-combat-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'boarding-combat-overlay';
+      overlay.className = 'boarding-combat-window';
+      overlay.innerHTML = `
+        <div class="boarding-combat-header">
+          <span>BOARDING ACTION</span>
+          <button class="boarding-combat-close-btn" id="boarding-combat-close-btn">&times;</button>
+        </div>
+        <div class="boarding-combat-body">
+          <canvas id="boardingCombatCanvas" width="356" height="160"></canvas>
+          <div id="boarding-combat-result" class="boarding-combat-result"></div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      
+      document.getElementById('boarding-combat-close-btn').addEventListener('click', () => {
+        overlay.style.display = 'none';
+        boardingCombatClosed = true;
+      });
+    }
+    return overlay;
+  }
+
+  function createVisualTroop(id, side, type, color) {
+    return {
+      id: id,
+      side: side,
+      type: type,
+      color: color,
+      x: 0,
+      y: 0,
+      cx: 0,
+      cy: 0,
+      state: 'alive',
+      fallProgress: 0,
+      fallAngle: 0,
+      lastFired: 0
+    };
+  }
+
+  function layoutVisualTroops() {
+    const leftTroops = boardingTroops.filter(t => t.side === 'left');
+    const rightTroops = boardingTroops.filter(t => t.side === 'right');
+    
+    leftTroops.forEach((t, i) => {
+      const row = i % 2;
+      const col = Math.floor(i / 2);
+      t.x = 25 + col * 16 + (row * 8);
+      t.y = 125 - row * 12;
+      t.cx = t.x - 30; // slide in from left
+      t.cy = t.y;
+    });
+    
+    rightTroops.forEach((t, i) => {
+      const row = i % 2;
+      const col = Math.floor(i / 2);
+      t.x = 331 - col * 16 - (row * 8);
+      t.y = 125 - row * 12;
+      t.cx = t.x + 30; // slide in from right
+      t.cy = t.y;
+    });
+  }
+
+  function initBoardingCombat(cruiser) {
+    ensureBoardingCombatWindowExists();
+    const overlay = document.getElementById('boarding-combat-overlay');
+    if (!boardingCombatClosed) {
+      overlay.style.display = 'block';
+    }
+    
+    // Reset result text
+    const resultDiv = document.getElementById('boarding-combat-result');
+    if (resultDiv) {
+      resultDiv.textContent = '';
+    }
+    
+    boardingWinnerMessage = '';
+    boardingWinnerTime = 0;
+    boardingTroops = [];
+    boardingLasers = [];
+    boardingBlastParticles = [];
+    
+    const defender = serverState.players.find(p => p.id === cruiser.ownerId) || { color: '#ffffff' };
+    const attacker = serverState.players.find(p => p.id === cruiser.boardingPlayerId) || { color: '#ff3366' };
+    
+    const M_def = cruiser.marineCount || 0;
+    const C_def = cruiser.crew || 0;
+    const M_atk = cruiser.boardingMarines || 0;
+    
+    const maxTroopsPerSide = 15;
+    
+    let visualM_def = Math.min(maxTroopsPerSide, M_def);
+    let visualC_def = Math.min(maxTroopsPerSide - visualM_def, C_def);
+    
+    let troopId = 0;
+    for (let i = 0; i < visualM_def; i++) {
+      boardingTroops.push(createVisualTroop(troopId++, 'left', 'marine', defender.color));
+    }
+    for (let i = 0; i < visualC_def; i++) {
+      boardingTroops.push(createVisualTroop(troopId++, 'left', 'crew', defender.color));
+    }
+    
+    let visualM_atk = Math.min(maxTroopsPerSide, M_atk);
+    for (let i = 0; i < visualM_atk; i++) {
+      boardingTroops.push(createVisualTroop(troopId++, 'right', 'marine', attacker.color));
+    }
+    
+    layoutVisualTroops();
+    
+    if (!boardingAnimFrame) {
+      lastBoardingStateTime = Date.now();
+      animateBoardingCombat();
+    }
+  }
+
+  function syncBoardingCombatData(cruiser) {
+    const M_def = cruiser.marineCount || 0;
+    const C_def = cruiser.crew || 0;
+    const M_atk = cruiser.boardingMarines || 0;
+    
+    const aliveLeftMarines = boardingTroops.filter(t => t.side === 'left' && t.type === 'marine' && t.state === 'alive');
+    const targetLeftMarines = Math.min(15, M_def);
+    if (aliveLeftMarines.length > targetLeftMarines) {
+      const numToKill = aliveLeftMarines.length - targetLeftMarines;
+      for (let i = 0; i < numToKill; i++) {
+        const victim = aliveLeftMarines[i];
+        victim.state = 'dying';
+      }
+    }
+    
+    const aliveLeftCrew = boardingTroops.filter(t => t.side === 'left' && t.type === 'crew' && t.state === 'alive');
+    const targetLeftCrew = Math.min(15 - targetLeftMarines, C_def);
+    if (aliveLeftCrew.length > targetLeftCrew) {
+      const numToKill = aliveLeftCrew.length - targetLeftCrew;
+      for (let i = 0; i < numToKill; i++) {
+        const victim = aliveLeftCrew[i];
+        victim.state = 'dying';
+      }
+    }
+    
+    const aliveRightMarines = boardingTroops.filter(t => t.side === 'right' && t.state === 'alive');
+    const targetRightMarines = Math.min(15, M_atk);
+    if (aliveRightMarines.length > targetRightMarines) {
+      const numToKill = aliveRightMarines.length - targetRightMarines;
+      for (let i = 0; i < numToKill; i++) {
+        const victim = aliveRightMarines[i];
+        victim.state = 'dying';
+      }
+    }
+  }
+
+  function handleBoardingCombatEnd(lastCruiserState) {
+    if (boardingWinnerMessage) return;
+    
+    let winner = 'Defender';
+    if (!lastCruiserState) {
+      winner = 'Defender';
+      boardingWinnerMessage = 'Cruiser Destroyed!';
+    } else {
+      const ownerId = lastCruiserState.ownerId;
+      const defendersSurvived = (lastCruiserState.crew || 0) + (lastCruiserState.marineCount || 0) > 0;
+      const attackersSurvived = (lastCruiserState.boardingMarines || 0) > 0;
+      
+      if (attackersSurvived && !defendersSurvived) {
+        winner = 'Attacker';
+        boardingWinnerMessage = 'Attacker Wins!';
+      } else if (defendersSurvived && !attackersSurvived) {
+        winner = 'Defender';
+        boardingWinnerMessage = 'Defender Wins!';
+      } else {
+        if (startingOwnerId && ownerId !== startingOwnerId) {
+          winner = 'Attacker';
+          boardingWinnerMessage = 'Attacker Wins!';
+        } else {
+          winner = 'Defender';
+          boardingWinnerMessage = 'Defender Wins!';
+        }
+      }
+    }
+    
+    const resultDiv = document.getElementById('boarding-combat-result');
+    if (resultDiv) {
+      resultDiv.textContent = boardingWinnerMessage;
+      resultDiv.style.color = winner === 'Attacker' ? '#ff3366' : '#00e5ff';
+      resultDiv.style.textShadow = `0 0 15px ${winner === 'Attacker' ? '#ff3366' : '#00e5ff'}`;
+    }
+    
+    boardingWinnerTime = Date.now();
+  }
+
+  function drawTroop(ctx, t) {
+    ctx.save();
+    ctx.translate(t.cx, t.cy);
+    
+    if (t.state === 'dying' || t.state === 'dead') {
+      const dir = t.side === 'left' ? -1 : 1;
+      ctx.translate(0, 4);
+      ctx.rotate(t.fallAngle * dir);
+      ctx.translate(0, -4);
+    }
+    
+    ctx.fillStyle = t.color;
+    ctx.beginPath();
+    ctx.roundRect(-3, -12, 6, 12, 3);
+    ctx.fill();
+    
+    ctx.fillStyle = '#ffcc99';
+    ctx.beginPath();
+    ctx.arc(0, -15, 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    if (t.type === 'marine') {
+      ctx.fillStyle = t.color;
+      ctx.beginPath();
+      ctx.arc(0, -16, 4.2, Math.PI, 0);
+      ctx.fill();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-3, -15);
+      ctx.lineTo(3, -15);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#78909c';
+      ctx.beginPath();
+      ctx.arc(0, -16, 3.5, Math.PI * 1.1, Math.PI * 1.9);
+      ctx.fill();
+    }
+    
+    ctx.strokeStyle = '#37474f';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (t.side === 'left') {
+      ctx.moveTo(1, -8);
+      ctx.lineTo(6, -8);
+    } else {
+      ctx.moveTo(-1, -8);
+      ctx.lineTo(-6, -8);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function fireLaser(fromTroop, toTroop) {
+    fromTroop.lastFired = Date.now();
+    const sx = fromTroop.cx + (fromTroop.side === 'left' ? 5 : -5);
+    const sy = fromTroop.cy - 8;
+    const tx = toTroop.cx;
+    const ty = toTroop.cy - 8;
+    
+    boardingLasers.push({
+      sx: sx,
+      sy: sy,
+      tx: tx,
+      ty: ty,
+      color: fromTroop.color,
+      age: 0,
+      duration: 10
+    });
+    
+    for (let i = 0; i < 5; i++) {
+      boardingBlastParticles.push({
+        x: tx,
+        y: ty,
+        vx: (Math.random() - 0.5) * 60 - (fromTroop.side === 'left' ? -20 : 20),
+        vy: (Math.random() - 0.5) * 60 - 20,
+        color: fromTroop.color,
+        age: 0,
+        duration: 0.2 + Math.random() * 0.2
+      });
+    }
+    
+    const now = Date.now();
+    if (now - lastLaserSoundTime > 150) {
+      playSound('laser');
+      lastLaserSoundTime = now;
+    }
+  }
+
+  function animateBoardingCombat() {
+    if (activeBoardingShipId === null) {
+      boardingAnimFrame = null;
+      return;
+    }
+    
+    boardingAnimFrame = requestAnimationFrame(animateBoardingCombat);
+    
+    const now = Date.now();
+    const dt = Math.min(0.1, (now - lastBoardingStateTime) / 1000);
+    lastBoardingStateTime = now;
+    
+    const canvas = document.getElementById('boardingCombatCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = 'rgba(8, 20, 28, 0.6)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.08)';
+    ctx.lineWidth = 1;
+    for (let x = 10; x < canvas.width; x += 20) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = 10; y < canvas.height; y += 20) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+    
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 125);
+    ctx.lineTo(canvas.width, 125);
+    ctx.stroke();
+    
+    boardingBlastParticles = boardingBlastParticles.filter(p => {
+      p.age += dt;
+      if (p.age >= p.duration) return false;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 80 * dt;
+      
+      const progress = p.age / p.duration;
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = 1 - progress;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2 * (1 - progress), 0, Math.PI * 2);
+      ctx.fill();
+      return true;
+    });
+    ctx.globalAlpha = 1.0;
+    
+    boardingLasers = boardingLasers.filter(l => {
+      l.age += dt;
+      const progress = l.age / (l.duration / 60);
+      if (progress >= 1) return false;
+      
+      ctx.strokeStyle = l.color;
+      ctx.lineWidth = 3 * (1 - progress);
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = l.color;
+      ctx.beginPath();
+      ctx.moveTo(l.sx, l.sy);
+      ctx.lineTo(l.tx, l.ty);
+      ctx.stroke();
+      
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1 * (1 - progress);
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.moveTo(l.sx, l.sy);
+      ctx.lineTo(l.tx, l.ty);
+      ctx.stroke();
+      return true;
+    });
+    
+    boardingTroops.forEach(t => {
+      t.cx += (t.x - t.cx) * 0.1;
+      t.cy += (t.y - t.cy) * 0.1;
+      
+      if (t.state === 'dying') {
+        t.fallProgress += dt * 4;
+        t.fallAngle = t.fallProgress * (Math.PI / 2);
+        if (t.fallProgress >= 1) {
+          t.state = 'dead';
+          t.fallAngle = Math.PI / 2;
+        }
+      }
+      
+      drawTroop(ctx, t);
+    });
+    
+    if (!boardingWinnerMessage) {
+      const aliveLeft = boardingTroops.filter(t => t.side === 'left' && t.state === 'alive');
+      const aliveRight = boardingTroops.filter(t => t.side === 'right' && t.state === 'alive');
+      
+      if (aliveLeft.length > 0 && aliveRight.length > 0) {
+        if (Math.random() < 0.05) {
+          const shooter = aliveLeft[Math.floor(Math.random() * aliveLeft.length)];
+          const target = aliveRight[Math.floor(Math.random() * aliveRight.length)];
+          if (now - shooter.lastFired > 800) {
+            fireLaser(shooter, target);
+          }
+        }
+        
+        if (Math.random() < 0.05) {
+          const shooter = aliveRight[Math.floor(Math.random() * aliveRight.length)];
+          const target = aliveLeft[Math.floor(Math.random() * aliveLeft.length)];
+          if (now - shooter.lastFired > 800) {
+            fireLaser(shooter, target);
+          }
+        }
+      }
+    } else {
+      if (now - boardingWinnerTime > 4000) {
+        const overlay = document.getElementById('boarding-combat-overlay');
+        if (overlay) overlay.style.display = 'none';
+        activeBoardingShipId = null;
+      }
+    }
+  }
+
+  function updateBoardingOverlay(state) {
+    if (!state.ships) return;
+    
+    const boardingCruisers = state.ships.filter(s => s.isCruiser && s.isUnderBoarding && s.boardingMarines > 0);
+    
+    if (boardingCruisers.length > 0) {
+      const activeStillBoarding = activeBoardingShipId && boardingCruisers.find(s => s.id === activeBoardingShipId);
+      
+      if (!activeStillBoarding) {
+        if (activeBoardingShipId !== null) {
+          const lastState = serverState ? serverState.ships.find(s => s.id === activeBoardingShipId) : null;
+          handleBoardingCombatEnd(lastState);
+        } else {
+          const nextCruiser = boardingCruisers[0];
+          boardingCombatClosed = false;
+          activeBoardingShipId = nextCruiser.id;
+          startingOwnerId = nextCruiser.ownerId;
+          
+          initBoardingCombat(nextCruiser);
+        }
+      } else {
+        syncBoardingCombatData(activeStillBoarding);
+      }
+    } else {
+      if (activeBoardingShipId !== null) {
+        const lastState = serverState ? serverState.ships.find(s => s.id === activeBoardingShipId) : null;
+        handleBoardingCombatEnd(lastState);
+      }
+    }
+  }
 
   function formatTime(seconds) {
     if (seconds === undefined || seconds === null || isNaN(seconds)) return "00:00";
@@ -13154,7 +13644,7 @@ function getPlanetTradeIncomePerMin(planet) {
             if (hs.extended_fuel > 0) lines.push({ label: `Extended Fuel (${hs.extended_fuel})`, value: `⛽ Active`, color: '#ffa500' });
             if (hs.diplomat > 0) lines.push({ label: `Diplomats (${hs.diplomat})`, value: `🤝 ${hs.diplomat} Active`, color: '#e040fb' });
 
-            let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(2 * hs.health)}`;
+            let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(hs.maxHealth + hs.health)}`;
             if (hs.marines > 0) {
               crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${hs.marines * hs.maxHealth}`;
             }
@@ -13782,20 +14272,34 @@ function getPlanetTradeIncomePerMin(planet) {
         if (s.isBoardingFleet) {
           ctx.save();
           ctx.translate(s.x, s.y);
+          let angle = s.angle || 0;
+          if (s.targetX !== undefined && s.targetY !== undefined) {
+            angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
+          }
+          ctx.rotate(angle + Math.PI / 2);
+
           ctx.beginPath();
-          ctx.arc(0, 0, 4, 0, Math.PI * 2);
+          const scale = 0.5;
+          const mapX = (vx) => (vx - 16) * scale;
+          const mapY = (vy) => (vy - 16) * scale;
+
+          ctx.moveTo(mapX(16), mapY(4));
+          ctx.quadraticCurveTo(mapX(26), mapY(4), mapX(26), mapY(18));
+          ctx.lineTo(mapX(22), mapY(18));
+          ctx.lineTo(mapX(22), mapY(24));
+          ctx.lineTo(mapX(10), mapY(24));
+          ctx.lineTo(mapX(10), mapY(18));
+          ctx.lineTo(mapX(6), mapY(18));
+          ctx.quadraticCurveTo(mapX(6), mapY(4), mapX(16), mapY(4));
+          ctx.closePath();
+
           ctx.fillStyle = owner ? owner.color : '#ff0';
           ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1;
+          ctx.lineWidth = 1.5;
           ctx.shadowBlur = 10;
           ctx.shadowColor = owner ? owner.color : '#ff0';
           ctx.fill();
           ctx.stroke();
-          
-          ctx.font = '8px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('🪖', 0, -6);
           ctx.restore();
           continue;
         }
@@ -14282,9 +14786,14 @@ function getPlanetTradeIncomePerMin(planet) {
           } else if (cameraZoom < 0.8) {
             maxRender = 25;
           }
-          const renderCount = Math.min(maxRender, s.count);
+          let renderCount = Math.min(maxRender, s.count);
+          let activeMaxSpread = maxSpread;
+          if (s.expScore > 99) {
+            renderCount = Math.min(maxRender, Math.ceil(s.count / 5));
+            activeMaxSpread = Math.min(90, (10 + Math.sqrt(s.count || 1) * 2.5) * 1.55);
+          }
           for (let i = 0; i < renderCount; i++) {
-            const { lx, ly } = getFormationOffset(s.formation, i, renderCount, maxSpread, s.isInterceptor, s.isBomber);
+            const { lx, ly } = getFormationOffset(s.formation, i, renderCount, activeMaxSpread, s.isInterceptor, s.isBomber);
             const cos = Math.cos(s.angle || 0);
             const sin = Math.sin(s.angle || 0);
             const drawX = s.x + lx * cos - ly * sin;
@@ -14392,7 +14901,13 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
 
-          if (s.count > renderCount) {
+          let countToCompare = s.count;
+          let renderCountToCompare = renderCount;
+          if (s.expScore > 99) {
+            countToCompare = Math.ceil(s.count / 5);
+            renderCountToCompare = renderCount;
+          }
+          if (countToCompare > renderCountToCompare) {
             ctx.save();
             ctx.font = 'bold 9px "Outfit", "Inter", sans-serif';
             ctx.fillStyle = owner ? owner.color : '#ffffff';
@@ -14400,8 +14915,8 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.textBaseline = 'bottom';
             ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
             ctx.lineWidth = 2.5;
-            ctx.strokeText(`+${Math.round(s.count - renderCount)}`, s.x, s.y - maxSpread - 6);
-            ctx.fillText(`+${Math.round(s.count - renderCount)}`, s.x, s.y - maxSpread - 6);
+            ctx.strokeText(`+${Math.round(countToCompare - renderCountToCompare)}`, s.x, s.y - activeMaxSpread - 6);
+            ctx.fillText(`+${Math.round(countToCompare - renderCountToCompare)}`, s.x, s.y - activeMaxSpread - 6);
             ctx.restore();
           }
 
