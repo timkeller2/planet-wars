@@ -291,6 +291,89 @@ export class Game {
     this.highestSpeedMilestoneTriggered = 0;
     this.wreckages = [];
     this.pendingPioneerSpawns = [];
+    this._gameSpeed = 1.0;
+    this.baseGameSpeed = 1.0;
+    this.battlecam = 0;
+    this._calculatingBattlecamSpeed = false;
+    this.shipLastCombatGameTime = new Map();
+  }
+
+  get gameSpeed() {
+    return this._gameSpeed;
+  }
+
+  set gameSpeed(val) {
+    this._gameSpeed = val;
+    if (!this._calculatingBattlecamSpeed) {
+      this.baseGameSpeed = val;
+    }
+  }
+
+  updateBattlecam() {
+    if (!this.shipLastCombatGameTime) {
+      this.shipLastCombatGameTime = new Map();
+    }
+
+    const now = this.gameTime;
+
+    // 1. Scan active lasers to update combat timestamps for cruisers
+    for (const laser of this.lasers) {
+      if (!laser || laser.color === 'resupply-beam' || laser.color === 'refuel-beam') {
+        continue;
+      }
+      if (laser.sourceIsCruiser && laser.sourceId) {
+        this.shipLastCombatGameTime.set(laser.sourceId, now);
+      }
+      if (laser.targetIsCruiser && laser.targetId) {
+        this.shipLastCombatGameTime.set(laser.targetId, now);
+      }
+      if (laser.sourceShipId) {
+        this.shipLastCombatGameTime.set(laser.sourceShipId, now);
+      }
+    }
+
+    // Clean up old or inactive ships
+    for (const [shipId, lastTime] of this.shipLastCombatGameTime.entries()) {
+      if (now - lastTime > 5000) {
+        this.shipLastCombatGameTime.delete(shipId);
+      }
+    }
+
+    // 2. Count active cruisers currently in combat for each player
+    const playerCombatCounts = new Map();
+    for (const p of this.allPlayers) {
+      playerCombatCounts.set(p.id, 0);
+    }
+
+    for (const ship of this.ships) {
+      if (ship.active && (ship.isCruiser || (ship.maxHealth > 0 && !ship.isAmoeba))) {
+        if (this.shipLastCombatGameTime.has(ship.id) && ship.owner) {
+          const currentCount = playerCombatCounts.get(ship.owner.id) || 0;
+          playerCombatCounts.set(ship.owner.id, currentCount + 1);
+        }
+      }
+    }
+
+    // 3. Find the highest count among all players
+    let highestCount = 0;
+    for (const count of playerCombatCounts.values()) {
+      if (count > highestCount) {
+        highestCount = count;
+      }
+    }
+
+    this.battlecam = highestCount;
+
+    // 4. Calculate game speed reduction
+    let speedFactor = 1.0;
+    if (this.battlecam > 1) {
+      const extra = this.battlecam - 1;
+      speedFactor = Math.max(0.2, 1.0 - extra * 0.1);
+    }
+
+    this._calculatingBattlecamSpeed = true;
+    this.gameSpeed = this.baseGameSpeed * speedFactor;
+    this._calculatingBattlecamSpeed = false;
   }
 
   recordMarketSale(resource, price) {
@@ -1281,6 +1364,8 @@ export class Game {
       fulfillOrders: this.fulfillOrders,
       exploredGrid: this.exploredGrid,
       gameSpeed: this.gameSpeed || 1.0,
+      baseGameSpeed: this.baseGameSpeed || 1.0,
+      battlecam: this.battlecam || 0,
       highestSpeedMilestoneTriggered: this.highestSpeedMilestoneTriggered || 0,
       nextIonStormId: this.nextIonStormId,
       ionStormSpawnTimer: this.ionStormSpawnTimer,
@@ -1455,7 +1540,9 @@ export class Game {
     this.sellOrders = state.sellOrders;
     this.fulfillOrders = state.fulfillOrders;
     this.exploredGrid = state.exploredGrid;
+    this.baseGameSpeed = state.baseGameSpeed !== undefined ? state.baseGameSpeed : (state.gameSpeed !== undefined ? state.gameSpeed : 1.0);
     this.gameSpeed = state.gameSpeed !== undefined ? state.gameSpeed : 1.0;
+    this.battlecam = state.battlecam !== undefined ? state.battlecam : 0;
     this.highestSpeedMilestoneTriggered = state.highestSpeedMilestoneTriggered !== undefined ? state.highestSpeedMilestoneTriggered : 0;
     this.nextIonStormId = state.nextIonStormId !== undefined ? state.nextIonStormId : 0;
     this.ionStormSpawnTimer = state.ionStormSpawnTimer !== undefined ? state.ionStormSpawnTimer : 0;
@@ -7262,6 +7349,7 @@ export class Game {
         }
       }
     }
+    this.updateBattlecam();
   }
 
   draw() {

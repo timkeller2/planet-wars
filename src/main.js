@@ -430,6 +430,21 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastSelectedCruiserId = null;
   let selectedPlanets = [];
   let selectedShips = [];
+  const shipSelectionTimes = new Map();
+  function updateSelectionTimes() {
+    const currentSelectedIds = new Set(selectedShips.map(s => s.id));
+    const now = Date.now();
+    for (const id of currentSelectedIds) {
+      if (!shipSelectionTimes.has(id)) {
+        shipSelectionTimes.set(id, now);
+      }
+    }
+    for (const id of shipSelectionTimes.keys()) {
+      if (!currentSelectedIds.has(id)) {
+        shipSelectionTimes.delete(id);
+      }
+    }
+  }
   window.getLocalPlayer = () => localPlayer;
   window.getServerState = () => serverState;
   window.getSelectedShips = () => selectedShips;
@@ -7727,11 +7742,6 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     if (clickedShip) {
-      // On desktop, double click opens the tooltip for cruisers/fleets
-      if (!isTouch) {
-        openInfoPanel(clickedShip.isCruiser ? 'ship' : 'fleet', clickedShip.id);
-      }
-
       // If friendly cruiser, also select nearby cruisers
       if (clickedShip.ownerId === localPlayer.id && clickedShip.isCruiser) {
         selectedShips = [];
@@ -8025,7 +8035,17 @@ function getPlanetTradeIncomePerMin(planet) {
 
         if (clickedType && (clickedId !== null && clickedId !== undefined)) {
           if (clickedType === 'ship' || clickedType === 'fleet') {
-            closeInfoPanel();
+            const selectTime = shipSelectionTimes.get(clickedId);
+            const isSelectedOverOneSec = wasAlreadySelectedOnMouseDown && selectTime && (Date.now() - selectTime > 1000);
+            if (isSelectedOverOneSec) {
+              if (activeInfoPanel && activeInfoPanel.type === clickedType && activeInfoPanel.id === clickedId) {
+                closeInfoPanel();
+              } else {
+                openInfoPanel(clickedType, clickedId);
+              }
+            } else {
+              closeInfoPanel();
+            }
           } else if (!isOwned) {
             // Unowned entities: open tooltip on a single click
             if (activeInfoPanel && activeInfoPanel.type === clickedType && activeInfoPanel.id === clickedId) {
@@ -15454,6 +15474,7 @@ function getPlanetTradeIncomePerMin(planet) {
   // so that click hit-testing always matches what is on screen.
   function renderLoop() {
     try {
+      updateSelectionTimes();
       draw();
       updateInfoPanelContent();
       updateSelectionTiles();

@@ -2834,6 +2834,7 @@ async function bootstrap() {
         timeRemaining: game.timeRemaining,
         elapsedTime: game.gameTime / 1000,
         gameSpeed: game.gameSpeed || 1.0,
+        battlecam: game.battlecam || 0,
         width: game.width,
         height: game.height,
         gameStartTime: game.gameStartTime,
