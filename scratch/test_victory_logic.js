@@ -86,5 +86,72 @@ console.log('Testing victory conditions logic...');
   console.log('Test 3 Passed: 60 minutes duration lead is exactly 13 points.');
 }
 
+// Test 4: Cannot win via Tech Victory while in debt
+{
+  const game = new Game({ width: 1000, height: 1000 });
+  game.initMap();
+  
+  const player1 = game.humanPlayer;
+  const player2 = game.aiPlayers[0];
+  player1.isAlive = true;
+  player2.isAlive = true;
+  
+  game.planets[0].owner = player1;
+  game.planets[1].owner = player2;
+  
+  player1.techScore = 225; // Enough lead
+  player2.techScore = 0;
+  
+  // Set player 1 in debt
+  player1.credits = -10;
+  game.checkWinCondition();
+  assert.ok(!game.gameOverMessage, 'Should not win Tech Victory while in debt.');
+  
+  // Clear debt
+  player1.credits = 0;
+  game.checkWinCondition();
+  assert.ok(game.gameOverMessage && game.gameOverMessage.includes('TECH VICTORY'), 'Should win Tech Victory when not in debt.');
+  console.log('Test 4 Passed: Cannot win Tech Victory while in debt.');
+}
+
+// Test 5: Timed Victory selection with debt
+{
+  const game = new Game({ width: 1000, height: 1000 });
+  game.initMap();
+  
+  const player1 = game.humanPlayer;
+  const player2 = game.aiPlayers[0];
+  const player3 = game.aiPlayers[1];
+  
+  for (const p of game.allPlayers) {
+    p.isAlive = false;
+  }
+  player1.isAlive = true;
+  player2.isAlive = true;
+  player3.isAlive = true;
+  
+  // Scores: player 1 (highest), player 2 (second highest), player 3 (lowest)
+  player1.techScore = 100; // score = 10
+  player2.techScore = 64;  // score = 8
+  player3.techScore = 36;  // score = 6
+  
+  // Case A: Leader in debt, next highest not in debt
+  player1.credits = -50;
+  player2.credits = 10;
+  player3.credits = 100;
+  
+  game.triggerTimedGameVictory();
+  assert.ok(game.gameOverMessage && game.gameOverMessage.includes(player2.id.toUpperCase()), `Next highest not in debt should win. Msg: ${game.gameOverMessage}`);
+  
+  // Case B: All in debt -> Draw
+  game.gameOverMessage = null;
+  player2.credits = -10;
+  player3.credits = -20;
+  game.triggerTimedGameVictory();
+  assert.ok(game.gameOverMessage && game.gameOverMessage.includes('DRAW'), `Should end in a draw if all players are in debt. Msg: ${game.gameOverMessage}`);
+  
+  console.log('Test 5 Passed: Timed victory correctly passes to next non-debt player or ends in a draw.');
+}
+
 console.log('ALL TESTS PASSED SUCCESSFULLY!');
 process.exit(0);

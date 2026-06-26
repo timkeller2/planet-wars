@@ -7698,7 +7698,7 @@ export class Game {
     if (sortedByTech.length >= 2) {
       const topPlayer = sortedByTech[0];
       const lead = getTechBonus(topPlayer) - getTechBonus(sortedByTech[1]);
-      if (lead >= requiredLead) {
+      if (lead >= requiredLead && (topPlayer.credits || 0) >= 0) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7706,7 +7706,7 @@ export class Game {
       }
     } else if (sortedByTech.length === 1) {
       const topPlayer = sortedByTech[0];
-      if (getTechBonus(topPlayer) >= requiredLead) {
+      if (getTechBonus(topPlayer) >= requiredLead && (topPlayer.credits || 0) >= 0) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7719,7 +7719,7 @@ export class Game {
     if (sortedByExp.length >= 2) {
       const topPlayer = sortedByExp[0];
       const lead = getExpBonus(topPlayer) - getExpBonus(sortedByExp[1]);
-      if (lead >= requiredLead) {
+      if (lead >= requiredLead && (topPlayer.credits || 0) >= 0) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(EXPERIENCE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7727,7 +7727,7 @@ export class Game {
       }
     } else if (sortedByExp.length === 1) {
       const topPlayer = sortedByExp[0];
-      if (getExpBonus(topPlayer) >= requiredLead) {
+      if (getExpBonus(topPlayer) >= requiredLead && (topPlayer.credits || 0) >= 0) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(EXPERIENCE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7740,7 +7740,7 @@ export class Game {
     if (sortedByHappiness.length >= 2) {
       const topPlayer = sortedByHappiness[0];
       const lead = getHappinessBonus(topPlayer) - getHappinessBonus(sortedByHappiness[1]);
-      if (lead >= requiredLead) {
+      if (lead >= requiredLead && (topPlayer.credits || 0) >= 0) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(HAPPINESS VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7748,7 +7748,7 @@ export class Game {
       }
     } else if (sortedByHappiness.length === 1) {
       const topPlayer = sortedByHappiness[0];
-      if (getHappinessBonus(topPlayer) >= requiredLead) {
+      if (getHappinessBonus(topPlayer) >= requiredLead && (topPlayer.credits || 0) >= 0) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(HAPPINESS VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7769,7 +7769,7 @@ export class Game {
       const topPlayer = sortedByVP[0];
       const topVP = getVP(topPlayer);
       const secondVP = getVP(sortedByVP[1]);
-      if (topVP >= secondVP * 2 && topVP >= minScoreToWin) {
+      if (topVP >= secondVP * 2 && topVP >= minScoreToWin && (topPlayer.credits || 0) >= 0) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(SCORE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7777,7 +7777,7 @@ export class Game {
       }
     } else if (sortedByVP.length === 1) {
       const topPlayer = sortedByVP[0];
-      if (getVP(topPlayer) >= minScoreToWin) {
+      if (getVP(topPlayer) >= minScoreToWin && (topPlayer.credits || 0) >= 0) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(SCORE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7791,7 +7791,7 @@ export class Game {
       galacticCapacity += p.maxShips;
     }
     for (const player of this.allPlayers) {
-      if (player.isAlive && (player.totalCapacity || 0) > galacticCapacity * 0.75) {
+      if (player.isAlive && (player.totalCapacity || 0) > galacticCapacity * 0.75 && (player.credits || 0) >= 0) {
         this.stop();
         this.gameOverMessage = `${(player.name || player.id).toUpperCase()} IS VICTORIOUS!\n(ECONOMIC DOMINATION)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7804,7 +7804,7 @@ export class Game {
       const target = parseFloat(this.settings.financialVictoryTarget);
       if (!isNaN(target)) {
         for (const player of this.allPlayers) {
-          if (player.isAlive && (player.credits || 0) >= target) {
+          if (player.isAlive && (player.credits || 0) >= target && (player.credits || 0) >= 0) {
             this.stop();
             this.gameOverMessage = `${(player.name || player.id).toUpperCase()} IS VICTORIOUS!\n(FINANCIAL VICTORY)`;
             if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7826,28 +7826,39 @@ export class Game {
       return;
     }
 
-    let bestPlayer = null;
-    let highestScore = -Infinity;
-
-    for (const player of players) {
+    // Sort players by total score descending
+    const scoredPlayers = players.map(player => {
       const techBonus = Math.sqrt(player.techScore || 0);
       const expBonus = Math.sqrt(player.expScore || 0);
       const happinessBonus = Math.sqrt(player.happinessScore !== undefined ? player.happinessScore : 0);
-
       const totalScore = techBonus + expBonus + happinessBonus;
+      return { player, totalScore };
+    });
 
-      if (totalScore > highestScore) {
-        highestScore = totalScore;
-        bestPlayer = player;
+    scoredPlayers.sort((a, b) => b.totalScore - a.totalScore);
+
+    let bestPlayer = null;
+    if (scoredPlayers.length > 0) {
+      const lead = scoredPlayers[0].player;
+      if ((lead.credits || 0) < 0) {
+        // Find the next highest player who is not in debt
+        const eligible = scoredPlayers.find(sp => (sp.player.credits || 0) >= 0);
+        if (eligible) {
+          bestPlayer = eligible.player;
+        } else {
+          bestPlayer = null;
+        }
+      } else {
+        bestPlayer = lead;
       }
     }
 
-    let winnerName = 'NO ONE';
     if (bestPlayer) {
-      winnerName = bestPlayer.name || bestPlayer.id;
+      const winnerName = bestPlayer.name || bestPlayer.id;
+      this.gameOverMessage = `${winnerName.toUpperCase()} IS VICTORIOUS!\n(TIMED GAME VICTORY)`;
+    } else {
+      this.gameOverMessage = "TIMED GAME ENDED IN A DRAW!\n(DRAW)";
     }
-
-    this.gameOverMessage = `${winnerName.toUpperCase()} IS VICTORIOUS!\n(TIMED GAME VICTORY)`;
     if (this.onGameOver) this.onGameOver(this.gameOverMessage);
   }
 }
