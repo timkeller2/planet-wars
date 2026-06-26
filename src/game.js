@@ -7233,7 +7233,7 @@ export class Game {
       }
 
       // 4c. Marine Revolt Planet Assault Check
-      if ((ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
+      if (ship.scoutAttackEnabled === true && (ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
         let revoltPlanet = null;
         for (const p of this.planets) {
           if (p.inRevolt && p.revoltTimer <= 7500) {
@@ -7262,30 +7262,6 @@ export class Game {
             ship.marineCount = 0;
             ship.marineLaunchCooldown = 15.0;
           }
-        }
-      }
-
-      // Direct ship targeting launch check (Moved outside of hasEnoughMarines block to fix logic contradiction)
-      let targetShip = null;
-      if (ship.scoutAttackEnabled !== 'peace' && (ship.marineCount || 0) > 0 && ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
-        const enemy = this.ships.find(s => s.id === ship.cruiserTargetId && s.active);
-        if (enemy && enemy.owner && (enemy.owner.id !== ship.owner.id || enemy.isAmoeba)) {
-          targetShip = enemy;
-        }
-      }
-
-      if (targetShip) {
-        // Only launch up to 3 times the defending crew
-        const count = Math.min(Math.floor(ship.marineCount), Math.max(1, 3 * (targetShip.crew || 0)));
-        if (count > 0) {
-          this.queueMarineLaunch(ship, {
-            targetType: 'ship',
-            targetId: targetShip.id,
-            isBoardingFleet: false,
-            count: count
-          });
-          ship.marineCount = Math.max(0, ship.marineCount - count);
-          ship.marineLaunchCooldown = 15.0;
         }
       }
 
