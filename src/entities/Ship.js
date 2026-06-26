@@ -1424,7 +1424,7 @@ export class Ship {
             : allShips;
 
           for (const other of candidateThreats) {
-            if (other.active && other.owner && other.owner !== this.owner && !other.isAmoeba && !other.isReturnPod && !other.isBoardingFleet && !other.isMaterializing) {
+            if (other.active && other.owner && other.owner !== this.owner && !other.isAmoeba && !other.isReturnPod && !other.isBoardingFleet && !other.isMaterializing && !(other.isCruiser && other.health < 2)) {
               const dx = other.x - this.x;
               const dy = other.y - this.y;
               const distSq = dx * dx + dy * dy;
@@ -1939,23 +1939,7 @@ export class Ship {
           if (!enemyShip.active || (enemyShip.owner && this.owner && enemyShip.owner.id === this.owner.id) || enemyShip.isMaterializing) continue;
           if (this.isAmoeba && enemyShip.isAmoeba) continue;
           
-          if (this.owner) {
-            let targetedByOurBoarding = false;
-            if (allShips) {
-              for (const other of allShips) {
-                if (other.active && (other.isBoardingFleet || other.isMarineFleet) && other.targetShipId === enemyShip.id && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner)) {
-                  targetedByOurBoarding = true;
-                  break;
-                }
-              }
-            }
-            if (!targetedByOurBoarding && enemyShip.isUnderBoarding && enemyShip.boardingPlayer && (enemyShip.boardingPlayer.id === this.owner.id || enemyShip.boardingPlayer === this.owner || enemyShip.boardingPlayer === this.owner.id)) {
-              targetedByOurBoarding = true;
-            }
-            if (targetedByOurBoarding) continue;
-          }
-
-          if (this.isCruiser && this.owner && enemyShip.isCruiser && enemyShip.health <= 2) {
+          if (this.owner && enemyShip.isCruiser && enemyShip.health < 2) {
             let attemptBoarding = false;
             
             // 1. Cruiser with marines is nearby (within 500px)
@@ -1972,17 +1956,7 @@ export class Ship {
               }
             }
             
-            // 2. Marines in flight (boarding fleet)
-            if (!attemptBoarding && allShips) {
-              for (const other of allShips) {
-                if (other.active && (other.isBoardingFleet || other.isMarineFleet) && other.targetShipId === enemyShip.id && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner)) {
-                  attemptBoarding = true;
-                  break;
-                }
-              }
-            }
-            
-            // 3. Marines actively attacking (already boarding)
+            // 2. Marines actively attacking (already boarding)
             if (!attemptBoarding && enemyShip.isUnderBoarding && enemyShip.boardingPlayer && (enemyShip.boardingPlayer.id === this.owner.id || enemyShip.boardingPlayer === this.owner || enemyShip.boardingPlayer === this.owner.id)) {
               attemptBoarding = true;
             }
@@ -2973,19 +2947,23 @@ export class Ship {
                   isVisible = game.isShipVisibleTo(other, this.owner);
                 }
                 if (!isVisible) continue;
-                let beingBoardedByUs = false;
-                if (allShips) {
-                  for (const pod of allShips) {
-                    if (pod.active && (pod.isBoardingFleet || pod.isMarineFleet) && pod.targetShipId === other.id && pod.owner && (pod.owner.id === this.owner.id || pod.owner === this.owner)) {
-                      beingBoardedByUs = true;
-                      break;
+                let skipPursuing = false;
+                if (other.isCruiser && other.health < 2) {
+                  skipPursuing = true;
+                } else {
+                  if (allShips) {
+                    for (const pod of allShips) {
+                      if (pod.active && (pod.isBoardingFleet || pod.isMarineFleet) && pod.targetShipId === other.id && pod.owner && (pod.owner.id === this.owner.id || pod.owner === this.owner)) {
+                        skipPursuing = true;
+                        break;
+                      }
                     }
                   }
+                  if (!skipPursuing && other.isUnderBoarding && other.boardingPlayer && (other.boardingPlayer.id === this.owner.id || other.boardingPlayer === this.owner || other.boardingPlayer === this.owner.id)) {
+                    skipPursuing = true;
+                  }
                 }
-                if (!beingBoardedByUs && other.isUnderBoarding && other.boardingPlayer && (other.boardingPlayer.id === this.owner.id || other.boardingPlayer === this.owner || other.boardingPlayer === this.owner.id)) {
-                  beingBoardedByUs = true;
-                }
-                if (beingBoardedByUs) continue;
+                if (skipPursuing) continue;
 
                 let allowedToPursue = (this.scoutAttackEnabled === true);
                 if (!allowedToPursue) {

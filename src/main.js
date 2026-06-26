@@ -6035,17 +6035,17 @@ function getPlanetTradeIncomePerMin(planet) {
       
       if (attackersSurvived && !defendersSurvived) {
         winner = 'Attacker';
-        boardingWinnerMessage = 'Attacker Wins!';
+        boardingWinnerMessage = `${boardingAttackerName.toUpperCase()} WINS!`;
       } else if (defendersSurvived && !attackersSurvived) {
         winner = 'Defender';
-        boardingWinnerMessage = 'Defender Wins!';
+        boardingWinnerMessage = `${boardingDefenderName.toUpperCase()} WINS!`;
       } else {
         if (startingOwnerId && ownerId !== startingOwnerId) {
           winner = 'Attacker';
-          boardingWinnerMessage = 'Attacker Wins!';
+          boardingWinnerMessage = `${boardingAttackerName.toUpperCase()} WINS!`;
         } else {
           winner = 'Defender';
-          boardingWinnerMessage = 'Defender Wins!';
+          boardingWinnerMessage = `${boardingDefenderName.toUpperCase()} WINS!`;
         }
       }
     }
@@ -6200,9 +6200,9 @@ function getPlanetTradeIncomePerMin(planet) {
     
     // Shadow for name
     ctx.fillStyle = '#000000';
-    ctx.fillText(`${boardingDefenderName.toUpperCase()} (DEFENDER)`, 16, 16);
+    ctx.fillText(boardingDefenderName.toUpperCase(), 16, 16);
     ctx.fillStyle = boardingDefenderColor;
-    ctx.fillText(`${boardingDefenderName.toUpperCase()} (DEFENDER)`, 15, 15);
+    ctx.fillText(boardingDefenderName.toUpperCase(), 15, 15);
     
     // Shadow for troop count
     ctx.font = '10px Orbitron, sans-serif';
@@ -6217,9 +6217,9 @@ function getPlanetTradeIncomePerMin(planet) {
     
     // Shadow for name
     ctx.fillStyle = '#000000';
-    ctx.fillText(`${boardingAttackerName.toUpperCase()} (ATTACKER)`, canvas.width - 14, 16);
+    ctx.fillText(boardingAttackerName.toUpperCase(), canvas.width - 14, 16);
     ctx.fillStyle = boardingAttackerColor;
-    ctx.fillText(`${boardingAttackerName.toUpperCase()} (ATTACKER)`, canvas.width - 15, 15);
+    ctx.fillText(boardingAttackerName.toUpperCase(), canvas.width - 15, 15);
     
     // Shadow for troop count
     ctx.font = '10px Orbitron, sans-serif';
@@ -6309,7 +6309,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
     } else {
-      if (now - boardingWinnerTime > 4000) {
+      if (now - boardingWinnerTime > 3000) {
         const overlay = document.getElementById('boarding-combat-overlay');
         if (overlay) overlay.style.display = 'none';
         activeBoardingShipId = null;
@@ -8697,7 +8697,12 @@ function getPlanetTradeIncomePerMin(planet) {
 
         if (clickedType && (clickedId !== null && clickedId !== undefined)) {
           if (clickedType === 'ship' || clickedType === 'fleet') {
-            if (clickedShip && clickedShip.isAmoeba) {
+            const isMonsterCruiser = clickedShip && clickedShip.isCruiser && (
+              clickedShip.ownerId === 'monsters' || 
+              clickedShip.ownerId === 'monster' || 
+              (clickedShip.owner && (clickedShip.owner.id === 'monsters' || clickedShip.owner.isMonster || clickedShip.owner.id === 'monster'))
+            );
+            if (clickedShip && (clickedShip.isAmoeba || isMonsterCruiser)) {
               if (activeInfoPanel && activeInfoPanel.type === clickedType && activeInfoPanel.id === clickedId) {
                 closeInfoPanel();
               } else {
