@@ -2241,6 +2241,7 @@ async function bootstrap() {
           boardingMarines: s.boardingMarines || 0,
           boardingPlayerId: s.boardingPlayer ? s.boardingPlayer.id : null,
           boardingSourceId: s.boardingSourceId || null,
+          boardingTimer: s.boardingTimer || 0,
           isBoardingFleet: s.isBoardingFleet || false,
           isReturnPod: s.isReturnPod || false,
           isUpgrading: s.isUpgrading || false,

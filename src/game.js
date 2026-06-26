@@ -7289,31 +7289,69 @@ export class Game {
         }
       }
 
-      // 5. Boarding Trigger Checks
-      if (ship.scoutAttackEnabled !== 'peace' && (ship.marineCount || 0) > 0 && (ship.marines || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
-        // Find enemy cruiser in full scan range of attacking cruiser
-        for (const enemy of cruisers) {
-          if (enemy.owner.id !== ship.owner.id && !enemy.isAmoeba) {
-            const dx = enemy.x - ship.x;
-            const dy = enemy.y - ship.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist <= radar) {
-              const isSelectedTarget = (ship.cruiserTargetType === 'ship' && ship.cruiserTargetId === enemy.id);
-              if (isSelectedTarget || ship.marineCount > 0) {
-                // Launch Boarding Fleet Pod up to 3 times the defending crew
-                const launchCount = Math.min(Math.floor(ship.marineCount), Math.max(1, 3 * (enemy.crew || 0)));
-                if (launchCount > 0) {
-                  this.queueMarineLaunch(ship, {
-                    targetType: 'ship',
-                    targetId: enemy.id,
-                    isBoardingFleet: true,
-                    count: launchCount
-                  });
-                  ship.marineCount = Math.max(0, ship.marineCount - launchCount);
-                  ship.marineLaunchCooldown = 15.0;
-                  break;
+      // 5. Boarding Trigger Checks (New: Direct Boarding if disabled & isolated)
+      if (ship.health < 2 && ship.health > 0 && !ship.isUnderBoarding && !ship.isMaterializing) {
+        const sensorRange = ship.cruiserRadarRange();
+        const friendlyNearby = cruisers.some(other => 
+          other.id !== ship.id && 
+          other.owner && 
+          ship.owner && 
+          other.owner.id === ship.owner.id && 
+          !other.isMaterializing && 
+          Math.hypot(other.x - ship.x, other.y - ship.y) <= sensorRange
+        );
+
+        if (!friendlyNearby) {
+          const enemiesInRange = cruisers.filter(other => 
+            other.owner && 
+            ship.owner && 
+            other.owner.id !== ship.owner.id && 
+            !other.isAmoeba &&
+            other.marineCount > 0 && 
+            !other.isMaterializing && 
+            Math.hypot(other.x - ship.x, other.y - ship.y) <= other.cruiserRadarRange()
+          );
+
+          if (enemiesInRange.length > 0) {
+            const playerMarineCounts = new Map();
+            for (const ec of enemiesInRange) {
+              const pId = ec.owner.id;
+              playerMarineCounts.set(pId, (playerMarineCounts.get(pId) || 0) + ec.marineCount);
+            }
+
+            let bestPlayerId = null;
+            let maxMarines = 0;
+            for (const [pId, mCount] of playerMarineCounts.entries()) {
+              if (mCount > maxMarines) {
+                maxMarines = mCount;
+                bestPlayerId = pId;
+              }
+            }
+
+            if (bestPlayerId && maxMarines > 0) {
+              const bestPlayer = this.allPlayers.find(p => p.id === bestPlayerId);
+              const attackingCruisers = enemiesInRange.filter(ec => ec.owner.id === bestPlayerId);
+
+              ship.isUnderBoarding = true;
+              ship.boardingPlayer = bestPlayer;
+              ship.boardingTimer = 10.0;
+
+              const contributions = [];
+              let totalAttackingMarines = 0;
+              for (const ac of attackingCruisers) {
+                const mCount = Math.floor(ac.marineCount || 0);
+                if (mCount > 0) {
+                  contributions.push({ shipId: ac.id, contributed: mCount });
+                  ac.marineCount -= mCount;
+                  totalAttackingMarines += mCount;
                 }
               }
+              ship.boardingSourceContributions = contributions;
+              ship.boardingStartMarines = totalAttackingMarines;
+              ship.boardingMarines = totalAttackingMarines;
+              ship.boardingSourceId = attackingCruisers[0] ? attackingCruisers[0].id : null;
+
+              console.log(`[BOARDING STARTED] Cruiser ${ship.id} is being boarded by player ${bestPlayer.name} with ${totalAttackingMarines} marines.`);
             }
           }
         }
@@ -7321,75 +7359,127 @@ export class Game {
 
       // 6. Boarding Battle Combat resolution
       if (ship.isUnderBoarding && ship.boardingMarines > 0) {
+        if (ship.boardingTimer === undefined) {
+          ship.boardingTimer = 10.0;
+        }
+
+        ship.boardingTimer = Math.max(0, ship.boardingTimer - dt);
+
         let M_atk = ship.boardingMarines;
         let M_def = ship.marineCount || 0;
         let C_def = ship.crew || 0;
 
-        // Symmetric combat tick
-        const killRateAtk = Math.max(0.05, Math.min(0.95, (50 + M_atk - C_def - M_def) / 100));
-        const defendersKilled = M_atk * killRateAtk * dt;
+        // Symmetric combat tick during the 10 seconds, only if defenders are alive
+        if (ship.boardingTimer > 0 && M_atk > 0 && (M_def > 0 || C_def > 0)) {
+          const pacingFactor = 0.5; // pacing factor to stretch casualties over 10s
+          const killRateAtk = Math.max(0.05, Math.min(0.95, (50 + M_atk - C_def - M_def) / 100));
+          const defendersKilled = M_atk * killRateAtk * dt * pacingFactor;
 
-        const killRateDef = Math.max(0.05, Math.min(0.95, (25 + C_def + M_def - M_atk) / 100));
-        const attackersKilled = (C_def + M_def) * killRateDef * dt;
+          const killRateDef = Math.max(0.05, Math.min(0.95, (25 + C_def + M_def - M_atk) / 100));
+          const attackersKilled = (C_def + M_def) * killRateDef * dt * pacingFactor;
 
-        // Apply attackers casualties
-        M_atk = Math.max(0, M_atk - attackersKilled);
+          M_atk = Math.max(0, M_atk - attackersKilled);
 
-        // Apply defenders casualties
-        let remDeaths = defendersKilled;
-        if (M_def > 0) {
-          const deaths = Math.min(M_def, remDeaths);
-          M_def -= deaths;
-          remDeaths -= deaths;
-        }
-        C_def = Math.max(0, C_def - remDeaths);
-
-        ship.boardingMarines = M_atk;
-        ship.marineCount = M_def;
-        ship.crew = C_def;
-
-        if (M_atk <= 0) {
-          // Boarding failed!
-          ship.isUnderBoarding = false;
-          ship.boardingMarines = 0;
-          console.log(`[BOARDING FAILED] Boarding of Ship ${ship.id} failed. Defenders survived.`);
-        } else if (M_def <= 0 && C_def <= 0) {
-          // Attacking victory! Capture successful!
-          const originalSourceId = ship.boardingSourceId;
-
-          ship.isUnderBoarding = false;
-          ship.boardingMarines = 0;
-
-          // Change ownership
-          const wasMonsterShip = ship.owner && (ship.owner.id === 'monsters' || ship.owner.isMonster);
-          ship.owner = this.allPlayers.find(p => p.id === ship.boardingPlayer.id);
-          if (wasMonsterShip) {
-            ship.speed = (ship.speed || 0) + 10;
-            ship.isRefueling = false;
+          let remDeaths = defendersKilled;
+          if (M_def > 0) {
+            const deaths = Math.min(M_def, remDeaths);
+            M_def -= deaths;
+            remDeaths -= deaths;
           }
-          
-          // Crew from survivors
-          const crewNeeded = ship.maxHealth + ship.health;
-          const crewAssigned = Math.min(M_atk, crewNeeded);
-          ship.crew = crewAssigned;
-          M_atk -= crewAssigned;
-          ship.marineCount = 0;
+          C_def = Math.max(0, C_def - remDeaths);
 
-          console.log(`[BOARDING SUCCESS] Ship ${ship.id} captured by player ${ship.owner.name}.`);
+          ship.boardingMarines = M_atk;
+          ship.marineCount = M_def;
+          ship.crew = C_def;
+        }
 
-          // Spawn return pod if survivors remain
-          if (M_atk > 0) {
-            const launcher = this.ships.find(ss => ss.id === originalSourceId && ss.active);
-            if (launcher) {
-              const rPod = new Ship(this.nextShipId++, ship.x, ship.y, null, ship.owner, launcher.x, launcher.y);
-              rPod.cruiserStyle = ship.cruiserStyle;
-              rPod.isReturnPod = true;
-              rPod.targetShipId = launcher.id;
-              rPod.sourceShipId = ship.id;
-              rPod.marineCount = M_atk;
-              rPod.speed = 25;
-              this.ships.push(rPod);
-              console.log(`[RETURN POD] Returning ${M_atk} survivors from Ship ${ship.id} to Ship ${launcher.id}.`);
+        // When the timer is up, resolve the combat to the end!
+        if (ship.boardingTimer <= 0) {
+          // If both sides still have forces, instantly tick until one side dies
+          while (M_atk > 0 && (M_def > 0 || C_def > 0)) {
+            const killRateAtk = Math.max(0.05, Math.min(0.95, (50 + M_atk - C_def - M_def) / 100));
+            const defendersKilled = Math.max(0.1, M_atk * killRateAtk * 0.1);
+
+            const killRateDef = Math.max(0.05, Math.min(0.95, (25 + C_def + M_def - M_atk) / 100));
+            const attackersKilled = Math.max(0.1, (C_def + M_def) * killRateDef * 0.1);
+
+            M_atk = Math.max(0, M_atk - attackersKilled);
+
+            let remDeaths = defendersKilled;
+            if (M_def > 0) {
+              const deaths = Math.min(M_def, remDeaths);
+              M_def -= deaths;
+              remDeaths -= deaths;
+            }
+            C_def = Math.max(0, C_def - remDeaths);
+          }
+
+          ship.boardingMarines = M_atk;
+          ship.marineCount = M_def;
+          ship.crew = C_def;
+
+          if (M_atk <= 0) {
+            // Defenders win!
+            ship.isUnderBoarding = false;
+            ship.boardingMarines = 0;
+            console.log(`[BOARDING RESOLVED] Defenders survived boarding action on Cruiser ${ship.id}.`);
+          } else {
+            // Attackers win!
+            ship.isUnderBoarding = false;
+            ship.boardingMarines = 0;
+
+            // Change ownership
+            const wasMonsterShip = ship.owner && (ship.owner.id === 'monsters' || ship.owner.isMonster);
+            ship.owner = this.allPlayers.find(p => p.id === ship.boardingPlayer.id);
+            if (wasMonsterShip) {
+              ship.speed = (ship.speed || 0) + 10;
+              ship.isRefueling = false;
+            }
+
+            // Retain ship.maxHealth from the survivors as the new crew
+            const crewRetained = Math.min(M_atk, ship.maxHealth);
+            ship.crew = crewRetained;
+            ship.marineCount = 0;
+
+            console.log(`[BOARDING SUCCESS] Cruiser ${ship.id} captured by player ${ship.owner.name}. Crew assigned: ${crewRetained}/${ship.maxHealth}.`);
+
+            // Return prorated remaining survivors directly to the attacking cruisers
+            const M_return = M_atk - ship.maxHealth;
+            if (M_return > 0 && ship.boardingSourceContributions && ship.boardingSourceContributions.length > 0) {
+              let totalDistributed = 0;
+              const contributions = ship.boardingSourceContributions;
+              const totalStart = ship.boardingStartMarines || 1;
+
+              for (let i = 0; i < contributions.length; i++) {
+                const contrib = contributions[i];
+                const launcher = this.ships.find(s => s.id === contrib.shipId && s.active);
+                if (launcher) {
+                  let share = Math.floor(M_return * (contrib.contributed / totalStart));
+                  share = Math.min(contrib.contributed, share);
+
+                  const maxCapacity = (launcher.marines || 0) * launcher.maxHealth;
+                  launcher.marineCount = Math.min(maxCapacity, (launcher.marineCount || 0) + share);
+                  totalDistributed += share;
+                  contrib.returnedShare = share;
+                }
+              }
+
+              // Distribute remainder from floor rounding to first active contributing launcher
+              let remainder = M_return - totalDistributed;
+              if (remainder > 0) {
+                for (const contrib of contributions) {
+                  const launcher = this.ships.find(s => s.id === contrib.shipId && s.active);
+                  if (launcher) {
+                    const maxCapacity = (launcher.marines || 0) * launcher.maxHealth;
+                    const canTake = Math.max(0, maxCapacity - (launcher.marineCount || 0));
+                    const added = Math.min(remainder, canTake);
+                    launcher.marineCount += added;
+                    remainder -= added;
+                    if (remainder <= 0) break;
+                  }
+                }
+              }
+              console.log(`[BOARDING RETURN] Directly returned ${M_return} survivors back to source cruisers.`);
             }
           }
         }

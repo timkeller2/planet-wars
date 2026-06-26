@@ -5847,7 +5847,7 @@ function getPlanetTradeIncomePerMin(planet) {
       overlay.className = 'boarding-combat-window';
       overlay.innerHTML = `
         <div class="boarding-combat-header">
-          <span>BOARDING ACTION</span>
+          <span>BOARDING ACTION (<span id="boarding-combat-timer">10.0</span>s)</span>
           <button class="boarding-combat-close-btn" id="boarding-combat-close-btn">&times;</button>
         </div>
         <div class="boarding-combat-body">
@@ -5918,6 +5918,12 @@ function getPlanetTradeIncomePerMin(planet) {
       resultDiv.textContent = '';
     }
     
+    const timerSpan = document.getElementById('boarding-combat-timer');
+    if (timerSpan) {
+      const val = cruiser.boardingTimer !== undefined ? cruiser.boardingTimer : 0;
+      timerSpan.textContent = val.toFixed(1);
+    }
+    
     boardingWinnerMessage = '';
     boardingWinnerTime = 0;
     boardingTroops = [];
@@ -5961,6 +5967,12 @@ function getPlanetTradeIncomePerMin(planet) {
     const M_def = cruiser.marineCount || 0;
     const C_def = cruiser.crew || 0;
     const M_atk = cruiser.boardingMarines || 0;
+    
+    const timerSpan = document.getElementById('boarding-combat-timer');
+    if (timerSpan) {
+      const val = cruiser.boardingTimer !== undefined ? cruiser.boardingTimer : 0;
+      timerSpan.textContent = val.toFixed(1);
+    }
     
     const aliveLeftMarines = boardingTroops.filter(t => t.side === 'left' && t.type === 'marine' && t.state === 'alive');
     const targetLeftMarines = Math.min(15, M_def);
