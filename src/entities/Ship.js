@@ -877,11 +877,14 @@ export class Ship {
                 this.splashDamage = val;
               } else if (key === 'supply_ship') {
                 this.maxsupplies = val * 20;
+                this.supplies = this.maxsupplies;
               } else if (key === 'extended_fuel') {
                 const baseFuel = this.maxHealth / 5;
                 this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + baseFuel * val);
               } else if (key === 'shields') {
                 this.shieldPoints = this.getMaxShields();
+              } else if (key === 'marines') {
+                this.marineCount = val * this.maxHealth;
               }
             }
           }
