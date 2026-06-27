@@ -442,6 +442,10 @@ function getPlanetTradeIncomePerMin(planet) {
   let boardingDefenderColor = '#ffffff';
   let boardingAttackerCount = 0;
   let boardingDefenderCount = 0;
+  let boardingCombatStartTime = 0;
+  let cachedLastCruiserState = null;
+  let startingDefenderCount = 0;
+  let startingAttackerCount = 0;
   let serverSavedConfigs = [];
   let lastGameStartTime = null;
   let lastSelectedCruiserId = null;
@@ -5986,6 +5990,8 @@ function getPlanetTradeIncomePerMin(planet) {
     
     boardingWinnerMessage = '';
     boardingWinnerTime = 0;
+    boardingCombatStartTime = Date.now();
+    cachedLastCruiserState = null;
     boardingTroops = [];
     boardingLasers = [];
     boardingBlastParticles = [];
@@ -6001,6 +6007,10 @@ function getPlanetTradeIncomePerMin(planet) {
     boardingAttackerName = attacker.name || attacker.id || 'Attacker';
     boardingDefenderColor = defender.color || '#ffffff';
     boardingAttackerColor = attacker.color || '#ff3366';
+    
+    startingDefenderCount = M_def + C_def;
+    startingAttackerCount = M_atk;
+    
     boardingDefenderCount = M_def + C_def;
     boardingAttackerCount = M_atk;
     
@@ -6082,14 +6092,37 @@ function getPlanetTradeIncomePerMin(planet) {
     if (!lastCruiserState) {
       winner = 'Defender';
       boardingWinnerMessage = 'Cruiser Destroyed!';
+      boardingDefenderCount = 0;
+      boardingAttackerCount = 0;
+      boardingTroops.forEach(t => {
+        t.state = 'dying';
+      });
     } else {
       const ownerId = lastCruiserState.ownerId;
       if (startingOwnerId && ownerId !== startingOwnerId) {
         winner = 'Attacker';
         boardingWinnerMessage = `${boardingAttackerName.toUpperCase()} WINS!`;
+        
+        boardingDefenderCount = 0;
+        boardingAttackerCount = lastCruiserState.crew || 0;
+        
+        boardingTroops.forEach(t => {
+          if (t.side === 'left') {
+            t.state = 'dying';
+          }
+        });
       } else {
         winner = 'Defender';
         boardingWinnerMessage = `${boardingDefenderName.toUpperCase()} WINS!`;
+        
+        boardingDefenderCount = (lastCruiserState.crew || 0) + (lastCruiserState.marineCount || 0);
+        boardingAttackerCount = 0;
+        
+        boardingTroops.forEach(t => {
+          if (t.side === 'right') {
+            t.state = 'dying';
+          }
+        });
       }
     }
     
@@ -6330,7 +6363,22 @@ function getPlanetTradeIncomePerMin(planet) {
       drawTroop(ctx, t);
     });
     
-    if (!boardingWinnerMessage) {
+    const elapsed = now - boardingCombatStartTime;
+    const timerSpan = document.getElementById('boarding-combat-timer');
+    if (timerSpan) {
+      let displayVal = 5.0;
+      if (elapsed < 2000) {
+        displayVal = 5.0;
+      } else if (elapsed < 6000) {
+        const progress = (elapsed - 2000) / 4000;
+        displayVal = Math.max(0, 5.0 * (1 - progress));
+      } else {
+        displayVal = 0.0;
+      }
+      timerSpan.textContent = displayVal.toFixed(1);
+    }
+
+    if (!boardingWinnerMessage && elapsed >= 2000 && elapsed < 6000) {
       const aliveLeft = boardingTroops.filter(t => t.side === 'left' && t.state === 'alive');
       const aliveRight = boardingTroops.filter(t => t.side === 'right' && t.state === 'alive');
       
@@ -6351,7 +6399,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
       }
-    } else {
+    } else if (boardingWinnerMessage) {
       if (now - boardingWinnerTime > 3000) {
         const overlay = document.getElementById('boarding-combat-overlay');
         if (overlay) overlay.style.display = 'none';
@@ -6365,28 +6413,32 @@ function getPlanetTradeIncomePerMin(planet) {
     
     const boardingCruisers = state.ships.filter(s => s.isCruiser && s.isUnderBoarding && s.boardingMarines > 0);
     
-    if (boardingCruisers.length > 0) {
-      const activeStillBoarding = activeBoardingShipId && boardingCruisers.find(s => s.id === activeBoardingShipId);
+    if (activeBoardingShipId !== null) {
+      const activeStillBoarding = boardingCruisers.find(s => s.id === activeBoardingShipId);
+      const elapsed = Date.now() - boardingCombatStartTime;
       
-      if (!activeStillBoarding) {
-        if (activeBoardingShipId !== null) {
-          const lastState = serverState ? serverState.ships.find(s => s.id === activeBoardingShipId) : null;
-          handleBoardingCombatEnd(lastState);
-        } else {
-          const nextCruiser = boardingCruisers[0];
-          boardingCombatClosed = false;
-          activeBoardingShipId = nextCruiser.id;
-          startingOwnerId = nextCruiser.ownerId;
-          
-          initBoardingCombat(nextCruiser);
+      if (activeStillBoarding) {
+        cachedLastCruiserState = activeStillBoarding;
+        if (elapsed >= 2000) {
+          syncBoardingCombatData(activeStillBoarding);
         }
       } else {
-        syncBoardingCombatData(activeStillBoarding);
+        const lastState = serverState ? serverState.ships.find(s => s.id === activeBoardingShipId) : null;
+        if (lastState) {
+          cachedLastCruiserState = lastState;
+        }
+        if (elapsed >= 6000) {
+          handleBoardingCombatEnd(cachedLastCruiserState || lastState);
+        }
       }
     } else {
-      if (activeBoardingShipId !== null) {
-        const lastState = serverState ? serverState.ships.find(s => s.id === activeBoardingShipId) : null;
-        handleBoardingCombatEnd(lastState);
+      if (boardingCruisers.length > 0) {
+        const nextCruiser = boardingCruisers[0];
+        boardingCombatClosed = false;
+        activeBoardingShipId = nextCruiser.id;
+        startingOwnerId = nextCruiser.ownerId;
+        
+        initBoardingCombat(nextCruiser);
       }
     }
   }
