@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { Game } from './src/game.js';
+import { Ship } from './src/entities/Ship.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import readline from 'readline';
@@ -178,6 +179,74 @@ async function bootstrap() {
           }
         }
         return "Spawn amoeba failed (monster player or spawn method not initialized).";
+      }
+
+      case 'triggerboard': {
+        const cruiser = game.ships.find(s => s.active && s.isCruiser && s.owner && s.owner.id === targetPlayer.id);
+        if (!cruiser) return "No active cruiser found for player to board.";
+        cruiser.isUnderBoarding = true;
+        cruiser.boardingMarines = 10;
+        cruiser.boardingTimer = 2.0;
+        cruiser.boardingPlayer = game.allPlayers.find(p => p.id !== targetPlayer.id && p.id !== 'monsters') || { id: 'enemy_ai', name: 'Enemy AI', color: '#ff3366', techScore: 5 };
+        cruiser.boardingStartMarines = 10;
+        cruiser.boardingSourceContributions = [{ shipId: 999, contributed: 10 }];
+        return `Triggered boarding action on Cruiser ${cruiser.id}.`;
+      }
+
+      case 'spawnenemy': {
+        console.log('SPAWNENEMY RUNNING:');
+        console.log('  targetPlayer:', { id: targetPlayer.id, name: targetPlayer.name });
+        const enemyAI = game.aiPlayers.find(ai => ai.id !== targetPlayer.id && ai.id !== 'monsters');
+        if (!enemyAI) return "No enemy AI player found.";
+        console.log('  enemyAI found:', { id: enemyAI.id, name: enemyAI.name });
+        const hw = game.planets.find(p => p.homeworldOf === targetPlayer.id);
+        if (!hw) return "No homeworld found for target player.";
+        
+        const sx = hw.x + 20;
+        const sy = hw.y + 20;
+        
+        const ship = new Ship(game.nextShipId++, sx, sy, null, enemyAI, sx, sy);
+        ship.isCruiser = true;
+        ship.classType = 'corvette';
+        ship.maxHealth = 15;
+        ship.health = 15;
+        ship.crew = 30;
+        ship.marineCount = 15;
+        ship.fuel = 15;
+        ship.speed = 10;
+        
+        game.ships.push(ship);
+        return `Spawned enemy AI cruiser ${ship.id} at (${Math.round(sx)}, ${Math.round(sy)}) for player ${enemyAI.name}.`;
+      }
+
+      case 'marines': {
+        const shipId = parseInt(args[0], 10);
+        const count = parseInt(args[1], 10);
+        if (isNaN(shipId) || isNaN(count)) return "Usage: /marines <shipId> <count>";
+        const ship = game.ships.find(s => s.id === shipId);
+        if (!ship) return `Ship ${shipId} not found.`;
+        ship.marineCount = count;
+        return `Set marineCount of Ship ${shipId} to ${count}.`;
+      }
+
+      case 'sensors': {
+        const shipId = parseInt(args[0], 10);
+        const val = parseInt(args[1], 10);
+        if (isNaN(shipId) || isNaN(val)) return "Usage: /sensors <shipId> <val>";
+        const ship = game.ships.find(s => s.id === shipId);
+        if (!ship) return `Ship ${shipId} not found.`;
+        ship.sensorarrays = val;
+        return `Set sensorarrays of Ship ${shipId} to ${val}.`;
+      }
+
+      case 'damage': {
+        const shipId = parseInt(args[0], 10);
+        const amount = parseFloat(args[1]);
+        if (isNaN(shipId) || isNaN(amount)) return "Usage: /damage <shipId> <amount>";
+        const ship = game.ships.find(s => s.id === shipId);
+        if (!ship) return `Ship ${shipId} not found.`;
+        ship.health = Math.max(0, ship.health - amount);
+        return `Damaged Ship ${shipId} by ${amount}. Remaining health: ${ship.health}`;
       }
 
       case 'clear': {
@@ -2846,7 +2915,8 @@ async function bootstrap() {
         width: game.width,
         height: game.height,
         gameStartTime: game.gameStartTime,
-        exploredCells: playerExploredCells
+        exploredCells: playerExploredCells,
+        boardingReplays: game.boardingReplays || []
       };
       
       if (game.pendingHabClassChanges && game.pendingHabClassChanges.length > 0) {

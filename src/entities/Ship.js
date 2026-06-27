@@ -1424,7 +1424,24 @@ export class Ship {
             : allShips;
 
           for (const other of candidateThreats) {
-            if (other.active && other.owner && other.owner !== this.owner && !other.isAmoeba && !other.isReturnPod && !other.isBoardingFleet && !other.isMaterializing && !(other.isCruiser && other.health < 2)) {
+            let isBoardingCandidate = false;
+            if (other.isCruiser && other.health < 2) {
+              if (other.isUnderBoarding) {
+                isBoardingCandidate = true;
+              } else if (allShips) {
+                for (const s of allShips) {
+                  if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marineCount || 0) > 0 && s.scoutAttackEnabled === true) {
+                    const dx = s.x - other.x;
+                    const dy = s.y - other.y;
+                    if (dx * dx + dy * dy <= 500 * 500) {
+                      isBoardingCandidate = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+            if (other.active && other.owner && other.owner !== this.owner && !other.isAmoeba && !other.isReturnPod && !other.isBoardingFleet && !other.isMaterializing && !isBoardingCandidate) {
               const dx = other.x - this.x;
               const dy = other.y - this.y;
               const distSq = dx * dx + dy * dy;
@@ -1945,7 +1962,7 @@ export class Ship {
             // 1. Cruiser with marines is nearby (within 500px)
             if (allShips) {
               for (const other of allShips) {
-                if (other.active && other.isCruiser && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner) && (other.marineCount || 0) > 0) {
+                if (other.active && other.isCruiser && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner) && (other.marineCount || 0) > 0 && other.scoutAttackEnabled === true) {
                   const dx = other.x - enemyShip.x;
                   const dy = other.y - enemyShip.y;
                   if (dx * dx + dy * dy <= 500 * 500) {
@@ -2949,7 +2966,22 @@ export class Ship {
                 if (!isVisible) continue;
                 let skipPursuing = false;
                 if (other.isCruiser && other.health < 2) {
-                  skipPursuing = true;
+                  let isBoardingCandidate = other.isUnderBoarding;
+                  if (!isBoardingCandidate && allShips) {
+                    for (const s of allShips) {
+                      if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marineCount || 0) > 0 && s.scoutAttackEnabled === true) {
+                        const dx = s.x - other.x;
+                        const dy = s.y - other.y;
+                        if (dx * dx + dy * dy <= 500 * 500) {
+                          isBoardingCandidate = true;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                  if (isBoardingCandidate) {
+                    skipPursuing = true;
+                  }
                 } else {
                   if (allShips) {
                     for (const pod of allShips) {

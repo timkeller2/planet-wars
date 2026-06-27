@@ -1774,6 +1774,7 @@ export class Game {
     this.ionStorms = [];
     this.sellOrders = [];
     this.fulfillOrders = [];
+    this.boardingReplays = [];
     this.exploredGrid = {};
     this.wreckages = [];
     this.pendingPioneerSpawns = [];
@@ -3924,6 +3925,12 @@ export class Game {
   }
 
   update(deltaTime) {
+    if (!this.boardingReplays) {
+      this.boardingReplays = [];
+    }
+    const nowTime = Date.now();
+    this.boardingReplays = this.boardingReplays.filter(r => nowTime - r.timestamp < 300000);
+
     for (const player of this.allPlayers) {
       player.wasAlive = player.isAlive !== false;
     }
@@ -7291,6 +7298,7 @@ export class Game {
             !other.isAmoeba &&
             other.marineCount > 0 && 
             !other.isMaterializing && 
+            other.scoutAttackEnabled === true &&
             Math.hypot(other.x - ship.x, other.y - ship.y) <= other.cruiserRadarRange()
           );
 
@@ -7347,66 +7355,126 @@ export class Game {
 
         ship.boardingTimer = Math.max(0, ship.boardingTimer - dt);
 
-        let M_atk = ship.boardingMarines;
-        let M_def = ship.marineCount || 0;
-        let C_def = ship.crew || 0;
-
-        // Symmetric combat tick during the 5 seconds, only if defenders are alive
-        if (ship.boardingTimer > 0 && M_atk > 0 && (M_def > 0 || C_def > 0)) {
-          const pacingFactor = 1.0; // pacing factor to stretch casualties over 5s
-          const killRateAtk = Math.max(0.05, Math.min(0.95, (50 + M_atk - C_def - M_def) / 100));
-          const defendersKilled = M_atk * killRateAtk * dt * pacingFactor;
-
-          const killRateDef = Math.max(0.05, Math.min(0.95, (25 + C_def + M_def - M_atk) / 100));
-          const attackersKilled = (C_def + M_def) * killRateDef * dt * pacingFactor;
-
-          M_atk = Math.max(0, M_atk - attackersKilled);
-
-          let remDeaths = defendersKilled;
-          if (M_def > 0) {
-            const deaths = Math.min(M_def, remDeaths);
-            M_def -= deaths;
-            remDeaths -= deaths;
-          }
-          C_def = Math.max(0, C_def - remDeaths);
-
-          ship.boardingMarines = M_atk;
-          ship.marineCount = M_def;
-          ship.crew = C_def;
-        }
-
-        // When the timer is up, resolve the combat to the end!
         if (ship.boardingTimer <= 0) {
-          // If both sides still have forces, instantly tick until one side dies
-          while (M_atk > 0 && (M_def > 0 || C_def > 0)) {
-            const killRateAtk = Math.max(0.05, Math.min(0.95, (50 + M_atk - C_def - M_def) / 100));
-            const defendersKilled = Math.max(0.1, M_atk * killRateAtk * 0.1);
+          let M_atk = ship.boardingMarines;
+          let M_def = ship.marineCount || 0;
+          let C_def = ship.crew || 0;
 
-            const killRateDef = Math.max(0.05, Math.min(0.95, (25 + C_def + M_def - M_atk) / 100));
-            const attackersKilled = Math.max(0.1, (C_def + M_def) * killRateDef * 0.1);
+          // Calculate tech/XP bonuses
+          const defenderPlayer = ship.owner || { id: 'monsters', techScore: 0 };
+          const attackerPlayer = ship.boardingPlayer || { id: 'unknown', techScore: 0 };
 
-            M_atk = Math.max(0, M_atk - attackersKilled);
+          const defTech = Math.sqrt(defenderPlayer.techScore || 0);
+          const defXp = Math.sqrt(ship.expScore || 0);
+          const defHitChance = 10 + defTech + defXp;
 
-            let remDeaths = defendersKilled;
-            if (M_def > 0) {
-              const deaths = Math.min(M_def, remDeaths);
-              M_def -= deaths;
-              remDeaths -= deaths;
+          let atkXp = 0;
+          if (ship.boardingSourceContributions && ship.boardingSourceContributions.length > 0) {
+            const launcher = this.ships.find(s => s.id === ship.boardingSourceContributions[0].shipId && s.active);
+            if (launcher) {
+              atkXp = Math.sqrt(launcher.expScore || 0);
             }
-            C_def = Math.max(0, C_def - remDeaths);
+          }
+          const atkTech = Math.sqrt(attackerPlayer.techScore || 0);
+          const atkHitChance = 10 + atkTech + atkXp;
+
+          const leftUnits = [];
+          for (let i = 0; i < M_def; i++) {
+            leftUnits.push({ id: `L_${i}`, type: 'marine', side: 'left', alive: true });
+          }
+          for (let i = 0; i < C_def; i++) {
+            leftUnits.push({ id: `L_${M_def + i}`, type: 'crew', side: 'left', alive: true });
           }
 
-          ship.boardingMarines = M_atk;
-          ship.marineCount = M_def;
-          ship.crew = C_def;
+          const rightUnits = [];
+          for (let i = 0; i < M_atk; i++) {
+            rightUnits.push({ id: `R_${i}`, type: 'marine', side: 'right', alive: true });
+          }
 
-          if (M_atk <= 0) {
+          let currentTime = 0;
+          const events = [];
+
+          while (leftUnits.some(u => u.alive) && rightUnits.some(u => u.alive)) {
+            const roundShots = [];
+            
+            leftUnits.forEach(u => {
+              if (u.alive) {
+                roundShots.push({ shooter: u, time: currentTime + Math.random(), enemyUnits: rightUnits, hitChance: defHitChance });
+              }
+            });
+
+            rightUnits.forEach(u => {
+              if (u.alive) {
+                roundShots.push({ shooter: u, time: currentTime + Math.random(), enemyUnits: leftUnits, hitChance: atkHitChance });
+              }
+            });
+
+            // Sort shots chronologically within this second
+            roundShots.sort((a, b) => a.time - b.time);
+
+            // Execute shots sequentially
+            for (const shot of roundShots) {
+              if (!shot.shooter.alive) continue;
+
+              const aliveEnemies = shot.enemyUnits.filter(u => u.alive);
+              if (aliveEnemies.length === 0) break;
+
+              if (Math.random() * 100 < shot.hitChance) {
+                const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+                target.alive = false;
+                events.push({
+                  time: shot.time,
+                  shooterId: shot.shooter.id,
+                  targetId: target.id
+                });
+              }
+            }
+
+            currentTime += 1.0;
+          }
+
+          const leftSurvivors = leftUnits.filter(u => u.alive);
+          const rightSurvivors = rightUnits.filter(u => u.alive);
+
+          const survivorMarines = leftSurvivors.filter(u => u.type === 'marine').length;
+          const survivorCrew = leftSurvivors.filter(u => u.type === 'crew').length;
+
+          // Record Replay
+          const replayName = `The battle for ${ship.name || ship.configName || ("Cruiser " + ship.id)}`;
+          const replay = {
+            id: `rep_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            name: replayName,
+            timestamp: Date.now(),
+            leftSide: {
+              name: ship.owner && ship.owner.id === 'monsters' ? 'MONSTERS' : (ship.owner ? (ship.owner.name || ship.owner.id) : 'Defender'),
+              color: ship.owner ? (ship.owner.color || '#ffffff') : '#ffffff',
+              units: leftUnits.map((u, idx) => ({ id: u.id, type: u.type, side: u.side, index: idx }))
+            },
+            rightSide: {
+              name: ship.boardingPlayer ? (ship.boardingPlayer.name || ship.boardingPlayer.id) : 'Attacker',
+              color: ship.boardingPlayer ? (ship.boardingPlayer.color || '#ff3366') : '#ff3366',
+              units: rightUnits.map((u, idx) => ({ id: u.id, type: u.type, side: u.side, index: idx }))
+            },
+            events: events,
+            winner: leftSurvivors.length > 0 ? 'Defender' : 'Attacker',
+            totalDuration: Math.max(1, currentTime)
+          };
+
+          if (!this.boardingReplays) {
+            this.boardingReplays = [];
+          }
+          this.boardingReplays.push(replay);
+
+          if (leftSurvivors.length > 0) {
             // Defenders win!
             ship.isUnderBoarding = false;
             ship.boardingMarines = 0;
+            ship.marineCount = survivorMarines;
+            ship.crew = survivorCrew;
             console.log(`[BOARDING RESOLVED] Defenders survived boarding action on Cruiser ${ship.id}.`);
           } else {
             // Attackers win!
+            M_atk = rightSurvivors.length;
             ship.isUnderBoarding = false;
             ship.boardingMarines = 0;
 

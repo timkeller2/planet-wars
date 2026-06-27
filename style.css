@@ -1255,3 +1255,57 @@ canvas {
   pointer-events: none;
   white-space: nowrap;
 }
+
+.replay-buttons-bar {
+  position: absolute;
+  bottom: 345px;
+  left: 20px;
+  width: 350px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  pointer-events: auto !important;
+  z-index: 110;
+}
+
+.replay-btn {
+  background: rgba(0, 229, 255, 0.1);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  color: #00e5ff;
+  padding: 6px 12px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.1);
+  text-shadow: 0 0 4px rgba(0, 229, 255, 0.5);
+  animation: fadeInReplay 0.3s ease-out;
+}
+
+@keyframes fadeInReplay {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.replay-btn:hover {
+  background: rgba(0, 229, 255, 0.25);
+  border-color: #00e5ff;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.replay-btn:active {
+  transform: translateY(1px);
+}
+
+.replay-btn::before {
+  content: '▶';
+  margin-right: 8px;
+  font-size: 0.75rem;
+}

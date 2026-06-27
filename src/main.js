@@ -5924,6 +5924,8 @@ function getPlanetTradeIncomePerMin(planet) {
       document.getElementById('boarding-combat-close-btn').addEventListener('click', () => {
         overlay.style.display = 'none';
         boardingCombatClosed = true;
+        isReplayMode = false;
+        activeReplay = null;
       });
     }
     return overlay;
@@ -6408,39 +6410,345 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   }
 
-  function updateBoardingOverlay(state) {
-    if (!state.ships) return;
+  const deletedReplayIds = new Set();
+  let activeReplay = null;
+  let activeReplayStartTime = 0;
+  let processedReplayEventIds = new Set();
+  let isReplayMode = false;
+
+  function syncReplayButtons(replays) {
+    const container = document.getElementById('replay-buttons-container');
+    if (!container) return;
+
+    if (!replays || replays.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    const nowTime = Date.now();
+    const activeReplays = replays.filter(r => !deletedReplayIds.has(r.id) && (nowTime - r.timestamp < 300000));
+
+    const currentBtnIds = Array.from(container.children).map(c => c.dataset.replayId).join(',');
+    const newBtnIds = activeReplays.map(r => r.id).join(',');
+
+    if (currentBtnIds !== newBtnIds) {
+      container.innerHTML = '';
+      activeReplays.forEach(r => {
+        const btn = document.createElement('button');
+        btn.className = 'replay-btn';
+        btn.textContent = r.name;
+        btn.dataset.replayId = r.id;
+        
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          playReplay(r);
+        });
+        
+        btn.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          deletedReplayIds.add(r.id);
+          syncReplayButtons(replays);
+        });
+        
+        container.appendChild(btn);
+      });
+    }
+  }
+
+  function createReplayVisualTroop(u, side, color) {
+    return {
+      id: u.id,
+      side: side,
+      type: u.type,
+      color: color,
+      index: u.index,
+      x: 0,
+      y: 0,
+      cx: 0,
+      cy: 0,
+      state: 'alive',
+      fallProgress: 0,
+      fallAngle: 0,
+      lastFired: 0
+    };
+  }
+
+  function layoutReplayVisualTroops(replayTime, totalDuration) {
+    const progress = Math.min(1.0, replayTime / totalDuration);
+    const leftStartX = 45;
+    const rightStartX = 305;
+    const centerTargetX = 175;
+    const unitsPerCol = 12;
+
+    boardingTroops.forEach(t => {
+      if (t.state === 'alive') {
+        const col = Math.floor(t.index / unitsPerCol);
+        const row = t.index % unitsPerCol;
+        
+        const startX = t.side === 'left' ? (leftStartX - col * 12) : (rightStartX + col * 12);
+        const targetX = centerTargetX;
+
+        t.x = startX + (targetX - startX) * progress;
+        t.y = 52 + row * 8;
+
+        if (replayTime === 0 || (t.cx === 0 && t.cy === 0)) {
+          t.cx = t.x;
+          t.cy = t.y;
+        }
+      }
+    });
+  }
+
+  function playReplay(replay) {
+    isReplayMode = true;
+    activeReplay = replay;
+    activeReplayStartTime = Date.now();
+    processedReplayEventIds.clear();
+    boardingCombatClosed = false;
+
+    ensureBoardingCombatWindowExists();
+    const overlay = document.getElementById('boarding-combat-overlay');
+    if (overlay) {
+      overlay.style.display = 'block';
+    }
+
+    const resultDiv = document.getElementById('boarding-combat-result');
+    if (resultDiv) {
+      resultDiv.textContent = '';
+    }
+
+    const timerSpan = document.getElementById('boarding-combat-timer');
+    if (timerSpan) {
+      timerSpan.textContent = replay.totalDuration.toFixed(1);
+    }
+
+    boardingWinnerMessage = '';
+    boardingWinnerTime = 0;
+    boardingTroops = [];
+    boardingLasers = [];
+    boardingBlastParticles = [];
+
+    boardingDefenderName = replay.leftSide.name;
+    boardingDefenderColor = replay.leftSide.color;
+    boardingAttackerName = replay.rightSide.name;
+    boardingAttackerColor = replay.rightSide.color;
+
+    startingDefenderCount = replay.leftSide.units.length;
+    startingAttackerCount = replay.rightSide.units.length;
+
+    boardingDefenderCount = startingDefenderCount;
+    boardingAttackerCount = startingAttackerCount;
+
+    replay.leftSide.units.forEach(u => {
+      boardingTroops.push(createReplayVisualTroop(u, 'left', replay.leftSide.color));
+    });
+
+    replay.rightSide.units.forEach(u => {
+      boardingTroops.push(createReplayVisualTroop(u, 'right', replay.rightSide.color));
+    });
+
+    layoutReplayVisualTroops(0, replay.totalDuration);
+
+    if (!boardingAnimFrame) {
+      lastBoardingStateTime = Date.now();
+      animateReplayCombat();
+    }
+  }
+
+  function animateReplayCombat() {
+    if (!isReplayMode || !activeReplay) {
+      boardingAnimFrame = null;
+      return;
+    }
     
-    const boardingCruisers = state.ships.filter(s => s.isCruiser && s.isUnderBoarding && s.boardingMarines > 0);
+    boardingAnimFrame = requestAnimationFrame(animateReplayCombat);
     
-    if (activeBoardingShipId !== null) {
-      const activeStillBoarding = boardingCruisers.find(s => s.id === activeBoardingShipId);
-      const elapsed = Date.now() - boardingCombatStartTime;
+    const now = Date.now();
+    const dt = Math.min(0.1, (now - lastBoardingStateTime) / 1000);
+    lastBoardingStateTime = now;
+
+    const replayTime = (now - activeReplayStartTime) / 1000;
+    
+    const canvas = document.getElementById('boardingCombatCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = 'rgba(8, 20, 28, 0.6)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.08)';
+    ctx.lineWidth = 1;
+    for (let x = 10; x < canvas.width; x += 20) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = 10; y < canvas.height; y += 20) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+    
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 125);
+    ctx.lineTo(canvas.width, 125);
+    ctx.stroke();
+
+    activeReplay.events.forEach((ev, idx) => {
+      if (replayTime >= ev.time && !processedReplayEventIds.has(idx)) {
+        processedReplayEventIds.add(idx);
+        
+        const shooter = boardingTroops.find(t => t.id === ev.shooterId);
+        const target = boardingTroops.find(t => t.id === ev.targetId);
+        
+        if (shooter && target && shooter.state === 'alive' && target.state === 'alive') {
+          fireLaser(shooter, target);
+          target.state = 'dying';
+          target.fallProgress = 0;
+          target.fallAngle = 0;
+
+          if (now - lastLaserSoundTime > 150) {
+            playSound('laser');
+            lastLaserSoundTime = now;
+          }
+
+          if (target.side === 'left') {
+            boardingDefenderCount = Math.max(0, boardingDefenderCount - 1);
+          } else {
+            boardingAttackerCount = Math.max(0, boardingAttackerCount - 1);
+          }
+        }
+      }
+    });
+
+    layoutReplayVisualTroops(replayTime, activeReplay.totalDuration);
+
+    ctx.save();
+    ctx.font = 'bold 11px Orbitron, sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    
+    ctx.fillStyle = '#000000';
+    ctx.fillText(boardingDefenderName.toUpperCase(), 16, 16);
+    ctx.fillStyle = boardingDefenderColor;
+    ctx.fillText(boardingDefenderName.toUpperCase(), 15, 15);
+    
+    ctx.font = '10px Orbitron, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 16, 31);
+    ctx.fillStyle = '#b0bec5';
+    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 15, 30);
+    
+    ctx.font = 'bold 11px Orbitron, sans-serif';
+    ctx.textAlign = 'right';
+    
+    ctx.fillStyle = '#000000';
+    ctx.fillText(boardingAttackerName.toUpperCase(), canvas.width - 14, 16);
+    ctx.fillStyle = boardingAttackerColor;
+    ctx.fillText(boardingAttackerName.toUpperCase(), canvas.width - 15, 15);
+    
+    ctx.font = '10px Orbitron, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 14, 31);
+    ctx.fillStyle = '#b0bec5';
+    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 15, 30);
+    
+    ctx.restore();
+
+    boardingBlastParticles = boardingBlastParticles.filter(p => {
+      p.age += dt;
+      if (p.age >= p.duration) return false;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 80 * dt;
       
-      if (activeStillBoarding) {
-        cachedLastCruiserState = activeStillBoarding;
-        if (elapsed >= 2000) {
-          syncBoardingCombatData(activeStillBoarding);
+      const progress = p.age / p.duration;
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = 1 - progress;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2 * (1 - progress), 0, Math.PI * 2);
+      ctx.fill();
+      return true;
+    });
+    ctx.globalAlpha = 1.0;
+    
+    boardingLasers = boardingLasers.filter(l => {
+      l.age += dt;
+      const progress = l.age / (l.duration / 60);
+      if (progress >= 1) return false;
+      
+      ctx.strokeStyle = l.color;
+      ctx.lineWidth = 3 * (1 - progress);
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = l.color;
+      ctx.beginPath();
+      ctx.moveTo(l.sx, l.sy);
+      ctx.lineTo(l.tx, l.ty);
+      ctx.stroke();
+      
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1 * (1 - progress);
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.moveTo(l.sx, l.sy);
+      ctx.lineTo(l.tx, l.ty);
+      ctx.stroke();
+      return true;
+    });
+    
+    boardingTroops.forEach(t => {
+      t.cx += (t.x - t.cx) * 0.15;
+      t.cy += (t.y - t.cy) * 0.15;
+      
+      if (t.state === 'dying') {
+        t.fallProgress += dt * 4;
+        t.fallAngle = t.fallProgress * (Math.PI / 2);
+        if (t.fallProgress >= 1) {
+          t.state = 'dead';
+          t.fallAngle = Math.PI / 2;
+        }
+      }
+      
+      drawTroop(ctx, t);
+    });
+    
+    const timerSpan = document.getElementById('boarding-combat-timer');
+    if (timerSpan) {
+      const remainingTime = Math.max(0, activeReplay.totalDuration - replayTime);
+      timerSpan.textContent = remainingTime.toFixed(1);
+    }
+
+    if (replayTime >= activeReplay.totalDuration) {
+      if (!boardingWinnerMessage) {
+        boardingWinnerMessage = activeReplay.winner === 'Defender' ? 
+          `${activeReplay.leftSide.name.toUpperCase()} WINS!` : 
+          `${activeReplay.rightSide.name.toUpperCase()} WINS!`;
+        boardingWinnerTime = Date.now();
+
+        const resultDiv = document.getElementById('boarding-combat-result');
+        if (resultDiv) {
+          resultDiv.textContent = boardingWinnerMessage;
+          resultDiv.style.color = activeReplay.winner === 'Defender' ? activeReplay.leftSide.color : activeReplay.rightSide.color;
         }
       } else {
-        const lastState = serverState ? serverState.ships.find(s => s.id === activeBoardingShipId) : null;
-        if (lastState) {
-          cachedLastCruiserState = lastState;
+        if (Date.now() - boardingWinnerTime > 3000) {
+          const overlay = document.getElementById('boarding-combat-overlay');
+          if (overlay) overlay.style.display = 'none';
+          isReplayMode = false;
+          activeReplay = null;
         }
-        if (elapsed >= 6000) {
-          handleBoardingCombatEnd(cachedLastCruiserState || lastState);
-        }
-      }
-    } else {
-      if (boardingCruisers.length > 0) {
-        const nextCruiser = boardingCruisers[0];
-        boardingCombatClosed = false;
-        activeBoardingShipId = nextCruiser.id;
-        startingOwnerId = nextCruiser.ownerId;
-        
-        initBoardingCombat(nextCruiser);
       }
     }
+  }
+
+  function updateBoardingOverlay(state) {
+    syncReplayButtons(state.boardingReplays);
   }
 
   function formatTime(seconds) {
