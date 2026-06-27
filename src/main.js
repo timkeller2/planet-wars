@@ -6084,23 +6084,12 @@ function getPlanetTradeIncomePerMin(planet) {
       boardingWinnerMessage = 'Cruiser Destroyed!';
     } else {
       const ownerId = lastCruiserState.ownerId;
-      const defendersSurvived = (lastCruiserState.crew || 0) + (lastCruiserState.marineCount || 0) > 0;
-      const attackersSurvived = (lastCruiserState.boardingMarines || 0) > 0;
-      
-      if (attackersSurvived && !defendersSurvived) {
+      if (startingOwnerId && ownerId !== startingOwnerId) {
         winner = 'Attacker';
         boardingWinnerMessage = `${boardingAttackerName.toUpperCase()} WINS!`;
-      } else if (defendersSurvived && !attackersSurvived) {
+      } else {
         winner = 'Defender';
         boardingWinnerMessage = `${boardingDefenderName.toUpperCase()} WINS!`;
-      } else {
-        if (startingOwnerId && ownerId !== startingOwnerId) {
-          winner = 'Attacker';
-          boardingWinnerMessage = `${boardingAttackerName.toUpperCase()} WINS!`;
-        } else {
-          winner = 'Defender';
-          boardingWinnerMessage = `${boardingDefenderName.toUpperCase()} WINS!`;
-        }
       }
     }
     
