@@ -11039,10 +11039,14 @@ function getPlanetTradeIncomePerMin(planet) {
 
     // Dynamic button visibility
     const selectedCruiser = getSelectedCruiser();
-    if (!selectedCruiser || (lastSelectedCruiserId !== null && selectedCruiser.id !== lastSelectedCruiserId)) {
+    const selectedPlanet = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
+    const currentSelectionId = selectedCruiser ? `ship-${selectedCruiser.id}` : (selectedPlanet ? `planet-${selectedPlanet.id}` : null);
+    if (!selectedCruiser && !selectedPlanet) {
+      upgradeModeActive = false;
+    } else if (currentSelectionId !== (window.lastSelectionId || null)) {
       upgradeModeActive = false;
     }
-    lastSelectedCruiserId = selectedCruiser ? selectedCruiser.id : null;
+    window.lastSelectionId = currentSelectionId;
     const upgradeQual = getSelectedCruiserUpgradeQualifiers();
 
     const btnFocusMode = document.getElementById('btn-focus-mode');
