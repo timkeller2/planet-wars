@@ -540,6 +540,7 @@ async function bootstrap() {
       const planet = game.planets.find(p => p.id === data.planetId);
       if (planet && planet.owner && planet.owner.id === player.id) {
         if (planet.inRevolt) return;
+        if (planet.upgradeTransition) return; // Prevent concurrent upgrades
         const typesMap = {
           sensorarray: 'sensorarrays',
           lab: 'labs',
@@ -590,21 +591,18 @@ async function bootstrap() {
           }
 
           const creditsAvailable = (player.credits || 0) - minAllowedCredits;
-          if ((planet.ships + creditsAvailable) >= cost) {
-            // Deduct cost
-            let remainingCost = cost;
-            const shipsDeducted = Math.min(planet.ships, remainingCost);
-            planet.ships -= shipsDeducted;
-            remainingCost -= shipsDeducted;
-            
-            if (remainingCost > 0) {
-              player.credits -= remainingCost;
-            }
-
-            // Apply upgrade
-            planet[prop] = nextLevel;
-            distributeUpgradeCredits(player, data.type, cost);
-            console.log(`[Server Planet Upgrade Success] Planet ${planet.id} upgraded ${prop} to ${nextLevel}. Cost: ${cost}`);
+          if (creditsAvailable >= cost) {
+            // Start the 30-second transition instead of applying immediately
+            planet.upgradeTransition = {
+              type: data.type,
+              prop: prop,
+              elapsed: 0,
+              duration: 30000,
+              totalCost: cost,
+              costRemaining: cost,
+              playerId: player.id
+            };
+            console.log(`[Server Planet Upgrade Started] Planet ${planet.id} starting upgrade ${prop} to ${nextLevel}. Cost: ${cost}`);
           }
         }
       }
@@ -2082,6 +2080,15 @@ async function bootstrap() {
 
       const speed = game.gameSpeed || 1.0;
       game.update(deltaTime * speed);
+
+      // Check for completed planet upgrades to distribute credits
+      for (const planet of game.planets) {
+        if (planet.upgradeCompleted) {
+          distributeUpgradeCredits(planet.owner, planet.upgradeCompleted.type, planet.upgradeCompleted.cost);
+          planet.upgradeCompleted = null;
+        }
+      }
+
       game.checkWinCondition();
       
       // Process pending game chat messages
@@ -2348,6 +2355,10 @@ async function bootstrap() {
           focusTransition: p.focusTransition ? {
             targetMode: p.focusTransition.targetMode,
             progress: Math.min(1.0, p.focusTransition.elapsed / 15000)
+          } : null,
+          upgradeTransition: p.upgradeTransition ? {
+            type: p.upgradeTransition.type,
+            progress: Math.min(1.0, p.upgradeTransition.elapsed / 30000)
           } : null,
           finalRateExceedsOne: finalRate > 1.0,
           resources: p.resources || null,

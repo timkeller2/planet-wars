@@ -3223,6 +3223,34 @@ export class Game {
           owner.builtClasses[classType] = true;
           owner.buildCounts = owner.buildCounts || {};
           owner.buildCounts[classType] = (owner.buildCounts[classType] || 0) + 1;
+
+          // Apply the 1% discount for each upgrade in the configuration
+          if (upgrades) {
+            const typeKeyMap = {
+              sensorarrays: 'sensorarray',
+              labs: 'lab',
+              armor: 'armor',
+              shields: 'shield',
+              engine: 'engine',
+              munitions: 'munitions',
+              targeting: 'targeting',
+              damagecontrol: 'damagecontrol',
+              supply_ship: 'supplyship',
+              extended_fuel: 'extendedfuel',
+              diplomat: 'diplomat',
+              marines: 'marines',
+              command: 'command'
+            };
+            for (const [prop, count] of Object.entries(upgrades)) {
+              const normType = typeKeyMap[prop] || prop;
+              const val = parseInt(count, 10) || 0;
+              if (val > 0 && owner.upgradeModifiers && owner.upgradeModifiers[normType] !== undefined) {
+                for (let i = 0; i < val; i++) {
+                  owner.upgradeModifiers[normType] = Math.max(-0.50, owner.upgradeModifiers[normType] - 0.01);
+                }
+              }
+            }
+          }
         }
         source.decreaseMaxShips(costCap);
 

@@ -312,6 +312,37 @@ export class Planet {
       }
     }
 
+    // Handle planet upgrade transition
+    if (this.upgradeTransition) {
+      if (!this.owner || this.owner.id !== this.upgradeTransition.playerId) {
+        this.upgradeTransition = null;
+      } else {
+        this.upgradeTransition.elapsed += deltaTime;
+        const progress = Math.min(1.0, this.upgradeTransition.elapsed / 30000);
+        const consumedSoFar = Math.floor(this.upgradeTransition.totalCost * progress);
+        const alreadyConsumed = this.upgradeTransition.totalCost - this.upgradeTransition.costRemaining;
+        const toConsume = consumedSoFar - alreadyConsumed;
+        
+        if (toConsume > 0) {
+          this.owner.credits = (this.owner.credits || 0) - toConsume;
+          this.upgradeTransition.costRemaining -= toConsume;
+        }
+        
+        if (progress >= 1.0) {
+          const prop = this.upgradeTransition.prop;
+          this[prop] = (this[prop] || 0) + 1;
+          
+          this.upgradeCompleted = {
+            type: this.upgradeTransition.type,
+            prop: prop,
+            cost: this.upgradeTransition.totalCost
+          };
+          
+          this.upgradeTransition = null;
+        }
+      }
+    }
+
     const isHuman = this.owner && !this.owner.isAI;
     const focus = this.focusMode || 'economy';
 

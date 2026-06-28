@@ -1773,6 +1773,18 @@ function getPlanetTradeIncomePerMin(planet) {
         ctxTile.restore();
       }
 
+      if (p.upgradeTransition) {
+        const progress = p.upgradeTransition.progress || 0;
+        ctxTile.save();
+        ctxTile.beginPath();
+        const ringRadius = p.radius + 14;
+        ctxTile.arc(p.x, p.y, ringRadius, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * progress));
+        ctxTile.strokeStyle = '#00e5ff';
+        ctxTile.lineWidth = 2;
+        ctxTile.stroke();
+        ctxTile.restore();
+      }
+
       if (!p.inFog || p.permanentlyTracked || isLastKnownPlanet) {
         const displayShips = isLastKnownPlanet ? lastKnownPlanets[p.id].ships : p.ships;
         const displayMaxShips = isLastKnownPlanet ? lastKnownPlanets[p.id].maxShips : p.maxShips;
@@ -11274,7 +11286,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
             const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
             const entityResourceShips = isPlanet ? entity.ships : (upgradeQual ? upgradeQual.planet.ships : 0);
-            const canAfford = hasTokens || ((entityResourceShips + creditsAvailable) >= uCost);
+            const canAfford = hasTokens || (isPlanet ? (creditsAvailable >= uCost) : ((entityResourceShips + creditsAvailable) >= uCost));
             if (!canAfford) {
               el.style.opacity = '0.5';
               el.style.pointerEvents = 'none';
@@ -13128,6 +13140,73 @@ function getPlanetTradeIncomePerMin(planet) {
           const pulse = 1.0 + Math.sin(Date.now() / 150) * 0.1;
           ctx.font = `${Math.floor(13 * pulse)}px sans-serif`;
           ctx.fillText(`${emoji} INCOMING`, p.x, p.y - p.radius - 20);
+          ctx.restore();
+        }
+
+        if (p.upgradeTransition) {
+          const progress = p.upgradeTransition.progress || 0;
+          const type = p.upgradeTransition.type;
+          
+          const emojis = {
+            sensorarray: '📡',
+            lab: '🔬',
+            armor: '🛡️',
+            shield: '🔮',
+            engine: '🚀',
+            munitions: '💣',
+            targeting: '🎯',
+            damagecontrol: '🔧',
+            supplyship: '🚚',
+            extendedfuel: '⛽',
+            diplomat: '💼',
+            marines: '🎖️',
+            command: '⭐'
+          };
+          const emoji = emojis[type] || '⚙️';
+          
+          // 1. Draw glowing rotating progress ring (cyberpunk blue)
+          ctx.save();
+          ctx.beginPath();
+          const ringRadius = p.radius + 14;
+          ctx.arc(p.x, p.y, ringRadius, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * progress));
+          
+          ctx.strokeStyle = '#00e5ff'; // neon cyan
+          ctx.lineWidth = 3;
+          ctx.shadowColor = '#00e5ff';
+          ctx.shadowBlur = 8;
+          ctx.stroke();
+          ctx.restore();
+          
+          // 2. Draw rotating particles orbiting the planet (pink/magenta)
+          ctx.save();
+          const particleCount = 6;
+          const angleOffset = -(Date.now() / 300) % (Math.PI * 2); // Rotate opposite direction
+          for (let i = 0; i < particleCount; i++) {
+            const angle = angleOffset + (i / particleCount) * Math.PI * 2;
+            const currentRadius = p.radius + 14 + Math.sin(Date.now() / 100 + i) * 3 * (1 - progress);
+            const px = p.x + Math.cos(angle) * currentRadius;
+            const py = p.y + Math.sin(angle) * currentRadius;
+            
+            ctx.beginPath();
+            ctx.arc(px, py, 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff00ff'; // glowing magenta
+            ctx.shadowColor = '#ff00ff';
+            ctx.shadowBlur = 6;
+            ctx.fill();
+          }
+          ctx.restore();
+
+          // 3. Draw dynamic floating emoji/status above the planet
+          ctx.save();
+          ctx.font = 'bold 11px Orbitron';
+          ctx.fillStyle = '#00e5ff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.shadowColor = '#000';
+          ctx.shadowBlur = 4;
+          const pulse = 1.0 + Math.sin(Date.now() / 150) * 0.1;
+          ctx.font = `${Math.floor(13 * pulse)}px sans-serif`;
+          ctx.fillText(`${emoji} UPGRADING`, p.x, p.y - p.radius - 20);
           ctx.restore();
         }
 
