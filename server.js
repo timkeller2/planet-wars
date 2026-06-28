@@ -90,6 +90,80 @@ async function bootstrap() {
   const connectedClients = new Map(); // socket.id -> player reference
   let lastHumanActivityTime = Date.now();
 
+  function getSocketIdForPlayer(playerId) {
+    for (const [socketId, player] of connectedClients.entries()) {
+      if (player && player.id === playerId) {
+        return socketId;
+      }
+    }
+    return null;
+  }
+
+  function distributeUpgradeCredits(buyingPlayer, upgradeType, cost) {
+    if (cost <= 0) return;
+    
+    const propMap = {
+      sensorarrays: 'sensorarrays',
+      sensorarray: 'sensorarrays',
+      labs: 'labs',
+      lab: 'labs',
+      armor: 'armor',
+      shields: 'shields',
+      shield: 'shields',
+      engine: 'engine',
+      munitions: 'munitions',
+      targeting: 'targeting',
+      damagecontrol: 'damagecontrol',
+      supply_ship: 'supply_ship',
+      supplyship: 'supply_ship',
+      extended_fuel: 'extended_fuel',
+      extendedfuel: 'extended_fuel',
+      diplomat: 'diplomat',
+      marines: 'marines',
+      command: 'command'
+    };
+    const propName = propMap[upgradeType] || upgradeType;
+
+    // Find other players who have planet upgrades of this type
+    const otherPlayers = []; // { player, count }
+    let totalOtherPlanetUpgrades = 0;
+
+    for (const p of game.allPlayers) {
+      if (p.id === buyingPlayer.id || p.id === 'monsters') continue;
+      
+      let count = 0;
+      for (const planet of game.planets) {
+        if (planet.owner && planet.owner.id === p.id && !planet.dead) {
+          count += (planet[propName] || 0);
+        }
+      }
+      
+      if (count > 0) {
+        otherPlayers.push({ player: p, count });
+        totalOtherPlanetUpgrades += count;
+      }
+    }
+
+    if (totalOtherPlanetUpgrades > 0) {
+      const distributedTotal = cost / 2;
+      for (const op of otherPlayers) {
+        const share = op.count / totalOtherPlanetUpgrades;
+        const gained = distributedTotal * share;
+        op.player.credits = (op.player.credits || 0) + gained;
+        
+        // Send private chat to this player
+        const socketId = getSocketIdForPlayer(op.player.id);
+        if (socketId) {
+          io.to(socketId).emit('chatMessage', {
+            sender: 'System',
+            color: '#ffd700', // Gold color
+            text: `You gained ${gained.toFixed(1)} credits because player ${buyingPlayer.name || buyingPlayer.id} purchased a ${propName} upgrade!`
+          });
+        }
+      }
+    }
+  }
+
   function executeCommand(cmdStr, player, socket, io, game) {
     const hasCheats = true;
 
@@ -451,6 +525,91 @@ async function bootstrap() {
       }
     });
 
+    socket.on('upgradePlanet', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      player.lastCommandTime = Date.now();
+      player.afkWarningSent = false;
+      if (player.isAI) {
+        player.isAI = false;
+      }
+
+      console.log(`[Server Received Planet Upgrade] Player: ${player.name}, planetId: ${data.planetId}, type: ${data.type}`);
+      const planet = game.planets.find(p => p.id === data.planetId);
+      if (planet && planet.owner && planet.owner.id === player.id) {
+        if (planet.inRevolt) return;
+        const typesMap = {
+          sensorarray: 'sensorarrays',
+          lab: 'labs',
+          armor: 'armor',
+          shield: 'shields',
+          engine: 'engine',
+          munitions: 'munitions',
+          targeting: 'targeting',
+          damagecontrol: 'damagecontrol',
+          supplyship: 'supply_ship',
+          extendedfuel: 'extended_fuel',
+          diplomat: 'diplomat',
+          marines: 'marines',
+          command: 'command'
+        };
+        const prop = typesMap[data.type];
+        if (prop && (planet[prop] || 0) < 5) {
+          const totalUpgrades = (planet.sensorarrays || 0) +
+                                (planet.labs || 0) +
+                                (planet.armor || 0) +
+                                (planet.shields || 0) +
+                                (planet.engine || 0) +
+                                (planet.munitions || 0) +
+                                (planet.targeting || 0) +
+                                (planet.damagecontrol || 0) +
+                                (planet.supply_ship || 0) +
+                                (planet.extended_fuel || 0) +
+                                (planet.diplomat || 0) +
+                                (planet.marines || 0) +
+                                (planet.command || 0);
+
+          const maxTotalUpgrades = Math.ceil(planet.maxShips / 50);
+
+          const currentVal = planet[prop] || 0;
+          const nextLevel = currentVal + 1;
+
+          if (totalUpgrades >= maxTotalUpgrades) {
+            console.log(`[Server Planet Upgrade Rejected] Max upgrades reached.`);
+            return;
+          }
+
+          const cost = game.getUpgradeCost(planet, data.type) * 3;
+
+          let minAllowedCredits = 0;
+          const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
+          if (ownsHomeworld) {
+            minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
+          }
+
+          const creditsAvailable = (player.credits || 0) - minAllowedCredits;
+          if ((planet.ships + creditsAvailable) >= cost) {
+            // Deduct cost
+            let remainingCost = cost;
+            const shipsDeducted = Math.min(planet.ships, remainingCost);
+            planet.ships -= shipsDeducted;
+            remainingCost -= shipsDeducted;
+            
+            if (remainingCost > 0) {
+              player.credits -= remainingCost;
+            }
+
+            // Apply upgrade
+            planet[prop] = nextLevel;
+            distributeUpgradeCredits(player, data.type, cost);
+            console.log(`[Server Planet Upgrade Success] Planet ${planet.id} upgraded ${prop} to ${nextLevel}. Cost: ${cost}`);
+          }
+        }
+      }
+    });
+
     socket.on('upgradeCruiser', (data) => {
       if (!game.isRunning || game.isPaused) return;
       const player = connectedClients.get(socket.id);
@@ -636,6 +795,7 @@ async function bootstrap() {
             ship.upgradeAccumulator = 0;
             
             console.log(`Started progressive upgrade for cruiser ${ship.id} with ${data.type}, financing from closest planet ${p.id} at cost ${cost}`);
+            distributeUpgradeCredits(player, data.type, cost);
             upgradeStarted = true;
           }
           if (!upgradeStarted) {
@@ -2147,28 +2307,7 @@ async function bootstrap() {
         p.revoltAttemptEvent = false;
 
         // Calculate final production rate with soft-cap
-        let finalRate = 0;
-        if (p.owner) {
-          const isHuman = !p.owner.isAI;
-          const focus = p.focusMode || 'economy';
-          const growthLimit = (isHuman && focus === 'garrison') ? p.maxShips * 2 : p.maxShips;
-          
-          if (p.ships < growthLimit || p.owner.isAI) {
-            const techBonus = p.owner.techScore ? 0.01 * Math.sqrt(p.owner.techScore) : 0;
-            const lowPopMultiplier = Math.min(1.0, 0.10 + 0.02 * Math.max(0, p.ships - 5));
-            const effectiveMaxShips = p.rampageBoost ? p.maxShips * 3 : p.maxShips;
-            const prodDivisor = 100 / (game.settings?.productionMultiple || 1.0);
-            finalRate = (Math.max(10, effectiveMaxShips - p.ships) / prodDivisor) * (1 + techBonus) * lowPopMultiplier;
-            if (p.homeworldOf === p.owner.id) {
-              finalRate *= 2;
-            }
-            if (isHuman) {
-              if (finalRate > 1.0) {
-                finalRate = 1.0 + ((finalRate - 1.0) / 3);
-              }
-            }
-          }
-        }
+        const finalRate = p.getFinalProductionRate(game.settings);
 
         return {
           id: p.id,
@@ -2222,6 +2361,19 @@ async function bootstrap() {
           activeDiplomatId: p.activeDiplomatId || null,
           useResources: p.useResources || false,
           isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false,
+          sensorarrays: p.sensorarrays || 0,
+          labs: p.labs || 0,
+          armor: p.armor || 0,
+          shields: p.shields || 0,
+          engine: p.engine || 0,
+          munitions: p.munitions || 0,
+          targeting: p.targeting || 0,
+          damagecontrol: p.damagecontrol || 0,
+          supply_ship: p.supply_ship || 0,
+          extended_fuel: p.extended_fuel || 0,
+          diplomat: p.diplomat || 0,
+          marines: p.marines || 0,
+          command: p.command || 0,
            anomaly: p.anomaly ? {
              id: p.anomaly.id,
              x: p.anomaly.x,

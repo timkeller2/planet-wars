@@ -108,6 +108,21 @@ export class Planet {
         break;
       }
     }
+
+    // Planet Upgrades
+    this.sensorarrays = 0;
+    this.labs = 0;
+    this.armor = 0;
+    this.shields = 0;
+    this.engine = 0;
+    this.munitions = 0;
+    this.targeting = 0;
+    this.damagecontrol = 0;
+    this.supply_ship = 0;
+    this.extended_fuel = 0;
+    this.diplomat = 0;
+    this.marines = 0;
+    this.command = 0;
   }
 
   generatePlanetName() {
@@ -157,6 +172,31 @@ export class Planet {
     if (this.supplies !== undefined) {
       this.supplies = Math.min(this.supplies, this.maxShips);
     }
+  }
+
+  getFinalProductionRate(settings) {
+    if (!this.owner) return 0;
+    const isHuman = !this.owner.isAI;
+    const focus = this.focusMode || 'economy';
+    const growthLimit = (isHuman && focus === 'garrison') ? this.maxShips * 2 : this.maxShips;
+    
+    if (this.ships < growthLimit || this.owner.isAI) {
+      const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
+      const lowPopMultiplier = Math.min(1.0, 0.10 + 0.02 * Math.max(0, this.ships - 5));
+      const effectiveMaxShips = this.rampageBoost ? this.maxShips * 3 : this.maxShips;
+      const prodDivisor = 100 / (settings?.productionMultiple || 1.0);
+      let rate = (Math.max(10, effectiveMaxShips - this.ships) / prodDivisor) * (1 + techBonus) * lowPopMultiplier;
+      if (this.homeworldOf === this.owner.id) {
+        rate *= 2;
+      }
+      if (isHuman) {
+        if (rate > 1.0) {
+          rate = 1.0 + ((rate - 1.0) / 3);
+        }
+      }
+      return rate;
+    }
+    return 0;
   }
 
   update(deltaTime, allPlanets, settings, game) {

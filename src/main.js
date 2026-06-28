@@ -3065,7 +3065,31 @@ function getPlanetTradeIncomePerMin(planet) {
       const improvementRateText = owner ? `${p.habitability}/${maxTerraformedVal}` : `${p.habitability}`;
       lines.push({ label: `Improvement Rate: ${improvementRateText}`, value: `Potential: ${softCap}`, color: '#ffb74d' });
 
-      const producedIcons = p.resources ? p.resources.map(r => resourceEmojis[r] || '').filter(Boolean).join(' ') : '';
+      const upgradeEmojis = {
+        sensorarrays: '📡',
+        labs: '🔬',
+        armor: '⛨',
+        shields: '🛡️',
+        engine: '🚀',
+        munitions: '💣',
+        targeting: '🎯',
+        damagecontrol: '🔧',
+        supply_ship: '📦',
+        extended_fuel: '⛽',
+        diplomat: '🤝',
+        marines: '🪖',
+        command: '👑'
+      };
+      let upgradeIcons = '';
+      for (const [prop, emoji] of Object.entries(upgradeEmojis)) {
+        const val = p[prop] || 0;
+        if (val > 0) {
+          upgradeIcons += ` ${emoji}${val > 1 ? val : ''}`;
+        }
+      }
+
+      const producedIcons = (p.resources ? p.resources.map(r => resourceEmojis[r] || '').filter(Boolean).join(' ') : '') +
+                            (upgradeIcons ? ' ' + upgradeIcons : '');
       const wantedResourceName = p.preferredResource ? p.preferredResource.charAt(0).toUpperCase() + p.preferredResource.slice(1) : 'Nothing';
       const wantedStr = p.preferredResource ? `${resourceEmojis[p.preferredResource] || ''} ${wantedResourceName}${prefBonusStr}` : 'Nothing';
 
@@ -5753,29 +5777,45 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (state.happinessEvents && state.happinessEvents.length > 0) {
       for (const ev of state.happinessEvents) {
-        const count = Math.max(1, Math.round(ev.amount));
-        const hName = getHabName(ev.habitability);
-        const hIcon = habIcons[hName] || '🪐';
-        for (let j = 0; j < count; j++) {
-          const angle = Math.random() * Math.PI * 2;
-          const distance = Math.random() * 15;
-          const startX = ev.x + Math.cos(angle) * distance;
-          const startY = ev.y + Math.sin(angle) * distance;
-          
+        if (ev.isBrokenHeart) {
           floatingAnimations.push({
-            x: startX,
-            y: startY,
-            startX: startX,
-            startY: startY,
-            text: hIcon,
+            x: ev.x,
+            y: ev.y,
+            startX: ev.x,
+            startY: ev.y,
+            text: '💔',
             type: 'happiness_icon',
-            age: -j * 0.45,
+            age: 0,
             duration: 7.0,
-            color: ev.color || '#ffeb3b',
+            color: ev.color || '#ff1744',
             driftAngle: -Math.PI / 2 + (Math.random() - 0.5) * 0.8,
             driftSpeed: 10 + Math.random() * 6,
             spinSpeed: (Math.random() - 0.5) * 1.5
           });
+        } else {
+          const count = Math.max(1, Math.round(ev.amount));
+          const hIcon = '💖';
+          for (let j = 0; j < count; j++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * 15;
+            const startX = ev.x + Math.cos(angle) * distance;
+            const startY = ev.y + Math.sin(angle) * distance;
+            
+            floatingAnimations.push({
+              x: startX,
+              y: startY,
+              startX: startX,
+              startY: startY,
+              text: hIcon,
+              type: 'happiness_icon',
+              age: -j * 0.45,
+              duration: 7.0,
+              color: ev.color || '#ffeb3b',
+              driftAngle: -Math.PI / 2 + (Math.random() - 0.5) * 0.8,
+              driftSpeed: 10 + Math.random() * 6,
+              spinSpeed: (Math.random() - 0.5) * 1.5
+            });
+          }
         }
       }
     }
@@ -7657,8 +7697,10 @@ function getPlanetTradeIncomePerMin(planet) {
                           (ship.supply_ship || 0) +
                           (ship.extended_fuel || 0) +
                           (ship.diplomat || 0) +
-                          (ship.marines || 0);
-    const baseCost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
+                          (ship.marines || 0) +
+                          (ship.command || 0);
+    const healthVal = (ship.maxHealth !== undefined) ? ship.maxHealth : (ship.maxShips || 100);
+    const baseCost = Math.min(150, Math.round(25 + healthVal * (3 + totalUpgrades / 3)));
     
     const typeKeyMap = {
       sensorarrays: 'sensorarray',
@@ -7693,7 +7735,42 @@ function getPlanetTradeIncomePerMin(planet) {
     }
     
     const modifier = Math.max(-0.50, globalMod + playerMod);
-    return Math.max(1, Math.round(baseCost * (1 + modifier)));
+    let finalCost = Math.max(1, Math.round(baseCost * (1 + modifier)));
+
+    // Only apply the planet upgrade divisor if it's a ship upgrade
+    const isShip = (ship.maxHealth !== undefined);
+    if (isShip && ship.ownerId) {
+      const propMap = {
+        sensorarrays: 'sensorarrays',
+        sensorarray: 'sensorarrays',
+        labs: 'labs',
+        lab: 'labs',
+        armor: 'armor',
+        shields: 'shields',
+        shield: 'shields',
+        engine: 'engine',
+        munitions: 'munitions',
+        targeting: 'targeting',
+        damagecontrol: 'damagecontrol',
+        supply_ship: 'supply_ship',
+        supplyship: 'supply_ship',
+        extended_fuel: 'extended_fuel',
+        extendedfuel: 'extended_fuel',
+        diplomat: 'diplomat',
+        marines: 'marines',
+        command: 'command'
+      };
+      const propName = propMap[type] || type;
+      let planetUpgradesCount = 0;
+      for (const p of serverState.planets) {
+        if (p.ownerId === ship.ownerId) {
+          planetUpgradesCount += (p[propName] || 0);
+        }
+      }
+      finalCost = Math.max(1, Math.round(finalCost / (1 + planetUpgradesCount)));
+    }
+
+    return finalCost;
   }
 
   let pendingShipConfig = null;
@@ -7756,7 +7833,19 @@ function getPlanetTradeIncomePerMin(planet) {
         playerMod = myPlayer.upgradeModifiers[normType];
       }
       const modifier = Math.max(-0.50, globalMod + playerMod);
-      const finalCostVal = Math.max(1, Math.round(baseCost * (1 + modifier)));
+      let finalCostVal = Math.max(1, Math.round(baseCost * (1 + modifier)));
+
+      // Apply the planet upgrade divisor for this upgrade type on client side
+      let planetUpgradesCount = 0;
+      if (myPlayer) {
+        for (const p of serverState.planets) {
+          if (p.ownerId === myPlayer.id) {
+            planetUpgradesCount += (p[foundProp] || 0);
+          }
+        }
+      }
+      finalCostVal = Math.max(1, Math.round(finalCostVal / (1 + planetUpgradesCount)));
+
       totalUpgradeCost += finalCostVal;
 
       simulatedLevels[foundProp]--;
@@ -9776,10 +9865,13 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (upgradeModeActive) {
       const ship = getSelectedCruiser();
-      if (ship) {
+      const planet = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
+      const entity = ship || planet;
+      if (entity) {
+        const isPlanet = !ship;
         const key = event.key.toLowerCase();
         
-        if (ship.isUpgrading) {
+        if (!isPlanet && ship.isUpgrading) {
           if (key === 'u' || event.key === 'Escape') {
             event.preventDefault();
             upgradeModeActive = false;
@@ -9793,123 +9885,132 @@ function getPlanetTradeIncomePerMin(planet) {
           return;
         }
 
-        const qual = getSelectedCruiserUpgradeQualifiers();
-        if (qual) {
-          const totalUpgrades = (ship.sensorarrays || 0) +
-                                (ship.labs || 0) +
-                                (ship.armor || 0) +
-                                (ship.shields || 0) +
-                                (ship.engine || 0) +
-                                (ship.munitions || 0) +
-                                (ship.targeting || 0) +
-                                (ship.damagecontrol || 0) +
-                                (ship.supply_ship || 0) +
-                                (ship.extended_fuel || 0) +
-                                (ship.diplomat || 0) +
-                                (ship.marines || 0) +
-                                (ship.command || 0);
+        const totalUpgrades = (entity.sensorarrays || 0) +
+                              (entity.labs || 0) +
+                              (entity.armor || 0) +
+                              (entity.shields || 0) +
+                              (entity.engine || 0) +
+                              (entity.munitions || 0) +
+                              (entity.targeting || 0) +
+                              (entity.damagecontrol || 0) +
+                              (entity.supply_ship || 0) +
+                              (entity.extended_fuel || 0) +
+                              (entity.diplomat || 0) +
+                              (entity.marines || 0) +
+                              (entity.command || 0);
 
-          const maxIndividualLevel = Math.floor((ship.maxHealth || 0) / 10);
-          const maxTotalUpgrades = Math.floor((ship.maxHealth || 0) / 5);
+        let maxIndividualLevel;
+        let maxTotalUpgrades;
+        if (isPlanet) {
+          maxIndividualLevel = 5;
+          maxTotalUpgrades = Math.ceil(entity.maxShips / 50);
+        } else {
+          maxIndividualLevel = Math.floor((entity.maxHealth || 0) / 10);
+          maxTotalUpgrades = Math.floor((entity.maxHealth || 0) / 5);
+        }
 
-          const isAllowed = (propName) => {
-            const currentVal = ship[propName] || 0;
-            const nextLevel = currentVal + 1;
-            let shieldCheck = true;
-            if (propName === 'shields') {
-              const rawTech = localPlayer ? localPlayer.techScore || 0 : 0;
-              const rawExp = localPlayer ? localPlayer.expScore || 0 : 0;
-              const shipExp = ship.expScore || 0;
-              const techBonus = Math.sqrt(rawTech);
-              const expBonus = Math.sqrt(rawExp);
-              const shipExpBonus = Math.sqrt(shipExp);
-              const baseDeflection = ship.maxHealth + (techBonus + expBonus + shipExpBonus);
-              const deflectionRem = 100 - baseDeflection;
-              const nextShieldDeflectionBonus = nextLevel * (deflectionRem / 5);
-              const newDeflection = baseDeflection + nextShieldDeflectionBonus;
-              if (newDeflection > 90) {
-                shieldCheck = false;
-              }
+        const isAllowed = (propName) => {
+          const currentVal = entity[propName] || 0;
+          const nextLevel = currentVal + 1;
+          let shieldCheck = true;
+          if (propName === 'shields') {
+            const rawTech = localPlayer ? localPlayer.techScore || 0 : 0;
+            const rawExp = localPlayer ? localPlayer.expScore || 0 : 0;
+            const shipExp = isPlanet ? 0 : entity.expScore || 0;
+            const techBonus = Math.sqrt(rawTech);
+            const expBonus = Math.sqrt(rawExp);
+            const shipExpBonus = Math.sqrt(shipExp);
+            const baseDeflection = (isPlanet ? 100 : entity.maxHealth) + (techBonus + expBonus + shipExpBonus);
+            const deflectionRem = 100 - baseDeflection;
+            const nextShieldDeflectionBonus = nextLevel * (deflectionRem / 5);
+            const newDeflection = baseDeflection + nextShieldDeflectionBonus;
+            if (newDeflection > 90) {
+              shieldCheck = false;
             }
-            const hasTokens = ship.upgradeTokens > 0;
-            if (hasTokens) {
-              return (currentVal < 5) && (nextLevel <= Math.min(5, maxIndividualLevel)) && shieldCheck;
-            }
-            return (currentVal < 5) && (currentVal + 1 <= maxIndividualLevel) && (totalUpgrades + 1 <= maxTotalUpgrades) && shieldCheck;
-          };
+          }
+          if (!isPlanet && entity.upgradeTokens > 0) {
+            return (currentVal < 5) && (nextLevel <= Math.min(5, maxIndividualLevel)) && shieldCheck;
+          }
+          return (currentVal < 5) && (currentVal + 1 <= maxIndividualLevel) && (totalUpgrades + 1 <= maxTotalUpgrades) && shieldCheck;
+        };
 
+        const emitUpgrade = (type) => {
+          if (isPlanet) {
+            socket.emit('upgradePlanet', { planetId: entity.id, type });
+          } else {
+            socket.emit('upgradeCruiser', { shipId: entity.id, type });
+          }
+        };
 
-
-          let triggered = false;
-          if (key === 's') {
-            event.preventDefault();
-            if (isAllowed('sensorarrays')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'sensorarray' });
-            triggered = true;
-          }
-          if (key === 'l') {
-            event.preventDefault();
-            if (isAllowed('labs')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'lab' });
-            triggered = true;
-          }
-          if (key === 'a') {
-            event.preventDefault();
-            if (isAllowed('armor')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'armor' });
-            triggered = true;
-          }
-          if (key === 'h') {
-            event.preventDefault();
-            if (isAllowed('shields')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'shield' });
-            triggered = true;
-          }
-          if (key === 'e') {
-            event.preventDefault();
-            if (isAllowed('engine')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'engine' });
-            triggered = true;
-          }
-          if (key === 'm') {
-            event.preventDefault();
-            if (isAllowed('munitions')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'munitions' });
-            triggered = true;
-          }
-          if (key === 't') {
-            event.preventDefault();
-            if (isAllowed('targeting')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'targeting' });
-            triggered = true;
-          }
-          if (key === 'd') {
-            event.preventDefault();
-            if (isAllowed('damagecontrol')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'damagecontrol' });
-            triggered = true;
-          }
-          if (key === 'y') {
-            event.preventDefault();
-            if (isAllowed('supply_ship')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'supplyship' });
-            triggered = true;
-          }
-          if (key === 'f') {
-            event.preventDefault();
-            if (isAllowed('extended_fuel')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'extendedfuel' });
-            triggered = true;
-          }
-          if (key === 'i') {
-            event.preventDefault();
-            if (isAllowed('diplomat')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'diplomat' });
-            triggered = true;
-          }
-          if (key === 'r') {
-            event.preventDefault();
-            if (isAllowed('marines')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'marines' });
-            triggered = true;
-          }
-          if (key === 'c') {
-            event.preventDefault();
-            if (isAllowed('command')) socket.emit('upgradeCruiser', { shipId: ship.id, type: 'command' });
-            triggered = true;
-          }
-          if (triggered) {
-            upgradeModeActive = false;
-            return;
-          }
+        let triggered = false;
+        if (key === 's') {
+          event.preventDefault();
+          if (isAllowed('sensorarrays')) emitUpgrade('sensorarray');
+          triggered = true;
+        }
+        if (key === 'l') {
+          event.preventDefault();
+          if (isAllowed('labs')) emitUpgrade('lab');
+          triggered = true;
+        }
+        if (key === 'a') {
+          event.preventDefault();
+          if (isAllowed('armor')) emitUpgrade('armor');
+          triggered = true;
+        }
+        if (key === 'h') {
+          event.preventDefault();
+          if (isAllowed('shields')) emitUpgrade('shield');
+          triggered = true;
+        }
+        if (key === 'e') {
+          event.preventDefault();
+          if (isAllowed('engine')) emitUpgrade('engine');
+          triggered = true;
+        }
+        if (key === 'm') {
+          event.preventDefault();
+          if (isAllowed('munitions')) emitUpgrade('munitions');
+          triggered = true;
+        }
+        if (key === 't') {
+          event.preventDefault();
+          if (isAllowed('targeting')) emitUpgrade('targeting');
+          triggered = true;
+        }
+        if (key === 'd') {
+          event.preventDefault();
+          if (isAllowed('damagecontrol')) emitUpgrade('damagecontrol');
+          triggered = true;
+        }
+        if (key === 'y') {
+          event.preventDefault();
+          if (isAllowed('supply_ship')) emitUpgrade('supplyship');
+          triggered = true;
+        }
+        if (key === 'f') {
+          event.preventDefault();
+          if (isAllowed('extended_fuel')) emitUpgrade('extendedfuel');
+          triggered = true;
+        }
+        if (key === 'i') {
+          event.preventDefault();
+          if (isAllowed('diplomat')) emitUpgrade('diplomat');
+          triggered = true;
+        }
+        if (key === 'r') {
+          event.preventDefault();
+          if (isAllowed('marines')) emitUpgrade('marines');
+          triggered = true;
+        }
+        if (key === 'c') {
+          event.preventDefault();
+          if (isAllowed('command')) emitUpgrade('command');
+          triggered = true;
+        }
+        if (triggered) {
+          upgradeModeActive = false;
+          return;
         }
       } else {
         upgradeModeActive = false;
@@ -9969,7 +10070,33 @@ function getPlanetTradeIncomePerMin(planet) {
     }
     if (event.key.toLowerCase() === 'u') {
       const qual = getSelectedCruiserUpgradeQualifiers();
+      const selectedPlanet = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
+      let planetEligible = false;
+      if (selectedPlanet && selectedPlanet.ownerId === localPlayer.id) {
+        const totalUpgrades = (selectedPlanet.sensorarrays || 0) +
+                              (selectedPlanet.labs || 0) +
+                              (selectedPlanet.armor || 0) +
+                              (selectedPlanet.shields || 0) +
+                              (selectedPlanet.engine || 0) +
+                              (selectedPlanet.munitions || 0) +
+                              (selectedPlanet.targeting || 0) +
+                              (selectedPlanet.damagecontrol || 0) +
+                              (selectedPlanet.supply_ship || 0) +
+                              (selectedPlanet.extended_fuel || 0) +
+                              (selectedPlanet.diplomat || 0) +
+                              (selectedPlanet.marines || 0) +
+                              (selectedPlanet.command || 0);
+        const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 50);
+        if (totalUpgrades < maxUpgrades) {
+          planetEligible = true;
+        }
+      }
+
       if (qual) {
+        event.preventDefault();
+        upgradeModeActive = true;
+        return;
+      } else if (planetEligible) {
         event.preventDefault();
         upgradeModeActive = true;
         return;
@@ -10432,8 +10559,27 @@ function getPlanetTradeIncomePerMin(planet) {
 
   bindActionClick('btn-upgrade-mode', () => {
     const qual = getSelectedCruiserUpgradeQualifiers();
+    const selectedPlanet = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
     if (qual) {
       upgradeModeActive = true;
+    } else if (selectedPlanet && selectedPlanet.ownerId === localPlayer.id) {
+      const totalUpgrades = (selectedPlanet.sensorarrays || 0) +
+                            (selectedPlanet.labs || 0) +
+                            (selectedPlanet.armor || 0) +
+                            (selectedPlanet.shields || 0) +
+                            (selectedPlanet.engine || 0) +
+                            (selectedPlanet.munitions || 0) +
+                            (selectedPlanet.targeting || 0) +
+                            (selectedPlanet.damagecontrol || 0) +
+                            (selectedPlanet.supply_ship || 0) +
+                            (selectedPlanet.extended_fuel || 0) +
+                            (selectedPlanet.diplomat || 0) +
+                            (selectedPlanet.marines || 0) +
+                            (selectedPlanet.command || 0);
+      const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 50);
+      if (totalUpgrades < maxUpgrades) {
+        upgradeModeActive = true;
+      }
     }
   });
 
@@ -10707,38 +10853,47 @@ function getPlanetTradeIncomePerMin(planet) {
 
   const registerUpgradeBtn = (id, type) => {
     bindActionClick(id, () => {
-      const qual = getSelectedCruiserUpgradeQualifiers();
-      if (qual) {
-        const ship = qual.ship;
-        const totalUpgrades = (ship.sensorarrays || 0) +
-                              (ship.labs || 0) +
-                              (ship.armor || 0) +
-                              (ship.shields || 0) +
-                              (ship.engine || 0) +
-                              (ship.munitions || 0) +
-                              (ship.targeting || 0) +
-                              (ship.damagecontrol || 0) +
-                              (ship.supply_ship || 0) +
-                              (ship.extended_fuel || 0) +
-                              (ship.diplomat || 0) +
-                              (ship.marines || 0) +
-                              (ship.command || 0);
+      const selectedCruiser = getSelectedCruiser();
+      const selectedPlanet = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
+      const entity = selectedCruiser || selectedPlanet;
+      if (entity) {
+        const isPlanet = !selectedCruiser;
+        const totalUpgrades = (entity.sensorarrays || 0) +
+                              (entity.labs || 0) +
+                              (entity.armor || 0) +
+                              (entity.shields || 0) +
+                              (entity.engine || 0) +
+                              (entity.munitions || 0) +
+                              (entity.targeting || 0) +
+                              (entity.damagecontrol || 0) +
+                              (entity.supply_ship || 0) +
+                              (entity.extended_fuel || 0) +
+                              (entity.diplomat || 0) +
+                              (entity.marines || 0) +
+                              (entity.command || 0);
 
-        const maxIndividualLevel = Math.floor((ship.maxHealth || 0) / 10);
-        const maxTotalUpgrades = Math.floor((ship.maxHealth || 0) / 5);
+        let maxTotalUpgrades;
+        let maxIndividualLevel;
+        if (isPlanet) {
+          maxTotalUpgrades = Math.ceil(entity.maxShips / 50);
+          maxIndividualLevel = 5;
+        } else {
+          maxIndividualLevel = Math.floor((entity.maxHealth || 0) / 10);
+          maxTotalUpgrades = Math.floor((entity.maxHealth || 0) / 5);
+        }
 
-        const currentVal = ship[type] || 0;
+        const currentVal = entity[type] || 0;
         const nextLevel = currentVal + 1;
 
         let shieldCheck = true;
         if (type === 'shields') {
           const rawTech = localPlayer ? localPlayer.techScore || 0 : 0;
           const rawExp = localPlayer ? localPlayer.expScore || 0 : 0;
-          const shipExp = ship.expScore || 0;
+          const shipExp = isPlanet ? 0 : entity.expScore || 0;
           const techBonus = Math.sqrt(rawTech);
           const expBonus = Math.sqrt(rawExp);
           const shipExpBonus = Math.sqrt(shipExp);
-          const baseDeflection = ship.maxHealth + (techBonus + expBonus + shipExpBonus);
+          const baseDeflection = (isPlanet ? 100 : entity.maxHealth) + (techBonus + expBonus + shipExpBonus);
           const deflectionRem = 100 - baseDeflection;
           const nextShieldDeflectionBonus = nextLevel * (deflectionRem / 5);
           const newDeflection = baseDeflection + nextShieldDeflectionBonus;
@@ -10747,11 +10902,11 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
 
-        if (ship.upgradeTokens > 0) {
+        if (!isPlanet && entity.upgradeTokens > 0) {
           if (currentVal < 5 && nextLevel <= Math.min(5, maxIndividualLevel) && shieldCheck) {
             const socketType = upgradeToSocketTypeMap[type] || type;
-            console.log(`[Upgrade Click] Token Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${qual.ship.id}`);
-            socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
+            console.log(`[Upgrade Click] Token Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${entity.id}`);
+            socket.emit('upgradeCruiser', { shipId: entity.id, type: socketType });
           } else {
             console.log(`[Upgrade Click Rejected] Token limits failed. type: ${type}, currentVal: ${currentVal}, nextLevel: ${nextLevel}, maxLevel: ${maxIndividualLevel}, shieldCheck: ${shieldCheck}`);
           }
@@ -10761,8 +10916,12 @@ function getPlanetTradeIncomePerMin(planet) {
 
         if (currentVal < 5 && nextLevel <= maxIndividualLevel && (totalUpgrades + 1) <= maxTotalUpgrades && shieldCheck) {
           const socketType = upgradeToSocketTypeMap[type] || type;
-          console.log(`[Upgrade Click] Button: ${id}, type: ${type}, socketType: ${socketType}, shipId: ${qual.ship.id}`);
-          socket.emit('upgradeCruiser', { shipId: qual.ship.id, type: socketType });
+          console.log(`[Upgrade Click] Button: ${id}, type: ${type}, socketType: ${socketType}, entityId: ${entity.id}, isPlanet: ${isPlanet}`);
+          if (isPlanet) {
+            socket.emit('upgradePlanet', { planetId: entity.id, type: socketType });
+          } else {
+            socket.emit('upgradeCruiser', { shipId: entity.id, type: socketType });
+          }
         } else {
           console.log(`[Upgrade Click Rejected] Limits failed. type: ${type}, currentVal: ${currentVal}, nextLevel: ${nextLevel}, maxLevel: ${maxIndividualLevel}, totalUpgrades: ${totalUpgrades}, maxTotalUpgrades: ${maxTotalUpgrades}`);
         }
@@ -10996,7 +11155,10 @@ function getPlanetTradeIncomePerMin(planet) {
       const elFocusCancel = document.getElementById('btn-focus-cancel');
       if (elFocusCancel) elFocusCancel.style.display = 'inline-flex';
 
-    } else if (upgradeModeActive && selectedCruiser) {
+    } else if (upgradeModeActive && (selectedCruiser || (selectedPlanets.length === 1 && selectedPlanets[0].ownerId === localPlayer.id))) {
+      const entity = selectedCruiser || selectedPlanets[0];
+      const isPlanet = !selectedCruiser;
+
       if (actionButtonsLeft) actionButtonsLeft.style.display = 'none';
       if (btnUpgradeMode) btnUpgradeMode.style.display = 'none';
       if (btnFocusMode) btnFocusMode.style.display = 'none';
@@ -11044,42 +11206,52 @@ function getPlanetTradeIncomePerMin(planet) {
         'command': 'Gives command points equal to (xp bonus * level) / 4 to ships in sensor range. Stacks. Caps at 1.5 * highest xp bonus among commanders. Points act as local xp bonus and add 1/2 value to speed'
       };
 
-      const totalUpgrades = (selectedCruiser.sensorarrays || 0) +
-                            (selectedCruiser.labs || 0) +
-                            (selectedCruiser.armor || 0) +
-                            (selectedCruiser.shields || 0) +
-                            (selectedCruiser.engine || 0) +
-                            (selectedCruiser.munitions || 0) +
-                            (selectedCruiser.targeting || 0) +
-                            (selectedCruiser.damagecontrol || 0) +
-                            (selectedCruiser.supply_ship || 0) +
-                            (selectedCruiser.extended_fuel || 0) +
-                            (selectedCruiser.diplomat || 0) +
-                            (selectedCruiser.marines || 0) +
-                            (selectedCruiser.command || 0);
+      const totalUpgrades = (entity.sensorarrays || 0) +
+                            (entity.labs || 0) +
+                            (entity.armor || 0) +
+                            (entity.shields || 0) +
+                            (entity.engine || 0) +
+                            (entity.munitions || 0) +
+                            (entity.targeting || 0) +
+                            (entity.damagecontrol || 0) +
+                            (entity.supply_ship || 0) +
+                            (entity.extended_fuel || 0) +
+                            (entity.diplomat || 0) +
+                            (entity.marines || 0) +
+                            (entity.command || 0);
 
-      const maxIndividualLevel = Math.floor((selectedCruiser.maxHealth || 0) / 10);
-      const maxTotalUpgrades = Math.floor((selectedCruiser.maxHealth || 0) / 5);
+      let maxTotalUpgrades;
+      let maxIndividualLevel;
+      if (isPlanet) {
+        maxTotalUpgrades = Math.ceil(entity.maxShips / 50);
+        maxIndividualLevel = 5;
+      } else {
+        maxIndividualLevel = Math.floor((entity.maxHealth || 0) / 10);
+        maxTotalUpgrades = Math.floor((entity.maxHealth || 0) / 5);
+      }
 
-      const hasTokens = selectedCruiser.upgradeTokens > 0;
+      const hasTokens = !isPlanet && entity.upgradeTokens > 0;
 
       for (const [btnId, prop] of Object.entries(upButtonsMap)) {
         const el = document.getElementById(btnId);
         if (el) {
-          const currentVal = selectedCruiser[prop] || 0;
+          const currentVal = entity[prop] || 0;
           const nextLevel = currentVal + 1;
           const levelAllowed = nextLevel <= maxIndividualLevel;
           const totalAllowed = (totalUpgrades + 1) <= maxTotalUpgrades;
           const shieldCheck = (prop !== 'shields' || nextLevel * 0.10 <= 0.80);
-          const tokenAllowed = hasTokens && (nextLevel <= Math.min(5, maxIndividualLevel));
           
-          const displayUpgrade = currentVal < 5 && !selectedCruiser.isUpgrading && shieldCheck && (tokenAllowed || (levelAllowed && totalAllowed));
+          let displayUpgrade = currentVal < 5 && shieldCheck && levelAllowed && totalAllowed;
+          if (!isPlanet) {
+            const tokenAllowed = hasTokens && (nextLevel <= Math.min(5, maxIndividualLevel));
+            displayUpgrade = currentVal < 5 && !entity.isUpgrading && shieldCheck && (tokenAllowed || (levelAllowed && totalAllowed));
+          }
           
           el.style.display = displayUpgrade ? 'inline-flex' : 'none';
           if (el.style.display === 'inline-flex') {
-            const uCost = getUpgradeCostForShip(selectedCruiser, prop);
+            const uCost = isPlanet ? getUpgradeCostForShip(entity, prop) * 3 : getUpgradeCostForShip(entity, prop);
             const baseName = namesMap[btnId] || 'Upgrade';
-            const desc = descMap[prop] || 'Upgrades cruiser capabilities';
+            const desc = descMap[prop] || `Upgrades ${isPlanet ? 'planet' : 'cruiser'} capabilities`;
             el.setAttribute('title', `${baseName}: ${desc}`);
             const costSpan = el.querySelector('.btn-cost');
             if (costSpan) {
@@ -11091,13 +11263,14 @@ function getPlanetTradeIncomePerMin(planet) {
               if (hasTokens) {
                 discountSpan.textContent = '';
               } else {
-                const disc = getPlayerSpecificDiscountForShip(selectedCruiser, prop);
+                const disc = getPlayerSpecificDiscountForShip(entity, prop);
                 discountSpan.textContent = disc !== 0 ? (disc > 0 ? `+${disc}%` : `${disc}%`) : '';
               }
             }
 
             const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
-            const canAfford = hasTokens || (upgradeQual && (upgradeQual.planet.ships + creditsAvailable) >= uCost);
+            const entityResourceShips = isPlanet ? entity.ships : (upgradeQual ? upgradeQual.planet.ships : 0);
+            const canAfford = hasTokens || ((entityResourceShips + creditsAvailable) >= uCost);
             if (!canAfford) {
               el.style.opacity = '0.5';
               el.style.pointerEvents = 'none';
@@ -11251,6 +11424,45 @@ function getPlanetTradeIncomePerMin(planet) {
       if (btnUpgradeMode) {
         btnUpgradeMode.style.display = 'none';
         const iconSpan = btnUpgradeMode.querySelector('.btn-icon');
+        const selectedPlanet = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
+
+        let showPlanetUpgrade = false;
+        let planetUpgradeCost = 0;
+        if (selectedPlanet && selectedPlanet.ownerId === localPlayer.id) {
+          const totalUpgrades = (selectedPlanet.sensorarrays || 0) +
+                                (selectedPlanet.labs || 0) +
+                                (selectedPlanet.armor || 0) +
+                                (selectedPlanet.shields || 0) +
+                                (selectedPlanet.engine || 0) +
+                                (selectedPlanet.munitions || 0) +
+                                (selectedPlanet.targeting || 0) +
+                                (selectedPlanet.damagecontrol || 0) +
+                                (selectedPlanet.supply_ship || 0) +
+                                (selectedPlanet.extended_fuel || 0) +
+                                (selectedPlanet.diplomat || 0) +
+                                (selectedPlanet.marines || 0) +
+                                (selectedPlanet.command || 0);
+          const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 50);
+          if (totalUpgrades < maxUpgrades) {
+            showPlanetUpgrade = true;
+            const validProps = [
+              'sensorarrays', 'labs', 'armor', 'shields', 'engine',
+              'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel',
+              'diplomat', 'marines'
+            ];
+            let minCost = Infinity;
+            for (const prop of validProps) {
+              const currentVal = selectedPlanet[prop] || 0;
+              const shieldCheck = (prop !== 'shields' || (currentVal + 1) * 0.10 <= 0.80);
+              if (currentVal < 5 && shieldCheck) {
+                const uCost = getUpgradeCostForShip(selectedPlanet, prop) * 3;
+                if (uCost < minCost) minCost = uCost;
+              }
+            }
+            planetUpgradeCost = minCost === Infinity ? 0 : minCost;
+          }
+        }
+
         if (upgradeQual && hasCruiserUpgradeCapacity(upgradeQual.ship)) {
           btnUpgradeMode.style.display = 'inline-flex';
           const validProps = [
@@ -11280,6 +11492,16 @@ function getPlanetTradeIncomePerMin(planet) {
             } else {
               iconSpan.textContent = '⚙️';
             }
+          }
+        } else if (showPlanetUpgrade) {
+          btnUpgradeMode.style.display = 'inline-flex';
+          btnUpgradeMode.setAttribute('title', `Upgrade Planet (U) (Cost: ${planetUpgradeCost})`);
+          const costSpan = btnUpgradeMode.querySelector('.btn-cost');
+          if (costSpan) {
+            costSpan.textContent = planetUpgradeCost;
+          }
+          if (iconSpan) {
+            iconSpan.textContent = '⚙️';
           }
         } else {
           if (iconSpan) {

@@ -466,7 +466,8 @@ export class Game {
                           (ship.diplomat || 0) +
                           (ship.marines || 0) +
                           (ship.command || 0);
-    const baseCost = Math.min(150, Math.round(25 + ship.maxHealth * (3 + totalUpgrades / 3)));
+    const healthVal = (ship.maxHealth !== undefined) ? ship.maxHealth : (ship.maxShips || 100);
+    const baseCost = Math.min(150, Math.round(25 + healthVal * (3 + totalUpgrades / 3)));
     
     const typeKeyMap = {
       sensorarrays: 'sensorarray',
@@ -501,7 +502,43 @@ export class Game {
     }
     
     const modifier = Math.max(-0.50, globalMod + playerMod);
-    return Math.max(1, Math.round(baseCost * (1 + modifier)));
+    let finalCost = Math.max(1, Math.round(baseCost * (1 + modifier)));
+
+    // Only apply the planet upgrade divisor if it's a ship upgrade
+    const isShip = (ship.maxHealth !== undefined);
+    if (isShip && ship.owner) {
+      const propMap = {
+        sensorarrays: 'sensorarrays',
+        sensorarray: 'sensorarrays',
+        labs: 'labs',
+        lab: 'labs',
+        armor: 'armor',
+        shields: 'shields',
+        shield: 'shields',
+        engine: 'engine',
+        munitions: 'munitions',
+        targeting: 'targeting',
+        damagecontrol: 'damagecontrol',
+        supply_ship: 'supply_ship',
+        supplyship: 'supply_ship',
+        extended_fuel: 'extended_fuel',
+        extendedfuel: 'extended_fuel',
+        diplomat: 'diplomat',
+        marines: 'marines',
+        command: 'command'
+      };
+      const propName = propMap[type] || type;
+      let planetUpgradesCount = 0;
+      const playerId = ship.owner.id;
+      for (const p of this.planets) {
+        if (p.owner && p.owner.id === playerId && !p.dead) {
+          planetUpgradesCount += (p[propName] || 0);
+        }
+      }
+      finalCost = Math.max(1, Math.round(finalCost / (1 + planetUpgradesCount)));
+    }
+
+    return finalCost;
   }
 
   getCruiserTotalUpgradeCost(ship) {
@@ -2889,6 +2926,12 @@ export class Game {
     const cfg = SHIP_CLASSES[classType];
     if (!cfg) return;
 
+    // Limit the number of cruisers a single planet may be building at a time to 1
+    const isAlreadyBuilding = this.ships.some(s => s.active && s.isMaterializing && s.sourcePlanet === source);
+    if (isAlreadyBuilding) {
+      return;
+    }
+
     if (source.owner) {
       const owner = source.owner;
       if (owner) {
@@ -3026,6 +3069,12 @@ export class Game {
     const cfg = SHIP_CLASSES[classType];
     if (!cfg) return;
 
+    // Limit the number of cruisers a single planet may be building at a time to 1
+    const isAlreadyBuilding = this.ships.some(s => s.active && s.isMaterializing && s.sourcePlanet === source);
+    if (isAlreadyBuilding) {
+      return;
+    }
+
     const owner = source.owner;
     if (source.owner) {
       if (owner) {
@@ -3128,7 +3177,19 @@ export class Game {
           playerMod = owner.upgradeModifiers[normType];
         }
         const modifier = Math.max(-0.50, globalMod + playerMod);
-        const finalCostVal = Math.max(1, Math.round(baseCost * (1 + modifier)));
+        let finalCostVal = Math.max(1, Math.round(baseCost * (1 + modifier)));
+
+        // Apply the planet upgrade divisor for this upgrade type
+        let planetUpgradesCount = 0;
+        if (owner) {
+          for (const p of this.planets) {
+            if (p.owner && p.owner.id === owner.id && !p.dead) {
+              planetUpgradesCount += (p[foundProp] || 0);
+            }
+          }
+        }
+        finalCostVal = Math.max(1, Math.round(finalCostVal / (1 + planetUpgradesCount)));
+
         totalUpgradeCost += finalCostVal;
 
         simulatedLevels[foundProp]--;
@@ -5673,24 +5734,44 @@ export class Game {
       if (ship.active && ship.isCruiser && !ship.isAmoeba) {
         const isOutOfBounds = ship.x < 0 || ship.x > this.width || ship.y < 0 || ship.y > this.height;
         if (isOutOfBounds) {
-          if (ship.outOfBoundsDamageTimer === undefined || ship.outOfBoundsDamageTimer === null) {
-            ship.outOfBoundsDamageTimer = (Math.floor(Math.random() * 3) + 1) * 1000;
-          }
-          ship.outOfBoundsDamageTimer -= deltaTime;
-          if (ship.outOfBoundsDamageTimer <= 0) {
-            ship.outOfBoundsDamageTimer = (Math.floor(Math.random() * 3) + 1) * 1000;
-            ship.health = Math.max(0, ship.health - 1);
-            if (ship.health <= 0) {
-              ship.active = false;
+          // Check if cruiser is within 50px of a friendly gravity well
+          let nearFriendlyWell = false;
+          if (ship.owner) {
+            for (const planet of this.planets) {
+              if (planet.owner && planet.owner.id === ship.owner.id && !planet.dead) {
+                const dx = ship.x - planet.x;
+                const dy = ship.y - planet.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist <= planet.getGravityRadius() + 50) {
+                  nearFriendlyWell = true;
+                  break;
+                }
+              }
             }
-            const explosionColor = '#ff0';
-            this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
-            const boltX = ship.x + (Math.random() - 0.5) * 80;
-            const boltY = ship.y - 30 - Math.random() * 50;
-            const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
-            const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
-            this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
-            this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
+          }
+
+          if (!nearFriendlyWell) {
+            if (ship.outOfBoundsDamageTimer === undefined || ship.outOfBoundsDamageTimer === null) {
+              ship.outOfBoundsDamageTimer = (Math.floor(Math.random() * 3) + 1) * 1000;
+            }
+            ship.outOfBoundsDamageTimer -= deltaTime;
+            if (ship.outOfBoundsDamageTimer <= 0) {
+              ship.outOfBoundsDamageTimer = (Math.floor(Math.random() * 3) + 1) * 1000;
+              ship.health = Math.max(0, ship.health - 1);
+              if (ship.health <= 0) {
+                ship.active = false;
+              }
+              const explosionColor = '#ff0';
+              this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
+              const boltX = ship.x + (Math.random() - 0.5) * 80;
+              const boltY = ship.y - 30 - Math.random() * 50;
+              const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
+              const midY = (ship.y + boltY) / 2 + (Math.random() - 0.5) * 20;
+              this.lasers.push({ startX: boltX, startY: boltY, endX: midX, endY: midY, color: explosionColor, age: 0, duration: 0.4 });
+              this.lasers.push({ startX: midX, startY: midY, endX: ship.x, endY: ship.y, color: explosionColor, age: 0, duration: 0.4 });
+            }
+          } else {
+            ship.outOfBoundsDamageTimer = null;
           }
         } else {
           ship.outOfBoundsDamageTimer = null;
@@ -6461,6 +6542,22 @@ export class Game {
         let happinessGained = 0;
         for (const planet of this.planets) {
           if (planet.owner && planet.owner.id === player.id && !planet.dead) {
+            const finalRate = planet.getFinalProductionRate(this.settings);
+            const inHighProduction = (finalRate > 1.0);
+            
+            if (inHighProduction) {
+              happinessGained -= 1;
+              this.happinessEvents = this.happinessEvents || [];
+              this.happinessEvents.push({
+                planetId: planet.id,
+                x: planet.x,
+                y: planet.y,
+                amount: -1,
+                isBrokenHeart: true,
+                color: '#ff1744'
+              });
+            }
+            
             if (planet.ships >= planet.maxShips - 5) {
               const gained = planet.ships * 0.01 * (planet.habitability / 100);
               happinessGained += gained;
@@ -6477,7 +6574,7 @@ export class Game {
             }
           }
         }
-        player.happinessScore = (player.happinessScore || 0) + happinessGained;
+        player.happinessScore = Math.max(0, (player.happinessScore || 0) + happinessGained);
       }
     }
 
@@ -6569,7 +6666,7 @@ export class Game {
    }
 
   triggerDiplomacyEvent(ship, targetPlanet) {
-    const expBonus = Math.sqrt(ship.owner.expScore || 0);
+    const expBonus = Math.sqrt(ship.owner.happinessScore || 0);
     const shipExpBonus = ship.getLocalXpBonus();
     const MathSquareBase = expBonus + shipExpBonus;
     const currentSym = getEffectiveSympathy(targetPlanet, ship.owner.id, this.ships, ship.owner, this);
@@ -6599,7 +6696,7 @@ export class Game {
     ship.gainXp(1, this);
 
     if (roll <= chancePercent) {
-      ship.owner.expScore = (ship.owner.expScore || 0) + 1;
+      ship.owner.happinessScore = (ship.owner.happinessScore || 0) + 1;
 
       targetPlanet.sympathy = targetPlanet.sympathy || {};
       targetPlanet.disposition = targetPlanet.disposition || {};
