@@ -800,10 +800,13 @@ export class Ship {
         const gravityRadius = planet.getGravityRadius();
         if (pdx * pdx + pdy * pdy < gravityRadius * gravityRadius) {
           if (planet.owner && this.owner && planet.owner.id === this.owner.id) {
-            friendlyWellPlanet = planet;
-            break;
+            if (!friendlyWellPlanet || ((friendlyWellPlanet.supplies || 0) < 1.0 && (planet.supplies || 0) >= 1.0)) {
+              friendlyWellPlanet = planet;
+            }
           } else if (!planet.owner && !planet.isDeepSpaceAnomaly) {
-            neutralWellPlanet = planet;
+            if (!neutralWellPlanet || ((neutralWellPlanet.supplies || 0) < 1.0 && (planet.supplies || 0) >= 1.0)) {
+              neutralWellPlanet = planet;
+            }
           }
         }
       }
