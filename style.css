@@ -1052,7 +1052,7 @@ canvas {
 }
 
 .selection-tile.ship-tile {
-  height: 80px;
+  height: 96px;
 }
 
 .selection-tile:hover {

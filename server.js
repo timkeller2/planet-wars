@@ -572,13 +572,28 @@ async function bootstrap() {
                                 (planet.marines || 0) +
                                 (planet.command || 0);
 
-          const maxTotalUpgrades = Math.ceil(planet.maxShips / 50);
+          const maxTotalUpgrades = Math.ceil(planet.maxShips / 120);
 
           const currentVal = planet[prop] || 0;
           const nextLevel = currentVal + 1;
 
           if (totalUpgrades >= maxTotalUpgrades) {
             console.log(`[Server Planet Upgrade Rejected] Max upgrades reached.`);
+            return;
+          }
+
+          // Enforce that the total upgrades of this type across all players does not exceed 1/3 the number of human players (rounded up)
+          const humanPlayers = game.allPlayers.filter(pl => pl && !pl.isAI && pl.id !== 'monsters');
+          const numHumanPlayers = Math.max(1, humanPlayers.length);
+          const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 3);
+
+          let totalUpgradesOfCertainType = 0;
+          for (const p of game.planets) {
+            totalUpgradesOfCertainType += (p[prop] || 0);
+          }
+
+          if (totalUpgradesOfCertainType >= maxUpgradesOfCertainType) {
+            console.log(`[Server Planet Upgrade Rejected] Max upgrades of type ${prop} across all players (${maxUpgradesOfCertainType}) reached.`);
             return;
           }
 

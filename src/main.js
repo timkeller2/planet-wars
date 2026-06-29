@@ -2397,7 +2397,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
         html += `
           <div class="selection-tile ship-tile${activeClass}" data-type="ship" data-id="${liveShip.id}"${opacityStyle} title="${liveShip.name ? shipClass + ' ' + liveShip.name : shipClass}">
-            <canvas class="selection-tile-canvas" width="120" height="160" style="width: 56px; height: 74px;"></canvas>
+            <canvas class="selection-tile-canvas" width="120" height="160" style="width: 56px; height: 89px;"></canvas>
           </div>
         `;
       }
@@ -9939,7 +9939,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let maxTotalUpgrades;
         if (isPlanet) {
           maxIndividualLevel = 5;
-          maxTotalUpgrades = Math.ceil(entity.maxShips / 50);
+          maxTotalUpgrades = Math.ceil(entity.maxShips / 120);
         } else {
           maxIndividualLevel = Math.floor((entity.maxHealth || 0) / 10);
           maxTotalUpgrades = Math.floor((entity.maxHealth || 0) / 5);
@@ -9962,6 +9962,21 @@ function getPlanetTradeIncomePerMin(planet) {
             const newDeflection = baseDeflection + nextShieldDeflectionBonus;
             if (newDeflection > 90) {
               shieldCheck = false;
+            }
+          }
+          if (isPlanet) {
+            const humanPlayers = serverState ? serverState.players.filter(pl => pl && !pl.isAI && pl.id !== 'monsters') : [];
+            const numHumanPlayers = Math.max(1, humanPlayers.length);
+            const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 3);
+
+            let totalUpgradesOfCertainType = 0;
+            if (serverState && serverState.planets) {
+              for (const p of serverState.planets) {
+                totalUpgradesOfCertainType += (p[propName] || 0);
+              }
+            }
+            if (totalUpgradesOfCertainType >= maxUpgradesOfCertainType) {
+              return false;
             }
           }
           if (!isPlanet && entity.upgradeTokens > 0) {
@@ -10122,7 +10137,7 @@ function getPlanetTradeIncomePerMin(planet) {
                               (selectedPlanet.diplomat || 0) +
                               (selectedPlanet.marines || 0) +
                               (selectedPlanet.command || 0);
-        const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 50);
+        const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 120);
         if (totalUpgrades < maxUpgrades) {
           planetEligible = true;
         }
@@ -10612,7 +10627,7 @@ function getPlanetTradeIncomePerMin(planet) {
                             (selectedPlanet.diplomat || 0) +
                             (selectedPlanet.marines || 0) +
                             (selectedPlanet.command || 0);
-      const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 50);
+      const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 120);
       if (totalUpgrades < maxUpgrades) {
         upgradeModeActive = true;
       }
@@ -10911,7 +10926,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let maxTotalUpgrades;
         let maxIndividualLevel;
         if (isPlanet) {
-          maxTotalUpgrades = Math.ceil(entity.maxShips / 50);
+          maxTotalUpgrades = Math.ceil(entity.maxShips / 120);
           maxIndividualLevel = 5;
         } else {
           maxIndividualLevel = Math.floor((entity.maxHealth || 0) / 10);
@@ -10950,7 +10965,24 @@ function getPlanetTradeIncomePerMin(planet) {
           return;
         }
 
-        if (currentVal < 5 && nextLevel <= maxIndividualLevel && (totalUpgrades + 1) <= maxTotalUpgrades && shieldCheck) {
+        let typeCapCheck = true;
+        if (isPlanet) {
+          const humanPlayers = serverState ? serverState.players.filter(pl => pl && !pl.isAI && pl.id !== 'monsters') : [];
+          const numHumanPlayers = Math.max(1, humanPlayers.length);
+          const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 3);
+
+          let totalUpgradesOfCertainType = 0;
+          if (serverState && serverState.planets) {
+            for (const p of serverState.planets) {
+              totalUpgradesOfCertainType += (p[type] || 0);
+            }
+          }
+          if (totalUpgradesOfCertainType >= maxUpgradesOfCertainType) {
+            typeCapCheck = false;
+          }
+        }
+
+        if (currentVal < 5 && nextLevel <= maxIndividualLevel && (totalUpgrades + 1) <= maxTotalUpgrades && shieldCheck && typeCapCheck) {
           const socketType = upgradeToSocketTypeMap[type] || type;
           console.log(`[Upgrade Click] Button: ${id}, type: ${type}, socketType: ${socketType}, entityId: ${entity.id}, isPlanet: ${isPlanet}`);
           if (isPlanet) {
@@ -11263,7 +11295,7 @@ function getPlanetTradeIncomePerMin(planet) {
       let maxTotalUpgrades;
       let maxIndividualLevel;
       if (isPlanet) {
-        maxTotalUpgrades = Math.ceil(entity.maxShips / 50);
+        maxTotalUpgrades = Math.ceil(entity.maxShips / 120);
         maxIndividualLevel = 5;
       } else {
         maxIndividualLevel = Math.floor((entity.maxHealth || 0) / 10);
@@ -11282,7 +11314,21 @@ function getPlanetTradeIncomePerMin(planet) {
           const shieldCheck = (prop !== 'shields' || nextLevel * 0.10 <= 0.80);
           
           let displayUpgrade = currentVal < 5 && shieldCheck && levelAllowed && totalAllowed;
-          if (!isPlanet) {
+          if (isPlanet) {
+            const humanPlayers = serverState ? serverState.players.filter(pl => pl && !pl.isAI && pl.id !== 'monsters') : [];
+            const numHumanPlayers = Math.max(1, humanPlayers.length);
+            const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 3);
+
+            let totalUpgradesOfCertainType = 0;
+            if (serverState && serverState.planets) {
+              for (const p of serverState.planets) {
+                totalUpgradesOfCertainType += (p[prop] || 0);
+              }
+            }
+            if (totalUpgradesOfCertainType >= maxUpgradesOfCertainType) {
+              displayUpgrade = false;
+            }
+          } else {
             const tokenAllowed = hasTokens && (nextLevel <= Math.min(5, maxIndividualLevel));
             displayUpgrade = currentVal < 5 && !entity.isUpgrading && shieldCheck && (tokenAllowed || (levelAllowed && totalAllowed));
           }
@@ -11482,7 +11528,7 @@ function getPlanetTradeIncomePerMin(planet) {
                                 (selectedPlanet.diplomat || 0) +
                                 (selectedPlanet.marines || 0) +
                                 (selectedPlanet.command || 0);
-          const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 50);
+          const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 120);
           if (totalUpgrades < maxUpgrades) {
             showPlanetUpgrade = true;
             const validProps = [

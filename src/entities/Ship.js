@@ -805,7 +805,7 @@ export class Ship {
         const reactorCap = this.extended_fuel * 10;
         const currentReactor = this.reactor || 0;
         if (currentReactor < reactorCap) {
-          const ratePerMs = 1.0 / 1000; // Accumulate 1 point per second
+          const ratePerMs = 1.0 / 5000; // Accumulate 1 point per 5 seconds
           const needed = reactorCap - currentReactor;
           const toAdd = Math.min(needed, ratePerMs * deltaTime);
           const dilithiumCost = toAdd * 0.05;
@@ -846,19 +846,31 @@ export class Ship {
 
     let friendlyWellPlanet = null;
     let neutralWellPlanet = null;
+    let minFriendlyDistSq = Infinity;
+    let minNeutralDistSq = Infinity;
+
     if (allPlanets && this.owner) {
       for (const planet of allPlanets) {
         const pdx = this.x - planet.x;
         const pdy = this.y - planet.y;
+        const distSq = pdx * pdx + pdy * pdy;
         const gravityRadius = planet.getGravityRadius();
-        if (pdx * pdx + pdy * pdy < gravityRadius * gravityRadius) {
+        if (distSq < gravityRadius * gravityRadius) {
           if (planet.owner && this.owner && planet.owner.id === this.owner.id) {
-            if (!friendlyWellPlanet || ((friendlyWellPlanet.supplies || 0) < 1.0 && (planet.supplies || 0) >= 1.0)) {
+            const hasSupplies = (planet.supplies || 0) >= 1.0;
+            const currentHasSupplies = friendlyWellPlanet && (friendlyWellPlanet.supplies || 0) >= 1.0;
+            
+            if (!friendlyWellPlanet || (hasSupplies && !currentHasSupplies) || (hasSupplies === currentHasSupplies && distSq < minFriendlyDistSq)) {
               friendlyWellPlanet = planet;
+              minFriendlyDistSq = distSq;
             }
           } else if (!planet.owner && !planet.isDeepSpaceAnomaly) {
-            if (!neutralWellPlanet || ((neutralWellPlanet.supplies || 0) < 1.0 && (planet.supplies || 0) >= 1.0)) {
+            const hasSupplies = (planet.supplies || 0) >= 1.0;
+            const currentHasSupplies = neutralWellPlanet && (neutralWellPlanet.supplies || 0) >= 1.0;
+            
+            if (!neutralWellPlanet || (hasSupplies && !currentHasSupplies) || (hasSupplies === currentHasSupplies && distSq < minNeutralDistSq)) {
               neutralWellPlanet = planet;
+              minNeutralDistSq = distSq;
             }
           }
         }
@@ -933,14 +945,14 @@ export class Ship {
                 this.splashDamage = val;
               } else if (key === 'supply_ship') {
                 this.maxsupplies = val * 20;
-                this.supplies = this.maxsupplies;
+                this.supplies = 0;
               } else if (key === 'extended_fuel') {
                 const baseFuel = this.maxHealth / 5;
                 this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + baseFuel * val);
               } else if (key === 'shields') {
                 this.shieldPoints = this.getMaxShields();
               } else if (key === 'marines') {
-                this.marineCount = val * this.maxHealth;
+                this.marineCount = 0;
               }
             }
           }
@@ -1564,11 +1576,10 @@ export class Ship {
             this.bombs = this.getMaxBombs();
           } else if (prop === 'supply_ship') {
             this.maxsupplies = (this.supply_ship || 0) * 20;
-            this.supplies = this.maxsupplies;
           } else if (prop === 'extended_fuel') {
             this.fuel = this.getMaxFuel();
           } else if (prop === 'marines') {
-            this.marineCount = (this.marines || 0) * this.maxHealth;
+            // Keep existing marineCount, do not auto-fill
           } else if (prop === 'shields') {
             this.shieldPoints = this.getMaxShields();
           }
@@ -1631,7 +1642,6 @@ export class Ship {
               this.splashDamage = this.munitions;
             } else if (this.upgradeProp === 'supply_ship') {
               this.maxsupplies = (this.supply_ship || 0) * 20;
-              this.supplies = this.maxsupplies;
             } else if (this.upgradeProp === 'extended_fuel') {
               const baseFuel = this.maxHealth / 5;
               this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + baseFuel);

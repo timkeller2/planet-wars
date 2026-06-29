@@ -3928,7 +3928,20 @@ export class Game {
 
   researchAnomaly(p, ship, deltaTime) {
     if (!p.anomaly || p.anomaly.completing || p.anomaly.researched) return;
-    if (p.anomaly.difficulty <= 0) {
+
+    if (!p.anomaly.progress) {
+      p.anomaly.progress = {};
+    }
+
+    const ownerId = ship.owner.id;
+    let currentProgress = 0;
+    if (p.anomaly.progress && typeof p.anomaly.progress === 'object') {
+      currentProgress = p.anomaly.progress[ownerId] || 0;
+    } else if (typeof p.anomaly.progress === 'number') {
+      currentProgress = p.anomaly.progress;
+    }
+
+    if (p.anomaly.difficulty <= 0 || currentProgress >= p.anomaly.difficulty) {
       p.anomaly.completing = true;
       p.anomaly.completingTimeLeft = 3000;
       p.anomaly.completingShipId = ship.id;
@@ -4171,8 +4184,8 @@ export class Game {
             // Load full supplies/marines/bombs/fuel/shields
             ship.fuel = ship.getMaxFuel();
             ship.bombs = ship.getMaxBombs();
-            ship.marineCount = (ship.marines || 0) * ship.maxHealth;
-            ship.supplies = ship.maxsupplies || 0;
+            ship.marineCount = 0;
+            ship.supplies = 0;
             ship.shieldPoints = 3 * (ship.shields || 0);
 
             this.ships.push(ship);
@@ -4606,7 +4619,7 @@ export class Game {
         let completedOrResearchedAnomalyOrWreckage = false;
 
         // Targeted anomaly within 50px check (research even if not idle / moving)
-        if (hasLabs && !completedOrResearchedAnomalyOrWreckage) {
+        if (!completedOrResearchedAnomalyOrWreckage) {
           let targetedAnomalyPlanet = null;
           if (ship.targetPlanet && ship.targetPlanet.anomaly && !ship.targetPlanet.anomaly.researched && !ship.targetPlanet.anomaly.completing) {
             targetedAnomalyPlanet = ship.targetPlanet;
@@ -4618,12 +4631,19 @@ export class Game {
             }
           }
           if (targetedAnomalyPlanet) {
-            const adx = ship.x - targetedAnomalyPlanet.anomaly.x;
-            const ady = ship.y - targetedAnomalyPlanet.anomaly.y;
-            const aDist = Math.sqrt(adx * adx + ady * ady);
-            if (aDist <= 50) {
-              this.researchAnomaly(targetedAnomalyPlanet, ship, deltaTime);
-              completedOrResearchedAnomalyOrWreckage = true;
+            const currentProgress = (targetedAnomalyPlanet.anomaly.progress && typeof targetedAnomalyPlanet.anomaly.progress === 'object')
+              ? (targetedAnomalyPlanet.anomaly.progress[ship.owner.id] || 0)
+              : (typeof targetedAnomalyPlanet.anomaly.progress === 'number' ? targetedAnomalyPlanet.anomaly.progress : 0);
+            const canResearch = hasLabs || currentProgress >= targetedAnomalyPlanet.anomaly.difficulty;
+
+            if (canResearch) {
+              const adx = ship.x - targetedAnomalyPlanet.anomaly.x;
+              const ady = ship.y - targetedAnomalyPlanet.anomaly.y;
+              const aDist = Math.sqrt(adx * adx + ady * ady);
+              if (aDist <= 50) {
+                this.researchAnomaly(targetedAnomalyPlanet, ship, deltaTime);
+                completedOrResearchedAnomalyOrWreckage = true;
+              }
             }
           }
         }
@@ -4688,7 +4708,10 @@ export class Game {
           let minLowDistSq = Infinity;
           for (const p of this.planets) {
             if (p.anomaly && !p.anomaly.researched && !p.anomaly.completing) {
-              const canResearch = p.anomaly.difficulty <= 0 || hasLabs;
+              const currentProgress = (p.anomaly.progress && typeof p.anomaly.progress === 'object')
+                ? (p.anomaly.progress[ship.owner.id] || 0)
+                : (typeof p.anomaly.progress === 'number' ? p.anomaly.progress : 0);
+              const canResearch = p.anomaly.difficulty <= 0 || hasLabs || currentProgress >= p.anomaly.difficulty;
               if (canResearch && p.anomaly.difficulty <= 3) {
                 const dx = p.anomaly.x - ship.x;
                 const dy = p.anomaly.y - ship.y;
@@ -4867,7 +4890,10 @@ export class Game {
           let minHighDistSq = Infinity;
           for (const p of this.planets) {
             if (p.anomaly && !p.anomaly.researched && !p.anomaly.completing) {
-              const canResearch = p.anomaly.difficulty <= 0 || hasLabs;
+              const currentProgress = (p.anomaly.progress && typeof p.anomaly.progress === 'object')
+                ? (p.anomaly.progress[ship.owner.id] || 0)
+                : (typeof p.anomaly.progress === 'number' ? p.anomaly.progress : 0);
+              const canResearch = p.anomaly.difficulty <= 0 || hasLabs || currentProgress >= p.anomaly.difficulty;
               if (canResearch && p.anomaly.difficulty > 3) {
                 const dx = p.anomaly.x - ship.x;
                 const dy = p.anomaly.y - ship.y;
@@ -7524,17 +7550,17 @@ export class Game {
             
             leftUnits.forEach(u => {
               if (u.alive) {
-                roundShots.push({ shooter: u, time: currentTime + Math.random(), enemyUnits: rightUnits, hitChance: defHitChance });
+                roundShots.push({ shooter: u, time: currentTime + Math.random() * 3.0, enemyUnits: rightUnits, hitChance: defHitChance });
               }
             });
 
             rightUnits.forEach(u => {
               if (u.alive) {
-                roundShots.push({ shooter: u, time: currentTime + Math.random(), enemyUnits: leftUnits, hitChance: atkHitChance });
+                roundShots.push({ shooter: u, time: currentTime + Math.random() * 3.0, enemyUnits: leftUnits, hitChance: atkHitChance });
               }
             });
 
-            // Sort shots chronologically within this second
+            // Sort shots chronologically within this 3-second interval
             roundShots.sort((a, b) => a.time - b.time);
 
             // Execute shots sequentially
@@ -7555,7 +7581,7 @@ export class Game {
               }
             }
 
-            currentTime += 1.0;
+            currentTime += 3.0;
           }
 
           const leftSurvivors = leftUnits.filter(u => u.alive);
