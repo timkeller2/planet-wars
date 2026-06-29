@@ -91,6 +91,7 @@ export class Ship {
     this.shields = 0;
     this.shieldPoints = 0;
     this.shieldShowTimer = 0;
+    this.shieldRegenCooldown = 0;
     this.inEffectiveStorm = false;
     this.timeSinceLastMoved = 0;
     this.engine = 0;
@@ -789,6 +790,7 @@ export class Ship {
 
     if (this.isCruiser) {
       this.shieldShowTimer = Math.max(0, (this.shieldShowTimer || 0) - deltaTime / 1000);
+      this.shieldRegenCooldown = Math.max(0, (this.shieldRegenCooldown || 0) - deltaTime / 1000);
 
       // --- REACTOR & EXTENDED FUEL TANKS LOGIC ---
       // 1. Reactor cooldown decrement
@@ -4765,10 +4767,11 @@ export class Ship {
 
       // Shield regeneration
       const maxShields = this.getMaxShields();
-      if ((this.shields || 0) > 0 && (this.shieldPoints || 0) < maxShields) {
+      if ((this.shields || 0) > 0 && (this.shieldPoints || 0) < maxShields && (this.shieldRegenCooldown || 0) <= 0) {
         const hasFuelOrCruiserSupplies = (this.fuel || 0) > 0 || (this.isCruiser && (this.supplies || 0) > 0);
         if (!this.inEffectiveStorm && hasFuelOrCruiserSupplies) {
-          const regenRatePerSec = 0.05 * maxShields * (1 + 0.50 * (this.damagecontrol || 0));
+          const averageShields = (maxShields + (this.shieldPoints || 0)) / 2;
+          const regenRatePerSec = 0.05 * averageShields * (1 + 0.50 * (this.damagecontrol || 0));
           let shieldRegenAmount = (deltaTime / 1000) * regenRatePerSec;
           const neededShields = maxShields - (this.shieldPoints || 0);
           shieldRegenAmount = Math.min(shieldRegenAmount, neededShields);
@@ -5896,6 +5899,11 @@ export class Ship {
         } else {
           damageAmt -= this.shieldPoints;
           this.shieldPoints = 0;
+        }
+        if (this.shieldPoints === 0) {
+          const d3 = Math.floor(Math.random() * 3) + 1;
+          const cooldown = Math.max(0, d3 - (this.damagecontrol || 0));
+          this.shieldRegenCooldown = cooldown;
         }
       }
 
