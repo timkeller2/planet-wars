@@ -16131,7 +16131,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.beginPath();
             ctx.arc(s.x, s.y, size + 5, 0, Math.PI * 2);
             ctx.strokeStyle = '#ffff00'; // Yellow
-            ctx.lineWidth = Math.ceil(Math.sqrt(s.shieldPoints));
+            ctx.lineWidth = Math.ceil(Math.sqrt(s.shieldPoints) / 3);
             ctx.stroke();
             ctx.restore();
           }

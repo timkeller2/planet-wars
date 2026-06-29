@@ -7897,7 +7897,8 @@ export class Game {
     if (sortedByTech.length >= 2) {
       const topPlayer = sortedByTech[0];
       const lead = getTechBonus(topPlayer) - getTechBonus(sortedByTech[1]);
-      if (lead >= requiredLead && (topPlayer.credits || 0) >= 0) {
+      const isHuman = !topPlayer.isAI && topPlayer.id !== 'monsters';
+      if (lead >= requiredLead && (!isHuman || (topPlayer.credits || 0) >= 0)) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7905,7 +7906,8 @@ export class Game {
       }
     } else if (sortedByTech.length === 1) {
       const topPlayer = sortedByTech[0];
-      if (getTechBonus(topPlayer) >= requiredLead && (topPlayer.credits || 0) >= 0) {
+      const isHuman = !topPlayer.isAI && topPlayer.id !== 'monsters';
+      if (getTechBonus(topPlayer) >= requiredLead && (!isHuman || (topPlayer.credits || 0) >= 0)) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(TECH VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7918,7 +7920,8 @@ export class Game {
     if (sortedByExp.length >= 2) {
       const topPlayer = sortedByExp[0];
       const lead = getExpBonus(topPlayer) - getExpBonus(sortedByExp[1]);
-      if (lead >= requiredLead && (topPlayer.credits || 0) >= 0) {
+      const isHuman = !topPlayer.isAI && topPlayer.id !== 'monsters';
+      if (lead >= requiredLead && (!isHuman || (topPlayer.credits || 0) >= 0)) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(EXPERIENCE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7926,7 +7929,8 @@ export class Game {
       }
     } else if (sortedByExp.length === 1) {
       const topPlayer = sortedByExp[0];
-      if (getExpBonus(topPlayer) >= requiredLead && (topPlayer.credits || 0) >= 0) {
+      const isHuman = !topPlayer.isAI && topPlayer.id !== 'monsters';
+      if (getExpBonus(topPlayer) >= requiredLead && (!isHuman || (topPlayer.credits || 0) >= 0)) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(EXPERIENCE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7939,7 +7943,8 @@ export class Game {
     if (sortedByHappiness.length >= 2) {
       const topPlayer = sortedByHappiness[0];
       const lead = getHappinessBonus(topPlayer) - getHappinessBonus(sortedByHappiness[1]);
-      if (lead >= requiredLead && (topPlayer.credits || 0) >= 0) {
+      const isHuman = !topPlayer.isAI && topPlayer.id !== 'monsters';
+      if (lead >= requiredLead && (!isHuman || (topPlayer.credits || 0) >= 0)) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(HAPPINESS VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7947,7 +7952,8 @@ export class Game {
       }
     } else if (sortedByHappiness.length === 1) {
       const topPlayer = sortedByHappiness[0];
-      if (getHappinessBonus(topPlayer) >= requiredLead && (topPlayer.credits || 0) >= 0) {
+      const isHuman = !topPlayer.isAI && topPlayer.id !== 'monsters';
+      if (getHappinessBonus(topPlayer) >= requiredLead && (!isHuman || (topPlayer.credits || 0) >= 0)) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(HAPPINESS VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7961,7 +7967,8 @@ export class Game {
     if (sortedByVP.length >= 2) {
       const topPlayer = sortedByVP[0];
       const lead = getVP(topPlayer) - getVP(sortedByVP[1]);
-      if (lead >= requiredScoreLead && (topPlayer.credits || 0) >= 0) {
+      const isHuman = !topPlayer.isAI && topPlayer.id !== 'monsters';
+      if (lead >= requiredScoreLead && (!isHuman || (topPlayer.credits || 0) >= 0)) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(SCORE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7969,7 +7976,8 @@ export class Game {
       }
     } else if (sortedByVP.length === 1) {
       const topPlayer = sortedByVP[0];
-      if (getVP(topPlayer) >= requiredScoreLead && (topPlayer.credits || 0) >= 0) {
+      const isHuman = !topPlayer.isAI && topPlayer.id !== 'monsters';
+      if (getVP(topPlayer) >= requiredScoreLead && (!isHuman || (topPlayer.credits || 0) >= 0)) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(SCORE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7983,7 +7991,8 @@ export class Game {
       galacticCapacity += p.maxShips;
     }
     for (const player of this.allPlayers) {
-      if (player.isAlive && (player.totalCapacity || 0) > galacticCapacity * 0.75 && (player.credits || 0) >= 0) {
+      const isHuman = !player.isAI && player.id !== 'monsters';
+      if (player.isAlive && (player.totalCapacity || 0) > galacticCapacity * 0.75 && (!isHuman || (player.credits || 0) >= 0)) {
         this.stop();
         this.gameOverMessage = `${(player.name || player.id).toUpperCase()} IS VICTORIOUS!\n(ECONOMIC DOMINATION)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7996,7 +8005,8 @@ export class Game {
       const target = parseFloat(this.settings.financialVictoryTarget);
       if (!isNaN(target)) {
         for (const player of this.allPlayers) {
-          if (player.isAlive && (player.credits || 0) >= target && (player.credits || 0) >= 0) {
+          const isHuman = !player.isAI && player.id !== 'monsters';
+          if (player.isAlive && (player.credits || 0) >= target && (!isHuman || (player.credits || 0) >= 0)) {
             this.stop();
             this.gameOverMessage = `${(player.name || player.id).toUpperCase()} IS VICTORIOUS!\n(FINANCIAL VICTORY)`;
             if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -8032,9 +8042,13 @@ export class Game {
     let bestPlayer = null;
     if (scoredPlayers.length > 0) {
       const lead = scoredPlayers[0].player;
-      if ((lead.credits || 0) < 0) {
+      const isLeadHuman = !lead.isAI && lead.id !== 'monsters';
+      if (isLeadHuman && (lead.credits || 0) < 0) {
         // Find the next highest player who is not in debt
-        const eligible = scoredPlayers.find(sp => (sp.player.credits || 0) >= 0);
+        const eligible = scoredPlayers.find(sp => {
+          const isHuman = !sp.player.isAI && sp.player.id !== 'monsters';
+          return !isHuman || (sp.player.credits || 0) >= 0;
+        });
         if (eligible) {
           bestPlayer = eligible.player;
         } else {
