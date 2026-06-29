@@ -795,10 +795,10 @@ export class Ship {
       this.reactorCooldown = Math.max(0, (this.reactorCooldown || 0) - deltaTime);
 
       if ((this.extended_fuel || 0) > 0) {
-        // 2. Free fuel regeneration: 1 fuel per level of extended fuel tanks every minute
+        // 2. Free fuel regeneration: 1 fuel per level of extended fuel tanks every 3 minutes
         this.freeFuelTimer = (this.freeFuelTimer || 0) + deltaTime;
-        if (this.freeFuelTimer >= 60000) {
-          this.freeFuelTimer -= 60000;
+        if (this.freeFuelTimer >= 180000) {
+          this.freeFuelTimer -= 180000;
           this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + this.extended_fuel);
         }
 
