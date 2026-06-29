@@ -2136,8 +2136,8 @@ function getPlanetTradeIncomePerMin(planet) {
             if (numDots > 0) {
               reactorHeight = 5;
               ctxTile.save();
-              ctxTile.fillStyle = '#00e5ff'; // neon/bright blue
-              ctxTile.shadowColor = '#00e5ff';
+              ctxTile.fillStyle = '#ff9f00'; // neon/bright orange
+              ctxTile.shadowColor = '#ff9f00';
               ctxTile.shadowBlur = 3;
               
               const dotRadius = 1.2;
@@ -5588,15 +5588,51 @@ function getPlanetTradeIncomePerMin(planet) {
           };
           for (const [res, count] of Object.entries(s.resourceConsumeEvents)) {
             if (count > 0 && emojis[res]) {
-              for (let b = 0; b < count; b++) {
+              if (res === 'dilithium') {
+                // Find nearest friendly planet to start the animation from
+                let startX = s.x;
+                let startY = s.y;
+                if (state.planets) {
+                  let nearestPlanet = null;
+                  let minDist = Infinity;
+                  for (const p of state.planets) {
+                    if (p.owner && p.owner.id === s.ownerId) {
+                      const dx = p.x - s.x;
+                      const dy = p.y - s.y;
+                      const dist = dx * dx + dy * dy;
+                      if (dist < minDist) {
+                        minDist = dist;
+                        nearestPlanet = p;
+                      }
+                    }
+                  }
+                  if (nearestPlanet) {
+                    startX = nearestPlanet.x;
+                    startY = nearestPlanet.y;
+                  }
+                }
                 floatingAnimations.push({
-                  x: s.x + (Math.random() - 0.5) * 12,
-                  y: s.y - 12 - b * 5,
+                  startX: startX,
+                  startY: startY,
+                  endX: s.x,
+                  endY: s.y,
+                  shipId: s.id,
                   text: emojis[res],
-                  type: 'resource_consume',
-                  age: b * 0.1,
-                  duration: 2.0
+                  type: 'reactor_dilithium_fly',
+                  age: 0,
+                  duration: 1.5
                 });
+              } else {
+                for (let b = 0; b < count; b++) {
+                  floatingAnimations.push({
+                    x: s.x + (Math.random() - 0.5) * 12,
+                    y: s.y - 12 - b * 5,
+                    text: emojis[res],
+                    type: 'resource_consume',
+                    age: b * 0.1,
+                    duration: 2.0
+                  });
+                }
               }
             }
           }
@@ -9939,7 +9975,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let maxTotalUpgrades;
         if (isPlanet) {
           maxIndividualLevel = 5;
-          maxTotalUpgrades = Math.ceil(entity.maxShips / 120);
+          maxTotalUpgrades = 1;
         } else {
           maxIndividualLevel = Math.floor((entity.maxHealth || 0) / 10);
           maxTotalUpgrades = Math.floor((entity.maxHealth || 0) / 5);
@@ -10137,7 +10173,7 @@ function getPlanetTradeIncomePerMin(planet) {
                               (selectedPlanet.diplomat || 0) +
                               (selectedPlanet.marines || 0) +
                               (selectedPlanet.command || 0);
-        const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 120);
+        const maxUpgrades = 1;
         if (totalUpgrades < maxUpgrades) {
           planetEligible = true;
         }
@@ -10627,7 +10663,7 @@ function getPlanetTradeIncomePerMin(planet) {
                             (selectedPlanet.diplomat || 0) +
                             (selectedPlanet.marines || 0) +
                             (selectedPlanet.command || 0);
-      const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 120);
+      const maxUpgrades = 1;
       if (totalUpgrades < maxUpgrades) {
         upgradeModeActive = true;
       }
@@ -10926,7 +10962,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let maxTotalUpgrades;
         let maxIndividualLevel;
         if (isPlanet) {
-          maxTotalUpgrades = Math.ceil(entity.maxShips / 120);
+          maxTotalUpgrades = 1;
           maxIndividualLevel = 5;
         } else {
           maxIndividualLevel = Math.floor((entity.maxHealth || 0) / 10);
@@ -11295,7 +11331,7 @@ function getPlanetTradeIncomePerMin(planet) {
       let maxTotalUpgrades;
       let maxIndividualLevel;
       if (isPlanet) {
-        maxTotalUpgrades = Math.ceil(entity.maxShips / 120);
+        maxTotalUpgrades = 1;
         maxIndividualLevel = 5;
       } else {
         maxIndividualLevel = Math.floor((entity.maxHealth || 0) / 10);
@@ -11528,7 +11564,7 @@ function getPlanetTradeIncomePerMin(planet) {
                                 (selectedPlanet.diplomat || 0) +
                                 (selectedPlanet.marines || 0) +
                                 (selectedPlanet.command || 0);
-          const maxUpgrades = Math.ceil(selectedPlanet.maxShips / 120);
+          const maxUpgrades = 1;
           if (totalUpgrades < maxUpgrades) {
             showPlanetUpgrade = true;
             const validProps = [
@@ -16128,11 +16164,35 @@ function getPlanetTradeIncomePerMin(planet) {
           if ((s.marines || 0) > 0) activeUpgrades.push({ symbol: '🪖', count: s.marines });
           if ((s.command || 0) > 0) activeUpgrades.push({ symbol: '👑', count: s.command });
 
+          let reactorHeight = 0;
+          if (s.reactor && s.reactor > 0) {
+            const numDots = Math.floor(Math.sqrt(s.reactor));
+            if (numDots > 0) {
+              reactorHeight = 5;
+              ctx.save();
+              ctx.fillStyle = '#ff9f00'; // neon/bright orange
+              ctx.shadowColor = '#ff9f00';
+              ctx.shadowBlur = 3;
+              
+              const dotRadius = 1.2;
+              const spacing = 3.5;
+              const startX = s.x - ((numDots - 1) * spacing) / 2;
+              const y = s.y + size + 2;
+              
+              for (let d = 0; d < numDots; d++) {
+                ctx.beginPath();
+                ctx.arc(startX + d * spacing, y, dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+              }
+              ctx.restore();
+            }
+          }
+
           let upgradesHeight = 0;
           if (cameraZoom >= 1.0 && activeUpgrades.length > 0) {
             const iconSize = 4;
             const spacingX = 5;
-            const yOffset = size + 4;
+            const yOffset = size + 4 + reactorHeight;
             upgradesHeight = 6; // offset the name by 6px if upgrades are drawn
             
             ctx.save();
@@ -16188,7 +16248,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.fillStyle = ownerPlayer ? ownerPlayer.color : '#fff';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillText(s.name, s.x, s.y + size + 4 + upgradesHeight);
+            ctx.fillText(s.name, s.x, s.y + size + 4 + reactorHeight + upgradesHeight);
             ctx.restore();
           }
 
@@ -17034,7 +17094,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const alpha = progress < 0.8 ? 1 : 1 - ((progress - 0.8) * 5);
 
         let yOffset = progress * 50; // default drift up by 50px
-        if (anim.type === 'pref_resource_diplomacy' || anim.type === 'diplomacy_success') {
+        if (anim.type === 'pref_resource_diplomacy' || anim.type === 'diplomacy_success' || anim.type === 'reactor_dilithium_fly') {
           yOffset = 0; // strictly moves from start position to target position
         } else if (anim.type === 'beaker') {
           yOffset = progress * 30; // ascends much slower
@@ -17200,6 +17260,10 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           ctx.fillStyle = `rgba(255, 255, 255, ${localAlpha})`;
           ctx.shadowColor = anim.color || '#ffeb3b';
+        } else if (anim.type === 'reactor_dilithium_fly') {
+          xOffset = Math.sin(progress * Math.PI * 2) * 4;
+          ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+          ctx.shadowColor = `rgba(0, 229, 255, ${alpha})`;
         } else {
           xOffset = Math.sin(progress * Math.PI * 3) * 8;
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
@@ -17207,8 +17271,8 @@ function getPlanetTradeIncomePerMin(planet) {
         }
 
         ctx.shadowBlur = 10;
-        if (anim.type === 'pref_resource_diplomacy' || anim.type === 'diplomacy_success') {
-          if (anim.type === 'diplomacy_success' && anim.shipId && serverState && serverState.ships) {
+        if (anim.type === 'pref_resource_diplomacy' || anim.type === 'diplomacy_success' || anim.type === 'reactor_dilithium_fly') {
+          if ((anim.type === 'diplomacy_success' || anim.type === 'reactor_dilithium_fly') && anim.shipId && serverState && serverState.ships) {
             const ship = serverState.ships.find(s => s.id === anim.shipId);
             if (ship) {
               anim.endX = ship.x;

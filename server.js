@@ -572,7 +572,7 @@ async function bootstrap() {
                                 (planet.marines || 0) +
                                 (planet.command || 0);
 
-          const maxTotalUpgrades = Math.ceil(planet.maxShips / 120);
+          const maxTotalUpgrades = 1;
 
           const currentVal = planet[prop] || 0;
           const nextLevel = currentVal + 1;
