@@ -100,6 +100,9 @@ export class Ship {
     this.damagecontrol = 0;
     this.supply_ship = 0;
     this.extended_fuel = 0;
+    this.freeFuelTimer = 0;
+    this.reactor = 0;
+    this.reactorCooldown = 0;
     this.supplies = 0;
     this.maxsupplies = 0;
     this.diplomat = 0;
@@ -785,6 +788,56 @@ export class Ship {
 
     if (this.isCruiser) {
       this.shieldShowTimer = Math.max(0, (this.shieldShowTimer || 0) - deltaTime / 1000);
+
+      // --- REACTOR & EXTENDED FUEL TANKS LOGIC ---
+      // 1. Reactor cooldown decrement
+      this.reactorCooldown = Math.max(0, (this.reactorCooldown || 0) - deltaTime);
+
+      if ((this.extended_fuel || 0) > 0) {
+        // 2. Free fuel regeneration: 1 fuel per level of extended fuel tanks every minute
+        this.freeFuelTimer = (this.freeFuelTimer || 0) + deltaTime;
+        if (this.freeFuelTimer >= 60000) {
+          this.freeFuelTimer -= 60000;
+          this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + this.extended_fuel);
+        }
+
+        // 3. Accumulate reactor points if dilithium is available
+        const reactorCap = this.extended_fuel * 10;
+        const currentReactor = this.reactor || 0;
+        if (currentReactor < reactorCap) {
+          const ratePerMs = 1.0 / 1000; // Accumulate 1 point per second
+          const needed = reactorCap - currentReactor;
+          const toAdd = Math.min(needed, ratePerMs * deltaTime);
+          const dilithiumCost = toAdd * 0.05;
+
+          if (this.owner && this.owner.resources && (this.owner.resources.dilithium || 0) >= dilithiumCost) {
+            this.owner.resources.dilithium -= dilithiumCost;
+            this.reactor = currentReactor + toAdd;
+            if (!this.resourceConsumeEvents) {
+              this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+            }
+            this.resourceConsumeEvents.dilithium = (this.resourceConsumeEvents.dilithium || 0) + dilithiumCost;
+          } else if (this.owner && this.owner.resources && this.owner.resources.dilithium > 0) {
+            const availableDilithium = this.owner.resources.dilithium;
+            const possibleAdd = availableDilithium / 0.05;
+            const actualAdd = Math.min(needed, possibleAdd);
+            this.owner.resources.dilithium = 0;
+            this.reactor = currentReactor + actualAdd;
+            if (!this.resourceConsumeEvents) {
+              this.resourceConsumeEvents = { deuterium: 0, tritanium: 0, duranium: 0, merculite: 0, antimatter: 0, dilithium: 0 };
+            }
+            this.resourceConsumeEvents.dilithium = (this.resourceConsumeEvents.dilithium || 0) + availableDilithium;
+          }
+        }
+
+        // 4. Consume reactor points to restore fuel if below 1/2 fuel and cooldown is ready
+        if (this.reactorCooldown <= 0 && (this.reactor || 0) > 0 && (this.fuel || 0) < this.getMaxFuel() / 2) {
+          const amount = Math.min(this.extended_fuel, this.reactor);
+          this.reactor -= amount;
+          this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + amount);
+          this.reactorCooldown = 15000; // 15 second cooldown
+        }
+      }
     }
     if (this.anomalyDiscoveryCooldown > 0) {
       this.anomalyDiscoveryCooldown = Math.max(0, this.anomalyDiscoveryCooldown - deltaTime);

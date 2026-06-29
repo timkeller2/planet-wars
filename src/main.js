@@ -2130,11 +2130,35 @@ function getPlanetTradeIncomePerMin(planet) {
           if ((s.marines || 0) > 0) activeUpgrades.push({ symbol: '🪖', count: s.marines });
           if ((s.command || 0) > 0) activeUpgrades.push({ symbol: '👑', count: s.command });
 
+          let reactorHeight = 0;
+          if (s.reactor && s.reactor > 0) {
+            const numDots = Math.floor(Math.sqrt(s.reactor));
+            if (numDots > 0) {
+              reactorHeight = 5;
+              ctxTile.save();
+              ctxTile.fillStyle = '#00e5ff'; // neon/bright blue
+              ctxTile.shadowColor = '#00e5ff';
+              ctxTile.shadowBlur = 3;
+              
+              const dotRadius = 1.2;
+              const spacing = 3.5;
+              const startX = s.x - ((numDots - 1) * spacing) / 2;
+              const y = s.y + size + 2;
+              
+              for (let d = 0; d < numDots; d++) {
+                ctxTile.beginPath();
+                ctxTile.arc(startX + d * spacing, y, dotRadius, 0, Math.PI * 2);
+                ctxTile.fill();
+              }
+              ctxTile.restore();
+            }
+          }
+
           let upgradesHeight = 0;
           if (activeUpgrades.length > 0) {
             const iconSize = 4;
             const spacingX = 5;
-            const yOffset = size + 4;
+            const yOffset = size + 4 + reactorHeight;
             upgradesHeight = 6;
             
             ctxTile.save();
@@ -2164,7 +2188,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctxTile.fillStyle = ownerPlayer ? ownerPlayer.color : '#fff';
             ctxTile.textAlign = 'center';
             ctxTile.textBaseline = 'top';
-            ctxTile.fillText(s.name, s.x, s.y + size + 3 + upgradesHeight);
+            ctxTile.fillText(s.name, s.x, s.y + size + 3 + reactorHeight + upgradesHeight);
             ctxTile.restore();
           }
 
@@ -7479,7 +7503,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (leaderboardHeader) {
         const titleSpan = leaderboardHeader.querySelector('span');
         if (titleSpan) {
-          titleSpan.textContent = `LEADERBOARD (lead by ${requiredLead})`;
+          titleSpan.textContent = `LEADERBOARD (lead by ${requiredLead};${Math.ceil(requiredLead * 1.5)})`;
         }
       }
 
@@ -13382,27 +13406,71 @@ function getPlanetTradeIncomePerMin(planet) {
             raceIcon = raceIcons[affinity] || null;
           }
 
-          const hasResources = p.resources && p.resources.length > 0;
-          if (hasResources) {
+          const resourceIcons = {
+            dilithium: '💎',
+            merculite: '☄️',
+            duranium: '🔲',
+            tritanium: '🔩',
+            antimatter: '🌀',
+            deuterium: '💧',
+            latinum: '🏺'
+          };
+
+          const rowItems = [];
+          
+          // 1. Add resources
+          if (p.resources && p.resources.length > 0) {
+            for (const r of p.resources) {
+              const emoji = resourceIcons[r];
+              if (emoji) {
+                rowItems.push({ symbol: emoji, count: 0, isResource: true });
+              }
+            }
+          }
+          
+          // 2. Add upgrades
+          const upObj = isLastKnown ? (lastKnownPlanets[p.id] || p) : p;
+          if ((upObj.sensorarrays || 0) > 0) rowItems.push({ symbol: '📡', count: upObj.sensorarrays });
+          if ((upObj.labs || 0) > 0) rowItems.push({ symbol: '🔬', count: upObj.labs });
+          if ((upObj.shields || 0) > 0) rowItems.push({ symbol: '🛡️', count: upObj.shields });
+          if ((upObj.armor || 0) > 0) rowItems.push({ symbol: '⛨', count: upObj.armor });
+          if ((upObj.engine || 0) > 0) rowItems.push({ symbol: '🚀', count: upObj.engine });
+          if ((upObj.munitions || 0) > 0) rowItems.push({ symbol: '💣', count: upObj.munitions });
+          if ((upObj.targeting || 0) > 0) rowItems.push({ symbol: '🎯', count: upObj.targeting });
+          if ((upObj.damagecontrol || 0) > 0) rowItems.push({ symbol: '🔧', count: upObj.damagecontrol });
+          if ((upObj.supply_ship || 0) > 0) rowItems.push({ symbol: '📦', count: upObj.supply_ship });
+          if ((upObj.extended_fuel || 0) > 0) rowItems.push({ symbol: '⛽', count: upObj.extended_fuel });
+          if ((upObj.diplomat || 0) > 0) rowItems.push({ symbol: '🤝', count: upObj.diplomat });
+          if ((upObj.marines || 0) > 0) rowItems.push({ symbol: '🪖', count: upObj.marines });
+          if ((upObj.command || 0) > 0) rowItems.push({ symbol: '👑', count: upObj.command });
+
+          if (rowItems.length > 0) {
             ctx.save();
             ctx.font = '12px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#fff';
             
-            const resourceIcons = {
-              dilithium: '💎',
-              merculite: '☄️',
-              duranium: '🔲',
-              tritanium: '🔩',
-              antimatter: '🌀',
-              deuterium: '💧',
-              latinum: '🏺'
-            };
+            const spacingX = 14;
+            const startX = p.x - ((rowItems.length - 1) * spacingX) / 2;
             
-            let displayString = p.resources.map(r => resourceIcons[r]).join(' ');
-            
-            ctx.fillText(displayString, p.x, currentY);
+            for (let j = 0; j < rowItems.length; j++) {
+              const item = rowItems[j];
+              const x = startX + j * spacingX;
+              const y = currentY;
+              
+              // Draw the emoji symbol
+              ctx.fillText(item.symbol, x, y);
+              
+              // If it's an upgrade and the count is > 1, draw the green count number
+              if (!item.isResource && item.count > 1) {
+                ctx.save();
+                ctx.fillStyle = '#39ff14';
+                ctx.font = 'bold 8px Orbitron';
+                ctx.fillText(item.count.toString(), x + 6, y - 5);
+                ctx.restore();
+              }
+            }
             ctx.restore();
             currentY += 14;
           }

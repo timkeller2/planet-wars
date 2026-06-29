@@ -7929,20 +7929,13 @@ export class Game {
       }
     }
 
-    // 4. Score Victory: twice the victory points of the 2nd highest player and at least minScoreToWin (50, or timed game minutes)
-    let minScoreToWin = 50;
-    if (this.settings && this.settings.timedGameLimit && this.settings.timedGameLimit !== 'unlimited') {
-      const limitSecs = parseFloat(this.settings.timedGameLimit);
-      if (!isNaN(limitSecs)) {
-        minScoreToWin = Math.round(15 + (limitSecs / 60) / 2);
-      }
-    }
+    // 4. Score Victory: leads by 1.5 * requiredLead (rounded up) Victory Points
+    const requiredScoreLead = Math.ceil(requiredLead * 1.5);
     const sortedByVP = [...alivePlayers].sort((a, b) => getVP(b) - getVP(a));
     if (sortedByVP.length >= 2) {
       const topPlayer = sortedByVP[0];
-      const topVP = getVP(topPlayer);
-      const secondVP = getVP(sortedByVP[1]);
-      if (topVP >= secondVP * 2 && topVP >= minScoreToWin && (topPlayer.credits || 0) >= 0) {
+      const lead = getVP(topPlayer) - getVP(sortedByVP[1]);
+      if (lead >= requiredScoreLead && (topPlayer.credits || 0) >= 0) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(SCORE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);
@@ -7950,7 +7943,7 @@ export class Game {
       }
     } else if (sortedByVP.length === 1) {
       const topPlayer = sortedByVP[0];
-      if (getVP(topPlayer) >= minScoreToWin && (topPlayer.credits || 0) >= 0) {
+      if (getVP(topPlayer) >= requiredScoreLead && (topPlayer.credits || 0) >= 0) {
         this.stop();
         this.gameOverMessage = `${(topPlayer.name || topPlayer.id).toUpperCase()} IS VICTORIOUS!\n(SCORE VICTORY)`;
         if (this.onGameOver) this.onGameOver(this.gameOverMessage);

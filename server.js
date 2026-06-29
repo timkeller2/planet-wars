@@ -2487,6 +2487,7 @@ async function bootstrap() {
           isHungry: s.isAmoeba ? (!s.amoebaGrowCooldown || s.amoebaGrowCooldown <= 0) : false,
           isWarp: s.isWarp || false,
           fuel: s.fuel || 0,
+          reactor: s.reactor || 0,
           angle: s.angle || 0,
           flightTime: s.flightTime || 0,
           speedModifier: s.speedModifier || 1.0,
