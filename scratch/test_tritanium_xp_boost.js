@@ -33,8 +33,9 @@ function runTest() {
   game.update(100);
   const regularFleet = game.ships[game.ships.length - 1];
   assert.ok(regularFleet, "A fleet should have been launched");
-  console.log(`Regular Fleet startingExp: ${regularFleet.expScore}`);
+  console.log(`Regular Fleet startingExp: ${regularFleet.expScore}, speed: ${regularFleet.speed}`);
   assert.strictEqual(regularFleet.expScore, friendlyPlanet.expScore || 0, "Regular fleet should start with default planet XP");
+  assert.strictEqual(regularFleet.speed, 15, "Regular fleet should have standard speed (15)");
 
   // 3. Launch fleet WITH Tritanium payment
   player.resources.tritanium = 50;
@@ -45,10 +46,11 @@ function runTest() {
   game.update(100);
   const boostedFleet = game.ships[game.ships.length - 1];
   assert.ok(boostedFleet && boostedFleet !== regularFleet, "A new fleet should have been launched");
-  console.log(`Boosted Fleet startingExp: ${boostedFleet.expScore}`);
+  console.log(`Boosted Fleet startingExp: ${boostedFleet.expScore}, speed: ${boostedFleet.speed}`);
   assert.strictEqual(boostedFleet.expScore, (friendlyPlanet.expScore || 0) + 400, "Boosted fleet should start with +400 XP");
+  assert.strictEqual(boostedFleet.speed, 35, "Boosted fleet should have speed 35");
 
-  console.log("All Tritanium XP Boost tests passed successfully!");
+  console.log("All Tritanium XP Boost and Speed tests passed successfully!");
 }
 
 try {

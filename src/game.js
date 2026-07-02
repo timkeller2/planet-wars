@@ -2632,6 +2632,9 @@ export class Game {
     const ship = new Ship(this.nextShipId++, source.x, source.y, target, source.owner);
     ship.cruiserStyle = source.racialAffinity;
     ship.count = finalShipsToSend;
+    if (isTritaniumPaid) {
+      ship.speed = 35;
+    }
     if (source.isSpeedPlanet) ship.speed += 15;
     ship.speedModifier = speedModifier !== null ? speedModifier : 1.0;
     ship.sourcePlanet = source;
@@ -2897,6 +2900,9 @@ export class Game {
     const ship = new Ship(this.nextShipId++, source.x, source.y, null, source.owner, targetX, targetY);
     ship.cruiserStyle = source.racialAffinity;
     ship.count = finalShipsToSend;
+    if (isTritaniumPaid) {
+      ship.speed = 35;
+    }
     if (source.isSpeedPlanet) ship.speed += 15;
     const spaceDx = targetX - source.x;
     const spaceDy = targetY - source.y;
