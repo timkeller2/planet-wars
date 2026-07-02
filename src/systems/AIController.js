@@ -127,7 +127,7 @@ export class AIController {
   performAction(aiPlanets) {
     const sourceCandidates = aiPlanets.filter(p => {
       if (p.ships <= 12) return false;
-      if (p.rampageEvent && p.maxShips >= 150 && p.ships < p.maxShips * 2) return false;
+      if (p.rampageEvent && p.maxShips >= 110 && p.ships < p.maxShips * 2) return false;
       if (aiPlanets.length < 4 && p.ships < p.maxShips * 0.75) return false;
       if (p.lastAiLaunchTime && Date.now() - p.lastAiLaunchTime < 5000) return false;
       return true;
@@ -165,7 +165,7 @@ export class AIController {
         }
       }
       
-      if (p.rampageEvent && p.maxShips >= 150 && shipsAfterLaunch < p.maxShips) {
+      if (p.rampageEvent && p.maxShips >= 110 && shipsAfterLaunch < p.maxShips) {
         return false;
       }
       

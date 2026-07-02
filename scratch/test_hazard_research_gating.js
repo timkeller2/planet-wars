@@ -22,6 +22,9 @@ function runTest() {
   cruiser.sensorarrays = 2; // Ensure good radar range
   game.ships.push(cruiser);
 
+  // Clear randomly generated storms/minefields to make the test deterministic
+  game.ionStorms = [];
+
   // 3. Spawn an ion storm at (210, 210) with intensity 10
   const storm = {
     id: 1,

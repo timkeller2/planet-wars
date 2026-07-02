@@ -4320,11 +4320,11 @@ export class Game {
         if (unusedAIs.length > 0) {
           const neutralPlanets = this.planets.filter(p => p.owner === null && !p.rampageIncubating);
           if (neutralPlanets.length > 0) {
-            const above150 = neutralPlanets.filter(p => p.maxShips > 150);
+            const above110 = neutralPlanets.filter(p => p.maxShips > 110);
             let target;
-            if (above150.length > 0) {
-              above150.sort((a, b) => a.maxShips - b.maxShips); // smallest first
-              target = above150[0];
+            if (above110.length > 0) {
+              above110.sort((a, b) => a.maxShips - b.maxShips); // smallest first
+              target = above110[0];
             } else {
               neutralPlanets.sort((a, b) => b.maxShips - a.maxShips); // largest first
               target = neutralPlanets[0];
