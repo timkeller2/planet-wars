@@ -4755,8 +4755,14 @@ export class Game {
                   break;
                 }
               } else {
-                targetHazard = { type: 'storm', storm: storm };
-                break;
+                const k = storm.knowledge[ship.owner.id] || 0;
+                const tR = Math.sqrt(ship.owner.techScore || 0);
+                const eR = Math.sqrt(ship.owner.expScore || 0);
+                const effectiveIntensity = Math.max(0, storm.intensity - k - (tR + eR) / 2);
+                if (effectiveIntensity > 0) {
+                  targetHazard = { type: 'storm', storm: storm };
+                  break;
+                }
               }
             }
           }
