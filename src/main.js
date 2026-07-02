@@ -7835,7 +7835,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const propName = propMap[type] || type;
       let planetUpgradesCount = 0;
       for (const p of serverState.planets) {
-        if (p.ownerId === ship.ownerId) {
+        if (p.ownerId === ship.ownerId && !p.dead) {
           planetUpgradesCount += (p[propName] || 0);
         }
       }
@@ -7912,7 +7912,7 @@ function getPlanetTradeIncomePerMin(planet) {
       let planetUpgradesCount = 0;
       if (myPlayer) {
         for (const p of serverState.planets) {
-          if (p.ownerId === myPlayer.id) {
+          if (p.ownerId === myPlayer.id && !p.dead) {
             planetUpgradesCount += (p[foundProp] || 0);
           }
         }

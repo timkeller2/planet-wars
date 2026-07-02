@@ -9,10 +9,17 @@ function runTest() {
   const game = new Game({ width: 1600, height: 1600 });
   game.initMap();
 
-  // 2. Verify starting globalUpgradeModifiers are initialized to 0.0
-  console.log("Verifying starting globalUpgradeModifiers are 0.0...");
+  // 2. Verify starting globalUpgradeModifiers are initialized between -0.1 and 0.1
+  console.log("Verifying starting globalUpgradeModifiers are between -0.1 and 0.1...");
   for (const [key, val] of Object.entries(game.globalUpgradeModifiers)) {
-    assert.strictEqual(val, 0.0, `Starting globalUpgradeModifiers for ${key} should be 0.0, got ${val}`);
+    assert.ok(val >= -0.10 && val <= 0.10, `Starting globalUpgradeModifiers for ${key} should be between -0.1 and 0.1, got ${val}`);
+  }
+
+  // Verify starting player upgradeModifiers are initialized between -0.1 and 0.1
+  console.log("Verifying starting player upgradeModifiers are between -0.1 and 0.1...");
+  const p1 = game.allPlayers.find(p => p.id === 'p1') || game.allPlayers[0];
+  for (const [key, val] of Object.entries(p1.upgradeModifiers)) {
+    assert.ok(val >= -0.10 && val <= 0.10, `Starting player upgradeModifiers for ${key} should be between -0.1 and 0.1, got ${val}`);
   }
 
   // 3. Verify getUpgradeCost calculates correctly with 0 planets owned

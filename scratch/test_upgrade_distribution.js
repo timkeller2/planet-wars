@@ -49,8 +49,8 @@ function runTest() {
   const discountedCost = game.getUpgradeCost(cruiserA, 'labs');
   console.log(`Discounted upgrade cost with 2 planet labs: ${discountedCost}`);
   
-  const expectedDiscounted = Math.max(1, Math.round(baseCost / 3));
-  assert.strictEqual(discountedCost, expectedDiscounted, "Discounted cost should be baseCost / (1 + 2)");
+  const expectedDiscounted = Math.max(1, Math.round(baseCost * 0.60));
+  assert.strictEqual(discountedCost, expectedDiscounted, "Discounted cost should apply 20% discount per upgrade count");
   console.log("Test 1 Passed: Cost discount divisor verified successfully!");
 
   // Test 3: Prorated credit distribution

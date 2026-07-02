@@ -10,19 +10,21 @@ export class Player {
     this.cruiserStyle = null;
     this.credits = 0;
     this.hasOwnedPlanet = false;
+    const getRandDiscount = () => Math.round((-0.10 + Math.random() * 0.20) * 100) / 100;
     this.upgradeModifiers = {
-      sensorarray: 0,
-      lab: 0,
-      armor: 0,
-      shield: 0,
-      engine: 0,
-      munitions: 0,
-      targeting: 0,
-      damagecontrol: 0,
-      supplyship: 0,
-      extendedfuel: 0,
-      diplomat: 0,
-      marines: 0
+      sensorarray: getRandDiscount(),
+      lab: getRandDiscount(),
+      armor: getRandDiscount(),
+      shield: getRandDiscount(),
+      engine: getRandDiscount(),
+      munitions: getRandDiscount(),
+      targeting: getRandDiscount(),
+      damagecontrol: getRandDiscount(),
+      supplyship: getRandDiscount(),
+      extendedfuel: getRandDiscount(),
+      diplomat: getRandDiscount(),
+      marines: getRandDiscount(),
+      command: getRandDiscount()
     };
     this.prevTechBonus = 0;
     this.atWarWith = {};
