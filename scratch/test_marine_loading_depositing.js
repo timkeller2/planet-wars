@@ -51,12 +51,12 @@ function runTest() {
   assert.ok(cruiser.marineCount > 0, "Marines should be loaded when scout attack mode is enabled");
   const loadedMarines = cruiser.marineCount;
 
-  // Disable Scout Attack Mode, and target the friendly planet to deposit marines.
+  // Disable Scout Attack Mode, and verify depositing works even with targetPlanet = null.
   console.log("Testing: Should deposit marines to friendly planet if scoutAttackEnabled is false...");
   cruiser.scoutAttackEnabled = false;
-  cruiser.targetPlanet = friendlyPlanet;
+  cruiser.targetPlanet = null; // Test the bug condition where target is null but cruiser is in gravity well
 
-  // Let's set planet ships to 90, so there is room for 10 ships (planet capacity 100)
+  // Let's set planet ships to 95, so there is room for 5 ships (planet capacity 100)
   friendlyPlanet.ships = 95;
   const initialPlanetShips = friendlyPlanet.ships;
   const initialCruiserMarines = cruiser.marineCount;

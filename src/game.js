@@ -7265,21 +7265,23 @@ export class Game {
             }
           }
         } else {
-          // Deposit marines up to the planet's capacity if targeting a friendly planet
-          const p = ship.targetPlanet;
-          if (p && p.owner && p.owner.id === ship.owner.id && (ship.marineCount || 0) > 0) {
-            const pdx = p.x - ship.x;
-            const pdy = p.y - ship.y;
-            const distSq = pdx*pdx + pdy*pdy;
-            const gr = p.getGravityRadius();
-            if (distSq < gr * gr) {
-              const spaceAvailable = Math.max(0, p.maxShips - p.ships);
-              if (spaceAvailable > 0) {
-                // Deposit continuously at a rate of 1 per second
-                const toUnload = Math.min(ship.marineCount, spaceAvailable, 1 * dt);
-                if (toUnload > 0) {
-                  ship.marineCount = Math.max(0, ship.marineCount - toUnload);
-                  p.ships += toUnload;
+          // Deposit marines up to the planet's capacity if inside a friendly planet's gravity well
+          for (const p of this.planets) {
+            if ((ship.marineCount || 0) <= 0) break;
+            if (p.owner && p.owner.id === ship.owner.id) {
+              const pdx = p.x - ship.x;
+              const pdy = p.y - ship.y;
+              const distSq = pdx * pdx + pdy * pdy;
+              const gr = p.getGravityRadius();
+              if (distSq < gr * gr) {
+                const spaceAvailable = Math.max(0, p.maxShips - p.ships);
+                if (spaceAvailable > 0) {
+                  // Deposit continuously at a rate of 1 per second
+                  const toUnload = Math.min(ship.marineCount, spaceAvailable, 1 * dt);
+                  if (toUnload > 0) {
+                    ship.marineCount = Math.max(0, ship.marineCount - toUnload);
+                    p.ships += toUnload;
+                  }
                 }
               }
             }
