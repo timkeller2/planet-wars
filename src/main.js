@@ -11309,7 +11309,7 @@ function getPlanetTradeIncomePerMin(planet) {
         'munitions': 'Adds +1 bomb capacity and +1 splash damage rating per level to standard weapon dogfights',
         'targeting': 'Adds +5% weapon range and +5% laser accuracy hit chance per level in combat',
         'damagecontrol': 'Adds +50% out-of-combat repair and +20% deep-space repair rate per level. Also increases shield regen rate by +50% of the base rate per level.',
-        'supply_ship': 'Adds +20 max supplies, and +(25 + level*10)% supply cost discount per level. Penalties: -3 speed, -5% accuracy, -5 weapon range, -20 sensor range (min 25), -2 weapon volleys (min 1) per level',
+        'supply_ship': 'Adds +12 max supplies, and +(25 + level*10)% supply cost discount per level. Penalties: -3 speed, -5% accuracy, -5 weapon range, -20 sensor range (min 25), -2 weapon volleys (min 1) per level',
         'extended_fuel': 'Each level increases the maximum fuel capacity for the cruiser by the base amount at no penalty',
         'diplomat': 'Adds diplomat subversion to project 1 passive sympathy/min or reduce 1 enemy sympathy/min',
         'marines': 'Adds +1 marine capacity factor per level to drastically boost planetary boarding success',

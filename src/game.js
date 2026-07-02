@@ -4184,7 +4184,7 @@ export class Game {
               ship.splashDamage = ship.munitions;
             }
             if (ship.supply_ship) {
-              ship.maxsupplies = ship.supply_ship * 20;
+              ship.maxsupplies = ship.supply_ship * 12;
             }
 
             // Load full supplies/marines/bombs/fuel/shields
