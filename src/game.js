@@ -7224,34 +7224,56 @@ export class Game {
         ship.crew = Math.min(ship.maxHealth + ship.health, (ship.crew || 0) + 1 * dt);
       }
 
-      // 3. Load Marines
-      // "load marines up to capacity from planets with > 50% ships at cost of 1 ship from nearby planet for each marine"
+      // 3. Load / Deposit Marines
       if (ship.inFriendlyWell && (ship.marines || 0) > 0) {
-        const capacity = ship.marines * ship.maxHealth;
-        for (const p of this.planets) {
-          if (ship.marineCount >= capacity) break;
-          if (p.owner && p.owner.id === ship.owner.id) {
+        if (ship.scoutAttackEnabled === true) {
+          // "load marines up to capacity from planets with > 50% ships at cost of 1 ship from nearby planet for each marine"
+          const capacity = ship.marines * ship.maxHealth;
+          for (const p of this.planets) {
+            if (ship.marineCount >= capacity) break;
+            if (p.owner && p.owner.id === ship.owner.id) {
+              const pdx = p.x - ship.x;
+              const pdy = p.y - ship.y;
+              const distSq = pdx*pdx + pdy*pdy;
+              const gr = p.getGravityRadius();
+              if (distSq < gr * gr) {
+                // Rule: When loading marines, do not load from a garrison world that is within 10 of twice maxships
+                // unless the ship to be loaded is sitting within 25px of the planet.
+                const isSuchGarrisonWorld = (p.isMilitary || p.focusMode === 'garrison') && (p.ships >= p.maxShips * 2 - 10);
+                if (isSuchGarrisonWorld && distSq > 25 * 25) {
+                  continue;
+                }
+
+                const halfCapacity = 0.5 * p.maxShips;
+                if (p.ships > halfCapacity) {
+                  const needed = capacity - ship.marineCount;
+                  const available = p.ships - halfCapacity;
+                  // Load continuously at a rate of 1 per second
+                  const toLoad = Math.min(needed, available, 1 * dt);
+                  if (toLoad > 0) {
+                    ship.marineCount += toLoad;
+                    p.ships = Math.max(0, p.ships - toLoad);
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          // Deposit marines up to the planet's capacity if targeting a friendly planet
+          const p = ship.targetPlanet;
+          if (p && p.owner && p.owner.id === ship.owner.id && (ship.marineCount || 0) > 0) {
             const pdx = p.x - ship.x;
             const pdy = p.y - ship.y;
             const distSq = pdx*pdx + pdy*pdy;
             const gr = p.getGravityRadius();
             if (distSq < gr * gr) {
-              // Rule: When loading marines, do not load from a garrison world that is within 10 of twice maxships
-              // unless the ship to be loaded is sitting within 25px of the planet.
-              const isSuchGarrisonWorld = (p.isMilitary || p.focusMode === 'garrison') && (p.ships >= p.maxShips * 2 - 10);
-              if (isSuchGarrisonWorld && distSq > 25 * 25) {
-                continue;
-              }
-
-              const halfCapacity = 0.5 * p.maxShips;
-              if (p.ships > halfCapacity) {
-                const needed = capacity - ship.marineCount;
-                const available = p.ships - halfCapacity;
-                // Load continuously at a rate of 1 per second
-                const toLoad = Math.min(needed, available, 1 * dt);
-                if (toLoad > 0) {
-                  ship.marineCount += toLoad;
-                  p.ships = Math.max(0, p.ships - toLoad);
+              const spaceAvailable = Math.max(0, p.maxShips - p.ships);
+              if (spaceAvailable > 0) {
+                // Deposit continuously at a rate of 1 per second
+                const toUnload = Math.min(ship.marineCount, spaceAvailable, 1 * dt);
+                if (toUnload > 0) {
+                  ship.marineCount = Math.max(0, ship.marineCount - toUnload);
+                  p.ships += toUnload;
                 }
               }
             }
