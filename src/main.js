@@ -4761,10 +4761,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const musicCheckbox = document.getElementById('music-checkbox');
         const bgMusic = document.getElementById('bg-music');
         if (musicCheckbox && musicCheckbox.checked && bgMusic) {
-          bgMusic.src = '/Music/Megalovania.mp3';
-          bgMusic.loop = false;
-          bgMusic.volume = getTargetMusicVolume(0.45);
-          updateAudioState();
+          playMegalovaniaTrack(bgMusic);
         }
       }
 
@@ -4924,6 +4921,24 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastPlanetIncubations = {};
   let lastPlanetRevoltAttempts = {};
   let megalovaniaPlayed = false;
+  let megalovaniaTimeoutId = null;
+
+  function playMegalovaniaTrack(bgMusic) {
+    bgMusic.src = '/Music/Megalovania.mp3';
+    bgMusic.loop = false;
+    bgMusic.volume = getTargetMusicVolume(0.45);
+    updateAudioState();
+
+    if (megalovaniaTimeoutId) {
+      clearTimeout(megalovaniaTimeoutId);
+    }
+    megalovaniaTimeoutId = setTimeout(() => {
+      const curSrc = bgMusic.getAttribute('src') || '';
+      if (curSrc.includes('Megalovania')) {
+        playRandomIntroTrack();
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+  }
   let lastPlanetStands = {};
   let lastPlanetHomeworlds = {};
   let planetShields = {};
@@ -5442,10 +5457,7 @@ function getPlanetTradeIncomePerMin(planet) {
               const musicCheckbox = document.getElementById('music-checkbox');
               const bgMusic = document.getElementById('bg-music');
               if (musicCheckbox && musicCheckbox.checked && bgMusic) {
-                bgMusic.src = '/Music/Megalovania.mp3';
-                bgMusic.loop = false;
-                bgMusic.volume = getTargetMusicVolume(0.45);
-                updateAudioState();
+                playMegalovaniaTrack(bgMusic);
               }
             }
           }
