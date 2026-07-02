@@ -2640,7 +2640,7 @@ export class Game {
       startingExp += (source.maxShips || 0) / 10;
     }
     if (isTritaniumPaid) {
-      startingExp += 100;
+      startingExp += 400;
     }
     ship.expScore = startingExp;
     ship.bomberOffsetMag = 0;
@@ -2908,7 +2908,7 @@ export class Game {
       startingExp += (source.maxShips || 0) / 10;
     }
     if (isTritaniumPaid) {
-      startingExp += 100;
+      startingExp += 400;
     }
     ship.expScore = startingExp;
     ship.bomberOffsetMag = 0;
