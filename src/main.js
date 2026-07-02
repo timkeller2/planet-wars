@@ -9946,14 +9946,14 @@ function getPlanetTradeIncomePerMin(planet) {
         const key = event.key.toLowerCase();
         
         if (!isPlanet && ship.isUpgrading) {
-          if (key === 'u' || event.key === 'Escape') {
+          if (key === 'g' || event.key === 'Escape') {
             event.preventDefault();
             upgradeModeActive = false;
           }
           return;
         }
         
-        if (key === 'u' || event.key === 'Escape') {
+        if (key === 'g' || event.key === 'Escape') {
           event.preventDefault();
           upgradeModeActive = false;
           return;
@@ -10157,7 +10157,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (event.key.toLowerCase() === 'w') {
       warpOrderNext = !warpOrderNext;
     }
-    if (event.key.toLowerCase() === 'u') {
+    if (event.key.toLowerCase() === 'g') {
       const qual = getSelectedCruiserUpgradeQualifiers();
       const selectedPlanet = selectedPlanets.length === 1 ? selectedPlanets[0] : null;
       let planetEligible = false;
@@ -10189,27 +10189,28 @@ function getPlanetTradeIncomePerMin(planet) {
         event.preventDefault();
         upgradeModeActive = true;
         return;
-      } else {
-        const selectedCruisers = getSelectedCruisers();
-        if (selectedCruisers.length > 0) {
-          event.preventDefault();
-          const anyNotUsing = selectedCruisers.some(c => !c.useResources);
-          const nextState = anyNotUsing;
-          for (const ship of selectedCruisers) {
-            ship.useResources = nextState;
-            socket.emit('toggleCruiserUseResources', { shipId: ship.id, enabled: nextState });
-          }
-          return;
-        } else if (selectedPlanets.length > 0) {
-          event.preventDefault();
-          const anyNotUsing = selectedPlanets.some(p => !p.useResources);
-          const nextState = anyNotUsing;
-          for (const p of selectedPlanets) {
-            p.useResources = nextState;
-            socket.emit('togglePlanetUseResources', { planetId: p.id, enabled: nextState });
-          }
-          return;
+      }
+    }
+    if (event.key.toLowerCase() === 'u') {
+      const selectedCruisers = getSelectedCruisers();
+      if (selectedCruisers.length > 0) {
+        event.preventDefault();
+        const anyNotUsing = selectedCruisers.some(c => !c.useResources);
+        const nextState = anyNotUsing;
+        for (const ship of selectedCruisers) {
+          ship.useResources = nextState;
+          socket.emit('toggleCruiserUseResources', { shipId: ship.id, enabled: nextState });
         }
+        return;
+      } else if (selectedPlanets.length > 0) {
+        event.preventDefault();
+        const anyNotUsing = selectedPlanets.some(p => !p.useResources);
+        const nextState = anyNotUsing;
+        for (const p of selectedPlanets) {
+          p.useResources = nextState;
+          socket.emit('togglePlanetUseResources', { planetId: p.id, enabled: nextState });
+        }
+        return;
       }
     }
     if (event.key.toLowerCase() === 'o') {
