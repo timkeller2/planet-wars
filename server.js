@@ -293,6 +293,57 @@ async function bootstrap() {
         return `Spawned enemy AI cruiser ${ship.id} at (${Math.round(sx)}, ${Math.round(sy)}) for player ${enemyAI.name}.`;
       }
 
+      case 'spawncruiser': {
+        const hw = game.planets.find(p => p.homeworldOf === targetPlayer.id);
+        if (!hw) return "No homeworld found for target player.";
+        const sx = hw.x - 20;
+        const sy = hw.y - 20;
+        
+        const ship = new Ship(game.nextShipId++, sx, sy, null, targetPlayer, sx, sy);
+        ship.isCruiser = true;
+        ship.classType = 'corvette';
+        ship.maxHealth = 15;
+        ship.health = 15;
+        ship.crew = 30;
+        ship.marineCount = 15;
+        ship.fuel = 15;
+        ship.speed = 10;
+        
+        game.ships.push(ship);
+        return `Spawned friendly cruiser ${ship.id} at (${Math.round(sx)}, ${Math.round(sy)}) for player ${targetPlayer.name}.`;
+      }
+
+      case 'forceboard': {
+        const friendlyId = parseInt(args[0], 10);
+        const enemyId = parseInt(args[1], 10);
+        if (isNaN(friendlyId) || isNaN(enemyId)) return "Usage: /forceboard <friendlyShipId> <enemyShipId>";
+        const friendly = game.ships.find(s => s.id === friendlyId);
+        const enemy = game.ships.find(s => s.id === enemyId);
+        if (!friendly || !enemy) return "One or both ships not found.";
+        friendly.isUnderBoarding = true;
+        friendly.boardingMarines = 10;
+        friendly.boardingTimer = 5.0;
+        friendly.boardingPlayer = enemy.owner;
+        friendly.boardingStartMarines = 10;
+        friendly.boardingSourceId = enemy.id;
+        friendly.boardingSourceContributions = [{ shipId: enemy.id, contributed: 10 }];
+        return `Force boarded ship ${friendlyId} by ship ${enemyId}.`;
+      }
+
+      case 'forceboardany': {
+        const friendly = game.ships.find(s => s.active && s.isCruiser && s.owner && s.owner.id === targetPlayer.id);
+        const enemy = game.ships.find(s => s.active && s.isCruiser && s.owner && s.owner.id !== targetPlayer.id);
+        if (!friendly || !enemy) return "One or both cruisers not found.";
+        friendly.isUnderBoarding = true;
+        friendly.boardingMarines = 10;
+        friendly.boardingTimer = 5.0;
+        friendly.boardingPlayer = enemy.owner;
+        friendly.boardingStartMarines = 10;
+        friendly.boardingSourceId = enemy.id;
+        friendly.boardingSourceContributions = [{ shipId: enemy.id, contributed: 10 }];
+        return `Force boarded ship ${friendly.id} by ship ${enemy.id}.`;
+      }
+
       case 'marines': {
         const shipId = parseInt(args[0], 10);
         const count = parseInt(args[1], 10);
@@ -2488,6 +2539,7 @@ async function bootstrap() {
           boardingMarines: s.boardingMarines || 0,
           boardingPlayerId: s.boardingPlayer ? s.boardingPlayer.id : null,
           boardingSourceId: s.boardingSourceId || null,
+          boardingSourceContributions: s.boardingSourceContributions || null,
           boardingTimer: s.boardingTimer || 0,
           isBoardingFleet: s.isBoardingFleet || false,
           isReturnPod: s.isReturnPod || false,
@@ -2799,7 +2851,7 @@ async function bootstrap() {
               spawnChance -= 0.25;
             }
             if (Math.random() < spawnChance) {
-              const dist = Math.random() * (p.radius - 5);
+              const dist = p.radius + Math.random() * 25;
               const angle = Math.random() * Math.PI * 2;
               const ax = p.x + Math.cos(angle) * dist;
               const ay = p.y + Math.sin(angle) * dist;

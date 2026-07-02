@@ -769,6 +769,40 @@ export class Ship {
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
 
+    let friendlyWellPlanet = null;
+    let neutralWellPlanet = null;
+    let minFriendlyDistSq = Infinity;
+    let minNeutralDistSq = Infinity;
+
+    if (allPlanets && this.owner) {
+      for (const planet of allPlanets) {
+        const pdx = this.x - planet.x;
+        const pdy = this.y - planet.y;
+        const distSq = pdx * pdx + pdy * pdy;
+        const gravityRadius = planet.getGravityRadius();
+        if (distSq < gravityRadius * gravityRadius) {
+          if (planet.owner && this.owner && planet.owner.id === this.owner.id) {
+            const hasSupplies = (planet.supplies || 0) >= 1.0;
+            const currentHasSupplies = friendlyWellPlanet && (friendlyWellPlanet.supplies || 0) >= 1.0;
+            
+            if (!friendlyWellPlanet || (hasSupplies && !currentHasSupplies) || (hasSupplies === currentHasSupplies && distSq < minFriendlyDistSq)) {
+              friendlyWellPlanet = planet;
+              minFriendlyDistSq = distSq;
+            }
+          } else if (!planet.owner && !planet.isDeepSpaceAnomaly) {
+            const hasSupplies = (planet.supplies || 0) >= 1.0;
+            const currentHasSupplies = neutralWellPlanet && (neutralWellPlanet.supplies || 0) >= 1.0;
+            
+            if (!neutralWellPlanet || (hasSupplies && !currentHasSupplies) || (hasSupplies === currentHasSupplies && distSq < minNeutralDistSq)) {
+              neutralWellPlanet = planet;
+              minNeutralDistSq = distSq;
+            }
+          }
+        }
+      }
+    }
+    this.inFriendlyWell = friendlyWellPlanet !== null;
+
     if (this.pioneerWarpIn) {
       const dx = this.pioneerWarpX - this.x;
       const dy = this.pioneerWarpY - this.y;
@@ -807,7 +841,7 @@ export class Ship {
         // 3. Accumulate reactor points if dilithium is available (1 point per second, no partial units)
         const reactorCap = this.extended_fuel * 10;
         const currentReactor = this.reactor || 0;
-        if (currentReactor < reactorCap) {
+        if (this.inFriendlyWell && currentReactor < reactorCap) {
           this.reactorTimer = (this.reactorTimer || 0) + deltaTime;
           while (this.reactorTimer >= 1000 && this.reactor < reactorCap) {
             const dilithiumCost = 0.05;
@@ -840,40 +874,6 @@ export class Ship {
       this.anomalyDiscoveryCooldown = Math.max(0, this.anomalyDiscoveryCooldown - deltaTime);
     }
     this.isMovingBackward = false;
-
-    let friendlyWellPlanet = null;
-    let neutralWellPlanet = null;
-    let minFriendlyDistSq = Infinity;
-    let minNeutralDistSq = Infinity;
-
-    if (allPlanets && this.owner) {
-      for (const planet of allPlanets) {
-        const pdx = this.x - planet.x;
-        const pdy = this.y - planet.y;
-        const distSq = pdx * pdx + pdy * pdy;
-        const gravityRadius = planet.getGravityRadius();
-        if (distSq < gravityRadius * gravityRadius) {
-          if (planet.owner && this.owner && planet.owner.id === this.owner.id) {
-            const hasSupplies = (planet.supplies || 0) >= 1.0;
-            const currentHasSupplies = friendlyWellPlanet && (friendlyWellPlanet.supplies || 0) >= 1.0;
-            
-            if (!friendlyWellPlanet || (hasSupplies && !currentHasSupplies) || (hasSupplies === currentHasSupplies && distSq < minFriendlyDistSq)) {
-              friendlyWellPlanet = planet;
-              minFriendlyDistSq = distSq;
-            }
-          } else if (!planet.owner && !planet.isDeepSpaceAnomaly) {
-            const hasSupplies = (planet.supplies || 0) >= 1.0;
-            const currentHasSupplies = neutralWellPlanet && (neutralWellPlanet.supplies || 0) >= 1.0;
-            
-            if (!neutralWellPlanet || (hasSupplies && !currentHasSupplies) || (hasSupplies === currentHasSupplies && distSq < minNeutralDistSq)) {
-              neutralWellPlanet = planet;
-              minNeutralDistSq = distSq;
-            }
-          }
-        }
-      }
-    }
-    this.inFriendlyWell = friendlyWellPlanet !== null;
 
     if (this.isMaterializing) {
       const dt = deltaTime / 1000;
@@ -3837,13 +3837,18 @@ export class Ship {
           const tdy = target.y - this.y;
           const dist = Math.sqrt(tdx * tdx + tdy * tdy);
           if (dist < 15) {
-            // Trigger boarding on target ship!
-            target.isUnderBoarding = true;
-            target.boardingPlayer = this.owner;
-            target.boardingMarines = (target.boardingMarines || 0) + this.count;
-            target.boardingSourceId = this.sourceShipId;
+            if (!target.boardingCooldown || target.boardingCooldown <= 0) {
+              // Trigger boarding on target ship!
+              target.isUnderBoarding = true;
+              target.boardingPlayer = this.owner;
+              target.boardingMarines = (target.boardingMarines || 0) + this.count;
+              target.boardingSourceId = this.sourceShipId;
+              target.boardingCooldown = 60.0;
+              console.log(`[MARINE FLEET BOARDING IMPACT] Marine fleet collided with target ship ${target.id}, boarding with ${this.count} marines.`);
+            } else {
+              console.log(`[MARINE FLEET BOARDING REJECTED] Marine fleet collided with target ship ${target.id}, but target is on boarding cooldown.`);
+            }
             this.active = false; // consume marine fleet
-            console.log(`[MARINE FLEET BOARDING IMPACT] Marine fleet collided with target ship ${target.id}, boarding with ${this.count} marines.`);
             
             if (explosions) {
               explosions.push({

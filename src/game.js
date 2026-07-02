@@ -261,7 +261,7 @@ export class Game {
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
     this.minefieldDamageTimer = 0;
-    const getRandMod = () => Math.round((-0.10 - Math.random() * 0.20) * 100) / 100;
+    const getRandMod = () => 0.0;
     this.globalUpgradeModifiers = {
       sensorarray: getRandMod(),
       lab: getRandMod(),
@@ -494,7 +494,7 @@ export class Game {
     
     const globalMod = (this.globalUpgradeModifiers && this.globalUpgradeModifiers[normType] !== undefined)
       ? Math.max(-0.35, this.globalUpgradeModifiers[normType])
-      : -0.25;
+      : 0.0;
       
     let playerMod = 0.0;
     if (ship.owner && ship.owner.upgradeModifiers && ship.owner.upgradeModifiers[normType] !== undefined) {
@@ -535,7 +535,8 @@ export class Game {
           planetUpgradesCount += (p[propName] || 0);
         }
       }
-      finalCost = Math.max(1, Math.round(finalCost / (1 + planetUpgradesCount)));
+      const planetDiscount = Math.min(1.0, 0.20 * planetUpgradesCount);
+      finalCost = Math.max(1, Math.round(finalCost * (1 - planetDiscount)));
     }
 
     return finalCost;
@@ -1956,7 +1957,7 @@ export class Game {
     }
 
     // Reset global upgrade modifiers
-    const getRandMod = () => Math.round((-0.10 - Math.random() * 0.20) * 100) / 100;
+    const getRandMod = () => 0.0;
     this.globalUpgradeModifiers = {
       sensorarray: getRandMod(),
       lab: getRandMod(),
@@ -3171,7 +3172,7 @@ export class Game {
         const normType = typeKeyMap[foundProp] || foundProp;
         const globalMod = (this.globalUpgradeModifiers && this.globalUpgradeModifiers[normType] !== undefined)
           ? Math.max(-0.35, this.globalUpgradeModifiers[normType])
-          : -0.25;
+          : 0.0;
         let playerMod = 0;
         if (owner && owner.upgradeModifiers && owner.upgradeModifiers[normType] !== undefined) {
           playerMod = owner.upgradeModifiers[normType];
@@ -3188,7 +3189,8 @@ export class Game {
             }
           }
         }
-        finalCostVal = Math.max(1, Math.round(finalCostVal / (1 + planetUpgradesCount)));
+        const planetDiscount = Math.min(1.0, 0.20 * planetUpgradesCount);
+        finalCostVal = Math.max(1, Math.round(finalCostVal * (1 - planetDiscount)));
 
         totalUpgradeCost += finalCostVal;
 
@@ -7158,6 +7160,10 @@ export class Game {
     for (const ship of cruisers) {
       if (ship.isUpgrading) continue;
 
+      if (ship.boardingCooldown && ship.boardingCooldown > 0) {
+        ship.boardingCooldown = Math.max(0, ship.boardingCooldown - dt);
+      }
+
       // 0. Process queued marine launches
       if (ship.pendingMarineLaunches && ship.pendingMarineLaunches.length > 0) {
         for (let i = 0; i < ship.pendingMarineLaunches.length; i++) {
@@ -7430,7 +7436,7 @@ export class Game {
       }
 
       // 5. Boarding Trigger Checks (New: Direct Boarding if disabled & isolated)
-      if (ship.health < 2 && ship.health > 0 && !ship.isUnderBoarding && !ship.isMaterializing) {
+      if (ship.health < 2 && ship.health > 0 && !ship.isUnderBoarding && !ship.isMaterializing && (!ship.boardingCooldown || ship.boardingCooldown <= 0)) {
         const sensorRange = ship.cruiserRadarRange();
         const friendlyNearby = cruisers.some(other => 
           other.id !== ship.id && 
@@ -7476,6 +7482,7 @@ export class Game {
               ship.isUnderBoarding = true;
               ship.boardingPlayer = bestPlayer;
               ship.boardingTimer = 5.0;
+              ship.boardingCooldown = 60.0;
 
               const contributions = [];
               let totalAttackingMarines = 0;

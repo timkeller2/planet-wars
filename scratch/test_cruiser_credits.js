@@ -21,6 +21,7 @@ function runTest() {
   // minAllowedCredits = -(1000 + Math.floor(100)) = -1100
 
   // Scenario A: Player has enough credits (200) and planet has enough ships (60 >= 50)
+  game.ships = [];
   planet.ships = 60;
   planet.maxShips = 300;
   player.credits = 200;
@@ -38,6 +39,7 @@ function runTest() {
   assert.strictEqual(spawnedShip.buildCostShipsTotal, 0, "Corvette should cost 0 ships");
 
   // Scenario B: Player does not have enough credits (-1080 credits, so only 20 above debt limit of -1100)
+  game.ships = [];
   player.credits = -1080;
   planet.ships = 60;
   player.builtClasses = {};
@@ -49,6 +51,7 @@ function runTest() {
   assert.strictEqual(game.ships.length, initialShipCount, "Should NOT build a ship when credits are insufficient");
 
   // Scenario C: Player has enough credits (200), but planet has insufficient ships (10 < 50)
+  game.ships = [];
   player.credits = 200;
   planet.ships = 10;
   player.builtClasses = {};
@@ -60,6 +63,7 @@ function runTest() {
   assert.strictEqual(game.ships.length, initialShipCount, "Should NOT build a ship when planet ships are insufficient");
 
   // Scenario D: Player has enough credits (200), planet has 30 ships, planet IS a military world (30 * 2 = 60 >= 50)
+  game.ships = [];
   player.credits = 200;
   planet.ships = 30;
   planet.isMilitary = true;
@@ -75,6 +79,7 @@ function runTest() {
   assert.strictEqual(spawnedShip.buildCostShipsTotal, 0, "Corvette should cost 0 ships");
 
   // Scenario E: Subsequent builds should also pay 100% in credits
+  game.ships = [];
   player.credits = 200;
   planet.ships = 60;
   planet.isMilitary = false;
@@ -93,6 +98,7 @@ function runTest() {
   assert.strictEqual(spawnedShip.buildCostShipsTotal, 0, "Subsequent build should cost 0 ships");
 
   // Scenario F: Custom configuration build
+  game.ships = [];
   player.credits = 200;
   planet.ships = 120;
   planet.isMilitary = false;

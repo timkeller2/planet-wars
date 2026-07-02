@@ -5010,7 +5010,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const freq = 350 + Math.sin(nowTime / 40) * 100;
         osc.frequency.setValueAtTime(freq, now);
         osc.frequency.linearRampToValueAtTime(freq + 50, now + 0.15);
-        gainNode.gain.setValueAtTime(0.12 * getSfxVolumeMultiplier(), now); // low volume
+        gainNode.gain.setValueAtTime(0.03 * getSfxVolumeMultiplier(), now); // low volume
         gainNode.gain.linearRampToValueAtTime(0.001, now + 0.15);
         osc.start(now);
         osc.stop(now + 0.15);
@@ -7798,7 +7798,7 @@ function getPlanetTradeIncomePerMin(planet) {
     
     const globalMod = (serverState.globalUpgradeModifiers && serverState.globalUpgradeModifiers[normType] !== undefined)
       ? Math.max(-0.35, serverState.globalUpgradeModifiers[normType])
-      : -0.25;
+      : 0.0;
       
     let playerMod = 0.0;
     const playerObj = serverState.players ? serverState.players.find(p => p.id === ship.ownerId) : null;
@@ -7839,7 +7839,8 @@ function getPlanetTradeIncomePerMin(planet) {
           planetUpgradesCount += (p[propName] || 0);
         }
       }
-      finalCost = Math.max(1, Math.round(finalCost / (1 + planetUpgradesCount)));
+      const planetDiscount = Math.min(1.0, 0.20 * planetUpgradesCount);
+      finalCost = Math.max(1, Math.round(finalCost * (1 - planetDiscount)));
     }
 
     return finalCost;
@@ -7899,7 +7900,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const normType = typeKeyMap[foundProp] || foundProp;
       const globalMod = (serverState.globalUpgradeModifiers && serverState.globalUpgradeModifiers[normType] !== undefined)
         ? Math.max(-0.35, serverState.globalUpgradeModifiers[normType])
-        : -0.25;
+        : 0.0;
       let playerMod = 0;
       if (myPlayer && myPlayer.upgradeModifiers && myPlayer.upgradeModifiers[normType] !== undefined) {
         playerMod = myPlayer.upgradeModifiers[normType];
@@ -7916,7 +7917,8 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
       }
-      finalCostVal = Math.max(1, Math.round(finalCostVal / (1 + planetUpgradesCount)));
+      const planetDiscount = Math.min(1.0, 0.20 * planetUpgradesCount);
+      finalCostVal = Math.max(1, Math.round(finalCostVal * (1 - planetDiscount)));
 
       totalUpgradeCost += finalCostVal;
 
@@ -12346,6 +12348,72 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.stroke();
 
               ctx.restore();
+            }
+          }
+
+          if (ship.isUnderBoarding && ship.boardingTimer > 0) {
+            const srcIds = new Set();
+            if (ship.boardingSourceId) {
+              srcIds.add(ship.boardingSourceId);
+            }
+            if (ship.boardingSourceContributions) {
+              for (const c of ship.boardingSourceContributions) {
+                if (c.shipId) srcIds.add(c.shipId);
+              }
+            }
+            for (const srcId of srcIds) {
+              const srcShip = serverState.ships.find(s => s.id === srcId);
+              if (srcShip) {
+                const sx = srcShip.x;
+                const sy = srcShip.y;
+                const tx = ship.x;
+                const ty = ship.y;
+
+                const angle = Math.atan2(ty - sy, tx - sx);
+                ctx.save();
+                const shimmer = 0.5 + 0.3 * Math.sin(Date.now() / 50) + 0.2 * Math.random();
+                const alpha = 0.6 * shimmer;
+
+                // Draw cone (a wedge from source to target)
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                const coneWidth = 6;
+                const perpAngle = angle + Math.PI / 2;
+                const tx1 = tx - Math.cos(perpAngle) * coneWidth;
+                const ty1 = ty - Math.sin(perpAngle) * coneWidth;
+                const tx2 = tx + Math.cos(perpAngle) * coneWidth;
+                const ty2 = ty + Math.sin(perpAngle) * coneWidth;
+                ctx.lineTo(tx1, ty1);
+                ctx.lineTo(tx2, ty2);
+                ctx.closePath();
+
+                const grad = ctx.createLinearGradient(sx, sy, tx, ty);
+                grad.addColorStop(0, `rgba(0, 255, 255, 0.05)`);
+                grad.addColorStop(0.3, `rgba(0, 255, 255, ${alpha * 0.7})`);
+                grad.addColorStop(1, `rgba(0, 255, 255, ${alpha})`);
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+                // Core beam line
+                ctx.strokeStyle = `rgba(200, 255, 255, ${alpha * 0.8})`;
+                ctx.lineWidth = 1.5 + Math.random() * 1.5;
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(tx, ty);
+                ctx.stroke();
+
+                // Outer edges
+                ctx.strokeStyle = `rgba(0, 255, 255, ${alpha * 0.4})`;
+                ctx.lineWidth = 0.8;
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(tx1, ty1);
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(tx2, ty2);
+                ctx.stroke();
+
+                ctx.restore();
+              }
             }
           }
         }
