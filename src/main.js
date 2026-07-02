@@ -425,6 +425,34 @@ function getPlanetTradeIncomePerMin(planet) {
 
   let localPlayer = null;
   let serverState = null;
+  const serverShipsMap = new Map();
+  const serverPlanetsMap = new Map();
+  function clearServerStateMaps() {
+    serverShipsMap.clear();
+    serverPlanetsMap.clear();
+  }
+  function rebuildServerStateMaps() {
+    serverShipsMap.clear();
+    serverPlanetsMap.clear();
+    if (serverState) {
+      if (serverState.ships) {
+        for (let i = 0; i < serverState.ships.length; i++) {
+          serverShipsMap.set(serverState.ships[i].id, serverState.ships[i]);
+        }
+      }
+      if (serverState.planets) {
+        for (let i = 0; i < serverState.planets.length; i++) {
+          serverPlanetsMap.set(serverState.planets[i].id, serverState.planets[i]);
+        }
+      }
+    }
+  }
+  function findServerShip(id) {
+    return serverShipsMap.get(id) || null;
+  }
+  function findServerPlanet(id) {
+    return serverPlanetsMap.get(id) || null;
+  }
   let activeBoardingShipId = null;
   let boardingCombatClosed = false;
   let boardingTroops = [];
@@ -2356,7 +2384,7 @@ function getPlanetTradeIncomePerMin(planet) {
       let html = '';
       
       for (const p of selectedPlanets) {
-        const livePlanet = serverState ? serverState.planets.find(sp => sp.id === p.id) : p;
+        const livePlanet = serverState ? findServerPlanet(p.id) : p;
         if (!livePlanet) continue;
         
         const key = `planet-${livePlanet.id}`;
@@ -2371,7 +2399,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       for (const s of selectedShips) {
-        const liveShip = serverState ? serverState.ships.find(ss => ss.id === s.id) : s;
+        const liveShip = serverState ? findServerShip(s.id) : s;
         if (!liveShip || !liveShip.active) continue;
         
         let shipClass = "Fleet";
@@ -2411,7 +2439,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const id = parseInt(tile.getAttribute('data-id'), 10);
 
         if (type === 'ship') {
-          const liveShip = serverState ? serverState.ships.find(ss => ss.id === id) : null;
+          const liveShip = serverState ? findServerShip(id) : null;
           if (liveShip && liveShip.isCruiser && !liveShip.isAmoeba) {
             let pressTimer = null;
             const startPress = (e) => {
@@ -2463,7 +2491,7 @@ function getPlanetTradeIncomePerMin(planet) {
             hudSelectedSet.clear();
             
             if (type === 'planet') {
-              const planet = serverState ? serverState.planets.find(p => p.id === id) : null;
+              const planet = serverState ? findServerPlanet(id) : null;
               if (planet) {
                 selectedPlanets = [planet];
                 selectedShips = [];
@@ -2473,7 +2501,7 @@ function getPlanetTradeIncomePerMin(planet) {
                 cameraPanY = mapHeight / 2 - planet.y;
               }
             } else if (type === 'ship') {
-              const ship = serverState ? serverState.ships.find(s => s.id === id) : null;
+              const ship = serverState ? findServerShip(id) : null;
               if (ship) {
                 selectedShips = [ship];
                 selectedPlanets = [];
@@ -2520,11 +2548,11 @@ function getPlanetTradeIncomePerMin(planet) {
 
       const ctxTile = canvasEl.getContext('2d');
       if (type === 'planet') {
-        const livePlanet = serverState ? serverState.planets.find(sp => sp.id === id) : null;
+        const livePlanet = serverState ? findServerPlanet(id) : null;
         if (!livePlanet) continue;
         drawUnitOnTileCanvas(ctxTile, canvasEl.width, canvasEl.height, livePlanet, 'planet');
       } else if (type === 'ship') {
-        const liveShip = serverState ? serverState.ships.find(ss => ss.id === id) : null;
+        const liveShip = serverState ? findServerShip(id) : null;
         if (!liveShip || !liveShip.active) continue;
         drawUnitOnTileCanvas(ctxTile, canvasEl.width, canvasEl.height, liveShip, 'ship');
       }
@@ -2580,7 +2608,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
     
     if (activeInfoPanel.type === 'anomaly') {
-      const p = serverState.planets.find(pp => pp.id === activeInfoPanel.id);
+      const p = findServerPlanet(activeInfoPanel.id);
       if (p && p.anomaly && !p.anomaly.researched) {
         const serverPos = getMouseServerPos(lastCanvasMouseX, lastCanvasMouseY);
         const adx = p.anomaly.x - serverPos.x;
@@ -2881,7 +2909,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (infoPanelImagePlaceholder && infoPanelImageHologram) {
       if (type === 'fleet') {
-        const hs = serverState.ships.find(ss => ss.id === id);
+        const hs = findServerShip(id);
         const hsOwner = hs && hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
         const isMonster = hsOwner && (hsOwner.id === 'monsters' || hsOwner.id === 'monster');
 
@@ -2896,7 +2924,7 @@ function getPlanetTradeIncomePerMin(planet) {
         infoPanelImagePlaceholder.style.backgroundPosition = "center center";
         infoPanelImageHologram.style.display = "none";
       } else if (type === 'planet') {
-        let p = serverState.planets.find(pp => pp.id === id);
+        let p = findServerPlanet(id);
         const isLastKnown = p && p.inFog && (p.permanentlyTracked || !!lastKnownPlanets[p.id]);
         if (isLastKnown && !p.permanentlyTracked && lastKnownPlanets[p.id]) {
           p = lastKnownPlanets[p.id];
@@ -2914,7 +2942,7 @@ function getPlanetTradeIncomePerMin(planet) {
           infoPanelImageHologram.style.display = "flex";
         }
       } else if (type === 'ship') {
-        const hs = serverState.ships.find(ss => ss.id === id);
+        const hs = findServerShip(id);
         const hsOwner = hs && hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
         const raceStyle = hs ? (hs.cruiserStyle || (hsOwner ? hsOwner.cruiserStyle : null)) : null;
         const isMonster = hsOwner && (hsOwner.id === 'monsters' || hsOwner.id === 'monster');
@@ -2978,7 +3006,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     if (type === 'anomaly') {
-      let p = serverState.planets.find(pp => pp.id === id);
+      let p = findServerPlanet(id);
       if (!p || !p.anomaly || p.anomaly.researched) {
         closeInfoPanel();
         return;
@@ -3038,7 +3066,7 @@ function getPlanetTradeIncomePerMin(planet) {
         </div>`;
       }
     } else if (type === 'planet') {
-      let p = serverState.planets.find(pp => pp.id === id);
+      let p = findServerPlanet(id);
       const isLastKnown = p && p.inFog && (p.permanentlyTracked || !!lastKnownPlanets[p.id]);
       if (isLastKnown && !p.permanentlyTracked && lastKnownPlanets[p.id]) {
         p = lastKnownPlanets[p.id];
@@ -3503,7 +3531,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
     } else if (type === 'ship' || type === 'fleet') {
-      const hs = serverState.ships.find(ss => ss.id === id);
+      const hs = findServerShip(id);
       if (!hs || !hs.active) {
         closeInfoPanel();
         return;
@@ -4115,14 +4143,14 @@ function getPlanetTradeIncomePerMin(planet) {
     let hasTargetCoords = false;
 
     if (type === 'anomaly') {
-      let p = serverState.planets.find(pp => pp.id === id);
+      let p = findServerPlanet(id);
       if (p && p.anomaly) {
         targetX = p.anomaly.x;
         targetY = p.anomaly.y;
         hasTargetCoords = true;
       }
     } else if (type === 'planet') {
-      let p = serverState.planets.find(pp => pp.id === id);
+      let p = findServerPlanet(id);
       const isLastKnown = p && p.inFog && (p.permanentlyTracked || !!lastKnownPlanets[p.id]);
       if (isLastKnown && !p.permanentlyTracked && lastKnownPlanets[p.id]) {
         p = lastKnownPlanets[p.id];
@@ -4133,7 +4161,7 @@ function getPlanetTradeIncomePerMin(planet) {
         hasTargetCoords = true;
       }
     } else if (type === 'ship' || type === 'fleet') {
-      let s = serverState.ships.find(ss => ss.id === id);
+      let s = findServerShip(id);
       if (s) {
         targetX = s.x;
         targetY = s.y;
@@ -4618,6 +4646,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
       serverState = null;
+      clearServerStateMaps();
       lastKnownPlanets = {};
       lastKnownHazards = {};
       socket.emit('restartGame', payload);
@@ -4692,10 +4721,12 @@ function getPlanetTradeIncomePerMin(planet) {
             let ship = null;
             let planet = null;
             if (selectedShips.length === 1 && serverState) {
-              ship = serverState.ships.find(s => s.id === selectedShips[0].id && s.isCruiser && s.ownerId === localPlayer.id);
+              const s = findServerShip(selectedShips[0].id);
+              ship = (s && s.isCruiser && s.ownerId === localPlayer.id) ? s : null;
             }
             if (selectedPlanets.length === 1 && serverState) {
-              planet = serverState.planets.find(p => p.id === selectedPlanets[0].id && p.ownerId === localPlayer.id);
+              const p = findServerPlanet(selectedPlanets[0].id);
+              planet = (p && p.ownerId === localPlayer.id) ? p : null;
             }
 
             if (match && ship) {
@@ -5281,6 +5312,13 @@ function getPlanetTradeIncomePerMin(planet) {
       gameInProgressMsg.style.display = state.isRunning ? 'block' : 'none';
     }
 
+    const statePlanetsMap = new Map();
+    if (state.planets) {
+      for (let i = 0; i < state.planets.length; i++) {
+        statePlanetsMap.set(state.planets[i].id, state.planets[i]);
+      }
+    }
+
     if (state.gameStartTime !== undefined && state.gameStartTime !== lastGameStartTime) {
       lastGameStartTime = state.gameStartTime;
       hasCenteredOnHomeworld = false;
@@ -5361,7 +5399,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (serverState) {
       for (const p of state.planets) {
 
-        const wasVisible = serverState.planets.some(oldP => oldP.id === p.id);
+        const wasVisible = serverPlanetsMap.has(p.id);
         if (!p.inFog && wasVisible && p.ownerId && lastPlanetCapacities[p.id] && p.maxShips > lastPlanetCapacities[p.id]) {
           floatingAnimations.push({
             x: p.x,
@@ -5667,7 +5705,7 @@ function getPlanetTradeIncomePerMin(planet) {
             prefEmoji = emojis[s.diplomatPrefResourceEvent] || '💎';
           }
           if (s.diplomatTargetPlanetId !== null && state.planets) {
-            targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
+            targetP = statePlanetsMap.get(s.diplomatTargetPlanetId);
             if (targetP) {
               if (typeof s.diplomatPrefResourceEvent !== 'string' && targetP.preferredResource) {
                 prefEmoji = emojis[targetP.preferredResource] || '💎';
@@ -5721,7 +5759,7 @@ function getPlanetTradeIncomePerMin(planet) {
           let targetY = s.y - 12;
           let targetP = null;
           if (s.diplomatTargetPlanetId !== null && state.planets) {
-            targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
+            targetP = statePlanetsMap.get(s.diplomatTargetPlanetId);
             if (targetP) {
               targetX = targetP.x;
               targetY = targetP.y;
@@ -5752,7 +5790,7 @@ function getPlanetTradeIncomePerMin(planet) {
           let targetY = s.y - 12;
           let targetP = null;
           if (s.diplomatTargetPlanetId !== null && state.planets) {
-            targetP = state.planets.find(p => p.id === s.diplomatTargetPlanetId);
+            targetP = statePlanetsMap.get(s.diplomatTargetPlanetId);
             if (targetP) {
               targetX = targetP.x;
               targetY = targetP.y;
@@ -5810,8 +5848,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     if (serverState && state.ships && localPlayer) {
-      const oldShipIds = new Set(serverState.ships.map(s => s.id));
-      const newlyBuiltCruiser = state.ships.find(s => s.isCruiser && s.ownerId === localPlayer.id && !oldShipIds.has(s.id));
+      const newlyBuiltCruiser = state.ships.find(s => s.isCruiser && s.ownerId === localPlayer.id && !serverShipsMap.has(s.id));
       if (newlyBuiltCruiser) {
         selectedShips = [newlyBuiltCruiser];
         selectedPlanets = [];
@@ -5819,6 +5856,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     serverState = state;
+    rebuildServerStateMaps();
 
     if (state.storms) {
       for (const storm of state.storms) {
@@ -5839,10 +5877,10 @@ function getPlanetTradeIncomePerMin(planet) {
 
 
     if (state.ships) {
-      selectedShips = selectedShips.map(sel => state.ships.find(s => s.id === sel.id)).filter(Boolean);
+      selectedShips = selectedShips.map(sel => findServerShip(sel.id)).filter(Boolean);
     }
     if (state.planets) {
-      selectedPlanets = selectedPlanets.map(sel => state.planets.find(p => p.id === sel.id)).filter(Boolean);
+      selectedPlanets = selectedPlanets.map(sel => findServerPlanet(sel.id)).filter(Boolean);
     }
 
     if (state.upgradeEnhanceEvents && state.upgradeEnhanceEvents.length > 0) {
@@ -7725,7 +7763,7 @@ function getPlanetTradeIncomePerMin(planet) {
   function getSelectedCruiser() {
     if (!serverState || !localPlayer) return null;
     if (selectedShips.length !== 1) return null;
-    const ship = serverState.ships.find(s => s.id === selectedShips[0].id);
+    const ship = findServerShip(selectedShips[0].id);
     if (!ship || !ship.isCruiser || ship.ownerId !== localPlayer.id) return null;
     return ship;
   }
@@ -7760,7 +7798,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (!serverState || !localPlayer || selectedShips.length === 0) return [];
     const cruisers = [];
     for (const sel of selectedShips) {
-      const ship = serverState.ships.find(s => s.id === sel.id);
+      const ship = findServerShip(sel.id);
       if (ship && ship.isCruiser && ship.ownerId === localPlayer.id) {
         cruisers.push(ship);
       }
@@ -8205,7 +8243,7 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   const triggerSaveConfig = (shipId) => {
-    const liveShip = serverState ? serverState.ships.find(s => s.id === shipId) : null;
+    const liveShip = serverState ? findServerShip(shipId) : null;
     if (!liveShip || !liveShip.isCruiser || liveShip.isAmoeba) return;
     const classType = liveShip.classType;
     if (!classType || !SHIP_CLASSES[classType]) return;
@@ -8345,7 +8383,7 @@ function getPlanetTradeIncomePerMin(planet) {
   function getSelectedCruiserUpgradeQualifiers() {
     if (!serverState || !localPlayer) return null;
     if (selectedShips.length !== 1) return null;
-    const ship = serverState.ships.find(s => s.id === selectedShips[0].id);
+    const ship = findServerShip(selectedShips[0].id);
     if (!ship || !ship.isCruiser || ship.ownerId !== localPlayer.id) return null;
 
     if (ship.upgradeTokens > 0) {
@@ -8421,7 +8459,7 @@ function getPlanetTradeIncomePerMin(planet) {
   function getSelectedPlanetForFocus() {
     if (!serverState || !localPlayer) return null;
     if (selectedPlanets.length !== 1) return null;
-    const planet = serverState.planets.find(p => p.id === selectedPlanets[0].id);
+    const planet = findServerPlanet(selectedPlanets[0].id);
     if (!planet || planet.ownerId !== localPlayer.id) return null;
     return planet;
   }
@@ -8429,7 +8467,7 @@ function getPlanetTradeIncomePerMin(planet) {
   function getSelectedPlanetFocusQualifiers() {
     if (!serverState || !localPlayer) return null;
     if (selectedPlanets.length !== 1) return null;
-    const planet = serverState.planets.find(p => p.id === selectedPlanets[0].id);
+    const planet = findServerPlanet(selectedPlanets[0].id);
     if (!planet || planet.ownerId !== localPlayer.id) return null;
     const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
     const creditsAvailable = (myPlayer && myPlayer.useCredits !== false) ? Math.max(0, getCreditsAvailableForConfig(myPlayer)) : 0;
@@ -11128,6 +11166,7 @@ function getPlanetTradeIncomePerMin(planet) {
     hasCenteredOnHomeworld = false;
     resetClientModeFlags();
     serverState = null;
+    clearServerStateMaps();
     lastKnownPlanets = {}; // Clear cached planet details
     lastKnownHazards = {};
     socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin });
@@ -11991,7 +12030,7 @@ function getPlanetTradeIncomePerMin(planet) {
           if (owner) {
             const isSelectedCruiserCluster = f.isCruiser && selectedShips.some(ss => {
               if (!ss.isCruiser) return false;
-              const rawShip = serverState.ships.find(s => s.id === ss.id);
+              const rawShip = findServerShip(ss.id);
               if (!rawShip) return false;
               const sx = rawShip.rawServerX !== undefined ? rawShip.rawServerX : rawShip.x;
               const sy = rawShip.rawServerY !== undefined ? rawShip.rawServerY : rawShip.y;
@@ -12020,7 +12059,7 @@ function getPlanetTradeIncomePerMin(planet) {
       // Draw scanning beams for planets being subverted by a diplomat (yellow scan beams)
       for (const p of serverState.planets) {
         if (p.activeDiplomatId && p.diplomacyWarmupTimer > 0) {
-          const diplomat = serverState.ships.find(s => s.id === p.activeDiplomatId);
+          const diplomat = findServerShip(p.activeDiplomatId);
           if (diplomat) {
             const sx = diplomat.x;
             const sy = diplomat.y;
@@ -12096,7 +12135,7 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
           for (const shipId of shipIds) {
-            const ship = serverState.ships.find(s => s.id === shipId);
+            const ship = findServerShip(shipId);
             if (ship) {
               anyBeingResearched = true;
               if (p.anomaly.completing) {
@@ -12171,7 +12210,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (serverState.wreckages) {
         for (const w of serverState.wreckages) {
           if (w.beingScanned && w.scanningShipId) {
-            const ship = serverState.ships.find(s => s.id === w.scanningShipId);
+            const ship = findServerShip(w.scanningShipId);
             if (ship) {
               anyBeingResearched = true;
               anyCompleting = true;
@@ -12243,13 +12282,13 @@ function getPlanetTradeIncomePerMin(planet) {
             let sourceX = null;
             let sourceY = null;
             if (ship.activeSupplySourceType === 'planet') {
-              const planet = serverState.planets.find(p => p.id === ship.activeSupplySourceId);
+              const planet = findServerPlanet(ship.activeSupplySourceId);
               if (planet) {
                 sourceX = planet.x;
                 sourceY = planet.y;
               }
             } else if (ship.activeSupplySourceType === 'ship') {
-              const otherShip = serverState.ships.find(s => s.id === ship.activeSupplySourceId);
+              const otherShip = findServerShip(ship.activeSupplySourceId);
               if (otherShip) {
                 sourceX = otherShip.x;
                 sourceY = otherShip.y;
@@ -12310,7 +12349,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           if (ship.activeFuelDonorId) {
-            const donor = serverState.ships.find(s => s.id === ship.activeFuelDonorId);
+            const donor = findServerShip(ship.activeFuelDonorId);
             if (donor) {
               const sx = donor.x;
               const sy = donor.y;
@@ -12375,7 +12414,7 @@ function getPlanetTradeIncomePerMin(planet) {
               }
             }
             for (const srcId of srcIds) {
-              const srcShip = serverState.ships.find(s => s.id === srcId);
+              const srcShip = findServerShip(srcId);
               if (srcShip) {
                 const sx = srcShip.x;
                 const sy = srcShip.y;
@@ -12960,7 +12999,8 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.restore();
 
           if (p.activeDiplomatId && serverState.ships && serverState.players) {
-            const diplomat = serverState.ships.find(s => s.id === p.activeDiplomatId && s.active);
+            const diplomatShip = findServerShip(p.activeDiplomatId);
+            const diplomat = (diplomatShip && diplomatShip.active) ? diplomatShip : null;
             if (diplomat) {
               const diplomatOwner = serverState.players.find(pl => pl.id === diplomat.ownerId);
               if (diplomatOwner) {
@@ -14047,7 +14087,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
       // Defense tooltip on hovered planet
       if (false && hoveredPlanet && serverState.planets) {
-        let hp = serverState.planets.find(pp => pp.id === hoveredPlanet.id);
+        let hp = findServerPlanet(hoveredPlanet.id);
         if (!hp) {
           hoveredPlanet = null;
         } else {
@@ -14588,7 +14628,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
       // Fleet tooltip on hovered ship
       if (false && hoveredShip && !hoveredPlanet && serverState && serverState.ships) {
-        const hs = serverState.ships.find(ss => ss.id === hoveredShip.id);
+        const hs = findServerShip(hoveredShip.id);
         if (!hs) {
           hoveredShip = null;
         } else {
@@ -15634,7 +15674,7 @@ function getPlanetTradeIncomePerMin(planet) {
                     lastY = o.targetY;
                     hasPath = true;
                   } else if (o.type === 'movePlanet') {
-                    const targetPlanet = serverState.planets.find(p => p.id === o.targetId);
+                    const targetPlanet = findServerPlanet(o.targetId);
                     if (targetPlanet) {
                       const tX = targetPlanet.x + (o.offsetX || 0);
                       const tY = targetPlanet.y + (o.offsetY || 0);
@@ -15672,13 +15712,13 @@ function getPlanetTradeIncomePerMin(planet) {
               let tx = null;
               let ty = null;
               if (s.cruiserTargetType === 'planet') {
-                const targetP = serverState.planets.find(p => p.id === s.cruiserTargetId);
+                const targetP = findServerPlanet(s.cruiserTargetId);
                 if (targetP) {
                   tx = (s.cruiserTargetClickX !== undefined && s.cruiserTargetClickX !== null) ? s.cruiserTargetClickX : targetP.x;
                   ty = (s.cruiserTargetClickY !== undefined && s.cruiserTargetClickY !== null) ? s.cruiserTargetClickY : targetP.y;
                 }
               } else if (s.cruiserTargetType === 'ship') {
-                const targetS = serverState.ships.find(ship => ship.id === s.cruiserTargetId);
+                const targetS = findServerShip(s.cruiserTargetId);
                 if (targetS && targetS.active) {
                   tx = targetS.x;
                   ty = targetS.y;
@@ -15723,13 +15763,13 @@ function getPlanetTradeIncomePerMin(planet) {
               
               if (s.cruiserTargetType && s.cruiserTargetId !== null) {
                 if (s.cruiserTargetType === 'planet') {
-                  const targetP = serverState.planets.find(p => p.id === s.cruiserTargetId);
+                  const targetP = findServerPlanet(s.cruiserTargetId);
                   if (targetP) {
                     lastX = (s.cruiserTargetClickX !== undefined && s.cruiserTargetClickX !== null) ? s.cruiserTargetClickX : targetP.x;
                     lastY = (s.cruiserTargetClickY !== undefined && s.cruiserTargetClickY !== null) ? s.cruiserTargetClickY : targetP.y;
                   }
                 } else if (s.cruiserTargetType === 'ship') {
-                  const targetS = serverState.ships.find(ship => ship.id === s.cruiserTargetId);
+                  const targetS = findServerShip(s.cruiserTargetId);
                   if (targetS && targetS.active) {
                     lastX = targetS.x;
                     lastY = targetS.y;
@@ -15751,20 +15791,20 @@ function getPlanetTradeIncomePerMin(planet) {
                   tx = order.targetX;
                   ty = order.targetY;
                 } else if (order.type === 'movePlanet') {
-                  const planet = serverState.planets.find(p => p.id === order.targetId);
+                  const planet = findServerPlanet(order.targetId);
                   if (planet) {
                     tx = planet.x + (order.offsetX || 0);
                     ty = planet.y + (order.offsetY || 0);
                   }
                 } else if (order.type === 'target') {
                   if (order.targetType === 'planet') {
-                    const planet = serverState.planets.find(p => p.id === order.targetId);
+                    const planet = findServerPlanet(order.targetId);
                     if (planet) {
                       tx = (order.clickX !== null && order.clickX !== undefined) ? order.clickX : planet.x;
                       ty = (order.clickY !== null && order.clickY !== undefined) ? order.clickY : planet.y;
                     }
                   } else if (order.targetType === 'ship') {
-                    const targetShip = serverState.ships.find(ship => ship.id === order.targetId);
+                    const targetShip = findServerShip(order.targetId);
                     if (targetShip && targetShip.active) {
                       tx = targetShip.x;
                       ty = targetShip.y;
@@ -17121,7 +17161,7 @@ function getPlanetTradeIncomePerMin(planet) {
           drawY = anim.startY + Math.sin(anim.driftAngle) * driftDist;
         }
         if (anim.shipId && anim.type !== 'diplomacy_success' && serverState && serverState.ships) {
-          const ship = serverState.ships.find(s => s.id === anim.shipId);
+          const ship = findServerShip(anim.shipId);
           if (ship) {
             drawX = ship.x;
             drawY = ship.y;
@@ -17354,7 +17394,7 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.shadowBlur = 10;
         if (anim.type === 'pref_resource_diplomacy' || anim.type === 'diplomacy_success' || anim.type === 'reactor_dilithium_fly') {
           if ((anim.type === 'diplomacy_success' || anim.type === 'reactor_dilithium_fly') && anim.shipId && serverState && serverState.ships) {
-            const ship = serverState.ships.find(s => s.id === anim.shipId);
+            const ship = findServerShip(anim.shipId);
             if (ship) {
               anim.endX = ship.x;
               anim.endY = ship.y;
