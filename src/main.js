@@ -7638,6 +7638,10 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       });
 
+      // Never target the monster/NPC players
+      bullseyeIds.delete('monsters');
+      bullseyeIds.delete('monster');
+
       let html = '';
       alivePlayers.forEach(p => {
         const pTech = Math.round(getTechBonus(p));

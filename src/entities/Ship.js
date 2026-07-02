@@ -1010,17 +1010,19 @@ export class Ship {
 
       // Trigger condition
       if (!this.isRetreating && (!this.playerMoveOrderRetreatCooldown || this.playerMoveOrderRetreatCooldown <= 0)) {
-        const specialModeActive = this.isPatrolling || this.isScouting || this.isResearching || this.isDiplomacy || isBombingPlanet;
-        if (specialModeActive || isStandby) {
-          const combatTrigger = inCombat && (emptyBombs || lowHealth);
-          const normalTrigger = !this.inFriendlyWell && (lowFuel || emptyBombs || (lowHealth && (inActiveMode || isStandby)));
+        if (this.isPatrolling || this.isScouting) {
+          const specialModeActive = this.isPatrolling || this.isScouting || this.isResearching || this.isDiplomacy || isBombingPlanet;
+          if (specialModeActive || isStandby) {
+            const combatTrigger = inCombat && (emptyBombs || lowHealth);
+            const normalTrigger = !this.inFriendlyWell && (lowFuel || emptyBombs || (lowHealth && (inActiveMode || isStandby)));
 
-          if (combatTrigger || normalTrigger) {
-            this.isRetreating = true;
-            this.retreatTargetPlanetId = null;
-            if (this.isScouting) {
-              this.scoutTargetX = null;
-              this.scoutTargetY = null;
+            if (combatTrigger || normalTrigger) {
+              this.isRetreating = true;
+              this.retreatTargetPlanetId = null;
+              if (this.isScouting) {
+                this.scoutTargetX = null;
+                this.scoutTargetY = null;
+              }
             }
           }
         }
