@@ -3831,11 +3831,38 @@ export class Ship {
         this.targetY = target.y;
         this.targetPlanet = null;
         
-        // Collision check - only board if target is NOT an amoeba
         if (!target.isAmoeba) {
           const tdx = target.x - this.x;
           const tdy = target.y - this.y;
           const dist = Math.sqrt(tdx * tdx + tdy * tdy);
+
+          if (target.isCruiser && target.health >= 2) {
+            // Acts like a fighter squadron targeting a healthy cruiser!
+            if (dist <= 50) {
+              this.damageAccumulator = (this.damageAccumulator || 0) + (deltaTime / 1000);
+              if (this.damageAccumulator >= 0.5) {
+                this.damageAccumulator -= 0.5;
+                const hitsCount = Math.max(1, Math.floor((this.count / 10) * (1 + (this.expScore || 0) / 100)));
+                for (let i = 0; i < hitsCount; i++) {
+                  target.takeDamage(explosions, this, false, 'side', 0);
+                }
+                this.count = Math.max(0, this.count - 0.5);
+                if (this.count <= 0) {
+                  this.active = false;
+                }
+                if (explosions && Math.random() < 0.3) {
+                  explosions.push({
+                    x: target.x + (Math.random() - 0.5) * 30,
+                    y: target.y + (Math.random() - 0.5) * 30,
+                    color: this.owner ? this.owner.color : '#fff',
+                    age: 0
+                  });
+                }
+              }
+            }
+            return;
+          }
+
           if (dist < 15) {
             if (!target.boardingCooldown || target.boardingCooldown <= 0) {
               // Trigger boarding on target ship!

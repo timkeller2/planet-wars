@@ -7473,6 +7473,26 @@ export class Game {
         }
       }
 
+      // 4d. Marine Cruiser Attack Check (Fighter Squadron style)
+      if (ship.scoutAttackEnabled === true && (ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
+        if (ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null) {
+          const targetShip = this.ships.find(s => s.id === ship.cruiserTargetId && s.active);
+          if (targetShip && targetShip.isCruiser && !targetShip.isAmoeba && targetShip.health >= 2) {
+            const count = Math.floor(ship.marineCount);
+            if (count > 0) {
+              this.queueMarineLaunch(ship, {
+                targetType: 'ship',
+                targetId: targetShip.id,
+                isBoardingFleet: false,
+                count: count
+              });
+              ship.marineCount = 0;
+              ship.marineLaunchCooldown = 15.0;
+            }
+          }
+        }
+      }
+
       // 5. Boarding Trigger Checks (New: Direct Boarding if disabled & isolated)
       if (ship.health < 2 && ship.health > 0 && !ship.isUnderBoarding && !ship.isMaterializing && (!ship.boardingCooldown || ship.boardingCooldown <= 0)) {
         const sensorRange = ship.cruiserRadarRange();
@@ -7772,13 +7792,13 @@ export class Game {
         marineFleet.targetShipId = targetShip.id;
       }
       
-      let startingExp = ship.expScore || 0;
+      let startingExp = (ship.expScore || 0) + 100;
       const tritaniumCost = 0.01 * (batchSize / 3);
       const owner = ship.owner;
       const canUseRes = !!(ship.useResources || (owner && owner.tradeLimitToggle === true));
       if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && batchSize > 0 && canUseRes) {
         owner.resources.tritanium -= tritaniumCost;
-        startingExp += 400;
+        startingExp = (ship.expScore || 0) + 400;
       }
       marineFleet.expScore = startingExp;
       this.ships.push(marineFleet);
