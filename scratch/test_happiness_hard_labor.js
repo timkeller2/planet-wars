@@ -41,13 +41,13 @@ console.log('Testing Hard Labor happiness penalty...');
   console.log('Planet ships:', planet.ships);
   console.log('Happiness events:', JSON.stringify(game.happinessEvents, null, 2));
   
-  assert.strictEqual(player.happinessScore, 9, 'Happiness score should be reduced by 1');
+  assert.strictEqual(player.happinessScore, 7, 'Happiness score should be reduced by 3');
   
   assert.ok(game.happinessEvents && game.happinessEvents.length > 0, 'Should have generated happiness events');
   const event = game.happinessEvents.find(e => e.planetId === planet.id);
   assert.ok(event, 'Should have event for our planet');
   assert.ok(event.isBrokenHeart, 'Event should be a broken heart');
-  assert.strictEqual(event.amount, -1, 'Event amount should be -1');
+  assert.strictEqual(event.amount, -3, 'Event amount should be -3');
   
   console.log('Test 1 Passed: Hard Labor penalty and broken heart animation event verified successfully.');
 }

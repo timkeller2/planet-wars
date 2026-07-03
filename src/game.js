@@ -6620,13 +6620,13 @@ export class Game {
             const inHighProduction = (finalRate > 1.0);
             
             if (inHighProduction) {
-              happinessGained -= 1;
+              happinessGained -= 3;
               this.happinessEvents = this.happinessEvents || [];
               this.happinessEvents.push({
                 planetId: planet.id,
                 x: planet.x,
                 y: planet.y,
-                amount: -1,
+                amount: -3,
                 isBrokenHeart: true,
                 color: '#ff1744'
               });
