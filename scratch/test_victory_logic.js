@@ -129,6 +129,8 @@ console.log('Testing victory conditions logic...');
   player1.isAlive = true;
   player2.isAlive = true;
   player3.isAlive = true;
+  player2.isAI = false;
+  player3.isAI = false;
   
   // Scores: player 1 (highest), player 2 (second highest), player 3 (lowest)
   player1.techScore = 100; // score = 10

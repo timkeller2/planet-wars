@@ -337,6 +337,14 @@ export class Ship {
     const shieldPerLevel = Math.ceil(2 + playerTechBonus / 5);
     return shieldPerLevel * (this.shields || 0);
   }
+  getWarpBonus() {
+    const speedTechBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
+    let baseSpeed = this.speed * (1 + speedTechBonus);
+    let engineBonus = (this.engine || 0) * 3;
+    baseSpeed += engineBonus;
+    baseSpeed += (this.commandPoints || 0) * 0.5;
+    return Math.max(10, baseSpeed);
+  }
 
   getMaxSpeed() {
     const speedTechBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
@@ -345,7 +353,7 @@ export class Ship {
     maxSp += engineBonus;
     maxSp += (this.commandPoints || 0) * 0.5;
     if (this.isWarp) {
-      maxSp += this.warpBonus || 0;
+      maxSp += this.getWarpBonus();
     }
     if (this.supply_ship && this.supply_ship > 0) {
       maxSp = Math.max(5, maxSp - this.supply_ship * 3);
@@ -389,7 +397,7 @@ export class Ship {
     effectiveSpeed += engineBonus;
     effectiveSpeed += (this.commandPoints || 0) * 0.5;
     if (isWarp) {
-      effectiveSpeed += this.warpBonus || 0;
+      effectiveSpeed += this.getWarpBonus();
     }
     if (this.supply_ship && this.supply_ship > 0) {
       effectiveSpeed = Math.max(5, effectiveSpeed - this.supply_ship * 3);
@@ -411,7 +419,6 @@ export class Ship {
     }
     return effectiveSpeed;
   }
-
   handlePlayerMoveOrder(destination, game) {
     if (!this.isCruiser) return;
     this.flightTime = 0;
@@ -5182,7 +5189,7 @@ export class Ship {
     effectiveSpeed += engineBonus;
     effectiveSpeed += (this.commandPoints || 0) * 0.5;
     if (this.isWarp) {
-      effectiveSpeed += this.warpBonus || 0;
+      effectiveSpeed += this.getWarpBonus();
     }
     if (this.supply_ship && this.supply_ship > 0) {
       effectiveSpeed = Math.max(5, effectiveSpeed - this.supply_ship * 3);
@@ -5247,7 +5254,7 @@ export class Ship {
                   }
                 }
                 this.isWarp = false;
-                effectiveSpeed = Math.max(0, effectiveSpeed - (this.warpBonus || 0));
+                effectiveSpeed = Math.max(0, effectiveSpeed - this.getWarpBonus());
                 if (explosions) {
                   explosions.push({ x: this.x, y: this.y, color: '#ff3300', age: 0, isMassive: true });
                 }

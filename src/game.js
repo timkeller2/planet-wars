@@ -2747,7 +2747,7 @@ export class Game {
     for (const p of this.planets) {
       if (p.owner && p.owner.id === player.id) planetCount++;
     }
-    ship.warpBonus = Math.max(20, 30 - planetCount);
+    ship.warpBonus = ship.getWarpBonus ? ship.getWarpBonus() : Math.max(10, ship.speed);
     return false;
   }
 
