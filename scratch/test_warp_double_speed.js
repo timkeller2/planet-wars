@@ -44,6 +44,8 @@ function runTest() {
   cruiser.isCruiser = true;
   cruiser.speed = 15;
   cruiser.engine = 2; // +6 speed
+  cruiser.maxHealth = 40;
+  cruiser.health = 40;
   
   // Cruiser speed without warp: 15 + 6 = 21
   cruiser.isWarp = false;
@@ -60,7 +62,15 @@ function runTest() {
   player.resources.tritanium = 0;
   cruiser.fuel = 10;
   cruiser.isWarp = false;
-  game.applyWarpToShip(cruiser, player);
+  
+  // Mock Math.random to always succeed (no launch explosion)
+  const origRandom = Math.random;
+  Math.random = () => 0.9;
+  try {
+    game.applyWarpToShip(cruiser, player);
+  } finally {
+    Math.random = origRandom;
+  }
   assert.strictEqual(cruiser.isWarp, true, "Cruiser should now be in warp");
   assert.strictEqual(cruiser.warpBonus, 21, `applyWarpToShip should have saved warpBonus as 21, got ${cruiser.warpBonus}`);
 

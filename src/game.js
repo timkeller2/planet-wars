@@ -502,7 +502,7 @@ export class Game {
       playerMod = ship.owner.upgradeModifiers[normType];
     }
     
-    const modifier = Math.max(-0.50, globalMod + playerMod);
+    const modifier = Math.max(-0.75, globalMod + playerMod);
     let finalCost = Math.max(1, Math.round(baseCost * (1 + modifier)));
 
     // Only apply the planet upgrade divisor if it's a ship upgrade
@@ -593,7 +593,7 @@ export class Game {
       if (ship.owner && ship.owner.upgradeModifiers && ship.owner.upgradeModifiers[normType] !== undefined) {
         playerMod = ship.owner.upgradeModifiers[normType];
       }
-      const modifier = Math.max(-0.50, globalMod + playerMod);
+      const modifier = Math.max(-0.75, globalMod + playerMod);
       const finalCost = Math.max(1, Math.round(baseCost * (1 + modifier)));
       totalSpent += finalCost;
       
@@ -3189,7 +3189,7 @@ export class Game {
         if (owner && owner.upgradeModifiers && owner.upgradeModifiers[normType] !== undefined) {
           playerMod = owner.upgradeModifiers[normType];
         }
-        const modifier = Math.max(-0.50, globalMod + playerMod);
+        const modifier = Math.max(-0.75, globalMod + playerMod);
         let finalCostVal = Math.max(1, Math.round(baseCost * (1 + modifier)));
 
         // Apply the planet upgrade divisor for this upgrade type
@@ -3260,7 +3260,7 @@ export class Game {
               const val = parseInt(count, 10) || 0;
               if (val > 0 && owner.upgradeModifiers && owner.upgradeModifiers[normType] !== undefined) {
                 for (let i = 0; i < val; i++) {
-                  owner.upgradeModifiers[normType] = Math.max(-0.50, owner.upgradeModifiers[normType] - 0.01);
+                  owner.upgradeModifiers[normType] = Math.max(-0.75, owner.upgradeModifiers[normType] - 0.01);
                 }
               }
             }
@@ -6297,7 +6297,7 @@ export class Game {
 
           for (const type of Object.keys(player.upgradeModifiers)) {
             const val = player.upgradeModifiers[type];
-            if (val < 0 && val > -0.50) {
+            if (val < 0 && val > -0.75) {
               eligibleUpgradeTypes.push(type);
             } else if (val === 0) {
               zeroUpgradeTypes.push(type);
@@ -6307,10 +6307,10 @@ export class Game {
           let chosenType = null;
           if (roll === 1 && eligibleUpgradeTypes.length > 0) {
             chosenType = eligibleUpgradeTypes[Math.floor(Math.random() * eligibleUpgradeTypes.length)];
-            player.upgradeModifiers[chosenType] = Math.max(-0.50, player.upgradeModifiers[chosenType] - 0.15);
+            player.upgradeModifiers[chosenType] = Math.max(-0.75, player.upgradeModifiers[chosenType] - 0.15);
           } else if (zeroUpgradeTypes.length > 0) {
             chosenType = zeroUpgradeTypes[Math.floor(Math.random() * zeroUpgradeTypes.length)];
-            player.upgradeModifiers[chosenType] = Math.max(-0.50, player.upgradeModifiers[chosenType] - 0.15);
+            player.upgradeModifiers[chosenType] = Math.max(-0.75, player.upgradeModifiers[chosenType] - 0.15);
           }
 
           if (chosenType) {
@@ -6932,10 +6932,10 @@ export class Game {
       };
       const applied = [];
       for (let d = 0; d < numDiscounts; d++) {
-        const eligible = categories.filter(cat => (player.upgradeModifiers[cat] || 0) > -0.50);
+        const eligible = categories.filter(cat => (player.upgradeModifiers[cat] || 0) > -0.75);
         if (eligible.length > 0) {
           const chosen = eligible[Math.floor(Math.random() * eligible.length)];
-          player.upgradeModifiers[chosen] = Math.max(-0.50, (player.upgradeModifiers[chosen] || 0) - 0.15);
+          player.upgradeModifiers[chosen] = Math.max(-0.75, (player.upgradeModifiers[chosen] || 0) - 0.15);
           applied.push(chosen);
         }
       }
