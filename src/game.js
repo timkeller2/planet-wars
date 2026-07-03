@@ -261,7 +261,7 @@ export class Game {
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
     this.minefieldDamageTimer = 0;
-    const getRandDiscount = () => Math.round((-0.10 + Math.random() * 0.20) * 100) / 100;
+    const getRandDiscount = () => Math.round((-0.35 + Math.random() * 0.45) * 100) / 100;
     this.globalUpgradeModifiers = {
       sensorarray: getRandDiscount(),
       lab: getRandDiscount(),
@@ -1962,7 +1962,7 @@ export class Game {
     }
 
     // Reset global upgrade modifiers
-    const getRandDiscount = () => Math.round((-0.10 + Math.random() * 0.20) * 100) / 100;
+    const getRandDiscount = () => Math.round((-0.35 + Math.random() * 0.45) * 100) / 100;
     this.globalUpgradeModifiers = {
       sensorarray: getRandDiscount(),
       lab: getRandDiscount(),

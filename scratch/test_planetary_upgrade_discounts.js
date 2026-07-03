@@ -9,10 +9,10 @@ function runTest() {
   const game = new Game({ width: 1600, height: 1600 });
   game.initMap();
 
-  // 2. Verify starting globalUpgradeModifiers are initialized between -0.1 and 0.1
-  console.log("Verifying starting globalUpgradeModifiers are between -0.1 and 0.1...");
+  // 2. Verify starting globalUpgradeModifiers are initialized between -0.35 and 0.10
+  console.log("Verifying starting globalUpgradeModifiers are between -0.35 and 0.10...");
   for (const [key, val] of Object.entries(game.globalUpgradeModifiers)) {
-    assert.ok(val >= -0.10 && val <= 0.10, `Starting globalUpgradeModifiers for ${key} should be between -0.1 and 0.1, got ${val}`);
+    assert.ok(val >= -0.35 && val <= 0.10, `Starting globalUpgradeModifiers for ${key} should be between -0.35 and 0.10, got ${val}`);
   }
 
   // Verify starting player upgradeModifiers are initialized between -0.1 and 0.1
