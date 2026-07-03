@@ -3137,7 +3137,7 @@ export class Ship {
       const hasSupplies = (this.supplies || 0) > 0;
       const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
       const maxFuel = this.getMaxFuel();
-      const needsRefuel = (this.fuel < maxFuel * 0.25) && !hasSupplies && !withinSensorRangeOfSupplyShip;
+      const needsRefuel = (this.fuel < maxFuel * 0.33) && !hasSupplies && !withinSensorRangeOfSupplyShip;
       const supplyShip = this.findNearbySupplyShip(allShips);
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
       const needsRearm = (this.scoutAttackEnabled === true) && this.bombs <= 0 && !hasNearbySupply && !hasSupplies && !withinSensorRangeOfSupplyShip;
