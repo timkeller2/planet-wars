@@ -7183,7 +7183,7 @@ export class Game {
           target.boardingMarines = (target.boardingMarines || 0) + pod.marineCount;
           target.boardingSourceId = pod.sourceShipId;
         } else if (pod.isReturnPod) {
-          const maxCapacity = (target.marines || 0) * target.maxHealth;
+          const maxCapacity = Math.ceil(((target.marines || 0) * target.maxHealth) / 2);
           target.marineCount = Math.min(maxCapacity, (target.marineCount || 0) + pod.marineCount);
         }
       }
@@ -7251,7 +7251,7 @@ export class Game {
       if (ship.inFriendlyWell && (ship.marines || 0) > 0) {
         if (ship.scoutAttackEnabled === true) {
           // "load marines up to capacity from planets with > 50% ships at cost of 1 ship from nearby planet for each marine"
-          const capacity = ship.marines * ship.maxHealth;
+          const capacity = Math.ceil((ship.marines * ship.maxHealth) / 2);
           for (const p of this.planets) {
             if (ship.marineCount >= capacity) break;
             if (p.owner && p.owner.id === ship.owner.id) {
@@ -7324,8 +7324,9 @@ export class Game {
             const dy = p.y - ship.y;
             const dist = Math.sqrt(dx*dx + dy*dy);
             if (dist <= radar) {
-              const currentSym = getEffectiveSympathy(p, ship.owner.id, this.ships, ship.owner, this);
-              const isMaxEmpathy = currentSym >= p.maxShips;
+              const baseSym = p.sympathy ? (p.sympathy[ship.owner.id] || 0) : 0;
+              const limit = Math.max(p.maxShips, p.ships || 0);
+              const isMaxEmpathy = baseSym >= limit;
               if (!isMaxEmpathy && !p.dead) {
                 const isFriendly = p.owner && p.owner.id === ship.owner.id;
                 if (isFriendly) {
@@ -7431,7 +7432,7 @@ export class Game {
       }
 
       // 4b. Marine Planet Attack Check
-      const maxMarinesCapacity = (ship.marines || 0) * (ship.maxHealth || 0);
+      const maxMarinesCapacity = Math.ceil(((ship.marines || 0) * (ship.maxHealth || 0)) / 2);
       const isTargetingPlanet = (ship.cruiserTargetType === 'planet' && ship.cruiserTargetId !== null);
       const hasEnoughMarines = maxMarinesCapacity > 0 && ship.marineCount > 0.5 * maxMarinesCapacity && ship.scoutAttackEnabled === true && isTargetingPlanet;
 
@@ -7577,8 +7578,8 @@ export class Game {
           let C_def = ship.crew || 0;
 
           // Calculate tech/XP bonuses
-          const defenderPlayer = ship.owner || { id: 'monsters', techScore: 0 };
-          const attackerPlayer = ship.boardingPlayer || { id: 'unknown', techScore: 0 };
+          const defenderPlayer = ship.owner || { id: 'monsters', techScore: 0, expScore: 0 };
+          const attackerPlayer = ship.boardingPlayer || { id: 'unknown', techScore: 0, expScore: 0 };
 
           const defTech = Math.sqrt(defenderPlayer.techScore || 0);
           const defXp = Math.sqrt(ship.expScore || 0);
@@ -7668,12 +7669,14 @@ export class Game {
             leftSide: {
               name: ship.owner && ship.owner.id === 'monsters' ? 'MONSTERS' : (ship.owner ? (ship.owner.name || ship.owner.id) : 'Defender'),
               color: ship.owner ? (ship.owner.color || '#ffffff') : '#ffffff',
-              units: leftUnits.map((u, idx) => ({ id: u.id, type: u.type, side: u.side, index: idx }))
+              units: leftUnits.map((u, idx) => ({ id: u.id, type: u.type, side: u.side, index: idx })),
+              hitChance: defHitChance
             },
             rightSide: {
               name: ship.boardingPlayer ? (ship.boardingPlayer.name || ship.boardingPlayer.id) : 'Attacker',
               color: ship.boardingPlayer ? (ship.boardingPlayer.color || '#ff3366') : '#ff3366',
-              units: rightUnits.map((u, idx) => ({ id: u.id, type: u.type, side: u.side, index: idx }))
+              units: rightUnits.map((u, idx) => ({ id: u.id, type: u.type, side: u.side, index: idx })),
+              hitChance: atkHitChance
             },
             events: events,
             winner: leftSurvivors.length > 0 ? 'Defender' : 'Attacker',

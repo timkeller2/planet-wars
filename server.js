@@ -2542,6 +2542,26 @@ async function bootstrap() {
           boardingSourceId: s.boardingSourceId || null,
           boardingSourceContributions: s.boardingSourceContributions || null,
           boardingTimer: s.boardingTimer || 0,
+          boardingDefHitChance: (function() {
+            if (!s.isUnderBoarding) return 10;
+            const defenderPlayer = s.owner || { techScore: 0, expScore: 0 };
+            const defTech = Math.sqrt(defenderPlayer.techScore || 0);
+            const defXp = Math.sqrt(s.expScore || 0);
+            return 10 + defTech + defXp;
+          })(),
+          boardingAtkHitChance: (function() {
+            if (!s.isUnderBoarding) return 10;
+            const attackerPlayer = s.boardingPlayer || { techScore: 0, expScore: 0 };
+            const atkTech = Math.sqrt(attackerPlayer.techScore || 0);
+            let atkXp = 0;
+            if (s.boardingSourceContributions && s.boardingSourceContributions.length > 0) {
+              const launcher = game.ships.find(shipObj => shipObj.id === s.boardingSourceContributions[0].shipId && shipObj.active);
+              if (launcher) {
+                atkXp = Math.sqrt(launcher.expScore || 0);
+              }
+            }
+            return 10 + atkTech + atkXp;
+          })(),
           isBoardingFleet: s.isBoardingFleet || false,
           isReturnPod: s.isReturnPod || false,
           isUpgrading: s.isUpgrading || false,

@@ -468,6 +468,8 @@ function getPlanetTradeIncomePerMin(planet) {
   let boardingDefenderName = '';
   let boardingAttackerColor = '#ff3366';
   let boardingDefenderColor = '#ffffff';
+  let boardingDefenderHitChance = 10;
+  let boardingAttackerHitChance = 10;
   let boardingAttackerCount = 0;
   let boardingDefenderCount = 0;
   let boardingCombatStartTime = 0;
@@ -3653,7 +3655,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
         let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(hs.maxHealth + hs.health)}`;
         if (hs.marines > 0) {
-          crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${hs.marines * hs.maxHealth}`;
+          crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${Math.ceil((hs.marines * hs.maxHealth) / 2)}`;
         }
         lines.push({ label: 'Crew / Marines', value: crewVal, color: '#81d4fa' });
         if (hs.commandPoints > 0) {
@@ -6171,6 +6173,8 @@ function getPlanetTradeIncomePerMin(planet) {
     boardingAttackerName = attacker.name || attacker.id || 'Attacker';
     boardingDefenderColor = defender.color || '#ffffff';
     boardingAttackerColor = attacker.color || '#ff3366';
+    boardingDefenderHitChance = cruiser.boardingDefHitChance !== undefined ? cruiser.boardingDefHitChance : 10;
+    boardingAttackerHitChance = cruiser.boardingAtkHitChance !== undefined ? cruiser.boardingAtkHitChance : 10;
     
     startingDefenderCount = M_def + C_def;
     startingAttackerCount = M_atk;
@@ -6444,29 +6448,29 @@ function getPlanetTradeIncomePerMin(planet) {
     ctx.fillStyle = boardingDefenderColor;
     ctx.fillText(boardingDefenderName.toUpperCase(), 15, 15);
     
-    // Shadow for troop count
-    ctx.font = '10px Orbitron, sans-serif';
-    ctx.fillStyle = '#000000';
-    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 16, 31);
-    ctx.fillStyle = '#b0bec5';
-    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 15, 30);
-    
-    // Draw Attacker Stats (Right)
-    ctx.font = 'bold 11px Orbitron, sans-serif';
-    ctx.textAlign = 'right';
-    
-    // Shadow for name
-    ctx.fillStyle = '#000000';
-    ctx.fillText(boardingAttackerName.toUpperCase(), canvas.width - 14, 16);
-    ctx.fillStyle = boardingAttackerColor;
-    ctx.fillText(boardingAttackerName.toUpperCase(), canvas.width - 15, 15);
-    
-    // Shadow for troop count
-    ctx.font = '10px Orbitron, sans-serif';
-    ctx.fillStyle = '#000000';
-    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 14, 31);
-    ctx.fillStyle = '#b0bec5';
-    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 15, 30);
+     // Shadow for troop count
+     ctx.font = '10px Orbitron, sans-serif';
+     ctx.fillStyle = '#000000';
+     ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)} | KR: ${boardingDefenderHitChance.toFixed(1)}%`, 16, 31);
+     ctx.fillStyle = '#b0bec5';
+     ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)} | KR: ${boardingDefenderHitChance.toFixed(1)}%`, 15, 30);
+     
+     // Draw Attacker Stats (Right)
+     ctx.font = 'bold 11px Orbitron, sans-serif';
+     ctx.textAlign = 'right';
+     
+     // Shadow for name
+     ctx.fillStyle = '#000000';
+     ctx.fillText(boardingAttackerName.toUpperCase(), canvas.width - 14, 16);
+     ctx.fillStyle = boardingAttackerColor;
+     ctx.fillText(boardingAttackerName.toUpperCase(), canvas.width - 15, 15);
+     
+     // Shadow for troop count
+     ctx.font = '10px Orbitron, sans-serif';
+     ctx.fillStyle = '#000000';
+     ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)} | KR: ${boardingAttackerHitChance.toFixed(1)}%`, canvas.width - 14, 31);
+     ctx.fillStyle = '#b0bec5';
+     ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)} | KR: ${boardingAttackerHitChance.toFixed(1)}%`, canvas.width - 15, 30);
     
     ctx.restore();
     
@@ -6694,6 +6698,8 @@ function getPlanetTradeIncomePerMin(planet) {
     boardingDefenderColor = replay.leftSide.color;
     boardingAttackerName = replay.rightSide.name;
     boardingAttackerColor = replay.rightSide.color;
+    boardingDefenderHitChance = replay.leftSide.hitChance !== undefined ? replay.leftSide.hitChance : 10;
+    boardingAttackerHitChance = replay.rightSide.hitChance !== undefined ? replay.rightSide.hitChance : 10;
 
     startingDefenderCount = replay.leftSide.units.length;
     startingAttackerCount = replay.rightSide.units.length;
@@ -6803,9 +6809,9 @@ function getPlanetTradeIncomePerMin(planet) {
     
     ctx.font = '10px Orbitron, sans-serif';
     ctx.fillStyle = '#000000';
-    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 16, 31);
+    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)} | KR: ${boardingDefenderHitChance.toFixed(1)}%`, 16, 31);
     ctx.fillStyle = '#b0bec5';
-    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 15, 30);
+    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)} | KR: ${boardingDefenderHitChance.toFixed(1)}%`, 15, 30);
     
     ctx.font = 'bold 11px Orbitron, sans-serif';
     ctx.textAlign = 'right';
@@ -6817,9 +6823,9 @@ function getPlanetTradeIncomePerMin(planet) {
     
     ctx.font = '10px Orbitron, sans-serif';
     ctx.fillStyle = '#000000';
-    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 14, 31);
+    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)} | KR: ${boardingAttackerHitChance.toFixed(1)}%`, canvas.width - 14, 31);
     ctx.fillStyle = '#b0bec5';
-    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 15, 30);
+    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)} | KR: ${boardingAttackerHitChance.toFixed(1)}%`, canvas.width - 15, 30);
     
     ctx.restore();
 
@@ -14745,7 +14751,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
             let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(hs.maxHealth + hs.health)}`;
             if (hs.marines > 0) {
-              crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${hs.marines * hs.maxHealth}`;
+              crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${Math.ceil((hs.marines * hs.maxHealth) / 2)}`;
             }
             lines.push({ label: 'Crew', value: crewVal, color: '#81d4fa' });
 

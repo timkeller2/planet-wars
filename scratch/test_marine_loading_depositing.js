@@ -29,7 +29,7 @@ function runTest() {
   cruiser.maxHealth = 40;
   cruiser.health = 40;
   cruiser.fuel = cruiser.getMaxFuel();
-  cruiser.marines = 2; // Capacity is 2 * 40 = 80 marines
+  cruiser.marines = 2; // Capacity is ceil(2 * 40 / 2) = 40 marines
   cruiser.marineCount = 0;
   cruiser.scoutAttackEnabled = false; // Scout attack mode disabled initially
   cruiser.inFriendlyWell = true;
