@@ -1246,6 +1246,8 @@ export class Game {
         }
       }
       targetPlanet.maxShips = Math.max(15, targetPlanet.sizeClass - 20);
+      targetPlanet.sympathy = targetPlanet.sympathy || {};
+      targetPlanet.sympathy[player.id] = targetPlanet.maxShips;
       targetPlanet.supplies = targetPlanet.maxShips;
       targetPlanet.ships = targetPlanet.maxShips;
       targetPlanet.radius = Math.min(targetPlanet.sizeClass, targetPlanet.maxShips) / 4;
@@ -6974,7 +6976,22 @@ export class Game {
       }
 
       const oldHab = targetPlanet.habitability || 0;
-      targetPlanet.habitability = (targetPlanet.habitability || 0) + habReward;
+      let currentHab = oldHab;
+      for (let i = 0; i < habReward; i++) {
+        const stepOldHab = currentHab;
+        currentHab += 1;
+        
+        const stepOldName = getHabName(stepOldHab);
+        const stepNewName = getHabName(currentHab);
+        if (stepOldName === 'Jungle' && stepNewName === 'Ocean') {
+          currentHab = 100; // Terran
+        } else if (stepOldName === 'Desert' && stepNewName === 'Tundra') {
+          currentHab = 90; // Arid
+        } else if (stepOldName === 'Ocean' && stepNewName === 'Arid') {
+          currentHab = 100; // Terran
+        }
+      }
+      targetPlanet.habitability = currentHab;
       
       if (planet.isDeepSpaceAnomaly) {
         text = `ANOMALY RESOLVED in Deep Space: Nearest planet ${targetPlanet.name} habitability increased by +${habReward}%!`;
@@ -7475,25 +7492,6 @@ export class Game {
         }
       }
 
-      // 4d. Marine Cruiser Attack Check (Fighter Squadron style)
-      if (ship.scoutAttackEnabled === true && (ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
-        if (ship.cruiserTargetType === 'ship' && ship.cruiserTargetId !== null) {
-          const targetShip = this.ships.find(s => s.id === ship.cruiserTargetId && s.active);
-          if (targetShip && targetShip.isCruiser && !targetShip.isAmoeba && targetShip.health >= 2) {
-            const count = Math.floor(ship.marineCount);
-            if (count > 0) {
-              this.queueMarineLaunch(ship, {
-                targetType: 'ship',
-                targetId: targetShip.id,
-                isBoardingFleet: false,
-                count: count
-              });
-              ship.marineCount = 0;
-              ship.marineLaunchCooldown = 15.0;
-            }
-          }
-        }
-      }
 
       // 5. Boarding Trigger Checks (New: Direct Boarding if disabled & isolated)
       if (ship.health < 2 && ship.health > 0 && !ship.isUnderBoarding && !ship.isMaterializing && (!ship.boardingCooldown || ship.boardingCooldown <= 0)) {
@@ -7658,7 +7656,11 @@ export class Game {
           const survivorCrew = leftSurvivors.filter(u => u.type === 'crew').length;
 
           // Record Replay
-          const replayName = `The battle for ${ship.name || ship.configName || ("Cruiser " + ship.id)}`;
+          ship.boardingAttempts = (ship.boardingAttempts || 0) + 1;
+          let replayName = `The battle for ${ship.name || ship.configName || ("Cruiser " + ship.id)}`;
+          if (ship.boardingAttempts > 1) {
+            replayName += `, Round ${ship.boardingAttempts}`;
+          }
           const replay = {
             id: `rep_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
             name: replayName,

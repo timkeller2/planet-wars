@@ -295,6 +295,8 @@ export class Planet {
               }
             }
             this.homeworldOf = this.owner.id;
+            this.sympathy = this.sympathy || {};
+            this.sympathy[this.owner.id] = this.maxShips;
           }
 
           if (oldMode === 'garrison' && this.focusMode !== 'garrison' && this.ships > this.maxShips) {

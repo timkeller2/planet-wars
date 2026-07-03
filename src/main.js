@@ -7657,7 +7657,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
         html += `
             <div class="${blinkClass}" style="display: flex; justify-content: space-between; font-family: 'Rajdhani', sans-serif; font-size: 1.05rem; gap: 5px; color: ${p.color}; text-shadow: 0 0 5px ${p.color};">
-              <span style="width: 75px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${warIcon}${p.name}${bullseye}</span>
+              <span style="width: 75px; display: inline-flex; align-items: center; white-space: nowrap;"><span style="overflow: hidden; text-overflow: ellipsis; flex: 1;">${warIcon}${p.name}</span>${bullseye}</span>
               <span style="width: 50px; text-align: center;">+${pTech}</span>
               <span style="width: 45px; text-align: center;">+${pExp}</span>
               <span style="width: 45px; text-align: right;">+${pHappiness}</span>
@@ -9160,7 +9160,7 @@ function getPlanetTradeIncomePerMin(planet) {
     } else {
       cameraZoom /= zoomFactor;
     }
-    cameraZoom = Math.max(0.2, Math.min(cameraZoom, 20.0));
+    cameraZoom = Math.max(0.2, Math.min(cameraZoom, 25.0));
 
     const newServerPos = getMouseServerPos(mouseX, mouseY);
     cameraPanX += (newServerPos.x - oldServerPos.x);
@@ -9531,7 +9531,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const targetZoom = initialPinchZoom * zoomFactor;
 
       const oldServerPos = getMouseServerPos(mid.x, mid.y);
-      cameraZoom = Math.max(0.2, Math.min(targetZoom, 20.0));
+      cameraZoom = Math.max(0.2, Math.min(targetZoom, 25.0));
 
       const newServerPos = getMouseServerPos(mid.x, mid.y);
       cameraPanX += (newServerPos.x - oldServerPos.x);
@@ -10375,7 +10375,7 @@ function getPlanetTradeIncomePerMin(planet) {
       } else {
         cameraZoom /= zoomFactor;
       }
-      cameraZoom = Math.max(0.2, Math.min(cameraZoom, 20.0));
+      cameraZoom = Math.max(0.2, Math.min(cameraZoom, 25.0));
 
       const newServerPos = getMouseServerPos(mouseX, mouseY);
       cameraPanX += (newServerPos.x - oldServerPos.x);
