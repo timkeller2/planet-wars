@@ -6645,6 +6645,10 @@ export class Game {
                 habitability: planet.habitability,
                 color: player.color || '#ffeb3b'
               });
+
+              if (planet.focusMode === 'terraforming' && Math.random() < 0.5) {
+                planet.addSympathy(player.id, 1);
+              }
             }
           }
         }
