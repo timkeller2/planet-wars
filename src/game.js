@@ -7187,7 +7187,7 @@ export class Game {
           target.boardingMarines = (target.boardingMarines || 0) + pod.marineCount;
           target.boardingSourceId = pod.sourceShipId;
         } else if (pod.isReturnPod) {
-          const maxCapacity = Math.ceil(((target.marines || 0) * target.maxHealth) / 2);
+          const maxCapacity = (target.marines || 0) > 0 ? Math.ceil(((target.marines || 0) * target.maxHealth) / 2) + 5 : 0;
           target.marineCount = Math.min(maxCapacity, (target.marineCount || 0) + pod.marineCount);
         }
       }
@@ -7255,7 +7255,7 @@ export class Game {
       if (ship.inFriendlyWell && (ship.marines || 0) > 0) {
         if (ship.scoutAttackEnabled === true) {
           // "load marines up to capacity from planets with > 50% ships at cost of 1 ship from nearby planet for each marine"
-          const capacity = Math.ceil((ship.marines * ship.maxHealth) / 2);
+          const capacity = Math.ceil((ship.marines * ship.maxHealth) / 2) + 5;
           for (const p of this.planets) {
             if (ship.marineCount >= capacity) break;
             if (p.owner && p.owner.id === ship.owner.id) {
@@ -7436,7 +7436,7 @@ export class Game {
       }
 
       // 4b. Marine Planet Attack Check
-      const maxMarinesCapacity = Math.ceil(((ship.marines || 0) * (ship.maxHealth || 0)) / 2);
+      const maxMarinesCapacity = (ship.marines || 0) > 0 ? Math.ceil(((ship.marines || 0) * (ship.maxHealth || 0)) / 2) + 5 : 0;
       const isTargetingPlanet = (ship.cruiserTargetType === 'planet' && ship.cruiserTargetId !== null);
       const hasEnoughMarines = maxMarinesCapacity > 0 && ship.marineCount > 0.5 * maxMarinesCapacity && ship.scoutAttackEnabled === true && isTargetingPlanet;
 

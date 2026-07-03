@@ -3655,7 +3655,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
         let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(hs.maxHealth + hs.health)}`;
         if (hs.marines > 0) {
-          crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${Math.ceil((hs.marines * hs.maxHealth) / 2)}`;
+          crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${Math.ceil((hs.marines * hs.maxHealth) / 2) + 5}`;
         }
         lines.push({ label: 'Crew / Marines', value: crewVal, color: '#81d4fa' });
         if (hs.commandPoints > 0) {
@@ -14751,7 +14751,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
             let crewVal = `👤 ${Math.floor(hs.crew || 0)} / ${Math.floor(hs.maxHealth + hs.health)}`;
             if (hs.marines > 0) {
-              crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${Math.ceil((hs.marines * hs.maxHealth) / 2)}`;
+              crewVal += `  |  🪖 Marines: ${Math.floor(hs.marineCount || 0)} / ${Math.ceil((hs.marines * hs.maxHealth) / 2) + 5}`;
             }
             lines.push({ label: 'Crew', value: crewVal, color: '#81d4fa' });
 

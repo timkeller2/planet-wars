@@ -30,13 +30,13 @@ function runTest() {
   cruiser1.scoutAttackEnabled = true;
   cruiser1.inFriendlyWell = true;
 
-  // Capacity should be ceil(1 * 40 / 2) = 20
+  // Capacity should be ceil(1 * 40 / 2) + 5 = 25
   game.ships.push(cruiser1);
   for (let i = 0; i < 30; i++) {
     game.update(1000);
   }
   console.log(`Cruiser 1 (Level 1, maxHealth 40) loaded marines count: ${cruiser1.marineCount}`);
-  assert.strictEqual(cruiser1.marineCount, 20, "Marine capacity for Level 1, maxHealth 40 should be exactly 20");
+  assert.strictEqual(cruiser1.marineCount, 25, "Marine capacity for Level 1, maxHealth 40 should be exactly 25");
 
   // Spawn a cruiser with marine level = 1, maxHealth = 15
   const cruiser2 = new Ship('c_m2', friendlyPlanet.x + 10, friendlyPlanet.y + 10, null, player);
@@ -48,13 +48,13 @@ function runTest() {
   cruiser2.scoutAttackEnabled = true;
   cruiser2.inFriendlyWell = true;
 
-  // Capacity should be ceil(1 * 15 / 2) = 8
+  // Capacity should be ceil(1 * 15 / 2) + 5 = 13
   game.ships.push(cruiser2);
   for (let i = 0; i < 15; i++) {
     game.update(1000);
   }
   console.log(`Cruiser 2 (Level 1, maxHealth 15) loaded marines count: ${cruiser2.marineCount}`);
-  assert.strictEqual(cruiser2.marineCount, 8, "Marine capacity for Level 1, maxHealth 15 should be exactly 8 (ceil(7.5))");
+  assert.strictEqual(cruiser2.marineCount, 13, "Marine capacity for Level 1, maxHealth 15 should be exactly 13 (ceil(7.5) + 5)");
 
   console.log("All Marine Capacity Halving tests passed successfully!");
 }
