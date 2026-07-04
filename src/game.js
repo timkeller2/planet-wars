@@ -7466,7 +7466,6 @@ export class Game {
 
       // 4c. Marine Revolt Planet Assault Check
       if (ship.scoutAttackEnabled === true && (ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
-        let revoltPlanet = null;
         for (const p of this.planets) {
           if (p.inRevolt && p.revoltTimer <= 7500) {
             const dx = p.x - ship.x;
@@ -7474,25 +7473,38 @@ export class Game {
             const distSq = dx * dx + dy * dy;
             const gr = p.getGravityRadius();
             if (distSq < gr * gr) {
-              if (ship.marineCount >= 0.5 * p.ships) {
-                revoltPlanet = p;
-                break;
+              // Find all friendly qualifying cruisers within gravity range of this planet
+              const qualifyingCruisers = cruisers.filter(other => {
+                if (other.owner && ship.owner && other.owner.id === ship.owner.id) {
+                  if (other.scoutAttackEnabled === true && (other.marineCount || 0) > 0 && (!other.marineLaunchCooldown || other.marineLaunchCooldown <= 0)) {
+                    const odx = p.x - other.x;
+                    const ody = p.y - other.y;
+                    const odistSq = odx * odx + ody * ody;
+                    const ogr = p.getGravityRadius();
+                    return odistSq < ogr * ogr;
+                  }
+                }
+                return false;
+              });
+
+              const totalAvailableMarines = qualifyingCruisers.reduce((sum, c) => sum + (c.marineCount || 0), 0);
+              if (totalAvailableMarines >= 0.5 * p.ships) {
+                for (const qc of qualifyingCruisers) {
+                  const count = Math.floor(qc.marineCount);
+                  if (count > 0) {
+                    this.queueMarineLaunch(qc, {
+                      targetType: 'planet',
+                      targetId: p.id,
+                      isBoardingFleet: false,
+                      count: count
+                    });
+                    qc.marineCount = 0;
+                    qc.marineLaunchCooldown = 15.0;
+                  }
+                }
+                break; // Stop looking at other revolt planets for the current cruiser since it just launched
               }
             }
-          }
-        }
-
-        if (revoltPlanet) {
-          const count = Math.floor(ship.marineCount);
-          if (count > 0) {
-            this.queueMarineLaunch(ship, {
-              targetType: 'planet',
-              targetId: revoltPlanet.id,
-              isBoardingFleet: false,
-              count: count
-            });
-            ship.marineCount = 0;
-            ship.marineLaunchCooldown = 15.0;
           }
         }
       }
