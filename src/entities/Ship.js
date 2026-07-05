@@ -789,18 +789,18 @@ export class Ship {
         const gravityRadius = planet.getGravityRadius();
         if (distSq < gravityRadius * gravityRadius) {
           if (planet.owner && this.owner && planet.owner.id === this.owner.id) {
-            const hasSupplies = (planet.supplies || 0) >= 1.0;
-            const currentHasSupplies = friendlyWellPlanet && (friendlyWellPlanet.supplies || 0) >= 1.0;
+            const planetSupplies = planet.supplies || 0;
+            const currentSupplies = friendlyWellPlanet ? (friendlyWellPlanet.supplies || 0) : -1;
             
-            if (!friendlyWellPlanet || (hasSupplies && !currentHasSupplies) || (hasSupplies === currentHasSupplies && distSq < minFriendlyDistSq)) {
+            if (planetSupplies > currentSupplies || (planetSupplies === currentSupplies && distSq < minFriendlyDistSq)) {
               friendlyWellPlanet = planet;
               minFriendlyDistSq = distSq;
             }
           } else if (!planet.owner && !planet.isDeepSpaceAnomaly) {
-            const hasSupplies = (planet.supplies || 0) >= 1.0;
-            const currentHasSupplies = neutralWellPlanet && (neutralWellPlanet.supplies || 0) >= 1.0;
+            const planetSupplies = planet.supplies || 0;
+            const currentSupplies = neutralWellPlanet ? (neutralWellPlanet.supplies || 0) : -1;
             
-            if (!neutralWellPlanet || (hasSupplies && !currentHasSupplies) || (hasSupplies === currentHasSupplies && distSq < minNeutralDistSq)) {
+            if (planetSupplies > currentSupplies || (planetSupplies === currentSupplies && distSq < minNeutralDistSq)) {
               neutralWellPlanet = planet;
               minNeutralDistSq = distSq;
             }
@@ -3137,7 +3137,7 @@ export class Ship {
       const hasSupplies = (this.supplies || 0) > 0;
       const withinSensorRangeOfSupplyShip = this.isWithinSensorRangeOfSupplyShip(allShips);
       const maxFuel = this.getMaxFuel();
-      const needsRefuel = (this.fuel < maxFuel * 0.33) && !hasSupplies && !withinSensorRangeOfSupplyShip;
+      const needsRefuel = (this.fuel < maxFuel * 0.37) && !hasSupplies && !withinSensorRangeOfSupplyShip;
       const supplyShip = this.findNearbySupplyShip(allShips);
       const hasNearbySupply = supplyShip && (supplyShip.supplies || 0) >= 1.0;
       const needsRearm = (this.scoutAttackEnabled === true) && this.bombs <= 0 && !hasNearbySupply && !hasSupplies && !withinSensorRangeOfSupplyShip;
@@ -4534,7 +4534,7 @@ export class Ship {
           }
         }
       } else {
-        let fuelDrain = this.isWarp ? 8 : 4;
+        let fuelDrain = this.isWarp ? 12 : 4;
         if (this.isCruiser && distance < 5) {
           fuelDrain *= 0.25;
         }
