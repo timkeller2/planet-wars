@@ -5664,6 +5664,7 @@ export class Game {
             while (remainingFee > 0) {
               let highestRes = null;
               let highestQty = 0;
+              const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
               for (const res of resourcesList) {
                 const qty = player.resources[res] || 0;
                 if (qty > highestQty) {
