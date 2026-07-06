@@ -633,10 +633,10 @@ async function bootstrap() {
             return;
           }
 
-          // Enforce that the total upgrades of this type across all players does not exceed 1/3 the number of human players (rounded up)
+          // Enforce that the total upgrades of this type across all players does not exceed 1/5 the number of human players (rounded up)
           const humanPlayers = game.allPlayers.filter(pl => pl && !pl.isAI && pl.id !== 'monsters');
           const numHumanPlayers = Math.max(1, humanPlayers.length);
-          const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 3);
+          const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 5);
 
           let totalUpgradesOfCertainType = 0;
           for (const p of game.planets) {

@@ -494,7 +494,7 @@ export class Game {
     const normType = typeKeyMap[type] || type;
     
     const globalMod = (this.globalUpgradeModifiers && this.globalUpgradeModifiers[normType] !== undefined)
-      ? Math.max(-0.35, this.globalUpgradeModifiers[normType])
+      ? Math.max(-0.50, this.globalUpgradeModifiers[normType])
       : 0.0;
       
     let playerMod = 0.0;
@@ -587,7 +587,7 @@ export class Game {
       };
       const normType = typeKeyMap[foundProp] || foundProp;
       const globalMod = (this.globalUpgradeModifiers && this.globalUpgradeModifiers[normType] !== undefined)
-        ? Math.max(-0.35, this.globalUpgradeModifiers[normType])
+        ? Math.max(-0.50, this.globalUpgradeModifiers[normType])
         : -0.25;
       let playerMod = 0;
       if (ship.owner && ship.owner.upgradeModifiers && ship.owner.upgradeModifiers[normType] !== undefined) {
@@ -2271,6 +2271,18 @@ export class Game {
       }
     }
     
+    // Scatter random unique upgrades to 1/10 of neutral planets
+    const availableUpgrades = ['sensorarrays', 'labs', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel', 'diplomat', 'marines', 'command'];
+    const numToUpgrade = Math.min(availableUpgrades.length, Math.floor(this.planets.length / 10));
+    const shuffledPlanets = [...this.planets].sort(() => 0.5 - Math.random());
+    const shuffledUpgrades = [...availableUpgrades].sort(() => 0.5 - Math.random());
+    
+    for (let i = 0; i < numToUpgrade; i++) {
+      const p = shuffledPlanets[i];
+      const upgrade = shuffledUpgrades[i];
+      p[upgrade] = 1;
+    }
+    
     // Clear discovered/attacked planets for all players
     for (const player of this.allPlayers) {
       player.discoveredPlanets = new Set();
@@ -3183,7 +3195,7 @@ export class Game {
         };
         const normType = typeKeyMap[foundProp] || foundProp;
         const globalMod = (this.globalUpgradeModifiers && this.globalUpgradeModifiers[normType] !== undefined)
-          ? Math.max(-0.35, this.globalUpgradeModifiers[normType])
+          ? Math.max(-0.50, this.globalUpgradeModifiers[normType])
           : 0.0;
         let playerMod = 0;
         if (owner && owner.upgradeModifiers && owner.upgradeModifiers[normType] !== undefined) {
@@ -4512,20 +4524,20 @@ export class Game {
       }
     }
 
-    // 15-minute global discount decrease timer
+    // 10-minute global discount decrease timer
     if (this.globalDiscountTimer === undefined) {
       this.globalDiscountTimer = 0;
     }
     this.globalDiscountTimer += deltaTime;
-    if (this.globalDiscountTimer >= 900000) {
+    if (this.globalDiscountTimer >= 600000) {
       this.globalDiscountTimer = 0;
       for (const type of Object.keys(this.globalUpgradeModifiers)) {
-        if (this.globalUpgradeModifiers[type] > -0.35) {
+        if (this.globalUpgradeModifiers[type] > -0.50) {
           const randDec = 0.10 + Math.random() * 0.10; // random amount from 0.10 to 0.20
-          this.globalUpgradeModifiers[type] = Math.round(Math.max(-0.35, this.globalUpgradeModifiers[type] - randDec) * 100) / 100;
+          this.globalUpgradeModifiers[type] = Math.round(Math.max(-0.50, this.globalUpgradeModifiers[type] - randDec) * 100) / 100;
         }
       }
-      console.log("[GLOBAL DISCOUNT INCREASE] Ticked 15-minute global modifier decrease. Current modifiers:", this.globalUpgradeModifiers);
+      console.log("[GLOBAL DISCOUNT INCREASE] Ticked 10-minute global modifier decrease. Current modifiers:", this.globalUpgradeModifiers);
     }
 
     // Ion Storm movement and cleanup (skip stationary hazards)

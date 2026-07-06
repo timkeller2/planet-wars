@@ -7857,7 +7857,7 @@ function getPlanetTradeIncomePerMin(planet) {
     const normType = typeKeyMap[type] || type;
     
     const globalMod = (serverState.globalUpgradeModifiers && serverState.globalUpgradeModifiers[normType] !== undefined)
-      ? Math.max(-0.35, serverState.globalUpgradeModifiers[normType])
+      ? Math.max(-0.50, serverState.globalUpgradeModifiers[normType])
       : 0.0;
       
     let playerMod = 0.0;
@@ -7866,7 +7866,7 @@ function getPlanetTradeIncomePerMin(planet) {
       playerMod = playerObj.upgradeModifiers[normType];
     }
     
-    const modifier = Math.max(-0.50, globalMod + playerMod);
+    const modifier = Math.max(-0.75, globalMod + playerMod);
     let finalCost = Math.max(1, Math.round(baseCost * (1 + modifier)));
 
     // Only apply the planet upgrade divisor if it's a ship upgrade
@@ -7959,7 +7959,7 @@ function getPlanetTradeIncomePerMin(planet) {
       };
       const normType = typeKeyMap[foundProp] || foundProp;
       const globalMod = (serverState.globalUpgradeModifiers && serverState.globalUpgradeModifiers[normType] !== undefined)
-        ? Math.max(-0.35, serverState.globalUpgradeModifiers[normType])
+        ? Math.max(-0.50, serverState.globalUpgradeModifiers[normType])
         : 0.0;
       let playerMod = 0;
       if (myPlayer && myPlayer.upgradeModifiers && myPlayer.upgradeModifiers[normType] !== undefined) {
@@ -9854,9 +9854,9 @@ function getPlanetTradeIncomePerMin(planet) {
             .sort((a, b) => a.id - b.id);
 
           // Group into focus areas
-          const audioFocusAreas = groupIntoFocusAreas(audioPoints, 300);
-          const planetFocusAreas = groupIntoFocusAreas(myPlanets, 300);
-          const shipFocusAreas = groupIntoFocusAreas(myShips, 300);
+          const audioFocusAreas = groupIntoFocusAreas(audioPoints, 600);
+          const planetFocusAreas = groupIntoFocusAreas(myPlanets, 600);
+          const shipFocusAreas = groupIntoFocusAreas(myShips, 600);
 
           // Build a single ordered sequence of focus areas
           const focusAreas = [];
@@ -9884,11 +9884,11 @@ function getPlanetTradeIncomePerMin(planet) {
               selectedPlanets = [];
               selectedShips = [];
             } else if (target.type === 'planet') {
-              selectedPlanets = myPlanets.filter(p => Math.hypot(p.x - target.x, p.y - target.y) <= 300);
+              selectedPlanets = myPlanets.filter(p => Math.hypot(p.x - target.x, p.y - target.y) <= 600);
               selectedShips = [];
             } else if (target.type === 'ship') {
               selectedPlanets = [];
-              selectedShips = myShips.filter(s => Math.hypot(s.x - target.x, s.y - target.y) <= 300);
+              selectedShips = myShips.filter(s => Math.hypot(s.x - target.x, s.y - target.y) <= 600);
             }
 
             // Pan camera to center on the focused area
