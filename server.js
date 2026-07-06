@@ -1926,6 +1926,20 @@ async function bootstrap() {
         }
       }
 
+      // Process simulated AI upgrade purchases
+      if (game.aiUpgradePurchases && game.aiUpgradePurchases.length > 0) {
+        for (const purchase of game.aiUpgradePurchases) {
+          const typeKeyMap = {
+            sensorarrays: 'sensorarray', labs: 'lab', armor: 'armor', shields: 'shield', engine: 'engine', munitions: 'munitions', targeting: 'targeting', damagecontrol: 'damagecontrol', supply_ship: 'supplyship', extended_fuel: 'extendedfuel', diplomat: 'diplomat', marines: 'marines', command: 'command',
+            sensorarray: 'sensorarray', lab: 'lab', shield: 'shield', supplyship: 'supplyship', extendedfuel: 'extendedfuel'
+          };
+          const normType = typeKeyMap[purchase.type] || purchase.type;
+          
+          distributeUpgradeCredits(purchase.player, purchase.type, purchase.cost);
+        }
+        game.aiUpgradePurchases = [];
+      }
+
       game.checkWinCondition();
       
       // Process pending game chat messages

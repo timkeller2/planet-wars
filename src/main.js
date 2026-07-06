@@ -1,4 +1,17 @@
 import { io } from 'socket.io-client';
+
+const bundleSaleStyle = document.createElement('style');
+bundleSaleStyle.textContent = `
+@keyframes bundleSaleBlink {
+  0% { filter: brightness(1); }
+  50% { filter: brightness(2) drop-shadow(0 0 8px white); background-color: rgba(255, 255, 255, 0.4) !important; }
+  100% { filter: brightness(1); }
+}
+.bundle-sale-blink {
+  animation: bundleSaleBlink 0.5s linear infinite;
+}
+`;
+document.head.appendChild(bundleSaleStyle);
 const keysDown = {};
 let audioCtx = null;
 const activeAudioClones = new Set();
@@ -5329,6 +5342,7 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastExplosionCount = 0;
   let lastLaserCount = 0;
   let clientPlanetOwners = {};
+  let clientLastBundleSaleTime = -1;
 
   socket.on('gameStateUpdate', (state) => {
     const gameInProgressMsg = document.getElementById('game-in-progress-msg');
@@ -5362,8 +5376,45 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (state.players && localPlayer) {
       const myPlayer = state.players.find(p => p.id === localPlayer.id);
-      if (myPlayer && myPlayer.lastKnownPlanets) {
-        lastKnownPlanets = { ...myPlayer.lastKnownPlanets };
+      if (myPlayer) {
+        if (myPlayer.lastKnownPlanets) {
+          lastKnownPlanets = { ...myPlayer.lastKnownPlanets };
+        }
+        if (myPlayer.lastBundleSaleTime !== undefined) {
+          if (clientLastBundleSaleTime !== -1 && myPlayer.lastBundleSaleTime !== clientLastBundleSaleTime) {
+            playChaChingSound();
+          }
+          clientLastBundleSaleTime = myPlayer.lastBundleSaleTime;
+          
+          const timeSinceSale = myPlayer.lastBundleSaleTime ? (Date.now() - myPlayer.lastBundleSaleTime) : Infinity;
+          const isBundleSaleRecent = timeSinceSale <= 15000;
+          
+          let hasResources = true;
+          const resList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium'];
+          for (const res of resList) {
+            if (!myPlayer.resources || (myPlayer.resources[res] || 0) < 1) {
+              hasResources = false;
+              break;
+            }
+          }
+          if (myPlayer.resources && (myPlayer.resources.latinum || 0) < 4) hasResources = false;
+          
+          const cooldownMet = !myPlayer.lastBundleSaleTime || timeSinceSale >= (5 * 60 * 1000);
+          const tradeCap = myPlayer.tradeCapacity !== undefined ? myPlayer.tradeCapacity : 5;
+          const tradeOptions = myPlayer.tradeOptions !== undefined ? myPlayer.tradeOptions : 5;
+          const optionsWithinOne = tradeOptions >= (tradeCap - 1);
+          
+          const shouldBlink = isBundleSaleRecent || (hasResources && cooldownMet && optionsWithinOne);
+          
+          const cards = document.querySelectorAll('[id^="res-card-"]');
+          cards.forEach(card => {
+            if (shouldBlink) {
+              card.classList.add('bundle-sale-blink');
+            } else {
+              card.classList.remove('bundle-sale-blink');
+            }
+          });
+        }
       }
     }
 
@@ -7150,6 +7201,19 @@ function getPlanetTradeIncomePerMin(planet) {
       creditsDisplay.style.display = 'block';
       const hasMoneyBags = myPlayer.otherEffectiveShips !== undefined && myPlayer.playerEffectiveShips !== undefined && myPlayer.otherEffectiveShips >= myPlayer.playerEffectiveShips && myPlayer.playerEffectiveShips > 0;
       creditsDisplay.innerHTML = `💲${Math.floor(creditsVal)}<span style="font-size: 80%; font-weight: normal; margin-left: 2px; opacity: 0.85;">${incomeInt >= 0 ? '+' : ''}${incomeInt}${hasMoneyBags ? '💰' : ''}</span>`;
+      
+      if (serverState.settings && serverState.settings.financialVictoryTarget && serverState.settings.financialVictoryTarget !== 'none') {
+        let maxCredits = 0;
+        if (serverState.players) {
+          for (const p of serverState.players) {
+            if (!p.isAI && (p.credits || 0) > maxCredits) {
+              maxCredits = Math.floor(p.credits || 0);
+            }
+          }
+        }
+        creditsDisplay.innerHTML += `<sup style="margin-left: 4px; font-size: 0.7rem; color: #fff; text-shadow: 0 0 3px #fff;">(${maxCredits})</sup>`;
+      }
+      
       creditsDisplay.removeAttribute('title');
 
       if (creditsVal < 0) {
@@ -7186,7 +7250,11 @@ function getPlanetTradeIncomePerMin(planet) {
       const tradeOptions = myPlayer.tradeOptions !== undefined ? Math.floor(myPlayer.tradeOptions) : 5;
       const tradeCapacity = myPlayer.tradeCapacity !== undefined ? Math.floor(myPlayer.tradeCapacity) : 5;
       tradeOptionsDisplay.style.display = 'block';
-      tradeOptionsDisplay.textContent = `⚖️${tradeOptions}/${tradeCapacity}`;
+      tradeOptionsDisplay.innerHTML = `⚖️${tradeOptions}/${tradeCapacity}`;
+      if (myPlayer.tradeRegenAccumulator !== undefined && myPlayer.tradeRegenInterval !== undefined && tradeOptions < tradeCapacity) {
+        const pct = Math.floor((myPlayer.tradeRegenAccumulator / myPlayer.tradeRegenInterval) * 100);
+        tradeOptionsDisplay.innerHTML += `<sup style="margin-left: 4px; font-size: 0.75rem;">${Math.min(99, Math.max(0, pct))}%</sup>`;
+      }
       
       if (myPlayer.tradeLimitToggle === true) {
         tradeOptionsDisplay.style.color = '#ff9800';

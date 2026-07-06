@@ -2692,6 +2692,17 @@ export class Game {
          return; // Exploded!
       }
     }
+    if (source.owner && source.owner.isAI) {
+      ship.expScore += 200;
+      if (ship.count > 50) {
+        const upgrades = ['sensorarray', 'lab', 'armor', 'shield', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supplyship', 'extendedfuel', 'diplomat', 'marines', 'command'];
+        const chosen = upgrades[Math.floor(Math.random() * upgrades.length)];
+        const cost = this.getUpgradeCost(ship, chosen);
+        if (!this.aiUpgradePurchases) this.aiUpgradePurchases = [];
+        this.aiUpgradePurchases.push({ player: source.owner, type: chosen, cost: cost });
+      }
+    }
+
     this.ships.push(ship);
   }
 
@@ -5596,6 +5607,7 @@ export class Game {
       const myTradeOptions = player.tradeOptions || 0;
       const penaltyDelay = myTradeOptions < 0 ? Math.abs(myTradeOptions) * 30000 : 0;
       const tradeRegenInterval = (60000 / tradeRegenRate) + penaltyDelay;
+      player.tradeRegenInterval = tradeRegenInterval;
       player.tradeRegenAccumulator = (player.tradeRegenAccumulator || 0) + deltaTime;
       while (player.tradeRegenAccumulator >= tradeRegenInterval) {
         player.tradeRegenAccumulator -= tradeRegenInterval;
