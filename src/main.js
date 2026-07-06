@@ -11291,7 +11291,7 @@ function getPlanetTradeIncomePerMin(planet) {
           if (isPlanet) {
             const humanPlayers = serverState ? serverState.players.filter(pl => pl && !pl.isAI && pl.id !== 'monsters') : [];
             const numHumanPlayers = Math.max(1, humanPlayers.length);
-            const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 3);
+            const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 5);
 
             let totalUpgradesOfCertainType = 0;
             if (serverState && serverState.planets) {
@@ -11307,37 +11307,38 @@ function getPlanetTradeIncomePerMin(planet) {
             displayUpgrade = currentVal < 5 && !entity.isUpgrading && shieldCheck && (tokenAllowed || (levelAllowed && totalAllowed));
           }
           
-          el.style.display = displayUpgrade ? 'inline-flex' : 'none';
-          if (el.style.display === 'inline-flex') {
-            const uCost = isPlanet ? getUpgradeCostForShip(entity, prop) * 3 : getUpgradeCostForShip(entity, prop);
-            const baseName = namesMap[btnId] || 'Upgrade';
-            const desc = descMap[prop] || `Upgrades ${isPlanet ? 'planet' : 'cruiser'} capabilities`;
-            el.setAttribute('title', `${baseName}: ${desc}`);
-            const costSpan = el.querySelector('.btn-cost');
-            if (costSpan) {
-              costSpan.textContent = hasTokens ? '1 Token' : uCost;
-            }
+          el.style.display = 'inline-flex';
+          const uCost = isPlanet ? getUpgradeCostForShip(entity, prop) * 3 : getUpgradeCostForShip(entity, prop);
+          const baseName = namesMap[btnId] || 'Upgrade';
+          const desc = descMap[prop] || `Upgrades ${isPlanet ? 'planet' : 'cruiser'} capabilities`;
+          el.setAttribute('title', `${baseName}: ${desc}`);
+          const costSpan = el.querySelector('.btn-cost');
+          if (costSpan) {
+            costSpan.textContent = hasTokens ? '1 Token' : uCost;
+          }
 
-            const discountSpan = el.querySelector('.btn-discount');
-            if (discountSpan) {
-              if (hasTokens) {
-                discountSpan.textContent = '';
-              } else {
-                const disc = getPlayerSpecificDiscountForShip(entity, prop);
-                discountSpan.textContent = disc !== 0 ? (disc > 0 ? `+${disc}%` : `${disc}%`) : '';
-              }
-            }
-
-            const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
-            const entityResourceShips = isPlanet ? entity.ships : (upgradeQual ? upgradeQual.planet.ships : 0);
-            const canAfford = hasTokens || (isPlanet ? (creditsAvailable >= uCost) : ((entityResourceShips + creditsAvailable) >= uCost));
-            if (!canAfford) {
-              el.style.opacity = '0.5';
-              el.style.pointerEvents = 'none';
+          const discountSpan = el.querySelector('.btn-discount');
+          if (discountSpan) {
+            if (hasTokens) {
+              discountSpan.textContent = '';
             } else {
-              el.style.opacity = '1.0';
-              el.style.pointerEvents = 'auto';
+              const disc = getPlayerSpecificDiscountForShip(entity, prop);
+              discountSpan.textContent = disc !== 0 ? (disc > 0 ? `+${disc}%` : `${disc}%`) : '';
             }
+          }
+
+          const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
+          const entityResourceShips = isPlanet ? entity.ships : (upgradeQual ? upgradeQual.planet.ships : 0);
+          const canAfford = hasTokens || (isPlanet ? (creditsAvailable >= uCost) : ((entityResourceShips + creditsAvailable) >= uCost));
+          
+          if (!canAfford || !displayUpgrade) {
+            el.style.opacity = '0.5';
+            el.style.pointerEvents = 'none';
+            el.style.filter = 'grayscale(100%)';
+          } else {
+            el.style.opacity = '1.0';
+            el.style.pointerEvents = 'auto';
+            el.style.filter = 'none';
           }
         }
       }
