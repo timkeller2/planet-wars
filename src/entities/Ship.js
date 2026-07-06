@@ -277,7 +277,8 @@ export class Ship {
     let closestDistSq = Infinity;
     const myRadarRange = (this.isCruiser && typeof this.cruiserRadarRange === 'function') ? this.cruiserRadarRange() : 150;
 
-    for (const other of allShips) {
+    const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(this.x, this.y, 1500 * 1500) : allShips;
+    for (const other of candidateShips) {
       if (excludeSelf && other === this) continue;
       if (other.active && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.supplies || 0) > 0) {
         const dx = other.x - this.x;
@@ -721,7 +722,8 @@ export class Ship {
       }
     }
     if (allShips) {
-      for (const s of allShips) {
+      const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(p.x, p.y, 1500 * 1500) : allShips;
+      for (const s of candidateShips) {
         if (s.active && s.owner && s.owner.id === this.owner.id) {
           const radarRange = (s.isCruiser && typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : 50;
           const dx = s.x - p.x;
@@ -1252,7 +1254,8 @@ export class Ship {
                 // 2. Check distance from active enemies
                 let minEnemyDistSq = Infinity;
                 if (allShips) {
-                  for (const other of allShips) {
+                  const candidateEnemies = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(tx, ty, 300 * 300) : allShips;
+                  for (const other of candidateEnemies) {
                     if (other.active && other.id !== this.id) {
                       const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
                       if (isEnemy) {
@@ -1506,7 +1509,8 @@ export class Ship {
               if (other.isUnderBoarding) {
                 isBoardingCandidate = true;
               } else if (allShips) {
-                for (const s of allShips) {
+                const candidateMarines = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(other.x, other.y, 500 * 500) : allShips;
+                for (const s of candidateMarines) {
                   if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marineCount || 0) > 0 && s.scoutAttackEnabled === true) {
                     const dx = s.x - other.x;
                     const dy = s.y - other.y;
@@ -2036,7 +2040,8 @@ export class Ship {
             
             // 1. Cruiser with marines is nearby (within 500px)
             if (allShips) {
-              for (const other of allShips) {
+              const candidateMarines = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(enemyShip.x, enemyShip.y, 500 * 500) : allShips;
+              for (const other of candidateMarines) {
                 if (other.active && other.isCruiser && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner) && (other.marineCount || 0) > 0 && other.scoutAttackEnabled === true) {
                   const dx = other.x - enemyShip.x;
                   const dy = other.y - enemyShip.y;
@@ -3043,7 +3048,8 @@ export class Ship {
                 if (other.isCruiser && other.health < 2) {
                   let isBoardingCandidate = other.isUnderBoarding;
                   if (!isBoardingCandidate && allShips) {
-                    for (const s of allShips) {
+                    const candidateMarines = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(other.x, other.y, 500 * 500) : allShips;
+                    for (const s of candidateMarines) {
                       if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marineCount || 0) > 0 && s.scoutAttackEnabled === true) {
                         const dx = s.x - other.x;
                         const dy = s.y - other.y;
@@ -3345,7 +3351,8 @@ export class Ship {
         let enemyNearby = null;
         let closestEnemyDistSq = Infinity;
         if (allShips) {
-          for (const other of allShips) {
+          const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(this.x, this.y, 500 * 500) : allShips;
+          for (const other of candidateShips) {
             if (other.active && other.id !== this.id) {
               const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
               if (isEnemy) {
@@ -3382,7 +3389,8 @@ export class Ship {
             let sumDy = 0;
             let count = 0;
             if (allShips) {
-              for (const other of allShips) {
+              const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(this.x, this.y, 300 * 300) : allShips;
+              for (const other of candidateShips) {
                 if (other.active && other.id !== this.id) {
                   const isEnemy = (other.owner && other.owner.id !== this.owner.id) || other.isAmoeba;
                   if (isEnemy) {
@@ -3754,7 +3762,8 @@ export class Ship {
             
             let totalEnemyStrength = enemyTargetStrength;
             if (allShips) {
-              for (const other of allShips) {
+              const candidateEnemies = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(this.x, this.y, 400 * 400) : allShips;
+              for (const other of candidateEnemies) {
                 if (other.active && other.id !== this.id && other.id !== targetObj.id && other.owner && other.owner.id !== this.owner.id) {
                   const dx = other.x - this.x;
                   const dy = other.y - this.y;
@@ -4374,7 +4383,8 @@ export class Ship {
         let closestDistSq = Infinity;
         const radarRange = this.cruiserRadarRange();
         const radarRangeSq = radarRange * radarRange;
-        for (const other of allShips) {
+        const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(this.x, this.y, radarRangeSq) : allShips;
+        for (const other of candidateShips) {
           const cannotTransfer = (other.extended_fuel || 0) > 0;
           if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.fuel || 0) > 4 && (other.fuel || 0) > (this.fuel || 0) + 2 && !cannotTransfer) {
             const dx = other.x - this.x;
