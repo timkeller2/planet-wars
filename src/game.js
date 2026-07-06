@@ -7336,6 +7336,31 @@ export class Game {
         }
       }
 
+      // 4d. Auto-Marine Launch (Overflying Planet)
+      if (ship.scoutAttackEnabled === true && (ship.marineCount || 0) >= 1 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
+        for (const p of this.planets) {
+          if (p.dead || (p.owner && ship.owner && p.owner.id === ship.owner.id) || p.inTransition) continue;
+          
+          const dx = p.x - ship.x;
+          const dy = p.y - ship.y;
+          const distSq = dx * dx + dy * dy;
+          if (distSq < p.radius * p.radius) {
+            const count = Math.floor(ship.marineCount);
+            if (count > 0) {
+              this.queueMarineLaunch(ship, {
+                targetType: 'planet',
+                targetId: p.id,
+                isBoardingFleet: false,
+                count: count
+              });
+              ship.marineCount = 0;
+              ship.marineLaunchCooldown = 15.0;
+            }
+            break;
+          }
+        }
+      }
+
 
       // 5. Boarding Trigger Checks (New: Direct Boarding if disabled & isolated)
       if (ship.health < 2 && ship.health > 0 && !ship.isUnderBoarding && !ship.isMaterializing && (!ship.boardingCooldown || ship.boardingCooldown <= 0)) {

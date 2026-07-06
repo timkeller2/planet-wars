@@ -2602,17 +2602,17 @@ export class Ship {
         }
         let isCruiserBombing = false;
         if (isCruiser) {
-          if (this.cruiserTargetType === 'planet' && this.cruiserTargetId !== null) {
+          if ((this.cruiserTargetType === 'planet' && this.cruiserTargetId !== null) || this.scoutAttackEnabled === true) {
             isCruiserBombing = true;
           }
         }
-        if (!isCruiser || (isCruiserBombing && this.bombs >= 1 && (!this.planetBombardTimer || this.planetBombardTimer <= 0) && !enemyNearby)) {
+        if (!isCruiser || (isCruiserBombing && (!this.planetBombardTimer || this.planetBombardTimer <= 0) && (!enemyNearby || this.bombs >= 1))) {
           let validPlanets = [];
           for (const p of allPlanets) {
             if (p.owner && this.owner && p.owner.id === this.owner.id) continue;
             if (this.isAmoeba && !p.owner && (this.amoebaGrowCooldown || 0) > 0) continue;
             if (p.ships > 0) {
-              if (isCruiser && p.id !== this.cruiserTargetId) continue;
+              if (isCruiser && p.id !== this.cruiserTargetId && this.scoutAttackEnabled !== true) continue;
               const pdx = p.x - this.x;
               const pdy = p.y - this.y;
               const distSq = pdx * pdx + pdy * pdy;

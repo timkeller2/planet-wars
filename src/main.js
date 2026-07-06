@@ -8766,13 +8766,13 @@ function getPlanetTradeIncomePerMin(planet) {
             const selectedFleets = selectedShips.filter(s => !s.isCruiser && !s.isUpgrading);
             
             if (selectedCruisers.length > 0) {
-              socket.emit('setCruiserTarget', { 
+              socket.emit('moveShipsToSpace', { 
                 shipIds: selectedCruisers.map(c => c.id), 
-                targetType: 'planet', 
-                targetId: clickedPlanet.id,
-                clickX: clickPos.x,
-                clickY: clickPos.y,
-                isShift
+                targetX: clickPos.x, 
+                targetY: clickPos.y, 
+                isWarp: warpOrderNext, 
+                speedModifier: speedModifierNext, 
+                isShift 
               });
             }
             
@@ -9171,7 +9171,7 @@ function getPlanetTradeIncomePerMin(planet) {
     } else {
       cameraZoom /= zoomFactor;
     }
-    cameraZoom = Math.max(0.2, Math.min(cameraZoom, 25.0));
+    cameraZoom = Math.max(0.2, Math.min(cameraZoom, 50.0));
 
     const newServerPos = getMouseServerPos(mouseX, mouseY);
     cameraPanX += (newServerPos.x - oldServerPos.x);
@@ -9542,7 +9542,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const targetZoom = initialPinchZoom * zoomFactor;
 
       const oldServerPos = getMouseServerPos(mid.x, mid.y);
-      cameraZoom = Math.max(0.2, Math.min(targetZoom, 25.0));
+      cameraZoom = Math.max(0.2, Math.min(targetZoom, 50.0));
 
       const newServerPos = getMouseServerPos(mid.x, mid.y);
       cameraPanX += (newServerPos.x - oldServerPos.x);
@@ -10350,7 +10350,7 @@ function getPlanetTradeIncomePerMin(planet) {
       } else {
         cameraZoom /= zoomFactor;
       }
-      cameraZoom = Math.max(0.2, Math.min(cameraZoom, 25.0));
+      cameraZoom = Math.max(0.2, Math.min(cameraZoom, 50.0));
 
       const newServerPos = getMouseServerPos(mouseX, mouseY);
       cameraPanX += (newServerPos.x - oldServerPos.x);
