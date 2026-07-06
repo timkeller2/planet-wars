@@ -86,7 +86,7 @@ function playRandomIntroTrack() {
   playedIntroTracks.push(randomTrack);
 
   bgMusic.src = '/Music/Intro Music/' + encodeURIComponent(randomTrack);
-  bgMusic.loop = true; // Loop so it doesn't go silent and trigger browser autoplay blocks
+  bgMusic.loop = false; // Do not loop music anymore
   bgMusic.volume = getTargetMusicVolume(0.40);
   bgMusic.play().catch(e => console.warn('Music play blocked:', e));
 
@@ -5328,6 +5328,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
   let lastExplosionCount = 0;
   let lastLaserCount = 0;
+  let clientPlanetOwners = {};
 
   socket.on('gameStateUpdate', (state) => {
     const gameInProgressMsg = document.getElementById('game-in-progress-msg');
@@ -5338,7 +5339,16 @@ function getPlanetTradeIncomePerMin(planet) {
     const statePlanetsMap = new Map();
     if (state.planets) {
       for (let i = 0; i < state.planets.length; i++) {
-        statePlanetsMap.set(state.planets[i].id, state.planets[i]);
+        const p = state.planets[i];
+        statePlanetsMap.set(p.id, p);
+        
+        if (p.ownerId && clientPlanetOwners[p.id] !== undefined && clientPlanetOwners[p.id] !== p.ownerId) {
+          const bgMusic = document.getElementById('bg-music');
+          if (bgMusic && (bgMusic.paused || bgMusic.ended || !bgMusic.src || bgMusic.src.endsWith('/music.wav'))) {
+            playRandomIntroTrack();
+          }
+        }
+        clientPlanetOwners[p.id] = p.ownerId;
       }
     }
 
@@ -7243,12 +7253,28 @@ function getPlanetTradeIncomePerMin(planet) {
 
           let priceIndicator = card.querySelector('.res-price-indicator');
           if (!priceIndicator) {
-            priceIndicator = document.createElement('sup');
+            priceIndicator = document.createElement('div');
             priceIndicator.className = 'res-price-indicator';
+            priceIndicator.style.display = 'inline-flex';
+            priceIndicator.style.flexDirection = 'column';
             priceIndicator.style.marginLeft = '4px';
-            priceIndicator.style.fontSize = '0.75rem';
-            priceIndicator.style.color = '#fff';
-            priceIndicator.style.textShadow = '0 0 3px #fff';
+            priceIndicator.style.lineHeight = '1';
+            
+            const buySup = document.createElement('sup');
+            buySup.className = 'res-buy-price';
+            buySup.style.fontSize = '0.75rem';
+            buySup.style.color = '#39ff14';
+            buySup.style.textShadow = '0 0 3px #39ff14';
+            
+            const sellSub = document.createElement('sub');
+            sellSub.className = 'res-sell-price';
+            sellSub.style.fontSize = '0.65rem';
+            sellSub.style.color = '#ff3333';
+            sellSub.style.textShadow = '0 0 3px #ff3333';
+            
+            priceIndicator.appendChild(buySup);
+            priceIndicator.appendChild(sellSub);
+
             const childSpan = card.querySelector('span');
             if (childSpan) {
               childSpan.appendChild(priceIndicator);
@@ -7257,14 +7283,30 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
           if (serverState && serverState.marketPrices && serverState.marketPrices[res]) {
-            priceIndicator.textContent = `$${serverState.marketPrices[res]}`;
+            const myTradeOptions = myPlayer ? (myPlayer.tradeOptions || 0) : 0;
+            const penalty = myTradeOptions < 0 ? Math.abs(myTradeOptions) : 0;
+            const basePrice = serverState.marketPrices[res];
+            
+            const buyPrice = basePrice + penalty + 1;
+            const sellPrice = Math.max(1, basePrice - penalty - 1);
+            
+            const buySup = priceIndicator.querySelector('.res-buy-price');
+            const sellSub = priceIndicator.querySelector('.res-sell-price');
+            if (buySup) buySup.textContent = `${buyPrice}`;
+            if (sellSub) sellSub.textContent = `${sellPrice}`;
           } else {
-            priceIndicator.textContent = '';
+            const buySup = priceIndicator.querySelector('.res-buy-price');
+            const sellSub = priceIndicator.querySelector('.res-sell-price');
+            if (buySup) buySup.textContent = '';
+            if (sellSub) sellSub.textContent = '';
           }
 
           if (!card._hasMarketListeners) {
             card._hasMarketListeners = true;
+            
+            // Standard mouse events
             card.addEventListener('click', (e) => {
+              if (card._touchActive) return; // Prevent double fire on mobile
               e.stopPropagation();
               socket.emit('buyResource', { resource: res });
             });
@@ -7272,6 +7314,55 @@ function getPlanetTradeIncomePerMin(planet) {
               e.preventDefault();
               e.stopPropagation();
               socket.emit('sellResource', { resource: res });
+            });
+
+            // Robust touch events for mobile
+            let pressTimer = null;
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let hasTriggeredLongPress = false;
+
+            card.addEventListener('touchstart', (e) => {
+              if (e.touches.length > 1) return;
+              card._touchActive = true;
+              hasTriggeredLongPress = false;
+              touchStartX = e.touches[0].clientX;
+              touchStartY = e.touches[0].clientY;
+              
+              if (pressTimer) clearTimeout(pressTimer);
+              pressTimer = setTimeout(() => {
+                hasTriggeredLongPress = true;
+                socket.emit('sellResource', { resource: res });
+                if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback for sell
+              }, 500);
+            }, { passive: true });
+
+            card.addEventListener('touchmove', (e) => {
+              if (!pressTimer) return;
+              const dx = Math.abs(e.touches[0].clientX - touchStartX);
+              const dy = Math.abs(e.touches[0].clientY - touchStartY);
+              if (dx > 10 || dy > 10) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+              }
+            }, { passive: true });
+
+            card.addEventListener('touchend', (e) => {
+              if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+              }
+              if (!hasTriggeredLongPress) {
+                // Short tap -> Buy
+                socket.emit('buyResource', { resource: res });
+              }
+              setTimeout(() => { card._touchActive = false; }, 300);
+            });
+
+            card.addEventListener('touchcancel', () => {
+              if (pressTimer) clearTimeout(pressTimer);
+              pressTimer = null;
+              setTimeout(() => { card._touchActive = false; }, 300);
             });
           }
 
@@ -10596,14 +10687,6 @@ function getPlanetTradeIncomePerMin(planet) {
     socket.emit('toggleResourceSell', { resource: res });
   };
 
-
-  const btnSellResources = document.getElementById('btn-sell-resources');
-  if (btnSellResources) {
-    btnSellResources.addEventListener('click', (e) => {
-      e.stopPropagation();
-      socket.emit('sellResourcesToBank');
-    });
-  }
 
   const btnCreditsDisplay = document.getElementById('player-credits-display');
   if (btnCreditsDisplay) {

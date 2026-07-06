@@ -843,7 +843,7 @@ async function bootstrap() {
               extendedfuel: 'extendedfuel'
             };
             const normType = typeKeyMap[data.type] || data.type;
-            game.globalUpgradeModifiers[normType] = (game.globalUpgradeModifiers[normType] || 0) + 0.05;
+            game.globalUpgradeModifiers[normType] = (game.globalUpgradeModifiers[normType] || 0) + 0.10;
             if (player.upgradeModifiers && player.upgradeModifiers[normType] !== undefined) {
               if (player.upgradeModifiers[normType] > -0.50) {
                 player.upgradeModifiers[normType] = Math.max(-0.50, player.upgradeModifiers[normType] - 0.01);
@@ -1432,11 +1432,15 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (player && game && game.isRunning && data && data.resource) {
         const resource = data.resource;
-        const currentPrice = game.marketPrices ? game.marketPrices[resource] : null;
-        if (!currentPrice) return;
+        const basePrice = game.marketPrices ? game.marketPrices[resource] : null;
+        if (!basePrice) return;
         
         // Trade options check
-        if ((player.tradeOptions || 0) < 1) return;
+        const myTradeOptions = player.tradeOptions || 0;
+        if (myTradeOptions < -9) return;
+        
+        const penalty = myTradeOptions < 0 ? Math.abs(myTradeOptions) : 0;
+        const currentPrice = basePrice + penalty + 1;
         
         // Debt limit check
         const myCredits = player.credits || 0;
@@ -1449,7 +1453,7 @@ async function bootstrap() {
         if (myCredits - currentPrice < minAllowedCredits) return;
         
         // Process buy
-        player.tradeOptions--;
+        player.tradeOptions = myTradeOptions - 1;
         player.credits -= currentPrice;
         player.resources = player.resources || {};
         player.resources[resource] = (player.resources[resource] || 0) + 1;
@@ -1463,17 +1467,21 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (player && game && game.isRunning && data && data.resource) {
         const resource = data.resource;
-        const currentPrice = game.marketPrices ? game.marketPrices[resource] : null;
-        if (!currentPrice) return;
+        const basePrice = game.marketPrices ? game.marketPrices[resource] : null;
+        if (!basePrice) return;
         
         // Trade options check
-        if ((player.tradeOptions || 0) < 1) return;
+        const myTradeOptions = player.tradeOptions || 0;
+        if (myTradeOptions < -9) return;
+        
+        const penalty = myTradeOptions < 0 ? Math.abs(myTradeOptions) : 0;
+        const currentPrice = Math.max(1, basePrice - penalty - 1);
         
         // Has resource check
         if ((player.resources?.[resource] || 0) < 1) return;
         
         // Process sell
-        player.tradeOptions--;
+        player.tradeOptions = myTradeOptions - 1;
         player.credits = (player.credits || 0) + currentPrice;
         player.resources[resource]--;
         
@@ -2912,7 +2920,7 @@ async function bootstrap() {
         accuracyEvents: visibleAccuracyEvents,
         happinessEvents: visibleHappinessEvents,
         galacticCapacity: game.galacticCapacity,
-
+        marketPrices: game.marketPrices || {},
         resourceRarities: game.resourceRarities || {},
         isPaused: game.isPaused,
         isRunning: game.isRunning,

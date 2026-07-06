@@ -1378,21 +1378,30 @@ export class Game {
     
     const average = totalDeposits / 7;
     this.resourceRarities = {};
+    const rarityToPrice = {
+      'common': 5,
+      'normal': 10,
+      'rare': 15,
+      'exotic': 20
+    };
     for (const r of resourcesList) {
       if (average === 0) {
         this.resourceRarities[r] = 'normal';
-        continue;
-      }
-      const count = counts[r];
-      const ratio = count / average;
-      if (ratio < 0.25) {
-        this.resourceRarities[r] = 'exotic';
-      } else if (ratio <= 0.50) {
-        this.resourceRarities[r] = 'rare';
-      } else if (ratio > 1.50) {
-        this.resourceRarities[r] = 'common';
       } else {
-        this.resourceRarities[r] = 'normal';
+        const count = counts[r];
+        const ratio = count / average;
+        if (ratio < 0.25) {
+          this.resourceRarities[r] = 'exotic';
+        } else if (ratio <= 0.50) {
+          this.resourceRarities[r] = 'rare';
+        } else if (ratio > 1.50) {
+          this.resourceRarities[r] = 'common';
+        } else {
+          this.resourceRarities[r] = 'normal';
+        }
+      }
+      if (this.marketPrices) {
+        this.marketPrices[r] = rarityToPrice[this.resourceRarities[r]];
       }
     }
     console.log(`[Rarities] Recalculated. Average: ${average.toFixed(2)}, Counts:`, counts, `Rarities:`, this.resourceRarities);
@@ -3281,9 +3290,14 @@ export class Game {
             for (const [prop, count] of Object.entries(upgrades)) {
               const normType = typeKeyMap[prop] || prop;
               const val = parseInt(count, 10) || 0;
-              if (val > 0 && owner.upgradeModifiers && owner.upgradeModifiers[normType] !== undefined) {
-                for (let i = 0; i < val; i++) {
-                  owner.upgradeModifiers[normType] = Math.max(-0.75, owner.upgradeModifiers[normType] - 0.01);
+              if (val > 0) {
+                if (this.globalUpgradeModifiers) {
+                  this.globalUpgradeModifiers[normType] = (this.globalUpgradeModifiers[normType] || 0) + (0.10 * val);
+                }
+                if (owner.upgradeModifiers && owner.upgradeModifiers[normType] !== undefined) {
+                  for (let i = 0; i < val; i++) {
+                    owner.upgradeModifiers[normType] = Math.max(-0.75, owner.upgradeModifiers[normType] - 0.01);
+                  }
                 }
               }
             }
@@ -4072,15 +4086,16 @@ export class Game {
       this.marketFluctuationTimer = (this.marketFluctuationTimer || 0) + deltaTime;
       if (this.marketFluctuationTimer >= 60000) {
         this.marketFluctuationTimer = 0;
-        const basePrices = {
-          dilithium: 5, duranium: 5,
-          merculite: 10, tritanium: 10,
-          antimatter: 15, deuterium: 15,
-          latinum: 20
+        const rarityToPrice = {
+          'common': 5,
+          'normal': 10,
+          'rare': 15,
+          'exotic': 20
         };
         for (const res in this.marketPrices) {
           const currentPrice = this.marketPrices[res];
-          const basePrice = basePrices[res] || 5;
+          const rarity = this.resourceRarities ? this.resourceRarities[res] : 'normal';
+          const basePrice = rarityToPrice[rarity] || 10;
           const roll = Math.random();
           
           if (currentPrice < basePrice) {
@@ -5578,11 +5593,45 @@ export class Game {
 
       // Handle Trade Options Regeneration at decreasing intervals
       const tradeRegenRate = 1 + commerceWorlds;
-      const tradeRegenInterval = 60000 / tradeRegenRate;
+      const myTradeOptions = player.tradeOptions || 0;
+      const penaltyDelay = myTradeOptions < 0 ? Math.abs(myTradeOptions) * 30000 : 0;
+      const tradeRegenInterval = (60000 / tradeRegenRate) + penaltyDelay;
       player.tradeRegenAccumulator = (player.tradeRegenAccumulator || 0) + deltaTime;
       while (player.tradeRegenAccumulator >= tradeRegenInterval) {
         player.tradeRegenAccumulator -= tradeRegenInterval;
         player.tradeOptions = Math.min(player.tradeCapacity, (player.tradeOptions || 0) + 1);
+      }
+
+      // Auto Bundle Sale
+      if (player.tradeOptions >= player.tradeCapacity && player.resources) {
+        const now = Date.now();
+        if (!player.lastBundleSaleTime || now - player.lastBundleSaleTime >= 5 * 60 * 1000) {
+          const resList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium'];
+          let hasAll = true;
+          for (const res of resList) {
+            if ((player.resources[res] || 0) < 1) {
+              hasAll = false;
+              break;
+            }
+          }
+          if (hasAll && (player.resources['latinum'] || 0) >= 4) {
+            player.lastBundleSaleTime = now;
+            const L = 10;
+            const sellPrice = L + 2;
+            for (const res of resList) {
+              player.resources[res] -= 1;
+            }
+            player.resources['latinum'] -= 4;
+            let totalGain = sellPrice * L;
+            totalGain = Math.round(totalGain * (1 + 0.10 * 4));
+            player.credits = (player.credits || 0) + totalGain;
+            
+            const optionsExpended = Math.ceil(1 + L / 2);
+            player.tradeOptions -= optionsExpended;
+            
+            console.log(`[Auto Bundle Sale] Executed for player ${player.id}. Gained ${totalGain} credits.`);
+          }
+        }
       }
 
       // Passive trading income based on effective ships of all friendly/neutral planets, capped based on player's own effective ships
