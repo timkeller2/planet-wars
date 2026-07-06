@@ -96,16 +96,6 @@ export class Player {
     this.tradeCapacity = 5;
     this.tradeOptions = undefined;
     this.tradeRegenAccumulator = 0;
-    this.sellPriceSetting = 1;
-    const resources = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-    this.autoBuyOrders = resources.map(res => ({
-      id: "autobuy_" + Math.random().toString(36).substring(2, 9),
-      isAutoBuy: true,
-      ownerId: this.id,
-      ownerName: this.name,
-      resource: res,
-      price: 1
-    }));
     this.discoveredPlanets = new Set();
     this.attackedPlanets = new Map();
     this.lastKnownPlanets = {};

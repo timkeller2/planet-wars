@@ -7500,46 +7500,7 @@ function getPlanetTradeIncomePerMin(planet) {
             }
             
             // Disable / gray out orders if optionless or creditless (except for own orders)
-            if (!isMine) {
-              const hasOptions = myTradeOptions >= 1;
-              let minAllowedCredits = 0;
-              const ownsHomeworld = serverState.planets.some(p => p.homeworldOf === localPlayer.id && p.ownerId === localPlayer.id);
-              if (ownsHomeworld) {
-                minAllowedCredits = -(1000 + Math.floor(myPlayer.totalShips || 0));
-              }
-              const hasCredits = (myCredits - minAllowedCredits) >= order.price;
-              if (!hasOptions || !hasCredits) {
-                card.style.opacity = '0.35';
-                card.style.pointerEvents = 'none';
-                card.style.cursor = 'not-allowed';
-              }
-            }
-          }
-          
-          card.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            
-            if (order.isAutoBuy) {
-              for (const originalOrder of order.orders) {
-                socket.emit('cancelAutoBuyOrder', { orderId: originalOrder.id });
-              }
-            } else if (order.isFulfill) {
-              if (!e.ctrlKey) {
-                socket.emit('clickFulfillOrder', { orderId: order.id });
-              }
-            } else if (!e.ctrlKey) {
-              const isMine = order.ownerId === localPlayer.id;
-              if (isMine) {
-                socket.emit('cancelSellOrder', { orderId: order.id });
-              } else {
-                socket.emit('buySellOrder', { orderId: order.id });
-              }
-            }
-          });
-          
-          sellOrdersHud.appendChild(card);
-        }
+        sellOrdersHud.style.display = 'none';
       }
     }
 
@@ -10751,29 +10712,6 @@ function getPlanetTradeIncomePerMin(planet) {
   window.toggleResourceSellCard = (res) => {
     socket.emit('toggleResourceSell', { resource: res });
   };
-  window.changeSellPriceSetting = (e) => {
-    if (e) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-    const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
-    if (!myPlayer) return;
-    
-    const isCtrl = e && e.ctrlKey;
-    if (isCtrl) {
-      socket.emit('setAllAutoBuysToSellPrice');
-      return;
-    }
-    
-    const isRightClick = e && (e.button === 2 || e.type === 'contextmenu');
-    const isShift = e && e.shiftKey;
-    
-    let step = isShift ? 5 : 1;
-    if (isRightClick) step = -step;
-    
-    const currentPrice = myPlayer.sellPriceSetting !== undefined ? myPlayer.sellPriceSetting : 1;
-    const newPrice = Math.max(1, currentPrice + step);
-    
     socket.emit('changeSellPriceSetting', { value: newPrice });
   };
 
@@ -10888,28 +10826,7 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   }
 
-  const resourcesListForClicks = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-  for (const res of resourcesListForClicks) {
-    const card = document.getElementById(`res-card-${res}`);
-    if (card) {
-      card.addEventListener('mousedown', (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        if (e.button === 2) {
-          socket.emit('postFulfillOrder', { resource: res });
-        } else if (e.ctrlKey) {
-          const myPlayer = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
-          const priceVal = myPlayer ? (myPlayer.sellPriceSetting ?? 1) : 1;
-          socket.emit('createAutoBuyOrder', { resource: res, price: priceVal });
-        } else {
-          socket.emit('postSellOrder', { resource: res });
-        }
-      });
-      card.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-      });
-    }
-  }
+
 
   socket.on('purchaseSuccess', () => {
     playChaChingSound();

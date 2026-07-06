@@ -1407,8 +1407,6 @@ export class Game {
       settings: this.settings,
       globalUpgradeModifiers: this.globalUpgradeModifiers,
       resourceRarities: this.resourceRarities,
-      sellOrders: this.sellOrders,
-      fulfillOrders: this.fulfillOrders,
       exploredGrid: this.exploredGrid,
       gameSpeed: this.gameSpeed || 1.0,
       baseGameSpeed: this.baseGameSpeed || 1.0,
@@ -1584,8 +1582,6 @@ export class Game {
     this.settings = state.settings;
     this.globalUpgradeModifiers = state.globalUpgradeModifiers;
     this.resourceRarities = state.resourceRarities;
-    this.sellOrders = state.sellOrders;
-    this.fulfillOrders = state.fulfillOrders;
     this.exploredGrid = state.exploredGrid;
     this.baseGameSpeed = state.baseGameSpeed !== undefined ? state.baseGameSpeed : (state.gameSpeed !== undefined ? state.gameSpeed : 1.0);
     this.gameSpeed = state.gameSpeed !== undefined ? state.gameSpeed : 1.0;
@@ -1612,7 +1608,6 @@ export class Game {
       p.atWarWith = pData.atWarWith || {};
       p.builtClasses = pData.builtClasses || {};
       p.buildCounts = pData.buildCounts || p.buildCounts;
-      p.autoBuyOrders = pData.autoBuyOrders || p.autoBuyOrders;
       p.clientPlayerId = pData.clientPlayerId;
       p.lastCommandTime = pData.lastCommandTime;
       p.isAFK = pData.isAFK;
@@ -1813,7 +1808,7 @@ export class Game {
     this.explosions.clear();
     this.lasers.clear();
     this.ionStorms = [];
-    this.sellOrders = [];
+
     this.fulfillOrders = [];
     this.boardingReplays = [];
     this.exploredGrid = {};
@@ -6320,245 +6315,7 @@ export class Game {
 
     this.updateCustomCruiserSystems(deltaTime / 1000);
 
-    // Sell & Fulfill Orders Expiration and Neutral Postings Loops
-    if (!this.sellOrders) {
-      this.sellOrders = [];
-    }
-    if (!this.fulfillOrders) {
-      this.fulfillOrders = [];
-    }
 
-    // 1. Check expirations (30 minutes lifespan)
-    const nowTimestamp = Date.now();
-    for (let i = this.sellOrders.length - 1; i >= 0; i--) {
-      const order = this.sellOrders[i];
-      if (nowTimestamp >= order.expiresAt) {
-        // Return 1.0 resource unit back to original owner
-        const owner = this.allPlayers.find(p => p.id === order.ownerId);
-        if (owner && owner.isAlive) {
-          if (!owner.resources) owner.resources = {};
-          owner.resources[order.resource] = (owner.resources[order.resource] || 0) + 1.0;
-          console.log(`[Market Expiration] Order ${order.id} expired. 1.0 ${order.resource} returned to ${owner.id}`);
-        }
-        this.sellOrders.splice(i, 1);
-      } else if (order.ownerId !== 'neutral') {
-        const createdAt = order.createdAt || nowTimestamp;
-        const elapsedMs = nowTimestamp - createdAt;
-        const durationLimitMs = 15000 * order.price * order.price;
-        if (elapsedMs > durationLimitMs) {
-          const seller = this.allPlayers.find(p => p.id === order.ownerId);
-          if (seller) {
-            seller.credits = (seller.credits || 0) + order.price;
-            if (order.price > 5) {
-              if (seller.tradeOptions === undefined) {
-                seller.tradeOptions = seller.tradeCapacity || 5;
-              }
-              seller.tradeOptions -= 1;
-            }
-            if (!seller.isAI && seller.id !== 'monsters') {
-              this.pendingChatMessages = this.pendingChatMessages || [];
-              this.pendingChatMessages.push({
-                playerId: seller.id,
-                text: `The Market automatically purchased your sell order of 1 ${order.resource} for ${order.price} credits.`
-              });
-            }
-            console.log(`[Market Direct Purchase] Market bought player order ${order.id} for ${order.price} credits.`);
-          }
-          this.recordMarketSale(order.resource, order.price);
-          this.sellOrders.splice(i, 1);
-        }
-      }
-    }
-    for (let i = this.fulfillOrders.length - 1; i >= 0; i--) {
-      const order = this.fulfillOrders[i];
-      if (nowTimestamp >= order.expiresAt) {
-        this.fulfillOrders.splice(i, 1);
-        console.log(`[Market Expiration] Fulfill Order ${order.id} expired.`);
-      }
-    }
-
-    // 2. Neutral Posting Loop (every 2-3 minutes)
-    this.neutralTradeTimer = (this.neutralTradeTimer || 0) + deltaTime;
-    if (this.neutralTradeTimer >= (this.nextNeutralTradeTime || 120000)) {
-      this.neutralTradeTimer = 0;
-      this.nextNeutralTradeTime = 120000 + Math.random() * 60000; // 2-3 minutes random interval
-
-      const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-      const randomRes = resourcesList[Math.floor(Math.random() * resourcesList.length)];
-      const d3 = Math.floor(Math.random() * 3) + 1; // d3 (1, 2, 3)
-      let startPrice = 7 + d3;
-      if (this.resourceRarities && this.resourceRarities[randomRes]) {
-        const rarity = this.resourceRarities[randomRes];
-        if (rarity === 'exotic') startPrice = Math.round(startPrice * 3);
-        else if (rarity === 'rare') startPrice = Math.round(startPrice * 2);
-        else if (rarity === 'common') startPrice = Math.round(startPrice * 0.75);
-      }
-
-      const maxSoldPrice = this.getMaxSoldPriceInLast5Minutes(randomRes);
-      if (maxSoldPrice > 0) {
-        const minStartPrice = Math.round(maxSoldPrice * 1.35);
-        startPrice = Math.max(startPrice, minStartPrice);
-      }
-
-      // Post the new neutral order
-      const orderId = "order_" + Math.random().toString(36).substring(2, 9);
-      this.sellOrders.push({
-        id: orderId,
-        ownerId: 'neutral',
-        ownerName: 'Neutral Market',
-        resource: randomRes,
-        price: startPrice,
-        createdAt: nowTimestamp,
-        expiresAt: nowTimestamp + 30 * 60000 // 30 minutes in milliseconds
-      });
-      console.log(`[Neutral Market] Posted sell order ${orderId} for ${randomRes} at price ${startPrice}.`);
-
-      // Decrease the price of all existing neutral and AI orders by 10-30%, min 1
-      for (const order of this.sellOrders) {
-        const isNeutral = order.ownerId === 'neutral';
-        const isAI = this.aiPlayers.some(p => p.id === order.ownerId);
-        const isHuman = this.allPlayers.some(p => p.id === order.ownerId && !p.isAI);
-        if ((isNeutral || isAI) && !isHuman && order.id !== orderId) {
-          const oldPrice = order.price;
-          const pct = 0.10 + Math.random() * 0.20;
-          const decrease = Math.max(1, Math.round(oldPrice * pct));
-          order.price = Math.max(1, oldPrice - decrease);
-          console.log(`[Market Decay] Decayed ${isNeutral ? 'Neutral' : 'AI'} order ${order.id} price from ${oldPrice} to ${order.price} (decay=${decrease}, pct=${Math.round(pct * 100)}%).`);
-        }
-      }
-    }
-
-    // 3. AI Posting Loop (every 1 minute)
-    this.aiMarketTimer = (this.aiMarketTimer || 0) + deltaTime;
-    if (this.aiMarketTimer >= 60000) {
-      this.aiMarketTimer = 0;
-
-      const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-      
-      for (const aiPlayer of this.aiPlayers) {
-        if (!aiPlayer.isAlive || !aiPlayer.isAI) continue;
-        if (!aiPlayer.resources) aiPlayer.resources = {};
-
-        // Find qualifying resources where AI has > 2.0
-        let mostNumerousRes = null;
-        let highestQty = 2.0; // Must be strictly greater than 2.0
-        
-        for (const res of resourcesList) {
-          const qty = aiPlayer.resources[res] || 0;
-          if (qty > highestQty) {
-            highestQty = qty;
-            mostNumerousRes = res;
-          }
-        }
-
-        // If qualifying, 33% chance to post
-        if (mostNumerousRes && Math.random() < 0.33) {
-          // Deduct 1.0 resource
-          aiPlayer.resources[mostNumerousRes] -= 1.0;
-          // Deduct 1 trade option
-          if (aiPlayer.tradeOptions === undefined) {
-            aiPlayer.tradeOptions = aiPlayer.tradeCapacity || 5;
-          }
-          aiPlayer.tradeOptions = (aiPlayer.tradeOptions || 0) - 1;
-
-          // Create the sell order
-          const orderId = "order_" + Math.random().toString(36).substring(2, 9);
-          const d3 = Math.floor(Math.random() * 3) + 1; // d3 (1, 2, or 3)
-          let startPrice = 7 + d3;
-          if (this.resourceRarities && this.resourceRarities[mostNumerousRes]) {
-            const rarity = this.resourceRarities[mostNumerousRes];
-            if (rarity === 'exotic') startPrice = Math.round(startPrice * 3);
-            else if (rarity === 'rare') startPrice = Math.round(startPrice * 2);
-            else if (rarity === 'common') startPrice = Math.round(startPrice * 0.75);
-          }
-
-          const maxSoldPrice = this.getMaxSoldPriceInLast5Minutes(mostNumerousRes);
-          if (maxSoldPrice > 0) {
-            const minStartPrice = Math.round(maxSoldPrice * 1.35);
-            startPrice = Math.max(startPrice, minStartPrice);
-          }
-          
-          this.sellOrders.push({
-            id: orderId,
-            ownerId: aiPlayer.id,
-            ownerName: aiPlayer.name,
-            resource: mostNumerousRes,
-            price: startPrice,
-            createdAt: nowTimestamp,
-            expiresAt: nowTimestamp + 30 * 60000 // 30 minutes
-          });
-          console.log(`[AI Market Post] AI Player ${aiPlayer.name} (${aiPlayer.id}) posted 1 ${mostNumerousRes} for ${startPrice} credits (stock remaining: ${aiPlayer.resources[mostNumerousRes]}, options remaining: ${aiPlayer.tradeOptions}).`);
-        }
-      }
-    }
-
-    // 4. Auto Buy Orders Check
-    if (this.sellOrders && this.sellOrders.length > 0) {
-      for (const player of this.allPlayers) {
-        if (!player.isAlive || player.isAI) continue;
-        if (!player.autoBuyOrders || player.autoBuyOrders.length === 0) continue;
-
-        if (player.tradeOptions === undefined) {
-          player.tradeOptions = player.tradeCapacity || 5;
-        }
-
-        let minAllowedCredits = 0;
-        const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
-        if (ownsHomeworld) {
-          minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
-        }
-
-        let purchasedAny = true;
-        while (purchasedAny && player.tradeOptions >= 1 && this.sellOrders.length > 0) {
-          purchasedAny = false;
-          for (const abo of player.autoBuyOrders) {
-            if (player.tradeOptions < 1) break;
-
-            let bestOrderIdx = -1;
-            let lowestPrice = Infinity;
-
-            for (let i = 0; i < this.sellOrders.length; i++) {
-              const order = this.sellOrders[i];
-              if (order.ownerId !== player.id && order.resource === abo.resource && order.price <= abo.price) {
-                const buyerCredits = player.credits || 0;
-                if (order.price < lowestPrice && (buyerCredits - minAllowedCredits) >= order.price) {
-                  lowestPrice = order.price;
-                  bestOrderIdx = i;
-                }
-              }
-            }
-
-            if (bestOrderIdx !== -1) {
-              const order = this.sellOrders[bestOrderIdx];
-              player.tradeOptions -= 1;
-              player.credits = (player.credits || 0) - order.price;
-              if (!player.resources) player.resources = {};
-              player.resources[order.resource] = (player.resources[order.resource] || 0) + 1.0;
-
-              if (order.ownerId !== 'neutral') {
-                const seller = this.allPlayers.find(p => p.id === order.ownerId);
-                if (seller) {
-                  seller.credits = (seller.credits || 0) + order.price;
-                  if (!seller.isAI && seller.id !== 'monsters') {
-                    if (!this.pendingChatMessages) this.pendingChatMessages = [];
-                    this.pendingChatMessages.push({
-                      playerId: seller.id,
-                      text: `${player.name || player.id} purchased your sell order of 1 ${order.resource} for ${order.price} credits.`
-                    });
-                  }
-                }
-              }
-
-              this.recordMarketSale(order.resource, order.price);
-              console.log(`[Auto Buy Success] Player ${player.id} automatically purchased 1 ${order.resource} from ${order.ownerId} for ${order.price} credits using Auto Buy Order ${abo.id}.`);
-              this.sellOrders.splice(bestOrderIdx, 1);
-              purchasedAny = true;
-              break;
-            }
-          }
-        }
-      }
-    }
 
     // Update happiness scores every minute (60 seconds = 60000ms)
     this.happinessTimer = (this.happinessTimer || 0) + deltaTime;
