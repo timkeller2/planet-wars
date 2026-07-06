@@ -1428,69 +1428,57 @@ async function bootstrap() {
       }
     });
 
-    socket.on('toggleResourceSell', (data) => {
+    socket.on('buyResource', (data) => {
       const player = connectedClients.get(socket.id);
-      if (player && data && data.resource) {
-        if (!player.sellToggled) {
-          player.sellToggled = { dilithium: false, merculite: false, duranium: false, tritanium: false, antimatter: false, deuterium: false, latinum: false };
+      if (player && game && game.isRunning && data && data.resource) {
+        const resource = data.resource;
+        const currentPrice = game.marketPrices ? game.marketPrices[resource] : null;
+        if (!currentPrice) return;
+        
+        // Trade options check
+        if ((player.tradeOptions || 0) < 1) return;
+        
+        // Debt limit check
+        const myCredits = player.credits || 0;
+        let minAllowedCredits = 0;
+        const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
+        if (ownsHomeworld) {
+          minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
         }
-        if (player.sellToggled[data.resource] !== undefined) {
-          player.sellToggled[data.resource] = !player.sellToggled[data.resource];
-        }
+        
+        if (myCredits - currentPrice < minAllowedCredits) return;
+        
+        // Process buy
+        player.tradeOptions--;
+        player.credits -= currentPrice;
+        player.resources = player.resources || {};
+        player.resources[resource] = (player.resources[resource] || 0) + 1;
+        
+        // Adjust global price
+        game.marketPrices[resource]++;
       }
     });
 
-    socket.on('sellResourcesToBank', () => {
+    socket.on('sellResource', (data) => {
       const player = connectedClients.get(socket.id);
-      if (player && player.resources) {
-        const now = Date.now();
-        if (player.lastBundleSaleTime && now - player.lastBundleSaleTime < 5 * 60 * 1000) {
-          console.log(`[Bank Direct Sale] Blocked: Player ${player.id} direct sale bundle is on cooldown.`);
-          return;
-        }
-
-        if (player.tradeOptions === undefined) {
-          player.tradeOptions = player.tradeCapacity || 5;
-        }
-
-        const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium'];
-        const eligible = [];
-        for (const res of resourcesList) {
-          const qty = player.resources[res] || 0;
-          if (qty >= 1.0) {
-            eligible.push({ name: res, count: 1 });
-          }
-        }
-        const latinumQty = player.resources['latinum'] || 0;
-        const latinumSold = Math.min(4, Math.floor(latinumQty));
-        if (latinumSold >= 1) {
-          eligible.push({ name: 'latinum', count: latinumSold });
-        }
-
-        let L = 0;
-        for (const item of eligible) {
-          L += item.count;
-        }
-
-        // Allow sale if they have at least 1 trade option
-        if (L > 0 && player.tradeOptions >= 1) {
-          player.lastBundleSaleTime = now;
-          const sellPrice = L + 2;
-          for (const item of eligible) {
-            player.resources[item.name] = (player.resources[item.name] || 0) - item.count;
-          }
-          let totalGain = sellPrice * L;
-          if (latinumSold >= 1) {
-            totalGain = Math.round(totalGain * (1 + 0.10 * latinumSold));
-          }
-          player.credits = (player.credits || 0) + totalGain;
-          
-          // Deduct options count (cost), can go negative: 1 + 1/2 resources rounded up
-          const optionsExpended = Math.ceil(1 + L / 2);
-          player.tradeOptions = (player.tradeOptions || 0) - optionsExpended;
-
-          console.log(`[Bank Direct Sale] Player ${player.id} sold ${L} resources for ${totalGain} credits. Remaining options: ${player.tradeOptions}`);
-        }
+      if (player && game && game.isRunning && data && data.resource) {
+        const resource = data.resource;
+        const currentPrice = game.marketPrices ? game.marketPrices[resource] : null;
+        if (!currentPrice) return;
+        
+        // Trade options check
+        if ((player.tradeOptions || 0) < 1) return;
+        
+        // Has resource check
+        if ((player.resources?.[resource] || 0) < 1) return;
+        
+        // Process sell
+        player.tradeOptions--;
+        player.credits = (player.credits || 0) + currentPrice;
+        player.resources[resource]--;
+        
+        // Adjust global price (min 1)
+        game.marketPrices[resource] = Math.max(1, game.marketPrices[resource] - 1);
       }
     });
 

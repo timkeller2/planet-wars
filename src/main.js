@@ -7241,6 +7241,40 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           wantedIndicator.style.display = wantedResources.has(res) ? 'inline-block' : 'none';
 
+          let priceIndicator = card.querySelector('.res-price-indicator');
+          if (!priceIndicator) {
+            priceIndicator = document.createElement('sup');
+            priceIndicator.className = 'res-price-indicator';
+            priceIndicator.style.marginLeft = '4px';
+            priceIndicator.style.fontSize = '0.75rem';
+            priceIndicator.style.color = '#fff';
+            priceIndicator.style.textShadow = '0 0 3px #fff';
+            const childSpan = card.querySelector('span');
+            if (childSpan) {
+              childSpan.appendChild(priceIndicator);
+            } else {
+              card.appendChild(priceIndicator);
+            }
+          }
+          if (serverState && serverState.marketPrices && serverState.marketPrices[res]) {
+            priceIndicator.textContent = `$${serverState.marketPrices[res]}`;
+          } else {
+            priceIndicator.textContent = '';
+          }
+
+          if (!card._hasMarketListeners) {
+            card._hasMarketListeners = true;
+            card.addEventListener('click', (e) => {
+              e.stopPropagation();
+              socket.emit('buyResource', { resource: res });
+            });
+            card.addEventListener('contextmenu', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              socket.emit('sellResource', { resource: res });
+            });
+          }
+
           const rarity = serverState.resourceRarities?.[res] || 'normal';
           if (rarity === 'exotic') {
             card.style.borderColor = '#ff3333';
@@ -7350,157 +7384,6 @@ function getPlanetTradeIncomePerMin(planet) {
         }
         
         sellBtn.style.display = 'flex';
-      }
-
-      // Populate and render Sell Orders HUD
-      const sellOrdersHud = document.getElementById('sell-orders-hud');
-      if (sellOrdersHud) {
-        const orders = serverState.sellOrders || [];
-        const fulfillOrders = serverState.fulfillOrders || [];
-        
-        // Split auto buy orders from regular sell orders
-        const autoBuyOrders = orders.filter(o => o.isAutoBuy);
-        const regularOrders = orders.filter(o => !o.isAutoBuy);
-        
-        // Sort regular sell orders strictly from lowest price to highest
-        regularOrders.sort((a, b) => a.price - b.price);
-        
-        // Group auto buy orders by price
-        const autoBuyGroups = {};
-        for (const order of autoBuyOrders) {
-          if (!autoBuyGroups[order.price]) {
-            autoBuyGroups[order.price] = [];
-          }
-          autoBuyGroups[order.price].push(order);
-        }
-        
-        const groupedAutoBuyOrders = [];
-        const allResList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-        for (const price in autoBuyGroups) {
-          const group = autoBuyGroups[price];
-          group.sort((a, b) => a.resource.localeCompare(b.resource));
-          const uniqueRes = new Set(group.map(o => o.resource));
-          const isSimplified = allResList.every(r => uniqueRes.has(r));
-          groupedAutoBuyOrders.push({
-            isAutoBuy: true,
-            isGrouped: true,
-            isSimplified: isSimplified,
-            price: parseInt(price, 10),
-            orders: group,
-            ownerId: group[0].ownerId
-          });
-        }
-        
-        const sortedFulfillOrders = [...fulfillOrders];
-        sortedFulfillOrders.sort((a, b) => a.price - b.price);
-
-        // Combine: Auto Buy Orders first, regular sell orders second, fulfill orders third
-        const allOrders = [...groupedAutoBuyOrders, ...regularOrders, ...sortedFulfillOrders];
-        
-        sellOrdersHud.innerHTML = '';
-        sellOrdersHud.style.display = 'flex';
-        
-        const resourceEmojis = {
-          antimatter: '🌀',
-          tritanium: '🔩',
-          merculite: '☄️',
-          dilithium: '💎',
-          duranium: '🔲',
-          deuterium: '💧',
-          latinum: '🏺'
-        };
-        
-        const myCredits = myPlayer.credits || 0;
-        const myTradeOptions = myPlayer.tradeOptions !== undefined ? myPlayer.tradeOptions : 5;
-        
-        for (const order of allOrders) {
-          const emoji = order.isAutoBuy ? '' : (resourceEmojis[order.resource] || '');
-          const card = document.createElement('div');
-          card.className = 'cyber-btn sell-order-card';
-          card.style.display = 'flex';
-          card.style.alignItems = 'center';
-          card.style.justifyContent = 'center';
-          card.style.padding = '3px 8px';
-          card.style.borderRadius = '4px';
-          card.style.cursor = 'pointer';
-          card.style.fontSize = '0.75rem';
-          card.style.fontFamily = "'Orbitron', sans-serif";
-          card.style.fontWeight = 'bold';
-          card.style.transition = 'all 0.2s';
-          
-          if (order.isAutoBuy) {
-            // White styling for Auto Buy Order (only visible to owner, prepended to sellOrders by server)
-            card.style.borderColor = 'rgba(255, 255, 255, 0.6)';
-            card.style.background = 'rgba(255, 255, 255, 0.15)';
-            card.style.color = '#ffffff';
-            card.style.textShadow = '0 0 6px #ffffff';
-            if (order.isSimplified) {
-              card.title = `Auto Buy: All resources at <= ${order.price} credits - Click to Dismiss`;
-              card.textContent = `∞: ${order.price}`;
-            } else {
-              const emojis = order.orders.map(o => resourceEmojis[o.resource] || '').join('');
-              const resourceNames = order.orders.map(o => o.resource).join(', ');
-              card.title = `Auto Buy: ${resourceNames} at <= ${order.price} credits - Click to Dismiss`;
-              card.textContent = `${emojis}: ${order.price}`;
-            }
-          } else if (order.isFulfill) {
-            const isMine = order.ownerId === localPlayer.id;
-            if (isMine) {
-              card.style.borderColor = 'rgba(76, 175, 80, 0.4)';
-              card.style.background = 'rgba(76, 175, 80, 0.1)';
-              card.style.color = '#4caf50';
-              card.style.textShadow = '0 0 4px #4caf50';
-              card.title = `Your Fulfill Order - Click to Cancel`;
-            } else {
-              card.style.borderColor = 'rgba(33, 150, 243, 0.4)';
-              card.style.background = 'rgba(33, 150, 243, 0.1)';
-              card.style.color = '#2196f3';
-              card.style.textShadow = '0 0 4px #2196f3';
-              card.title = `Fulfill Order: Click to sell 1 ${order.resource} for ${order.price} credits`;
-              
-              const hasResource = (myPlayer.resources[order.resource] || 0) >= 1.0;
-              if (!hasResource) {
-                card.style.opacity = '0.35';
-                card.style.pointerEvents = 'none';
-                card.style.cursor = 'not-allowed';
-              }
-            }
-            // Display as [PRICE][RESOURCE]
-            card.textContent = `${order.price}${emoji}`;
-          } else {
-            const isMine = order.ownerId === localPlayer.id;
-            const timeRemainingMs = order.expiresAt - Date.now();
-            
-            if (isMine) {
-              card.style.borderColor = 'rgba(76, 175, 80, 0.4)';
-              card.style.background = 'rgba(76, 175, 80, 0.1)';
-              card.style.color = '#4caf50';
-              card.style.textShadow = '0 0 4px #4caf50';
-              card.title = `Your Order - Click to Cancel (Refunds 1 ${order.resource})`;
-            } else {
-              if (timeRemainingMs > 0 && timeRemainingMs <= 60000) {
-                card.style.borderColor = 'rgba(244, 67, 54, 0.4)';
-                card.style.background = 'rgba(244, 67, 54, 0.1)';
-                card.style.color = '#f44336';
-                card.style.textShadow = '0 0 4px #f44336';
-              } else {
-                card.style.borderColor = 'rgba(33, 150, 243, 0.4)';
-                card.style.background = 'rgba(33, 150, 243, 0.1)';
-                card.style.color = '#2196f3';
-                card.style.textShadow = '0 0 4px #2196f3';
-              }
-              card.title = `Owner: ${order.ownerName} - Click to Buy for ${order.price} credits (Costs 1 option)`;
-            }
-            
-            card.textContent = `${emoji}: ${order.price}`;
-            
-            // Make order blink if it is within 30 seconds of expiring (Task 104)
-            if (timeRemainingMs > 0 && timeRemainingMs <= 30000) {
-              card.classList.add('blink-warning');
-            }
-            
-            // Disable / gray out orders if optionless or creditless (except for own orders)
-        sellOrdersHud.style.display = 'none';
       }
     }
 
@@ -10712,18 +10595,7 @@ function getPlanetTradeIncomePerMin(planet) {
   window.toggleResourceSellCard = (res) => {
     socket.emit('toggleResourceSell', { resource: res });
   };
-    socket.emit('changeSellPriceSetting', { value: newPrice });
-  };
 
-  const sellForDisplayButton = document.getElementById('player-sell-for-display');
-  if (sellForDisplayButton) {
-    sellForDisplayButton.addEventListener('click', (e) => {
-      window.changeSellPriceSetting(e);
-    });
-    sellForDisplayButton.addEventListener('contextmenu', (e) => {
-      window.changeSellPriceSetting(e);
-    });
-  }
 
   const btnSellResources = document.getElementById('btn-sell-resources');
   if (btnSellResources) {

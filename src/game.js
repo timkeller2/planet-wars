@@ -289,6 +289,13 @@ export class Game {
     this.aiMarketTimer = 0;
     this.usedShipNames = new Set();
     this.marketSalesHistory = [];
+    this.marketPrices = {
+      dilithium: 5, duranium: 5,
+      merculite: 10, tritanium: 10,
+      antimatter: 15, deuterium: 15,
+      latinum: 20
+    };
+    this.marketFluctuationTimer = 0;
     this.highestSpeedMilestoneTriggered = 0;
     this.wreckages = [];
     this.pendingPioneerSpawns = [];
@@ -1406,6 +1413,8 @@ export class Game {
       rampageIncubationTimeRemaining: this.rampageIncubationTimeRemaining,
       settings: this.settings,
       globalUpgradeModifiers: this.globalUpgradeModifiers,
+      marketPrices: this.marketPrices,
+      marketFluctuationTimer: this.marketFluctuationTimer,
       resourceRarities: this.resourceRarities,
       exploredGrid: this.exploredGrid,
       gameSpeed: this.gameSpeed || 1.0,
@@ -1581,6 +1590,13 @@ export class Game {
     this.rampageIncubationTimeRemaining = state.rampageIncubationTimeRemaining;
     this.settings = state.settings;
     this.globalUpgradeModifiers = state.globalUpgradeModifiers;
+    this.marketPrices = state.marketPrices || {
+      dilithium: 5, duranium: 5,
+      merculite: 10, tritanium: 10,
+      antimatter: 15, deuterium: 15,
+      latinum: 20
+    };
+    this.marketFluctuationTimer = state.marketFluctuationTimer || 0;
     this.resourceRarities = state.resourceRarities;
     this.exploredGrid = state.exploredGrid;
     this.baseGameSpeed = state.baseGameSpeed !== undefined ? state.baseGameSpeed : (state.gameSpeed !== undefined ? state.gameSpeed : 1.0);
@@ -4050,6 +4066,44 @@ export class Game {
   update(deltaTime) {
     if (!this.boardingReplays) {
       this.boardingReplays = [];
+    }
+    
+    if (this.marketPrices) {
+      this.marketFluctuationTimer = (this.marketFluctuationTimer || 0) + deltaTime;
+      if (this.marketFluctuationTimer >= 60000) {
+        this.marketFluctuationTimer = 0;
+        const basePrices = {
+          dilithium: 5, duranium: 5,
+          merculite: 10, tritanium: 10,
+          antimatter: 15, deuterium: 15,
+          latinum: 20
+        };
+        for (const res in this.marketPrices) {
+          const currentPrice = this.marketPrices[res];
+          const basePrice = basePrices[res] || 5;
+          const roll = Math.random();
+          
+          if (currentPrice < basePrice) {
+            if (roll < 0.50) {
+              this.marketPrices[res]++;
+            } else if (roll < 0.75) {
+              this.marketPrices[res] = Math.max(1, this.marketPrices[res] - 1);
+            }
+          } else if (currentPrice > basePrice) {
+            if (roll < 0.50) {
+              this.marketPrices[res] = Math.max(1, this.marketPrices[res] - 1);
+            } else if (roll < 0.75) {
+              this.marketPrices[res]++;
+            }
+          } else {
+            if (roll < 0.25) {
+              this.marketPrices[res]++;
+            } else if (roll < 0.50) {
+              this.marketPrices[res] = Math.max(1, this.marketPrices[res] - 1);
+            }
+          }
+        }
+      }
     }
     const nowTime = Date.now();
     this.boardingReplays = this.boardingReplays.filter(r => nowTime - r.timestamp < 300000);
