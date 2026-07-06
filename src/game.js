@@ -5473,63 +5473,6 @@ export class Game {
       player.storageFeeAccumulator = (player.storageFeeAccumulator || 0) + deltaTime;
       while (player.storageFeeAccumulator >= 1000) {
         player.storageFeeAccumulator -= 1000;
-        
-        const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-        let totalStockpile = 0;
-        if (!player.resources) {
-          player.resources = { dilithium: 0, merculite: 0, duranium: 0, tritanium: 0, antimatter: 0, deuterium: 0, latinum: 0 };
-        }
-        for (const res of resourcesList) {
-          totalStockpile += (player.resources[res] || 0);
-        }
-        
-        const stockpileCapacity = player.stockpileCapacity || 1;
-        player.totalStockpile = totalStockpile;
-
-        if (totalStockpile > stockpileCapacity) {
-          const excess = totalStockpile - stockpileCapacity;
-          const storageFee = excess / (stockpileCapacity * 8);
-          player.storageFeeRate = storageFee * 60;
-
-          let minAllowedCredits = 0;
-          const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
-          if (ownsHomeworld) {
-            minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
-          }
-
-          const creditsAvailable = Math.max(0, (player.credits || 0) - minAllowedCredits);
-          if (creditsAvailable >= storageFee) {
-            player.credits = (player.credits || 0) - storageFee;
-          } else {
-            let remainingFee = storageFee - creditsAvailable;
-            if (creditsAvailable > 0) {
-              player.credits = (player.credits || 0) - creditsAvailable;
-            }
-
-            while (remainingFee > 0) {
-              let highestRes = null;
-              let highestQty = 0;
-              for (const res of resourcesList) {
-                const qty = player.resources[res] || 0;
-                if (qty > highestQty) {
-                  highestQty = qty;
-                  highestRes = res;
-                }
-              }
-
-              if (highestQty <= 0 || !highestRes) {
-                break;
-              }
-
-              const deductAmt = Math.min(remainingFee, highestQty);
-              player.resources[highestRes] -= deductAmt;
-              remainingFee -= deductAmt;
-            }
-          }
-        } else {
-          player.storageFeeRate = 0;
-        }
-
         // Fleet cost overages
         const commandLimit = player.commandLimit || 5;
         const commandCount = player.commandCount || 0;

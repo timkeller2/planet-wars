@@ -1078,7 +1078,8 @@ export class Ship {
         if (this.retreatTargetShipId && allShips) {
           const targetShip = allShips.find(s => s.id === this.retreatTargetShipId);
           if (targetShip && targetShip.active) {
-            const hasExcessFuel = (targetShip.fuel || 0) > 4;
+            const cannotTransfer = (targetShip.extended_fuel || 0) > 0 && (targetShip.supply_ship || 0) === 0;
+            const hasExcessFuel = (targetShip.fuel || 0) > 4 && !cannotTransfer;
             const hasSupplies = (targetShip.supplies || 0) > 0;
             if (hasExcessFuel || hasSupplies) {
               const dx = this.x - targetShip.x;
@@ -1089,13 +1090,9 @@ export class Ship {
               if (dist > stopDistance) {
                 this.targetX = targetShip.x + (dx / dist) * stopDistance;
                 this.targetY = targetShip.y + (dy / dist) * stopDistance;
-              } else if (dist > 0.01) {
-                this.targetX = targetShip.x + (dx / dist) * stopDistance;
-                this.targetY = targetShip.y + (dy / dist) * stopDistance;
               } else {
-                const angle = Math.random() * Math.PI * 2;
-                this.targetX = targetShip.x + Math.cos(angle) * stopDistance;
-                this.targetY = targetShip.y + Math.sin(angle) * stopDistance;
+                this.targetX = this.x;
+                this.targetY = this.y;
               }
             } else {
               this.retreatTargetShipId = null;
@@ -1167,7 +1164,8 @@ export class Ship {
           if (allShips && this.owner && (needsFuelForCruiser || needsRepairsForCruiser || needsRearmForCruiser)) {
             for (const other of allShips) {
               if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id) {
-                const hasExcessFuel = (other.fuel || 0) > 4;
+                const cannotTransfer = (other.extended_fuel || 0) > 0 && (other.supply_ship || 0) === 0;
+                const hasExcessFuel = (other.fuel || 0) > 4 && !cannotTransfer;
                 const hasSupplies = (other.supplies || 0) > 0;
                 
                 let matchesRequirement = false;
@@ -1315,13 +1313,9 @@ export class Ship {
               if (dist > stopDistance) {
                 this.targetX = selected.ship.x + (dx / dist) * stopDistance;
                 this.targetY = selected.ship.y + (dy / dist) * stopDistance;
-              } else if (dist > 0.01) {
-                this.targetX = selected.ship.x + (dx / dist) * stopDistance;
-                this.targetY = selected.ship.y + (dy / dist) * stopDistance;
               } else {
-                const angle = Math.random() * Math.PI * 2;
-                this.targetX = selected.ship.x + Math.cos(angle) * stopDistance;
-                this.targetY = selected.ship.y + Math.sin(angle) * stopDistance;
+                this.targetX = this.x;
+                this.targetY = this.y;
               }
             } else {
               this.targetX = selected.x;
@@ -4374,7 +4368,8 @@ export class Ship {
         const radarRange = this.cruiserRadarRange();
         const radarRangeSq = radarRange * radarRange;
         for (const other of allShips) {
-          if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.fuel || 0) > 4 && (other.fuel || 0) > (this.fuel || 0) + 2) {
+          const cannotTransfer = (other.extended_fuel || 0) > 0 && (other.supply_ship || 0) === 0;
+          if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.fuel || 0) > 4 && (other.fuel || 0) > (this.fuel || 0) + 2 && !cannotTransfer) {
             const dx = other.x - this.x;
             const dy = other.y - this.y;
             const distSq = dx * dx + dy * dy;

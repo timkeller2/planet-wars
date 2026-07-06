@@ -2287,6 +2287,27 @@ function getPlanetTradeIncomePerMin(planet) {
               currentY -= 1;
             }
             
+            if (s.isCruiser && (s.marines || 0) > 0) {
+              currentY -= barH;
+              ctxTile.fillStyle = '#0a220a';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctxTile.fillStyle = '#008000';
+              const maxMarines = Math.ceil((s.marines * s.maxHealth) / 2) + 5;
+              const ratio = maxMarines > 0 ? Math.min(1.0, Math.max(0, s.marineCount || 0) / maxMarines) : 0;
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW * ratio, barH);
+              currentY -= 1;
+            }
+
+            if (s.isCruiser && (s.maxArmor || 0) > 0) {
+              currentY -= barH;
+              ctxTile.fillStyle = '#2a2a2a';
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctxTile.fillStyle = '#696969';
+              const ratio = s.maxArmor > 0 ? Math.min(1.0, Math.max(0, s.armorPoints || 0) / s.maxArmor) : 0;
+              ctxTile.fillRect(s.x - barW / 2, currentY, barW * ratio, barH);
+              currentY -= 1;
+            }
+
             currentY -= barH;
             ctxTile.fillStyle = 'red';
             ctxTile.fillRect(s.x - barW / 2, currentY, barW, barH);
@@ -6961,7 +6982,6 @@ function getPlanetTradeIncomePerMin(planet) {
       const creditsVal = myPlayer.credits || 0;
 
       const interestRatePerMin = creditsVal < 0 ? (creditsVal * 0.025) : (creditsVal * 0.005);
-      const stockpileMaintenanceRatePerMin = myPlayer.storageFeeRate || 0;
       const fleetCostRatePerMin = myPlayer.fleetCostRate || 0;
       let totalTradeRatePerMin = 0;
       let rowsHtml = "";
@@ -7002,7 +7022,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
       const pirateActivityRatePerMin = (myPlayer.pirateActivity || 0) / 25;
       const pirateIncomeRatePerMin = (myPlayer.pirateIncome || 0) / 25;
-      const netIncome = totalTradeRatePerMin - stockpileMaintenanceRatePerMin - fleetCostRatePerMin + interestRatePerMin - pirateActivityRatePerMin + pirateIncomeRatePerMin;
+      const netIncome = totalTradeRatePerMin - fleetCostRatePerMin + interestRatePerMin - pirateActivityRatePerMin + pirateIncomeRatePerMin;
       const incomeInt = Math.round(netIncome);
 
       // Render custom tooltip panel HTML (Task 101 Overhaul)
@@ -7046,17 +7066,6 @@ function getPlanetTradeIncomePerMin(planet) {
         } else if (netIncome < 0) {
           totalIncomeColor = '#ff3333';
           totalIncomeText = `${netIncome.toFixed(2)}`;
-        }
-
-        let stockpileRowHtml = "";
-        if (stockpileMaintenanceRatePerMin > 0) {
-          stockpileRowHtml = `
-            <tr style="border-top: 1px dashed rgba(255, 255, 255, 0.15);">
-              <td style="padding: 6px 0; color: #aaa; text-align: left;">Stockpile Maintenance</td>
-              <td style="padding: 6px 0;"></td>
-              <td style="padding: 6px 0; text-align: right; color: #ff3333; font-weight: bold;">-${stockpileMaintenanceRatePerMin.toFixed(2)}/m</td>
-            </tr>
-          `;
         }
 
         let fleetCostRowHtml = "";
@@ -7106,7 +7115,6 @@ function getPlanetTradeIncomePerMin(planet) {
               ${rowsHtml}
             </tbody>
             <tfoot>
-              ${stockpileRowHtml}
               ${fleetCostRowHtml}
               ${pirateActivityRowHtml}
               ${pirateIncomeRowHtml}
@@ -7180,32 +7188,6 @@ function getPlanetTradeIncomePerMin(planet) {
         tradeOptionsDisplay.style.textShadow = 'none';
         tradeOptionsDisplay.style.background = 'rgba(255, 255, 255, 0.05)';
         tradeOptionsDisplay.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-      }
-    }
-
-    const stockpileCapacityDisplay = document.getElementById('player-stockpile-capacity-display');
-    if (stockpileCapacityDisplay) {
-      const resourcesListForStockpile = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-      let totalStockpile = 0;
-      if (myPlayer.resources) {
-        for (const res of resourcesListForStockpile) {
-          totalStockpile += (myPlayer.resources[res] || 0);
-        }
-      }
-      const stockpileCapacity = myPlayer.stockpileCapacity || 1;
-      stockpileCapacityDisplay.style.display = 'block';
-      stockpileCapacityDisplay.textContent = `📦${Math.floor(totalStockpile)}/${stockpileCapacity}`;
-
-      if (totalStockpile > stockpileCapacity) {
-        stockpileCapacityDisplay.style.color = '#ff5252';
-        stockpileCapacityDisplay.style.borderColor = 'rgba(255, 82, 82, 0.4)';
-        stockpileCapacityDisplay.style.textShadow = '0 0 5px #ff5252';
-        stockpileCapacityDisplay.style.background = 'rgba(255, 82, 82, 0.1)';
-      } else {
-        stockpileCapacityDisplay.style.color = '#00e676';
-        stockpileCapacityDisplay.style.borderColor = 'rgba(0, 230, 118, 0.2)';
-        stockpileCapacityDisplay.style.textShadow = '0 0 5px #00e676';
-        stockpileCapacityDisplay.style.background = 'rgba(0, 230, 118, 0.05)';
       }
     }
 
@@ -8737,6 +8719,26 @@ function getPlanetTradeIncomePerMin(planet) {
         clickedPlanet = bestPlanet;
       }
 
+      // Check if clicked on an anomaly to prevent targeting it
+      let clickedAnomaly = false;
+      if (serverState && serverState.planets) {
+        for (const p of serverState.planets) {
+          if (p.anomaly && !p.anomaly.researched) {
+            const adx = p.anomaly.x - clickPos.x;
+            const ady = p.anomaly.y - clickPos.y;
+            if (adx * adx + ady * ady <= 25 * 25) {
+              clickedAnomaly = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (clickedAnomaly) {
+        clickedPlanet = null;
+        clickedTargetShip = null;
+      }
+
       if (clickedTargetShip && selectedShips.length > 0) {
         // Direct target locking on an enemy/amoeba ship
         const selectedCruisers = selectedShips.filter(s => s.isCruiser && !s.isUpgrading);
@@ -9805,102 +9807,66 @@ function getPlanetTradeIncomePerMin(planet) {
     if (event.key === 'Tab') {
       event.preventDefault();
       if (serverState && localPlayer) {
-        if (event.ctrlKey) {
-          // Cycle cruisers
-          const myCruisers = serverState.ships.filter(s => s.active && s.isCruiser && s.ownerId === localPlayer.id);
-          if (myCruisers.length > 0) {
-            let currentIndex = myCruisers.findIndex(c => selectedShips.length === 1 && selectedShips[0].id === c.id);
-            let nextIndex = (currentIndex + 1) % myCruisers.length;
-            if (currentIndex === -1) nextIndex = 0;
-            
-            const targetCruiser = myCruisers[nextIndex];
-            selectedShips = [targetCruiser];
+        // Cycle focus areas
+        const now = Date.now();
+        recentAudioEvents = recentAudioEvents.filter(ev => now - ev.timestamp <= 10000);
+
+        // Get points for each category
+        const audioPoints = [...recentAudioEvents].sort((a, b) => b.timestamp - a.timestamp);
+        const myPlanets = serverState.planets
+          .filter(p => p.ownerId === localPlayer.id)
+          .sort((a, b) => a.id - b.id);
+        const myShips = serverState.ships
+          .filter(s => s.active && s.ownerId === localPlayer.id && !s.isReturnPod && !s.isBoardingFleet && !s.isAmoeba)
+          .sort((a, b) => a.id - b.id);
+
+        // Group into focus areas
+        const audioFocusAreas = groupIntoFocusAreas(audioPoints, 600);
+        const planetFocusAreas = groupIntoFocusAreas(myPlanets, 600);
+        const shipFocusAreas = groupIntoFocusAreas(myShips, 600);
+
+        // Build a single ordered sequence of focus areas
+        const focusAreas = [];
+        for (const center of audioFocusAreas) {
+          focusAreas.push({ type: 'audio', x: center.x, y: center.y });
+        }
+        for (const center of planetFocusAreas) {
+          focusAreas.push({ type: 'planet', x: center.x, y: center.y });
+        }
+        for (const center of shipFocusAreas) {
+          focusAreas.push({ type: 'ship', x: center.x, y: center.y });
+        }
+
+        if (focusAreas.length > 0) {
+          let nextIndex = 0;
+          if (typeof window.lastTabFocusIndex === 'number') {
+            nextIndex = (window.lastTabFocusIndex + 1) % focusAreas.length;
+          }
+          window.lastTabFocusIndex = nextIndex;
+
+          const target = focusAreas[nextIndex];
+
+          // Set selection based on the area's type
+          if (target.type === 'audio') {
             selectedPlanets = [];
-            
-            const mapWidth = serverState.width || 1920;
-            const mapHeight = serverState.height || 1620;
-            cameraPanX = mapWidth / 2 - targetCruiser.x;
-            cameraPanY = mapHeight / 2 - targetCruiser.y;
-          }
-        } else if (event.altKey) {
-          // Cycle fleets
-          const myFleets = serverState.ships.filter(s => s.active && !s.isCruiser && !s.isReturnPod && !s.isBoardingFleet && !s.isAmoeba && s.ownerId === localPlayer.id);
-          if (myFleets.length > 0) {
-            let currentIndex = myFleets.findIndex(f => selectedShips.length === 1 && selectedShips[0].id === f.id);
-            let nextIndex = (currentIndex + 1) % myFleets.length;
-            if (currentIndex === -1) nextIndex = 0;
-            
-            const targetFleet = myFleets[nextIndex];
-            selectedShips = [targetFleet];
+            selectedShips = [];
+          } else if (target.type === 'planet') {
+            selectedPlanets = myPlanets.filter(p => Math.hypot(p.x - target.x, p.y - target.y) <= 600);
+            selectedShips = [];
+          } else if (target.type === 'ship') {
             selectedPlanets = [];
-            
-            const mapWidth = serverState.width || 1920;
-            const mapHeight = serverState.height || 1620;
-            cameraPanX = mapWidth / 2 - targetFleet.x;
-            cameraPanY = mapHeight / 2 - targetFleet.y;
-          }
-        } else {
-          // Cycle focus areas
-          const now = Date.now();
-          recentAudioEvents = recentAudioEvents.filter(ev => now - ev.timestamp <= 10000);
-
-          // Get points for each category
-          const audioPoints = [...recentAudioEvents].sort((a, b) => b.timestamp - a.timestamp);
-          const myPlanets = serverState.planets
-            .filter(p => p.ownerId === localPlayer.id)
-            .sort((a, b) => a.id - b.id);
-          const myShips = serverState.ships
-            .filter(s => s.active && s.ownerId === localPlayer.id && !s.isReturnPod && !s.isBoardingFleet && !s.isAmoeba)
-            .sort((a, b) => a.id - b.id);
-
-          // Group into focus areas
-          const audioFocusAreas = groupIntoFocusAreas(audioPoints, 600);
-          const planetFocusAreas = groupIntoFocusAreas(myPlanets, 600);
-          const shipFocusAreas = groupIntoFocusAreas(myShips, 600);
-
-          // Build a single ordered sequence of focus areas
-          const focusAreas = [];
-          for (const center of audioFocusAreas) {
-            focusAreas.push({ type: 'audio', x: center.x, y: center.y });
-          }
-          for (const center of planetFocusAreas) {
-            focusAreas.push({ type: 'planet', x: center.x, y: center.y });
-          }
-          for (const center of shipFocusAreas) {
-            focusAreas.push({ type: 'ship', x: center.x, y: center.y });
+            selectedShips = myShips.filter(s => Math.hypot(s.x - target.x, s.y - target.y) <= 600);
           }
 
-          if (focusAreas.length > 0) {
-            let nextIndex = 0;
-            if (typeof window.lastTabFocusIndex === 'number') {
-              nextIndex = (window.lastTabFocusIndex + 1) % focusAreas.length;
-            }
-            window.lastTabFocusIndex = nextIndex;
+          // Pan camera to center on the focused area
+          const mapWidth = serverState.width || 1920;
+          const mapHeight = serverState.height || 1620;
+          cameraPanX = mapWidth / 2 - target.x;
+          cameraPanY = mapHeight / 2 - target.y;
 
-            const target = focusAreas[nextIndex];
-
-            // Set selection based on the area's type
-            if (target.type === 'audio') {
-              selectedPlanets = [];
-              selectedShips = [];
-            } else if (target.type === 'planet') {
-              selectedPlanets = myPlanets.filter(p => Math.hypot(p.x - target.x, p.y - target.y) <= 600);
-              selectedShips = [];
-            } else if (target.type === 'ship') {
-              selectedPlanets = [];
-              selectedShips = myShips.filter(s => Math.hypot(s.x - target.x, s.y - target.y) <= 600);
-            }
-
-            // Pan camera to center on the focused area
-            const mapWidth = serverState.width || 1920;
-            const mapHeight = serverState.height || 1620;
-            cameraPanX = mapWidth / 2 - target.x;
-            cameraPanY = mapHeight / 2 - target.y;
-
-            updateSelectionTimes();
-            updateSelectionTiles();
-            updateButtonHighlights();
-          }
+          updateSelectionTimes();
+          updateSelectionTiles();
+          updateButtonHighlights();
         }
       }
       return;
@@ -10914,38 +10880,6 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     });
     commandLimitDisplayBtn.addEventListener('mouseleave', () => {
-      const tooltipPanel = document.getElementById('credits-tooltip-panel');
-      if (tooltipPanel) {
-        tooltipPanel.dataset.source = '';
-        tooltipPanel.style.display = 'none';
-      }
-    });
-  }
-
-  const stockpileCapacityDisplayBtn = document.getElementById('player-stockpile-capacity-display');
-  if (stockpileCapacityDisplayBtn) {
-    stockpileCapacityDisplayBtn.style.cursor = 'pointer';
-    stockpileCapacityDisplayBtn.style.pointerEvents = 'auto';
-    stockpileCapacityDisplayBtn.addEventListener('mouseenter', () => {
-      const tooltipPanel = document.getElementById('credits-tooltip-panel');
-      if (tooltipPanel) {
-        tooltipPanel.dataset.source = 'stockpile';
-        tooltipPanel.innerHTML = `
-          <div style="font-weight: bold; font-size: 0.85rem; color: #e91e63; border-bottom: 1px solid rgba(233, 30, 99, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Stockpile Capacity</div>
-          <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.3;">
-            Resource Stockpile Capacity = Command Capacity + Trade Capacity.<br><br>
-            If exceeded, a Resource Storage Fee is charged every second:<br>
-            <span style="color: #ff5252; font-weight: bold;">Fee = (excess resources / capacity) rounded up</span>,<br>
-            deducted from credits first. If out of credits, resources are deducted starting with the highest stockpiles first.
-          </div>
-        `;
-        const rect = stockpileCapacityDisplayBtn.getBoundingClientRect();
-        tooltipPanel.style.left = `${rect.left + window.scrollX}px`;
-        tooltipPanel.style.top = `${rect.bottom + window.scrollY + 5}px`;
-        tooltipPanel.style.display = 'block';
-      }
-    });
-    stockpileCapacityDisplayBtn.addEventListener('mouseleave', () => {
       const tooltipPanel = document.getElementById('credits-tooltip-panel');
       if (tooltipPanel) {
         tooltipPanel.dataset.source = '';
@@ -16576,6 +16510,27 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.fillStyle = '#ffff00';
               const maxParley = (s.diplomat || 0) * 3;
               const ratio = maxParley > 0 ? Math.min(1.0, Math.max(0, s.parley || 0) / maxParley) : 0;
+              ctx.fillRect(s.x - barW / 2, currentY, barW * ratio, barH);
+              currentY -= 1;
+            }
+
+            if (s.isCruiser && (s.marines || 0) > 0) {
+              currentY -= barH;
+              ctx.fillStyle = '#0a220a';
+              ctx.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctx.fillStyle = '#008000';
+              const maxMarines = Math.ceil((s.marines * s.maxHealth) / 2) + 5;
+              const ratio = maxMarines > 0 ? Math.min(1.0, Math.max(0, s.marineCount || 0) / maxMarines) : 0;
+              ctx.fillRect(s.x - barW / 2, currentY, barW * ratio, barH);
+              currentY -= 1;
+            }
+
+            if (s.isCruiser && (s.maxArmor || 0) > 0) {
+              currentY -= barH;
+              ctx.fillStyle = '#2a2a2a';
+              ctx.fillRect(s.x - barW / 2, currentY, barW, barH);
+              ctx.fillStyle = '#696969';
+              const ratio = s.maxArmor > 0 ? Math.min(1.0, Math.max(0, s.armorPoints || 0) / s.maxArmor) : 0;
               ctx.fillRect(s.x - barW / 2, currentY, barW * ratio, barH);
               currentY -= 1;
             }
