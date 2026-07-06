@@ -301,7 +301,8 @@ export class Ship {
 
   isWithinSensorRangeOfSupplyShip(allShips) {
     if (!allShips || !this.owner) return false;
-    for (const other of allShips) {
+    const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(this.x, this.y, 400 * 400) : allShips;
+    for (const other of candidateShips) {
       if (other === this) continue;
       if (other.active && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.supplies || 0) > 0) {
         const dx = other.x - this.x;
@@ -782,7 +783,12 @@ export class Ship {
     let minNeutralDistSq = Infinity;
 
     if (allPlanets && this.owner) {
-      for (const planet of allPlanets) {
+      const maxGravityRadius = 400; // Gravity radius max is ~300.
+      const nearbyPlanets = (game && game.planetGrid && game.planetGridPopulated) 
+        ? game.planetGrid.getPlanetsInRadiusSq(this.x, this.y, maxGravityRadius * maxGravityRadius) 
+        : allPlanets;
+
+      for (const planet of nearbyPlanets) {
         const pdx = this.x - planet.x;
         const pdy = this.y - planet.y;
         const distSq = pdx * pdx + pdy * pdy;
@@ -1110,7 +1116,7 @@ export class Ship {
         let closestEnemyUnit = null;
         let closestEnemyDistSq = Infinity;
         if (allShips) {
-          const candidateShips = allShips;
+          const candidateShips = (game && game.ships && game.ships.getShipsInRadiusSq) ? game.ships.getShipsInRadiusSq(this.x, this.y, 200 * 200) : allShips;
           for (const other of candidateShips) {
             if (other.active && other.id !== this.id) {
               const isEnemy = (other.owner && other.owner.id !== this.owner.id && !other.isMaterializing) || other.isAmoeba;
@@ -1151,7 +1157,7 @@ export class Ship {
         }
 
         if (needNewTarget) {
-          const friendlyPlanets = allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : [];
+          const friendlyPlanets = (this.owner && this.owner.ownedPlanets) ? this.owner.ownedPlanets : (allPlanets ? allPlanets.filter(p => p.owner && p.owner.id === this.owner.id) : []);
           const safeCandidates = [];
           let globalBestFallback = null;
           let maxSafetyDistSq = -1;
@@ -1179,7 +1185,8 @@ export class Ship {
                   // Ensure this destination cruiser doesn't have active enemies close to it
                   let safeFromEnemies = true;
                   if (allShips) {
-                    for (const enemy of allShips) {
+                    const localEnemies = (game && game.ships && game.ships.getShipsInRadiusSq) ? game.ships.getShipsInRadiusSq(other.x, other.y, 300 * 300) : allShips;
+                    for (const enemy of localEnemies) {
                       if (enemy.active && enemy.id !== this.id) {
                         const isEnemy = (enemy.owner && enemy.owner.id !== this.owner.id) || enemy.isAmoeba;
                         if (isEnemy) {
@@ -3201,7 +3208,7 @@ export class Ship {
           // 1. Gather friendly ship candidates (supplies > 0 OR fuel > 4)
           if (allShips && this.owner) {
             for (const other of allShips) {
-              if (other.active && other !== this && other.isCruiser && other.owner && other.owner.id === this.owner.id) {
+              if (other.active && other !== this && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.extended_fuel || 0) === 0) {
                 const hasS = (other.supplies || 0) > 0;
                 const hasF = (other.fuel || 0) > 4;
                 if (hasS || hasF) {
@@ -4368,7 +4375,7 @@ export class Ship {
         const radarRange = this.cruiserRadarRange();
         const radarRangeSq = radarRange * radarRange;
         for (const other of allShips) {
-          const cannotTransfer = (other.extended_fuel || 0) > 0 && (other.supply_ship || 0) === 0;
+          const cannotTransfer = (other.extended_fuel || 0) > 0;
           if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.fuel || 0) > 4 && (other.fuel || 0) > (this.fuel || 0) + 2 && !cannotTransfer) {
             const dx = other.x - this.x;
             const dy = other.y - this.y;

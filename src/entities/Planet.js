@@ -29,9 +29,18 @@ export class Planet {
     return this._owner;
   }
   set owner(val) {
+    if (this._owner && this._owner.ownedPlanets) {
+      const idx = this._owner.ownedPlanets.indexOf(this);
+      if (idx !== -1) {
+        this._owner.ownedPlanets.splice(idx, 1);
+      }
+    }
     this._owner = val;
     if (val) {
       val.hasOwnedPlanet = true;
+      if (val.ownedPlanets && !val.ownedPlanets.includes(this)) {
+        val.ownedPlanets.push(this);
+      }
     }
   }
 

@@ -111,7 +111,7 @@ class SpatialGridArray extends Array {
       }
       const col = Math.floor(s.x / 100);
       const row = Math.floor(s.y / 100);
-      const key = `${col},${row}`;
+      const key = (col << 16) | (row & 0xFFFF);
       let cell = this.grid.get(key);
       if (!cell) {
         cell = [];
@@ -131,7 +131,7 @@ class SpatialGridArray extends Array {
     
     for (let col = minCol; col <= maxCol; col++) {
       for (let row = minRow; row <= maxRow; row++) {
-        const key = `${col},${row}`;
+        const key = (col << 16) | (row & 0xFFFF);
         const cell = this.grid.get(key);
         if (cell) {
           for (let i = 0; i < cell.length; i++) {
@@ -140,6 +140,56 @@ class SpatialGridArray extends Array {
             const dy = s.y - y;
             if (dx * dx + dy * dy <= radiusSq) {
               results.push(s);
+            }
+          }
+        }
+      }
+    }
+    return results;
+  }
+}
+
+class PlanetGrid {
+  constructor() {
+    this.grid = new Map();
+    this.cellSize = 500; // Larger cells for planets since they are sparse
+  }
+  
+  populate(planets) {
+    this.grid.clear();
+    for (const p of planets) {
+      if (p.isDeepSpaceAnomaly) continue;
+      const col = Math.floor(p.x / this.cellSize);
+      const row = Math.floor(p.y / this.cellSize);
+      const key = (col << 16) | (row & 0xFFFF);
+      let cell = this.grid.get(key);
+      if (!cell) {
+        cell = [];
+        this.grid.set(key, cell);
+      }
+      cell.push(p);
+    }
+  }
+
+  getPlanetsInRadiusSq(x, y, radiusSq) {
+    const results = [];
+    const radius = Math.sqrt(radiusSq);
+    const minCol = Math.floor((x - radius) / this.cellSize);
+    const maxCol = Math.floor((x + radius) / this.cellSize);
+    const minRow = Math.floor((y - radius) / this.cellSize);
+    const maxRow = Math.floor((y + radius) / this.cellSize);
+    
+    for (let col = minCol; col <= maxCol; col++) {
+      for (let row = minRow; row <= maxRow; row++) {
+        const key = (col << 16) | (row & 0xFFFF);
+        const cell = this.grid.get(key);
+        if (cell) {
+          for (let i = 0; i < cell.length; i++) {
+            const p = cell[i];
+            const dx = p.x - x;
+            const dy = p.y - y;
+            if (dx * dx + dy * dy <= radiusSq) {
+              results.push(p);
             }
           }
         }
@@ -225,6 +275,8 @@ export class Game {
     this.allPlayers = [this.humanPlayer, this.monsterPlayer, ...this.aiPlayers];
     
     this.planets = [];
+    this.planetGrid = new PlanetGrid();
+    this.planetGridPopulated = false;
     this.ships = new SpatialGridArray();
     this.lasers = new RecycledArray(1500);
     this.explosions = new RecycledArray(1000);
@@ -1498,6 +1550,19 @@ export class Game {
         radius: p.radius,
         sizeClass: p.sizeClass,
         maxShips: p.maxShips,
+        sensorarrays: p.sensorarrays,
+        labs: p.labs,
+        armor: p.armor,
+        shields: p.shields,
+        engine: p.engine,
+        munitions: p.munitions,
+        targeting: p.targeting,
+        damagecontrol: p.damagecontrol,
+        supply_ship: p.supply_ship,
+        extended_fuel: p.extended_fuel,
+        diplomat: p.diplomat,
+        marines: p.marines,
+        command: p.command,
         supplies: p.supplies,
         ships: p.ships,
         ownerId: p.owner ? p.owner.id : null,
@@ -2250,7 +2315,7 @@ export class Game {
           valid = true;
 
           if (valid) {
-            const minDistPadding = (this.settings && this.settings.graphicalMode) ? 40 : 25;
+            const minDistPadding = 50;
             for (const p of this.planets) {
               const dx = p.x - x;
               const dy = p.y - y;
@@ -4091,6 +4156,11 @@ export class Game {
   update(deltaTime) {
     if (!this.boardingReplays) {
       this.boardingReplays = [];
+    }
+    
+    if (!this.planetGridPopulated && this.planets && this.planets.length > 0) {
+      this.planetGrid.populate(this.planets);
+      this.planetGridPopulated = true;
     }
     
     if (this.marketPrices) {
