@@ -10,7 +10,12 @@ export class Player {
     this.cruiserStyle = null;
     this.credits = 0;
     this.hasOwnedPlanet = false;
-    this.ownedPlanets = [];
+    Object.defineProperty(this, 'ownedPlanets', {
+      value: [],
+      enumerable: false,
+      writable: true,
+      configurable: true
+    });
     const getRandDiscount = () => Math.round((-0.10 + Math.random() * 0.20) * 100) / 100;
     this.upgradeModifiers = {
       sensorarray: getRandDiscount(),

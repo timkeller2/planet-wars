@@ -783,7 +783,7 @@ export class Ship {
     let minNeutralDistSq = Infinity;
 
     if (allPlanets && this.owner) {
-      const maxGravityRadius = 400; // Gravity radius max is ~300.
+      const maxGravityRadius = 2500; // Planets can have huge gravity wells late game
       const nearbyPlanets = (game && game.planetGrid && game.planetGridPopulated) 
         ? game.planetGrid.getPlanetsInRadiusSq(this.x, this.y, maxGravityRadius * maxGravityRadius) 
         : allPlanets;

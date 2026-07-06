@@ -10942,7 +10942,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (isPlanet) {
           const humanPlayers = serverState ? serverState.players.filter(pl => pl && !pl.isAI && pl.id !== 'monsters') : [];
           const numHumanPlayers = Math.max(1, humanPlayers.length);
-          const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 3);
+          const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 5);
 
           let totalUpgradesOfCertainType = 0;
           if (serverState && serverState.planets) {

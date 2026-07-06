@@ -171,6 +171,19 @@ class PlanetGrid {
     }
   }
 
+  add(p) {
+    if (p.isDeepSpaceAnomaly) return;
+    const col = Math.floor(p.x / this.cellSize);
+    const row = Math.floor(p.y / this.cellSize);
+    const key = (col << 16) | (row & 0xFFFF);
+    let cell = this.grid.get(key);
+    if (!cell) {
+      cell = [];
+      this.grid.set(key, cell);
+    }
+    cell.push(p);
+  }
+
   getPlanetsInRadiusSq(x, y, radiusSq) {
     const results = [];
     const radius = Math.sqrt(radiusSq);
@@ -200,6 +213,13 @@ class PlanetGrid {
 }
 
 export class Game {
+  addPlanet(p) {
+    this.planets.push(p);
+    if (this.planetGridPopulated && this.planetGrid && !p.isDeepSpaceAnomaly) {
+      this.planetGrid.add(p);
+    }
+  }
+
   static getRandomAnomalyRewardType() {
     const roll = Math.random() * 100;
     if (roll < 64) {
@@ -1201,7 +1221,7 @@ export class Game {
         const newPlanetId = Math.max(...this.planets.map(p => p.id), 0) + 1;
         const initialShips = (!isNaN(parsedVal) && parsedVal > 0) ? parsedVal : 120;
         targetPlanet = new Planet(newPlanetId, bestPos.x, bestPos.y, newRadius, null, initialShips, this.width, this.height);
-        this.planets.push(targetPlanet);
+        this.addPlanet(targetPlanet);
         console.log(`[New Homeworld Created] Created new Planet ${targetPlanet.name} (${targetPlanet.id}) at (${Math.round(bestPos.x)}, ${Math.round(bestPos.y)}) for player ${player.id}. Min dist to other homeworlds: ${maxMinDist.toFixed(1)}`);
       }
     }
@@ -2219,7 +2239,7 @@ export class Game {
           y = bestPos.y;
           
           const newPlanet = createPlanetFromSpec(spec, x, y);
-          this.planets.push(newPlanet);
+          this.addPlanet(newPlanet);
           currentIndex++;
           
           // Try to place up to 3 more planets nearby in little groups (1 to 4 total)
@@ -2264,7 +2284,7 @@ export class Game {
               
               if (nearbyValid) {
                 const nearbyPlanet = createPlanetFromSpec(nextSpec, nearbyX, nearbyY);
-                this.planets.push(nearbyPlanet);
+                this.addPlanet(nearbyPlanet);
                 currentIndex++;
                 
                 prevX = nearbyX;
@@ -2351,7 +2371,7 @@ export class Game {
             newPlanet.supplies = Math.random() * newPlanet.maxShips;
             newPlanet.radius = Math.min(newPlanet.sizeClass, newPlanet.maxShips) / 4;
           }
-          this.planets.push(newPlanet);
+          this.addPlanet(newPlanet);
         }
       }
     }
@@ -2512,7 +2532,7 @@ export class Game {
         beingResearched: false,
         rewardType: rewardType
       };
-      this.planets.push(deepSpacePlanet);
+      this.addPlanet(deepSpacePlanet);
     }
 
     this.recalculateResourceRarities();
@@ -6779,7 +6799,7 @@ export class Game {
       beingResearched: false,
       rewardType: rewardType
     };
-    this.planets.push(deepSpacePlanet);
+    this.addPlanet(deepSpacePlanet);
 
     // Notify player in chat/logs
     this.pendingChatMessages = this.pendingChatMessages || [];

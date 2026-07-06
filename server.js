@@ -669,6 +669,8 @@ async function bootstrap() {
               playerId: player.id
             };
             console.log(`[Server Planet Upgrade Started] Planet ${planet.id} starting upgrade ${prop} to ${nextLevel}. Cost: ${cost}`);
+          } else {
+            console.log(`[Server Planet Upgrade Rejected] Insufficient credits for ${prop}. Cost: ${cost}, Available: ${creditsAvailable}`);
           }
         }
       }
