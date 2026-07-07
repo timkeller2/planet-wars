@@ -260,15 +260,35 @@ export class Game {
     }
     
     if (!found) {
+      const planetsInvolved = [];
+      if (this.planets) {
+        for (const p of this.planets) {
+          const pdx = p.x - x;
+          const pdy = p.y - y;
+          if (pdx * pdx + pdy * pdy <= 800 * 800) {
+            planetsInvolved.push({
+              id: p.id,
+              name: p.name,
+              x: p.x,
+              y: p.y,
+              radius: p.radius,
+              color: p.owner ? p.owner.color : '#888'
+            });
+          }
+        }
+      }
+
       this.ongoingBattles.push({
-        id: Math.random().toString(36).substring(2, 9),
+        id: 'BTL_' + timeNow + '_' + Math.floor(Math.random()*1000),
         x: x,
         y: y,
         radius: 800,
         startTime: timeNow,
         lastActivityTime: timeNow,
         lastFrameTime: 0,
-        frames: []
+        frames: [],
+        participants: new Set(),
+        planets: planetsInvolved
       });
     }
   }
@@ -6711,6 +6731,7 @@ export class Game {
             if (dx*dx + dy*dy <= bRadSq) {
               frame.ships.push({
                 id: s.id,
+                name: s.name,
                 x: s.x,
                 y: s.y,
                 angle: s.angle,
@@ -6753,22 +6774,40 @@ export class Game {
         // Finalize battle if no activity for 5 seconds
         if (timeNow - b.lastActivityTime >= 5000) {
           if (b.frames.length > 5) { // Only save if the battle had some duration
-            this.completedBattleReplays.push({
-              id: b.id,
-              name: 'Space Battle',
-              type: 'battle',
-              timestamp: timeNow,
-              x: b.x,
-              y: b.y,
-              radius: b.radius,
-              duration: timeNow - b.startTime,
-              frames: b.frames,
-              participants: Array.from(b.participants)
+            const humanParticipants = Array.from(b.participants).filter(pId => {
+              const p = this.allPlayers.find(pl => pl.id === pId);
+              return p && !p.isAI && p.id !== 'monsters';
             });
             
-            // Limit stored replays to prevent memory bloating
-            if (this.completedBattleReplays.length > 25) {
-              this.completedBattleReplays.shift();
+            if (humanParticipants.length > 0) {
+              let battleName = 'Space Skirmish';
+              if (b.planets && b.planets.length > 0) {
+                battleName = 'Battle of ' + b.planets[0].name;
+              } else if (b.frames[0] && b.frames[0].ships) {
+                const prominentShip = b.frames[0].ships.find(sh => (sh.isCruiser || sh.isAmoeba) && sh.name);
+                if (prominentShip) {
+                  battleName = 'Skirmish near ' + prominentShip.name;
+                }
+              }
+
+              this.completedBattleReplays.push({
+                id: b.id,
+                name: battleName,
+                type: 'battle',
+                timestamp: timeNow,
+                x: b.x,
+                y: b.y,
+                radius: b.radius,
+                duration: timeNow - b.startTime,
+                frames: b.frames,
+                planets: b.planets || [],
+                participants: Array.from(b.participants)
+              });
+              
+              // Limit stored replays to prevent memory bloating
+              if (this.completedBattleReplays.length > 25) {
+                this.completedBattleReplays.shift();
+              }
             }
           }
           this.ongoingBattles.splice(i, 1);

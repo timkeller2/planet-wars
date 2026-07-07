@@ -2961,7 +2961,7 @@ async function bootstrap() {
         gameStartTime: game.gameStartTime,
         exploredCells: playerExploredCells,
         boardingReplays: game.boardingReplays || [],
-        battleReplays: game.completedBattleReplays || []
+        battleReplays: game.completedBattleReplays ? game.completedBattleReplays.filter(r => r.participants.includes(player.id)) : []
       };
       
       if (game.pendingHabClassChanges && game.pendingHabClassChanges.length > 0) {

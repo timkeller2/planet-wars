@@ -6717,27 +6717,31 @@ function getPlanetTradeIncomePerMin(planet) {
       state: 'alive',
       fallProgress: 0,
       fallAngle: 0,
-      lastFired: 0
+      lastFired: 0,
+      offsetX: (Math.random() - 0.5) * 80,
+      offsetY: (Math.random() - 0.5) * 80,
+      speedMultiplier: 0.6 + Math.random() * 0.8
     };
   }
 
   function layoutReplayVisualTroops(replayTime, totalDuration) {
-    const progress = Math.min(1.0, replayTime / totalDuration);
-    const leftStartX = 45;
-    const rightStartX = 305;
-    const centerTargetX = 175;
-    const unitsPerCol = 12;
+    const leftStartX = 150;
+    const rightStartX = 650;
+    const centerTargetX = 400;
+    const unitsPerCol = 20;
 
     boardingTroops.forEach(t => {
       if (t.state === 'alive') {
         const col = Math.floor(t.index / unitsPerCol);
         const row = t.index % unitsPerCol;
         
-        const startX = t.side === 'left' ? (leftStartX - col * 12) : (rightStartX + col * 12);
-        const targetX = centerTargetX;
+        const startX = (t.side === 'left' ? (leftStartX - col * 15) : (rightStartX + col * 15)) + t.offsetX;
+        const targetX = centerTargetX + t.offsetX;
 
-        t.x = startX + (targetX - startX) * progress;
-        t.y = 52 + row * 8;
+        let p = Math.min(1.0, (replayTime / totalDuration) * t.speedMultiplier);
+
+        t.x = startX + (targetX - startX) * p;
+        t.y = 80 + row * 12 + t.offsetY;
 
         if (replayTime === 0 || (t.cx === 0 && t.cy === 0)) {
           t.cx = t.x;
@@ -6760,13 +6764,15 @@ function getPlanetTradeIncomePerMin(planet) {
     if (overlay) {
       overlay.style.display = 'block';
       if (replay.type === 'battle') {
-        overlay.style.width = '380px';
-        canvas.width = 356;
-        canvas.height = 356;
+        overlay.classList.add('battle-replay-mode');
+        overlay.classList.remove('boarding-replay-mode');
+        canvas.width = 800;
+        canvas.height = 800;
       } else {
-        overlay.style.width = '380px';
-        canvas.width = 356;
-        canvas.height = 160;
+        overlay.classList.remove('battle-replay-mode');
+        overlay.classList.add('boarding-replay-mode');
+        canvas.width = 800;
+        canvas.height = 400;
       }
     }
 
@@ -7060,6 +7066,26 @@ function getPlanetTradeIncomePerMin(planet) {
       progress = (replayTimeMs - f1.timeOffset) / (f2.timeOffset - f1.timeOffset);
     }
     
+    // Draw Planets
+    if (activeReplay.planets) {
+      activeReplay.planets.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius || 40, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        if (p.name) {
+          ctx.fillStyle = '#fff';
+          ctx.font = '14px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(p.name, p.x, p.y + (p.radius || 40) + 18);
+        }
+      });
+    }
+
     f1.ships.forEach(s1 => {
       const s2 = f2.ships.find(s => s.id === s1.id) || s1;
       const curX = s1.x + (s2.x - s1.x) * progress;
@@ -7115,6 +7141,13 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.fillRect(curX - 10, curY - 20, 20, 3);
         ctx.fillStyle = '#00ff00';
         ctx.fillRect(curX - 10, curY - 20, 20 * hpPct, 3);
+      }
+
+      if (s1.name && (s1.isCruiser || s1.isAmoeba)) {
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(s1.name, curX, curY + 25);
       }
     });
     
