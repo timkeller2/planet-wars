@@ -1310,7 +1310,46 @@ canvas {
   font-size: 0.75rem;
 }
 
-#boarding-combat-overlay.battle-replay-mode { left: 50% !important; top: 50% !important; transform: translate(-50%, -50%) !important; width: 800px !important; height: 800px !important; }
-#boarding-combat-overlay.boarding-replay-mode { left: 50% !important; top: 50% !important; transform: translate(-50%, -50%) !important; width: 800px !important; height: 400px !important; }
-#boarding-combat-overlay.battle-replay-mode canvas { width: 100% !important; height: 100% !important; }
-#boarding-combat-overlay.boarding-replay-mode canvas { width: 100% !important; height: 100% !important; }
+#boarding-combat-overlay.battle-replay-mode {
+  position: fixed !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 824px !important;
+  height: auto !important;
+  right: auto !important;
+  padding: 12px !important;
+  box-sizing: border-box !important;
+}
+
+#boarding-combat-overlay.battle-replay-mode .boarding-combat-body {
+  width: 800px !important;
+  height: 800px !important;
+}
+
+#boarding-combat-overlay.battle-replay-mode canvas {
+  width: 800px !important;
+  height: 800px !important;
+}
+
+#boarding-combat-overlay.boarding-replay-mode {
+  position: fixed !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 824px !important;
+  height: auto !important;
+  right: auto !important;
+  padding: 12px !important;
+  box-sizing: border-box !important;
+}
+
+#boarding-combat-overlay.boarding-replay-mode .boarding-combat-body {
+  width: 800px !important;
+  height: 400px !important;
+}
+
+#boarding-combat-overlay.boarding-replay-mode canvas {
+  width: 800px !important;
+  height: 400px !important;
+}

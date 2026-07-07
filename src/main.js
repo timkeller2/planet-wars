@@ -6157,7 +6157,7 @@ function getPlanetTradeIncomePerMin(planet) {
       overlay.className = 'boarding-combat-window';
       overlay.innerHTML = `
         <div class="boarding-combat-header">
-          <span>BOARDING ACTION (<span id="boarding-combat-timer">10.0</span>s)</span>
+          <span><span id="boarding-combat-title">BOARDING ACTION</span> (<span id="boarding-combat-timer">10.0</span>s)</span>
           <button class="boarding-combat-close-btn" id="boarding-combat-close-btn">&times;</button>
         </div>
         <div class="boarding-combat-body">
@@ -6735,13 +6735,13 @@ function getPlanetTradeIncomePerMin(planet) {
         const col = Math.floor(t.index / unitsPerCol);
         const row = t.index % unitsPerCol;
         
-        const startX = (t.side === 'left' ? (leftStartX - col * 15) : (rightStartX + col * 15)) + t.offsetX;
-        const targetX = centerTargetX + t.offsetX;
+        const startX = (t.side === 'left' ? (leftStartX - col * 15) : (rightStartX + col * 15)) + (t.offsetX || 0);
+        const targetX = centerTargetX + (t.offsetX || 0);
 
         let p = Math.min(1.0, (replayTime / totalDuration) * t.speedMultiplier);
 
         t.x = startX + (targetX - startX) * p;
-        t.y = 80 + row * 12 + t.offsetY;
+        t.y = 80 + row * 12 + (t.offsetY || 0);
 
         if (replayTime === 0 || (t.cx === 0 && t.cy === 0)) {
           t.cx = t.x;
@@ -6784,6 +6784,11 @@ function getPlanetTradeIncomePerMin(planet) {
     const timerSpan = document.getElementById('boarding-combat-timer');
     if (timerSpan) {
       timerSpan.textContent = replay.totalDuration ? replay.totalDuration.toFixed(1) : (replay.duration / 1000).toFixed(1);
+    }
+    
+    const titleSpan = document.getElementById('boarding-combat-title');
+    if (titleSpan) {
+      titleSpan.textContent = replay.type === 'battle' ? replay.name : 'BOARDING ACTION';
     }
     
     // Skip boarding-specific initialization if it's a 2D spatial battle
@@ -6843,6 +6848,12 @@ function getPlanetTradeIncomePerMin(planet) {
     const ctx = canvas.getContext('2d');
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const timerSpan = document.getElementById('boarding-combat-timer');
+    if (timerSpan) {
+      const remainingTime = Math.max(0, (activeReplay.totalDuration || activeReplay.duration / 1000) - replayTime);
+      timerSpan.textContent = remainingTime.toFixed(1);
+    }
     
     if (activeReplay.type === 'battle') {
       animateBattleReplay(ctx, now, dt, canvas, replayTime * 1000);
@@ -6992,11 +7003,7 @@ function getPlanetTradeIncomePerMin(planet) {
       drawTroop(ctx, t);
     });
     
-    const timerSpan = document.getElementById('boarding-combat-timer');
-    if (timerSpan) {
-      const remainingTime = Math.max(0, activeReplay.totalDuration - replayTime);
-      timerSpan.textContent = remainingTime.toFixed(1);
-    }
+
 
     if (replayTime >= activeReplay.totalDuration) {
       if (!boardingWinnerMessage) {
@@ -7023,7 +7030,24 @@ function getPlanetTradeIncomePerMin(planet) {
 
   function animateBattleReplay(ctx, now, dt, canvas, replayTimeMs) {
     const frames = activeReplay.frames;
-    if (!frames || frames.length === 0) return;
+    if (!frames || frames.length === 0) { console.warn('[REPLAY] No frames!'); return; }
+    
+    // One-time diagnostic dump
+    if (!activeReplay._loggedDiag) {
+      activeReplay._loggedDiag = true;
+      console.log('[REPLAY DIAG] center=', activeReplay.x, activeReplay.y, 'radius=', activeReplay.radius, 'frames=', frames.length);
+      console.log('[REPLAY DIAG] canvas=', canvas.width, canvas.height);
+      const viewSize = activeReplay.radius * 2;
+      const scale = canvas.width / viewSize;
+      console.log('[REPLAY DIAG] viewSize=', viewSize, 'scale=', scale);
+      if (frames[0]) {
+        console.log('[REPLAY DIAG] frame0 ships=', frames[0].ships.length, 'lasers=', frames[0].lasers.length, 'explosions=', frames[0].explosions.length);
+        if (frames[0].ships.length > 0) {
+          const s = frames[0].ships[0];
+          console.log('[REPLAY DIAG] first ship:', s.name, 'at', s.x, s.y, 'id=', s.id);
+        }
+      }
+    }
     
     let f1 = frames[0];
     let f2 = frames[frames.length - 1];

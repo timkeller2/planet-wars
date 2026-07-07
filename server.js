@@ -2960,9 +2960,28 @@ async function bootstrap() {
         height: game.height,
         gameStartTime: game.gameStartTime,
         exploredCells: playerExploredCells,
-        boardingReplays: game.boardingReplays || [],
-        battleReplays: game.completedBattleReplays ? game.completedBattleReplays.filter(r => r.participants.includes(player.id)) : []
+        boardingReplays: game.boardingReplays ? game.boardingReplays.filter(r => {
+          if (r.participants && !r.participants.includes(player.id)) return false;
+          if (game.settings?.fogOfWar && !isVisible(r.x || 0, r.y || 0)) return false;
+          return true;
+        }) : [],
+        battleReplays: game.completedBattleReplays ? game.completedBattleReplays.filter(r => {
+          if (!r.participants.includes(player.id)) return false;
+          if (game.settings?.fogOfWar && !isVisible(r.x, r.y)) return false;
+          return true;
+        }).map(r => {
+          // Strip planets the player hasn't discovered yet (fog of war)
+          if (game.settings?.fogOfWar && r.planets && r.planets.length > 0) {
+            const filteredPlanets = r.planets.filter(rp => player.discoveredPlanets && player.discoveredPlanets.has(rp.id));
+            return Object.assign({}, r, { planets: filteredPlanets });
+          }
+          return r;
+        }) : []
       };
+      
+      if (state.battleReplays.length > 0 || state.boardingReplays.length > 0) {
+        console.log(`[REPLAY] Sending to ${player.name}: battle=${state.battleReplays.map(r=>r.name).join(',')} boarding=${state.boardingReplays.map(r=>r.name).join(',')}`);
+      }
       
       if (game.pendingHabClassChanges && game.pendingHabClassChanges.length > 0) {
         for (const ev of game.pendingHabClassChanges) {

@@ -6461,9 +6461,6 @@ export class Game {
       }
     }
 
-    // Remove inactive ships and dead planets
-    this.ships = this.ships.filter(s => s.active);
-    
     let planetDestroyed = false;
     for (let i = this.planets.length - 1; i >= 0; i--) {
       if (this.planets[i].dead) {
@@ -6725,7 +6722,6 @@ export class Game {
           
           const bRadSq = b.radius * b.radius;
           for (const s of this.ships) {
-            if (!s.active) continue;
             const dx = s.x - b.x;
             const dy = s.y - b.y;
             if (dx*dx + dy*dy <= bRadSq) {
@@ -6773,7 +6769,17 @@ export class Game {
         
         // Finalize battle if no activity for 5 seconds
         if (timeNow - b.lastActivityTime >= 5000) {
-          if (b.frames.length > 5) { // Only save if the battle had some duration
+          // Trim trailing empty frames so instant-kill battles don't result in 5 seconds of blank space
+          while (b.frames.length > 1) {
+            const lastFrame = b.frames[b.frames.length - 1];
+            if (lastFrame.ships.length === 0 && lastFrame.lasers.length === 0 && lastFrame.explosions.length === 0) {
+              b.frames.pop();
+            } else {
+              break;
+            }
+          }
+          
+          if (b.frames.length > 2) { // Only save if the battle had some duration
             const humanParticipants = Array.from(b.participants).filter(pId => {
               const p = this.allPlayers.find(pl => pl.id === pId);
               return p && !p.isAI && p.id !== 'monsters';
@@ -6781,15 +6787,29 @@ export class Game {
             
             if (humanParticipants.length > 0) {
               let battleName = 'Space Skirmish';
-              if (b.planets && b.planets.length > 0) {
-                battleName = 'Battle of ' + b.planets[0].name;
-              } else if (b.frames[0] && b.frames[0].ships) {
-                const prominentShip = b.frames[0].ships.find(sh => (sh.isCruiser || sh.isAmoeba) && sh.name);
-                if (prominentShip) {
-                  battleName = 'Skirmish near ' + prominentShip.name;
+              // Find the nearest planet to the battle center (skip anomalies)
+              let nearestPlanet = null;
+              let nearestDist = Infinity;
+              for (const p of this.planets) {
+                if (p.isDeepSpaceAnomaly) continue;
+                const pdx = p.x - b.x;
+                const pdy = p.y - b.y;
+                const dist = Math.sqrt(pdx * pdx + pdy * pdy);
+                if (dist < nearestDist) {
+                  nearestDist = dist;
+                  nearestPlanet = p;
                 }
               }
+              if (nearestPlanet) {
+                battleName = 'Battle of ' + nearestPlanet.name;
+              }
 
+              // Diagnostic log for battle replay
+              const totalShips = b.frames.reduce((sum, f) => sum + f.ships.length, 0);
+              const totalLasers = b.frames.reduce((sum, f) => sum + f.lasers.length, 0);
+              const totalExplosions = b.frames.reduce((sum, f) => sum + f.explosions.length, 0);
+              console.log(`[BATTLE REPLAY] "${battleName}" finalized: ${b.frames.length} frames, ${totalShips} ship entries, ${totalLasers} laser entries, ${totalExplosions} explosion entries, radius=${b.radius}, center=(${Math.round(b.x)},${Math.round(b.y)})`);
+              
               this.completedBattleReplays.push({
                 id: b.id,
                 name: battleName,
@@ -6814,6 +6834,9 @@ export class Game {
         }
       }
     }
+    
+    // Remove inactive ships that died during this tick so they don't persist
+    this.ships = this.ships.filter(s => s.active);
    }
 
    eliminatePlayer(eliminatedPlayer, conqueror) {
@@ -7910,7 +7933,9 @@ export class Game {
             },
             events: events,
             winner: leftSurvivors.length > 0 ? 'Defender' : 'Attacker',
-            totalDuration: Math.max(1, currentTime)
+            totalDuration: Math.max(1, currentTime),
+            type: 'boarding',
+            participants: [ship.owner ? ship.owner.id : 'monsters', ship.boardingPlayer ? ship.boardingPlayer.id : 'monsters']
           };
 
           if (!this.boardingReplays) {
