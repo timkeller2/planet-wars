@@ -2960,7 +2960,8 @@ async function bootstrap() {
         height: game.height,
         gameStartTime: game.gameStartTime,
         exploredCells: playerExploredCells,
-        boardingReplays: game.boardingReplays || []
+        boardingReplays: game.boardingReplays || [],
+        battleReplays: game.completedBattleReplays || []
       };
       
       if (game.pendingHabClassChanges && game.pendingHabClassChanges.length > 0) {

@@ -244,6 +244,35 @@ export class Game {
     }
   }
 
+  registerBattleActivity(x, y, timeNow) {
+    if (!this.ongoingBattles) return;
+    let found = false;
+    const searchRadius = 600;
+
+    for (const b of this.ongoingBattles) {
+      const dx = b.x - x;
+      const dy = b.y - y;
+      if (dx * dx + dy * dy < searchRadius * searchRadius) {
+        b.lastActivityTime = timeNow;
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found) {
+      this.ongoingBattles.push({
+        id: Math.random().toString(36).substring(2, 9),
+        x: x,
+        y: y,
+        radius: 800,
+        startTime: timeNow,
+        lastActivityTime: timeNow,
+        lastFrameTime: 0,
+        frames: []
+      });
+    }
+  }
+
   constructor(options) {
     if (options && options.getContext) {
       this.canvas = options;
@@ -304,7 +333,27 @@ export class Game {
     this.planetGridPopulated = false;
     this.ships = new SpatialGridArray();
     this.lasers = new RecycledArray(1500);
+    const originalLaserPush = this.lasers.push.bind(this.lasers);
+    this.lasers.push = (item) => {
+      originalLaserPush(item);
+      const px = item.startX !== undefined ? item.startX : item.x;
+      const py = item.startY !== undefined ? item.startY : item.y;
+      if (px !== undefined && py !== undefined) {
+        this.registerBattleActivity(px, py, Date.now());
+      }
+    };
+    
     this.explosions = new RecycledArray(1000);
+    const originalExplosionPush = this.explosions.push.bind(this.explosions);
+    this.explosions.push = (item) => {
+      originalExplosionPush(item);
+      if (item.x !== undefined && item.y !== undefined) {
+        this.registerBattleActivity(item.x, item.y, Date.now());
+      }
+    };
+    
+    this.ongoingBattles = [];
+    this.completedBattleReplays = [];
     
     this.lastTime = 0;
     this.isRunning = false;
@@ -4229,7 +4278,10 @@ export class Game {
       }
     }
     const nowTime = Date.now();
-    this.boardingReplays = this.boardingReplays.filter(r => nowTime - r.timestamp < 300000);
+    this.boardingReplays = this.boardingReplays.filter(r => nowTime - r.timestamp < 120000);
+    if (this.completedBattleReplays) {
+      this.completedBattleReplays = this.completedBattleReplays.filter(r => nowTime - r.timestamp < 120000);
+    }
 
     for (const player of this.allPlayers) {
       player.wasAlive = player.isAlive !== false;
@@ -6621,6 +6673,96 @@ export class Game {
          this.eliminatePlayer(player, conqueror);
        }
      }
+
+    // 2D Spatial Battle Replays logic
+    if (this.ongoingBattles) {
+      const timeNow = Date.now();
+      for (let i = this.ongoingBattles.length - 1; i >= 0; i--) {
+        const b = this.ongoingBattles[i];
+        b.participants = b.participants || new Set();
+        
+        // Capture frame at 5 FPS (every 200ms)
+        if (timeNow - b.lastFrameTime >= 200) {
+          b.lastFrameTime = timeNow;
+          const frame = {
+            timeOffset: timeNow - b.startTime,
+            ships: [],
+            lasers: [],
+            explosions: []
+          };
+          
+          const bRadSq = b.radius * b.radius;
+          for (const s of this.ships) {
+            if (!s.active) continue;
+            const dx = s.x - b.x;
+            const dy = s.y - b.y;
+            if (dx*dx + dy*dy <= bRadSq) {
+              frame.ships.push({
+                id: s.id,
+                x: s.x,
+                y: s.y,
+                angle: s.angle,
+                health: s.health,
+                maxHealth: s.maxHealth,
+                ownerId: s.owner ? s.owner.id : null,
+                isCruiser: s.isCruiser,
+                isAmoeba: s.isAmoeba,
+                isMarineFleet: s.isMarineFleet,
+                radius: s.radius,
+                package: s.package,
+                count: s.count
+              });
+              b.participants.add(s.owner ? s.owner.id : 'monsters');
+            }
+          }
+          
+          for (const l of this.lasers) {
+            const dx = l.startX - b.x;
+            const dy = l.startY - b.y;
+            if (dx*dx + dy*dy <= bRadSq) {
+              frame.lasers.push({
+                startX: l.startX, startY: l.startY, endX: l.endX, endY: l.endY, color: l.color, age: l.age, duration: l.duration
+              });
+            }
+          }
+          
+          for (const e of this.explosions) {
+            const dx = e.x - b.x;
+            const dy = e.y - b.y;
+            if (dx*dx + dy*dy <= bRadSq) {
+              frame.explosions.push({
+                x: e.x, y: e.y, size: e.size, color: e.color, age: e.age, duration: e.duration
+              });
+            }
+          }
+          b.frames.push(frame);
+        }
+        
+        // Finalize battle if no activity for 5 seconds
+        if (timeNow - b.lastActivityTime >= 5000) {
+          if (b.frames.length > 5) { // Only save if the battle had some duration
+            this.completedBattleReplays.push({
+              id: b.id,
+              name: 'Space Battle',
+              type: 'battle',
+              timestamp: timeNow,
+              x: b.x,
+              y: b.y,
+              radius: b.radius,
+              duration: timeNow - b.startTime,
+              frames: b.frames,
+              participants: Array.from(b.participants)
+            });
+            
+            // Limit stored replays to prevent memory bloating
+            if (this.completedBattleReplays.length > 25) {
+              this.completedBattleReplays.shift();
+            }
+          }
+          this.ongoingBattles.splice(i, 1);
+        }
+      }
+    }
    }
 
    eliminatePlayer(eliminatedPlayer, conqueror) {
@@ -7581,6 +7723,35 @@ export class Game {
         ship.boardingTimer = Math.max(0, ship.boardingTimer - dt);
 
         if (ship.boardingTimer <= 0) {
+          if (ship.boardingPlayer && ship.boardingSourceContributions) {
+            const alreadyContributingIds = new Set(ship.boardingSourceContributions.map(c => c.shipId));
+            const lateCruisers = cruisers.filter(other => 
+              other.owner && 
+              other.owner.id === ship.boardingPlayer.id &&
+              !alreadyContributingIds.has(other.id) &&
+              !other.isAmoeba &&
+              other.marineCount > 0 &&
+              !other.isMaterializing &&
+              other.scoutAttackEnabled === true &&
+              Math.hypot(other.x - ship.x, other.y - ship.y) <= other.cruiserRadarRange()
+            );
+
+            if (lateCruisers.length > 0) {
+              let lateMarines = 0;
+              for (const lc of lateCruisers) {
+                const mCount = Math.floor(lc.marineCount || 0);
+                if (mCount > 0) {
+                  ship.boardingSourceContributions.push({ shipId: lc.id, contributed: mCount });
+                  lc.marineCount -= mCount;
+                  lateMarines += mCount;
+                }
+              }
+              ship.boardingStartMarines = (ship.boardingStartMarines || 0) + lateMarines;
+              ship.boardingMarines = (ship.boardingMarines || 0) + lateMarines;
+              console.log(`[BOARDING LATE JOIN] ${lateCruisers.length} additional cruisers joined the boarding action adding ${lateMarines} marines.`);
+            }
+          }
+
           let M_atk = ship.boardingMarines;
           let M_def = ship.marineCount || 0;
           let C_def = ship.crew || 0;

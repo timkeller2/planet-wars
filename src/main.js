@@ -6674,7 +6674,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     const nowTime = Date.now();
-    const activeReplays = replays.filter(r => !deletedReplayIds.has(r.id) && (nowTime - r.timestamp < 300000));
+    const activeReplays = replays.filter(r => !deletedReplayIds.has(r.id) && (nowTime - r.timestamp < 120000));
 
     const currentBtnIds = Array.from(container.children).map(c => c.dataset.replayId).join(',');
     const newBtnIds = activeReplays.map(r => r.id).join(',');
@@ -6756,8 +6756,18 @@ function getPlanetTradeIncomePerMin(planet) {
 
     ensureBoardingCombatWindowExists();
     const overlay = document.getElementById('boarding-combat-overlay');
+    const canvas = document.getElementById('boardingCombatCanvas');
     if (overlay) {
       overlay.style.display = 'block';
+      if (replay.type === 'battle') {
+        overlay.style.width = '380px';
+        canvas.width = 356;
+        canvas.height = 356;
+      } else {
+        overlay.style.width = '380px';
+        canvas.width = 356;
+        canvas.height = 160;
+      }
     }
 
     const resultDiv = document.getElementById('boarding-combat-result');
@@ -6767,37 +6777,40 @@ function getPlanetTradeIncomePerMin(planet) {
 
     const timerSpan = document.getElementById('boarding-combat-timer');
     if (timerSpan) {
-      timerSpan.textContent = replay.totalDuration.toFixed(1);
+      timerSpan.textContent = replay.totalDuration ? replay.totalDuration.toFixed(1) : (replay.duration / 1000).toFixed(1);
     }
+    
+    // Skip boarding-specific initialization if it's a 2D spatial battle
+    if (replay.type !== 'battle') {
+      boardingWinnerMessage = '';
+      boardingWinnerTime = 0;
+      boardingTroops = [];
+      boardingLasers = [];
+      boardingBlastParticles = [];
 
-    boardingWinnerMessage = '';
-    boardingWinnerTime = 0;
-    boardingTroops = [];
-    boardingLasers = [];
-    boardingBlastParticles = [];
+      boardingDefenderName = replay.leftSide.name;
+      boardingDefenderColor = replay.leftSide.color;
+      boardingAttackerName = replay.rightSide.name;
+      boardingAttackerColor = replay.rightSide.color;
+      boardingDefenderHitChance = replay.leftSide.hitChance !== undefined ? replay.leftSide.hitChance : 10;
+      boardingAttackerHitChance = replay.rightSide.hitChance !== undefined ? replay.rightSide.hitChance : 10;
 
-    boardingDefenderName = replay.leftSide.name;
-    boardingDefenderColor = replay.leftSide.color;
-    boardingAttackerName = replay.rightSide.name;
-    boardingAttackerColor = replay.rightSide.color;
-    boardingDefenderHitChance = replay.leftSide.hitChance !== undefined ? replay.leftSide.hitChance : 10;
-    boardingAttackerHitChance = replay.rightSide.hitChance !== undefined ? replay.rightSide.hitChance : 10;
+      startingDefenderCount = replay.leftSide.units.length;
+      startingAttackerCount = replay.rightSide.units.length;
 
-    startingDefenderCount = replay.leftSide.units.length;
-    startingAttackerCount = replay.rightSide.units.length;
+      boardingDefenderCount = startingDefenderCount;
+      boardingAttackerCount = startingAttackerCount;
 
-    boardingDefenderCount = startingDefenderCount;
-    boardingAttackerCount = startingAttackerCount;
+      replay.leftSide.units.forEach(u => {
+        boardingTroops.push(createReplayVisualTroop(u, 'left', replay.leftSide.color));
+      });
 
-    replay.leftSide.units.forEach(u => {
-      boardingTroops.push(createReplayVisualTroop(u, 'left', replay.leftSide.color));
-    });
+      replay.rightSide.units.forEach(u => {
+        boardingTroops.push(createReplayVisualTroop(u, 'right', replay.rightSide.color));
+      });
 
-    replay.rightSide.units.forEach(u => {
-      boardingTroops.push(createReplayVisualTroop(u, 'right', replay.rightSide.color));
-    });
-
-    layoutReplayVisualTroops(0, replay.totalDuration);
+      layoutReplayVisualTroops(0, replay.totalDuration);
+    }
 
     if (!boardingAnimFrame) {
       lastBoardingStateTime = Date.now();
@@ -6824,6 +6837,11 @@ function getPlanetTradeIncomePerMin(planet) {
     const ctx = canvas.getContext('2d');
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    if (activeReplay.type === 'battle') {
+      animateBattleReplay(ctx, now, dt, canvas, replayTime * 1000);
+      return;
+    }
     
     ctx.fillStyle = 'rgba(8, 20, 28, 0.6)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -6997,8 +7015,154 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   }
 
+  function animateBattleReplay(ctx, now, dt, canvas, replayTimeMs) {
+    const frames = activeReplay.frames;
+    if (!frames || frames.length === 0) return;
+    
+    let f1 = frames[0];
+    let f2 = frames[frames.length - 1];
+    
+    for (let i = 0; i < frames.length - 1; i++) {
+      if (replayTimeMs >= frames[i].timeOffset && replayTimeMs < frames[i+1].timeOffset) {
+        f1 = frames[i];
+        f2 = frames[i+1];
+        break;
+      }
+    }
+    
+    if (replayTimeMs >= frames[frames.length - 1].timeOffset) {
+      f1 = frames[frames.length - 1];
+      f2 = frames[frames.length - 1];
+    }
+    
+    ctx.fillStyle = '#08141c';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.08)';
+    ctx.lineWidth = 1;
+    for (let x = 10; x < canvas.width; x += 20) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    }
+    for (let y = 10; y < canvas.height; y += 20) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    }
+
+    const viewSize = activeReplay.radius * 2;
+    const scale = canvas.width / viewSize;
+    
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.scale(scale, scale);
+    ctx.translate(-activeReplay.x, -activeReplay.y);
+    
+    let progress = 0;
+    if (f2.timeOffset > f1.timeOffset) {
+      progress = (replayTimeMs - f1.timeOffset) / (f2.timeOffset - f1.timeOffset);
+    }
+    
+    f1.ships.forEach(s1 => {
+      const s2 = f2.ships.find(s => s.id === s1.id) || s1;
+      const curX = s1.x + (s2.x - s1.x) * progress;
+      const curY = s1.y + (s2.y - s1.y) * progress;
+      let curA = s1.angle;
+      
+      // Interpolate angle without spinning
+      let dAngle = s2.angle - s1.angle;
+      while (dAngle > Math.PI) dAngle -= Math.PI * 2;
+      while (dAngle < -Math.PI) dAngle += Math.PI * 2;
+      curA += dAngle * progress;
+      
+      const ownerColor = s1.ownerId === 'monsters' ? '#006400' : (serverState.players.find(p => p.id === s1.ownerId)?.color || '#ffffff');
+      
+      ctx.save();
+      ctx.translate(curX, curY);
+      ctx.rotate(curA);
+      
+      if (s1.isAmoeba) {
+        ctx.fillStyle = 'rgba(0, 100, 0, 0.6)';
+        ctx.strokeStyle = '#00ff00';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, s1.radius || 15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (s1.isMarineFleet) {
+        ctx.fillStyle = ownerColor;
+        ctx.fillRect(-3, -3, 6, 6);
+      } else if (s1.isCruiser) {
+        ctx.strokeStyle = ownerColor;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(15, 0);
+        ctx.lineTo(-10, -10);
+        ctx.lineTo(-5, 0);
+        ctx.lineTo(-10, 10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = ownerColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      
+      if (s1.maxHealth > 0) {
+        const hpPct = s1.health / s1.maxHealth;
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(curX - 10, curY - 20, 20, 3);
+        ctx.fillStyle = '#00ff00';
+        ctx.fillRect(curX - 10, curY - 20, 20 * hpPct, 3);
+      }
+    });
+    
+    f1.lasers.forEach(l => {
+      ctx.strokeStyle = l.color;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(l.startX, l.startY);
+      ctx.lineTo(l.endX, l.endY);
+      ctx.stroke();
+    });
+    
+    f1.explosions.forEach(e => {
+      ctx.fillStyle = e.color;
+      ctx.globalAlpha = Math.max(0, 1 - (e.age / e.duration));
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, e.size || 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+    });
+    
+    ctx.restore();
+    
+    if (replayTimeMs >= activeReplay.duration) {
+      if (!boardingWinnerMessage) {
+        boardingWinnerMessage = "BATTLE RECORDING ENDED";
+        boardingWinnerTime = Date.now();
+        const resultDiv = document.getElementById('boarding-combat-result');
+        if (resultDiv) {
+          resultDiv.textContent = boardingWinnerMessage;
+          resultDiv.style.color = '#0ff';
+        }
+      } else {
+        if (Date.now() - boardingWinnerTime > 3000) {
+          const overlay = document.getElementById('boarding-combat-overlay');
+          if (overlay) overlay.style.display = 'none';
+          isReplayMode = false;
+          activeReplay = null;
+        }
+      }
+    }
+  }
+
   function updateBoardingOverlay(state) {
-    syncReplayButtons(state.boardingReplays);
+    const combinedReplays = [];
+    if (state.boardingReplays) combinedReplays.push(...state.boardingReplays);
+    if (state.battleReplays) combinedReplays.push(...state.battleReplays);
+    syncReplayButtons(combinedReplays);
   }
 
   function formatTime(seconds) {
@@ -8737,8 +8901,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      if (clickedAnomaly) {
-        clickedPlanet = null;
+      if (clickedAnomaly && !clickedPlanet) {
         clickedTargetShip = null;
       }
 
@@ -9866,6 +10029,41 @@ function getPlanetTradeIncomePerMin(planet) {
           const mapHeight = serverState.height || 1620;
           cameraPanX = mapWidth / 2 - target.x;
           cameraPanY = mapHeight / 2 - target.y;
+
+          updateSelectionTimes();
+          updateSelectionTiles();
+          updateButtonHighlights();
+        }
+      }
+      return;
+    }
+
+    if (event.key === '.') {
+      event.preventDefault();
+      if (serverState && localPlayer) {
+        const idleShips = serverState.ships.filter(s => {
+          if (!s.active || s.ownerId !== localPlayer.id || !s.isCruiser || s.isReturnPod || s.isBoardingFleet || s.isAmoeba) return false;
+          if (!s.stationaryTimer || s.stationaryTimer <= 0) return false;
+          if (s.isResearching || s.isDiplomacy || s.isScouting || s.isPatrolling) return false;
+          return true;
+        }).sort((a, b) => a.id - b.id);
+
+        if (idleShips.length > 0) {
+          let nextIndex = 0;
+          if (typeof window.lastIdleFocusIndex === 'number') {
+            nextIndex = (window.lastIdleFocusIndex + 1) % idleShips.length;
+          }
+          window.lastIdleFocusIndex = nextIndex;
+
+          const targetShip = idleShips[nextIndex];
+          
+          selectedPlanets = [];
+          selectedShips = [targetShip];
+
+          const mapWidth = serverState.width || 1920;
+          const mapHeight = serverState.height || 1620;
+          cameraPanX = mapWidth / 2 - targetShip.x;
+          cameraPanY = mapHeight / 2 - targetShip.y;
 
           updateSelectionTimes();
           updateSelectionTiles();

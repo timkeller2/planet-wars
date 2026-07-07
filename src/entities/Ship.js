@@ -813,17 +813,27 @@ export class Ship {
         if (distSq < gravityRadius * gravityRadius) {
           if (planet.owner && this.owner && planet.owner.id === this.owner.id) {
             const planetSupplies = planet.supplies || 0;
-            const currentSupplies = friendlyWellPlanet ? (friendlyWellPlanet.supplies || 0) : -1;
+            const planetMax = planet.maxShips || 1;
+            const planetPct = planetSupplies / planetMax;
             
-            if (planetSupplies > currentSupplies || (planetSupplies === currentSupplies && distSq < minFriendlyDistSq)) {
+            const currentSupplies = friendlyWellPlanet ? (friendlyWellPlanet.supplies || 0) : -1;
+            const currentMax = friendlyWellPlanet ? (friendlyWellPlanet.maxShips || 1) : 1;
+            const currentPct = friendlyWellPlanet ? (currentSupplies / currentMax) : -1;
+            
+            if (planetPct > currentPct || (planetPct === currentPct && distSq < minFriendlyDistSq)) {
               friendlyWellPlanet = planet;
               minFriendlyDistSq = distSq;
             }
           } else if (!planet.owner && !planet.isDeepSpaceAnomaly) {
             const planetSupplies = planet.supplies || 0;
-            const currentSupplies = neutralWellPlanet ? (neutralWellPlanet.supplies || 0) : -1;
+            const planetMax = planet.maxShips || 1;
+            const planetPct = planetSupplies / planetMax;
             
-            if (planetSupplies > currentSupplies || (planetSupplies === currentSupplies && distSq < minNeutralDistSq)) {
+            const currentSupplies = neutralWellPlanet ? (neutralWellPlanet.supplies || 0) : -1;
+            const currentMax = neutralWellPlanet ? (neutralWellPlanet.maxShips || 1) : 1;
+            const currentPct = neutralWellPlanet ? (currentSupplies / currentMax) : -1;
+            
+            if (planetPct > currentPct || (planetPct === currentPct && distSq < minNeutralDistSq)) {
               neutralWellPlanet = planet;
               minNeutralDistSq = distSq;
             }
