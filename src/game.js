@@ -4239,17 +4239,29 @@ export class Game {
     
     if (this.marketPrices) {
       this.marketFluctuationTimer = (this.marketFluctuationTimer || 0) + deltaTime;
-      const numHumanPlayers = Math.max(1, this.allPlayers.filter(p => p.id !== 'monsters' && !p.isMonster).length);
-      const fluctuationInterval = Math.max(30000, 200000 / numHumanPlayers);
+      const fluctuationInterval = 60000; // 60 seconds
       if (this.marketFluctuationTimer >= fluctuationInterval) {
         this.marketFluctuationTimer = 0;
+        
+        const numAIPlayers = this.allPlayers.filter(p => p.isAI).length;
+        const resources = Object.keys(this.marketPrices);
+        
+        // Randomly select numAIPlayers resources
+        const resourcesToAdjust = [];
+        for (let i = 0; i < numAIPlayers; i++) {
+          if (resources.length > 0) {
+            const rIndex = Math.floor(Math.random() * resources.length);
+            resourcesToAdjust.push(resources.splice(rIndex, 1)[0]);
+          }
+        }
+        
         const rarityToPrice = {
           'common': 4,
           'normal': 8,
           'rare': 12,
           'exotic': 16
         };
-        for (const res in this.marketPrices) {
+        for (const res of resourcesToAdjust) {
           const currentPrice = this.marketPrices[res];
           const rarity = this.resourceRarities ? this.resourceRarities[res] : 'normal';
           const basePrice = rarityToPrice[rarity] || 10;
