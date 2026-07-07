@@ -2213,7 +2213,7 @@ export class Ship {
           const roll = Math.random();
           if (roll < finalHitChance) {
             const rollMadeBy = finalHitChance - roll;
-            const damageDealt = enemyShip.takeDamage(explosions, this, false, targetData.targetType || 'side', rollMadeBy);
+            const damageDealt = enemyShip.takeDamage(explosions, this, false, targetData.targetType || 'side', rollMadeBy, game);
             if (damageDealt && this.owner) {
               this.owner.addExperience(1);
               if (this.sourceShipId && allShips) {
@@ -2484,7 +2484,7 @@ export class Ship {
 
           if (isHit) {
             const rollMadeBy = finalHitChance - roll;
-            const damageDealt = enemyShip.takeDamage(explosions, this, false, targetType, rollMadeBy);
+            const damageDealt = enemyShip.takeDamage(explosions, this, false, targetType, rollMadeBy, game);
             if (damageDealt) {
               const isAttackerCruiser = this.maxHealth > 0 && !this.isAmoeba;
               if (isAttackerCruiser) {
@@ -2644,7 +2644,10 @@ export class Ship {
               const pdx = p.x - this.x;
               const pdy = p.y - this.y;
               const distSq = pdx * pdx + pdy * pdy;
-              const combinedRange = effectiveRange + p.radius;
+              let combinedRange = effectiveRange + p.radius;
+              if (isCruiser && isCruiserBombing) {
+                combinedRange = p.radius + 25;
+              }
               if (distSq < combinedRange * combinedRange) {
                 validPlanets.push(p);
               }
@@ -3881,7 +3884,7 @@ export class Ship {
                 this.damageAccumulator -= 0.5;
                 const hitsCount = Math.max(1, Math.floor((this.count / 10) * (1 + (this.expScore || 0) / 100)));
                 for (let i = 0; i < hitsCount; i++) {
-                  target.takeDamage(explosions, this, false, 'side', 0);
+                  target.takeDamage(explosions, this, false, 'side', 0, game);
                 }
                 this.count = Math.max(0, this.count - 0.5);
                 if (this.count <= 0) {
@@ -5588,7 +5591,10 @@ export class Ship {
               targetRange = effectiveRange - 0.5 * bombRangeBoost - 0.5 * specialBombRangeBoost;
             }
 
-            const range = targetRange + (isPlanetTarget ? currentTarget.radius : 0);
+            let range = targetRange;
+            if (isPlanetTarget) {
+              range = 25 + currentTarget.radius;
+            }
             if (dist <= range && !this.isMovingBackward) {
               effectiveSpeed = 0;
             }
@@ -5723,7 +5729,7 @@ export class Ship {
     }
   }
 
-  takeDamage(explosions, attacker = null, isHazard = false, targetType = null, hitRollMadeBy = 0) {
+  takeDamage(explosions, attacker = null, isHazard = false, targetType = null, hitRollMadeBy = 0, game = null) {
     if (this.health >= 0) {
       if (this.isCruiser) {
         this.shieldShowTimer = 30;
@@ -5844,6 +5850,41 @@ export class Ship {
           const d3 = Math.floor(Math.random() * 3) + 1;
           const cooldown = Math.max(0, d3 - (this.damagecontrol || 0));
           this.shieldRegenCooldown = cooldown;
+        }
+      }
+
+      // 0.5. Intercept remaining damage using nearby friendly cruiser shields
+      if (damageAmt > 0 && game && game.spatialGrid) {
+        // Search for cruisers in a wide radius (400px radius = 160000 sq)
+        const candidateProtectors = game.getShipsInRadiusSq(this.x, this.y, 160000);
+        for (const protector of candidateProtectors) {
+          if (protector.isCruiser && protector.owner && this.owner && protector.owner.id === this.owner.id) {
+            // A cruiser cannot protect itself with its own external umbrella (handled above)
+            if (protector.id === this.id) continue;
+            
+            const protectorRadius = (protector.maxHealth || 30) * 2;
+            const pdx = protector.x - this.x;
+            const pdy = protector.y - this.y;
+            if (pdx * pdx + pdy * pdy <= protectorRadius * protectorRadius) {
+              const pShieldsActive = (protector.shields || 0) > 0 && !protector.inEffectiveStorm && (protector.fuel || 0) > 0 && (protector.shieldPoints || 0) > 0;
+              if (pShieldsActive) {
+                if (protector.shieldPoints >= damageAmt) {
+                  protector.shieldPoints -= damageAmt;
+                  damageAmt = 0;
+                } else {
+                  damageAmt -= protector.shieldPoints;
+                  protector.shieldPoints = 0;
+                }
+                protector.shieldShowTimer = 30; // visually trigger the protector's shield
+                if (protector.shieldPoints === 0) {
+                  const d3 = Math.floor(Math.random() * 3) + 1;
+                  const cooldown = Math.max(0, d3 - (protector.damagecontrol || 0));
+                  protector.shieldRegenCooldown = cooldown;
+                }
+                if (damageAmt <= 0) break;
+              }
+            }
+          }
         }
       }
 

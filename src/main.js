@@ -16135,7 +16135,7 @@ function getPlanetTradeIncomePerMin(planet) {
           if (s.isCruiser && (s.shields || 0) > 0 && (s.shieldShowTimer || 0) > 0 && (s.shieldPoints || 0) > 0) {
             ctx.save();
             ctx.beginPath();
-            ctx.arc(s.x, s.y, size + 5, 0, Math.PI * 2);
+            ctx.arc(s.x, s.y, (s.maxHealth || 30) * 2, 0, Math.PI * 2);
             ctx.strokeStyle = '#ffff00'; // Yellow
             ctx.lineWidth = Math.ceil(Math.sqrt(s.shieldPoints) / 3);
             ctx.stroke();

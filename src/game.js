@@ -5933,14 +5933,16 @@ export class Game {
     for (const sourcePlanet of this.planets) {
       if (sourcePlanet.owner) {
         const gravityRadius = sourcePlanet.getGravityRadius();
-        for (const targetPlanet of this.planets) {
+        const gravityRadiusSq = gravityRadius * gravityRadius;
+        const candidatePlanets = this.planetGridPopulated && this.planetGrid ? this.planetGrid.getPlanetsInRadiusSq(sourcePlanet.x, sourcePlanet.y, gravityRadiusSq) : this.planets;
+        for (const targetPlanet of candidatePlanets) {
           if (targetPlanet.id !== sourcePlanet.id) {
             const isNeutralOrEnemy = !targetPlanet.owner || targetPlanet.owner.id !== sourcePlanet.owner.id;
             if (isNeutralOrEnemy) {
               const dx = targetPlanet.x - sourcePlanet.x;
               const dy = targetPlanet.y - sourcePlanet.y;
               const distSq = dx * dx + dy * dy;
-              if (distSq <= gravityRadius * gravityRadius) {
+              if (distSq <= gravityRadiusSq) {
                 if (targetPlanet.ships < sourcePlanet.ships) {
                   targetPlanet.addSympathy(sourcePlanet.owner.id, deltaTime / 60000);
                 }
