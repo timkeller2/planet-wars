@@ -325,7 +325,7 @@ export class Ship {
   getMaxBombs() {
     const baseMax = Math.floor(this.maxHealth / 5);
     const bonus = this.munitions || 0;
-    return baseMax + bonus;
+    return Math.max(0, baseMax + bonus - (this.supply_ship || 0));
   }
 
   getMaxFuel() {
@@ -2023,7 +2023,7 @@ export class Ship {
           maxShots = absoluteCap;
         }
         if (this.supply_ship && this.supply_ship > 0) {
-          maxShots = Math.max(1, maxShots - 2 * this.supply_ship);
+          maxShots = Math.max(1, maxShots - 3 * this.supply_ship);
         }
       }
     } else if (this.maxHealth > 0) {

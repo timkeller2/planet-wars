@@ -825,11 +825,43 @@ function getPlanetTradeIncomePerMin(planet) {
 
   const getMaxBombs = (s) => {
     const baseMax = Math.floor(s.maxHealth / 5);
-    return baseMax + (s.munitions || 0);
+    return Math.max(0, baseMax + (s.munitions || 0) - (s.supply_ship || 0));
   };
 
-  function drawRacialShipHull(ctx, style, cohort, size) {
+  function drawRacialShipHull(ctx, style, cohort, size, isSupplyShip = false) {
     ctx.beginPath();
+    
+    if (isSupplyShip) {
+      // Chiseled rectangular supply ship with engines
+      // Flat front
+      ctx.moveTo(-size * 0.2, -size * 0.7);
+      ctx.lineTo(size * 0.2, -size * 0.7);
+      
+      // Sloped right side to main body
+      ctx.lineTo(size * 0.4, -size * 0.4);
+      ctx.lineTo(size * 0.4, size * 0.4);
+      
+      // Right Engine
+      ctx.lineTo(size * 0.7, size * 0.4);
+      ctx.lineTo(size * 0.7, size * 0.8);
+      ctx.lineTo(size * 0.3, size * 0.8);
+      ctx.lineTo(size * 0.3, size * 0.6);
+      
+      // Back Edge
+      ctx.lineTo(-size * 0.3, size * 0.6);
+      
+      // Left Engine
+      ctx.lineTo(-size * 0.3, size * 0.8);
+      ctx.lineTo(-size * 0.7, size * 0.8);
+      ctx.lineTo(-size * 0.7, size * 0.4);
+      ctx.lineTo(-size * 0.4, size * 0.4);
+      
+      // Left Edge back to front slope
+      ctx.lineTo(-size * 0.4, -size * 0.4);
+      ctx.lineTo(-size * 0.2, -size * 0.7);
+      return;
+    }
+    
     if (style === 'Federation') {
       if (cohort === 'destroyer_group') {
         // Federation Destroyer (disk/saucer with side engines, pylons at bottom 1/5 of disk)
@@ -16304,7 +16336,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           let drawnShipImage = false;
-          if (graphicalMode && transparentShipsCanvas && !(style === 'Romulan' && s.classType === 'corvette')) {
+          if (graphicalMode && transparentShipsCanvas && !(style === 'Romulan' && s.classType === 'corvette') && !(s.isCruiser && s.maxsupplies > 0)) {
             let normalizedStyle = style;
             if (normalizedStyle) {
               normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
@@ -16344,7 +16376,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.rotate(angle + Math.PI / 2);
             ctx.beginPath();
 
-            drawRacialShipHull(ctx, style, cohort, size);
+            drawRacialShipHull(ctx, style, cohort, size, s.maxsupplies > 0);
             
             ctx.closePath();
             ctx.fill();
