@@ -6172,6 +6172,14 @@ function getPlanetTradeIncomePerMin(planet) {
         boardingCombatClosed = true;
         isReplayMode = false;
         activeReplay = null;
+        // Clean up zoom event listeners
+        const c = document.getElementById('boardingCombatCanvas');
+        if (c) {
+          if (c._replayWheelHandler) { c.removeEventListener('wheel', c._replayWheelHandler); c._replayWheelHandler = null; }
+          if (c._replayTouchStart) { c.removeEventListener('touchstart', c._replayTouchStart); c._replayTouchStart = null; }
+          if (c._replayTouchMove) { c.removeEventListener('touchmove', c._replayTouchMove); c._replayTouchMove = null; }
+          if (c._replayTouchEnd) { c.removeEventListener('touchend', c._replayTouchEnd); c._replayTouchEnd = null; }
+        }
       });
     }
     return overlay;
@@ -6768,6 +6776,44 @@ function getPlanetTradeIncomePerMin(planet) {
         overlay.classList.remove('boarding-replay-mode');
         canvas.width = 800;
         canvas.height = 800;
+        // Initialize zoom
+        activeReplay._zoom = 1.0;
+        // Clean up any previous zoom listeners
+        if (canvas._replayWheelHandler) canvas.removeEventListener('wheel', canvas._replayWheelHandler);
+        if (canvas._replayTouchStart) canvas.removeEventListener('touchstart', canvas._replayTouchStart);
+        if (canvas._replayTouchMove) canvas.removeEventListener('touchmove', canvas._replayTouchMove);
+        if (canvas._replayTouchEnd) canvas.removeEventListener('touchend', canvas._replayTouchEnd);
+        // Mouse wheel zoom
+        canvas._replayWheelHandler = (e) => {
+          e.preventDefault();
+          const delta = e.deltaY > 0 ? -0.1 : 0.1;
+          activeReplay._zoom = Math.max(0.5, Math.min(4.0, (activeReplay._zoom || 1.0) + delta));
+        };
+        canvas.addEventListener('wheel', canvas._replayWheelHandler, { passive: false });
+        // Pinch zoom
+        canvas._replayTouches = null;
+        canvas._replayTouchStart = (e) => {
+          if (e.touches.length === 2) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            canvas._replayTouches = Math.sqrt(dx * dx + dy * dy);
+          }
+        };
+        canvas._replayTouchMove = (e) => {
+          if (e.touches.length === 2 && canvas._replayTouches) {
+            e.preventDefault();
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const newDist = Math.sqrt(dx * dx + dy * dy);
+            const ratio = newDist / canvas._replayTouches;
+            activeReplay._zoom = Math.max(0.5, Math.min(4.0, (activeReplay._zoom || 1.0) * ratio));
+            canvas._replayTouches = newDist;
+          }
+        };
+        canvas._replayTouchEnd = () => { canvas._replayTouches = null; };
+        canvas.addEventListener('touchstart', canvas._replayTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', canvas._replayTouchMove, { passive: false });
+        canvas.addEventListener('touchend', canvas._replayTouchEnd);
       } else {
         overlay.classList.remove('battle-replay-mode');
         overlay.classList.add('boarding-replay-mode');
@@ -7077,7 +7123,8 @@ function getPlanetTradeIncomePerMin(planet) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
     }
 
-    const viewSize = activeReplay.radius * 1.2;
+    const zoom = activeReplay._zoom || 1.0;
+    const viewSize = (activeReplay.radius * 1.2) / zoom;
     const scale = canvas.width / viewSize;
     
     ctx.save();
@@ -12446,9 +12493,7 @@ function getPlanetTradeIncomePerMin(planet) {
               const tx = ship.x;
               const ty = ship.y;
               const supplyDist = Math.sqrt((tx-sx)*(tx-sx)+(ty-sy)*(ty-sy));
-              if (supplyDist > 300 && ship.activeSupplySourceType === 'planet') {
-                console.log(`[SUPPLY LINE] ${ship.name||ship.id} -> planet ${ship.activeSupplySourceId} dist=${Math.round(supplyDist)}`);
-              }
+              // Removed diagnostic logging
 
               const angle = Math.atan2(ty - sy, tx - sx);
               ctx.save();

@@ -1353,3 +1353,44 @@ canvas {
   width: 800px !important;
   height: 400px !important;
 }
+
+/* iPhone / small phone responsive sizing */
+@media (max-width: 480px) {
+  #boarding-combat-overlay.battle-replay-mode {
+    width: calc(100vw - 16px) !important;
+    padding: 8px !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+  }
+  #boarding-combat-overlay.battle-replay-mode .boarding-combat-body {
+    width: calc(100vw - 32px) !important;
+    height: calc(100vw - 32px) !important;
+  }
+  #boarding-combat-overlay.battle-replay-mode canvas {
+    width: calc(100vw - 32px) !important;
+    height: calc(100vw - 32px) !important;
+  }
+  #boarding-combat-overlay.boarding-replay-mode {
+    width: calc(100vw - 16px) !important;
+    padding: 8px !important;
+    left: 50% !important;
+    top: 50% !important;
+    transform: translate(-50%, -50%) !important;
+  }
+  #boarding-combat-overlay.boarding-replay-mode .boarding-combat-body {
+    width: calc(100vw - 32px) !important;
+    height: calc((100vw - 32px) * 0.5) !important;
+  }
+  #boarding-combat-overlay.boarding-replay-mode canvas {
+    width: calc(100vw - 32px) !important;
+    height: calc((100vw - 32px) * 0.5) !important;
+  }
+  #boarding-combat-overlay .boarding-combat-header {
+    font-size: 12px !important;
+    padding: 4px 8px !important;
+  }
+  #boarding-combat-overlay .boarding-combat-result {
+    font-size: 11px !important;
+  }
+}

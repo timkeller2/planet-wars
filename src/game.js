@@ -1991,6 +1991,8 @@ export class Game {
 
   initMap() {
     this.planets = [];
+    this.planetGrid = new PlanetGrid();
+    this.planetGridPopulated = false;
     this.ships = new SpatialGridArray();
     this.explosions.clear();
     this.lasers.clear();
@@ -2043,6 +2045,16 @@ export class Game {
     
     // Reset player states
     for (const player of this.allPlayers) {
+      player.isAlive = false;
+      player.wasAlive = false;
+      player.isEliminated = false;
+      player.lastAttackerPlayerId = null;
+      player.hasOwnedPlanet = false;
+      player.discoveredPlanets = new Set();
+      player.attackedPlanets = new Map();
+      player.spyRootedEvents = new Set();
+      player.disconnectTime = null;
+      
       player.techScore = 0;
       player.expScore = 0;
       player.expProgress = 0;

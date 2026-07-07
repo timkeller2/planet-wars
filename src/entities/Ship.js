@@ -794,6 +794,7 @@ export class Ship {
     this.lastX = this.x;
     this.lastY = this.y;
 
+    this.inFriendlyWell = false;
     let friendlyWellPlanet = null;
     let neutralWellPlanet = null;
     let minFriendlyDistSq = Infinity;
@@ -842,13 +843,6 @@ export class Ship {
       }
     }
     this.inFriendlyWell = friendlyWellPlanet !== null;
-
-    // Diagnostic: log suspiciously long supply distances
-    if (friendlyWellPlanet && minFriendlyDistSq > 500 * 500) {
-      const dist = Math.round(Math.sqrt(minFriendlyDistSq));
-      const gr = Math.round(friendlyWellPlanet.getGravityRadius());
-      console.log(`[SUPPLY DIAG] Ship ${this.name || this.id} resupplying from ${friendlyWellPlanet.name} at dist=${dist} gravRadius=${gr} maxShips=${Math.round(friendlyWellPlanet.maxShips)}`);
-    }
 
     if (this.pioneerWarpIn) {
       const dx = this.pioneerWarpX - this.x;
@@ -4753,6 +4747,7 @@ export class Ship {
         }
       }
     }
+
 
     if (this.targetPlanet) {
       if (distance < this.targetPlanet.radius) {
