@@ -263,6 +263,7 @@ export class Game {
       const planetsInvolved = [];
       if (this.planets) {
         for (const p of this.planets) {
+          if (p.isDeepSpaceAnomaly) continue;
           const pdx = p.x - x;
           const pdy = p.y - y;
           if (pdx * pdx + pdy * pdy <= 800 * 800) {
@@ -288,7 +289,9 @@ export class Game {
         lastFrameTime: 0,
         frames: [],
         participants: new Set(),
-        planets: planetsInvolved
+        planets: planetsInvolved,
+        totalDamage: 0,
+        cruiserDied: false
       });
     }
   }
@@ -6780,6 +6783,31 @@ export class Game {
           }
           
           if (b.frames.length > 2) { // Only save if the battle had some duration
+            // Calculate total damage dealt and whether a cruiser died
+            let totalDamage = 0;
+            let cruiserDied = false;
+            for (let fi = 1; fi < b.frames.length; fi++) {
+              const prev = b.frames[fi - 1];
+              const curr = b.frames[fi];
+              for (const ps of prev.ships) {
+                const cs = curr.ships.find(s => s.id === ps.id);
+                if (cs) {
+                  const dmg = ps.health - cs.health;
+                  if (dmg > 0) totalDamage += dmg;
+                } else {
+                  // Ship disappeared — count remaining health as damage
+                  totalDamage += Math.max(0, ps.health);
+                  if (ps.isCruiser || ps.isAmoeba) cruiserDied = true;
+                }
+              }
+            }
+            
+            // Skip insignificant battles (less than 5 damage and no cruiser/amoeba killed)
+            if (totalDamage < 5 && !cruiserDied) {
+              this.ongoingBattles.splice(i, 1);
+              continue;
+            }
+            
             const humanParticipants = Array.from(b.participants).filter(pId => {
               const p = this.allPlayers.find(pl => pl.id === pId);
               return p && !p.isAI && p.id !== 'monsters';

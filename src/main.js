@@ -7077,7 +7077,7 @@ function getPlanetTradeIncomePerMin(planet) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
     }
 
-    const viewSize = activeReplay.radius * 2;
+    const viewSize = activeReplay.radius * 1.2;
     const scale = canvas.width / viewSize;
     
     ctx.save();
@@ -7124,9 +7124,13 @@ function getPlanetTradeIncomePerMin(planet) {
       
       const ownerColor = s1.ownerId === 'monsters' ? '#006400' : (serverState.players.find(p => p.id === s1.ownerId)?.color || '#ffffff');
       
+      // Scale ship size based on maxHealth (25 = baseline 1.0)
+      const shipScale = s1.maxHealth > 0 ? Math.sqrt(s1.maxHealth / 25) : 1;
+      
       ctx.save();
       ctx.translate(curX, curY);
       ctx.rotate(curA);
+      ctx.scale(shipScale, shipScale);
       
       if (s1.isAmoeba) {
         ctx.fillStyle = 'rgba(0, 100, 0, 0.6)';
@@ -7161,17 +7165,18 @@ function getPlanetTradeIncomePerMin(planet) {
       
       if (s1.maxHealth > 0) {
         const hpPct = s1.health / s1.maxHealth;
+        const barW = 20 * shipScale;
         ctx.fillStyle = '#ff0000';
-        ctx.fillRect(curX - 10, curY - 20, 20, 3);
+        ctx.fillRect(curX - barW / 2, curY - 20 * shipScale, barW, 3);
         ctx.fillStyle = '#00ff00';
-        ctx.fillRect(curX - 10, curY - 20, 20 * hpPct, 3);
+        ctx.fillRect(curX - barW / 2, curY - 20 * shipScale, barW * hpPct, 3);
       }
 
       if (s1.name && (s1.isCruiser || s1.isAmoeba)) {
         ctx.fillStyle = '#fff';
         ctx.font = '10px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(s1.name, curX, curY + 25);
+        ctx.fillText(s1.name, curX, curY + 25 * shipScale);
       }
     });
     
@@ -12440,6 +12445,10 @@ function getPlanetTradeIncomePerMin(planet) {
               const sy = sourceY;
               const tx = ship.x;
               const ty = ship.y;
+              const supplyDist = Math.sqrt((tx-sx)*(tx-sx)+(ty-sy)*(ty-sy));
+              if (supplyDist > 300 && ship.activeSupplySourceType === 'planet') {
+                console.log(`[SUPPLY LINE] ${ship.name||ship.id} -> planet ${ship.activeSupplySourceId} dist=${Math.round(supplyDist)}`);
+              }
 
               const angle = Math.atan2(ty - sy, tx - sx);
               ctx.save();
