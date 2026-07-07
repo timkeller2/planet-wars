@@ -640,7 +640,9 @@ async function bootstrap() {
 
           let totalUpgradesOfCertainType = 0;
           for (const p of game.planets) {
-            totalUpgradesOfCertainType += (p[prop] || 0);
+            if (p.owner) {
+              totalUpgradesOfCertainType += (p[prop] || 0);
+            }
           }
 
           if (totalUpgradesOfCertainType >= maxUpgradesOfCertainType) {
@@ -1870,6 +1872,8 @@ async function bootstrap() {
 
   setInterval(() => {
     const currentTime = Date.now();
+    const tickStartPerf = performance.now();
+    let updateEndPerf = tickStartPerf;
     const deltaTime = currentTime - lastTime;
     lastTime = currentTime;
 
@@ -1919,6 +1923,7 @@ async function bootstrap() {
 
       const speed = game.gameSpeed || 1.0;
       game.update(deltaTime * speed);
+      updateEndPerf = performance.now();
 
       // Check for completed planet upgrades to distribute credits
       for (const planet of game.planets) {
@@ -2006,12 +2011,17 @@ async function bootstrap() {
 
     // Compute planet visual state
     const allPlanetsMapped = game.planets.map(p => {
-        const incomingShips = game.ships.filter(s => {
-          if (!s.active || s.targetPlanet !== p || s.owner === p.owner) return false;
-          const dx = s.x - p.x;
-          const dy = s.y - p.y;
-          return dx*dx + dy*dy < 22500; // Only show odds if attackers are within 150 pixels
-        });
+        const incomingShips = [];
+        const searchShips = game.spatialGrid ? game.getShipsInRadiusSq(p.x, p.y, 22500) : game.ships;
+        for (const s of searchShips) {
+          if (s.active && s.targetPlanet === p && s.owner !== p.owner) {
+            const dx = s.x - p.x;
+            const dy = s.y - p.y;
+            if (dx*dx + dy*dy < 22500) {
+              incomingShips.push(s);
+            }
+          }
+        }
         let maxKillChance = null;
         
         if (incomingShips.length > 0) {
@@ -2972,6 +2982,14 @@ async function bootstrap() {
       }
 
       io.to(socketId).emit('gameStateUpdate', state);
+    }
+    
+    const tickEndPerf = performance.now();
+    const tickDur = tickEndPerf - tickStartPerf;
+    if (tickDur > 100) {
+      const updateDur = updateEndPerf - tickStartPerf;
+      const payloadDur = tickEndPerf - updateEndPerf;
+      console.log(`[PERF WARN] Server tick took ${tickDur.toFixed(2)}ms (Limit ${TICK_RATE}ms). game.update: ${updateDur.toFixed(2)}ms, payload/emit: ${payloadDur.toFixed(2)}ms, ships: ${game.ships.length}`);
     }
 
     // Clear upgrade enhancement events after broadcasting to all clients

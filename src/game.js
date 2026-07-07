@@ -19,7 +19,10 @@ export function getEffectiveSympathy(planet, playerId, allShips, player = null, 
           isKnown = true;
         } else {
           // Check if any of the player's ships currently has the planet in its radar range
-          for (const ship of allShips) {
+          const maxPossibleRadarRadiusSq = 375 * 375; // Extended cruiser radar is max 375
+          const radarSearchShips = (game && game.spatialGrid) ? game.getShipsInRadiusSq(planet.x, planet.y, maxPossibleRadarRadiusSq) : allShips;
+          
+          for (const ship of radarSearchShips) {
             if (ship.active && ship.owner && ship.owner.id === playerId) {
               const dx = ship.x - planet.x;
               const dy = ship.y - planet.y;
@@ -44,9 +47,11 @@ export function getEffectiveSympathy(planet, playerId, allShips, player = null, 
 
     if (isKnown) {
       const gr = planet.getGravityRadius();
-      const maxDist = gr;
-      const maxDistSq = maxDist * maxDist;
-      for (const ship of allShips) {
+      const maxDistSq = gr * gr;
+      
+      const searchShips = (game && game.spatialGrid) ? game.getShipsInRadiusSq(planet.x, planet.y, maxDistSq) : allShips;
+      
+      for (const ship of searchShips) {
         if (ship.active && ship.owner && ship.owner.id === playerId) {
           const dx = ship.x - planet.x;
           const dy = ship.y - planet.y;
@@ -1451,10 +1456,10 @@ export class Game {
     const average = totalDeposits / 7;
     this.resourceRarities = {};
     const rarityToPrice = {
-      'common': 5,
-      'normal': 10,
-      'rare': 15,
-      'exotic': 20
+      'common': 4,
+      'normal': 8,
+      'rare': 12,
+      'exotic': 16
     };
     for (const r of resourcesList) {
       if (average === 0) {
@@ -4185,13 +4190,15 @@ export class Game {
     
     if (this.marketPrices) {
       this.marketFluctuationTimer = (this.marketFluctuationTimer || 0) + deltaTime;
-      if (this.marketFluctuationTimer >= 60000) {
+      const numHumanPlayers = Math.max(1, this.allPlayers.filter(p => p.id !== 'monsters' && !p.isMonster).length);
+      const fluctuationInterval = Math.max(30000, 200000 / numHumanPlayers);
+      if (this.marketFluctuationTimer >= fluctuationInterval) {
         this.marketFluctuationTimer = 0;
         const rarityToPrice = {
-          'common': 5,
-          'normal': 10,
-          'rare': 15,
-          'exotic': 20
+          'common': 4,
+          'normal': 8,
+          'rare': 12,
+          'exotic': 16
         };
         for (const res in this.marketPrices) {
           const currentPrice = this.marketPrices[res];
@@ -4677,8 +4684,32 @@ export class Game {
           pirate.health = maxHealth;
           pirate.crew = pirate.maxHealth + pirate.health;
           pirate.cruiserStyle = randomStyle;
+          const upgradeCapacity = Math.floor(maxHealth / 5);
+          const numUpgrades = Math.max(0, upgradeCapacity + Math.floor(Math.random() * 4) + 1 - 2);
+          const validUpgrades = ['sensorarrays', 'labs', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel', 'diplomat', 'marines', 'command'];
+          for (let i = 0; i < numUpgrades; i++) {
+            const rUpgrade = validUpgrades[Math.floor(Math.random() * validUpgrades.length)];
+            pirate[rUpgrade] = (pirate[rUpgrade] || 0) + 1;
+          }
+
+          if (pirate.armor) {
+            const bonus = (4 + 0.10 * pirate.maxHealth) * pirate.armor;
+            pirate.maxArmor = (pirate.maxArmor || 0) + bonus;
+            pirate.armorPoints = (pirate.armorPoints || 0) + bonus;
+          }
+          if (pirate.munitions) {
+            pirate.splashDamage = pirate.munitions;
+          }
+          if (pirate.supply_ship) {
+            pirate.maxsupplies = pirate.supply_ship * 12;
+            pirate.supplies = 0;
+          }
+
           pirate.fuel = pirate.getMaxFuel();
           pirate.bombs = pirate.getMaxBombs();
+          if (pirate.shields) {
+            pirate.shieldPoints = pirate.getMaxShields();
+          }
           pirate.speed = Math.max(5, pirate.speed - 10);
           pirate.speedModifier = 1.0;
 
@@ -7427,15 +7458,31 @@ export class Game {
         }
       }
 
-      // 4d. Auto-Marine Launch (Overflying Planet)
-      if (ship.scoutAttackEnabled === true && (ship.marineCount || 0) >= 1 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
+      // 4d. Auto-Marine Launch (Overflying Planet or Bombard Range Revolt Exception)
+      if (ship.scoutAttackEnabled === true && (ship.marineCount || 0) >= 1 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0) && (ship.stationaryTimer || 0) >= 3000) {
+        let laserTechBonus = 0;
+        if (ship.owner && ship.owner.upgrades && ship.owner.upgrades.sensorarray) {
+          laserTechBonus = ship.owner.upgrades.sensorarray * 0.15;
+        }
+        const xpRangeBonus = (ship.level || 0) * 0.05;
+        const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+        let firingRange = baseDogfightRange * 1.10;
+        if (ship.bombs > 0) firingRange += baseDogfightRange * 0.10;
+        if (ship.package === 'sniper') firingRange *= 1.4;
+        else if (ship.package === 'brute') firingRange *= 0.7;
+
         for (const p of this.planets) {
           if (p.dead || (p.owner && ship.owner && p.owner.id === ship.owner.id) || p.inTransition) continue;
           
           const dx = p.x - ship.x;
           const dy = p.y - ship.y;
           const distSq = dx * dx + dy * dy;
-          if (distSq < p.radius * p.radius) {
+          
+          const isStandardLaunch = (distSq < p.radius * p.radius);
+          const maxRange = firingRange + p.radius;
+          const isRevoltException = p.inRevolt && distSq <= maxRange * maxRange;
+          
+          if (isStandardLaunch || isRevoltException) {
             const count = Math.floor(ship.marineCount);
             if (count > 0) {
               this.queueMarineLaunch(ship, {

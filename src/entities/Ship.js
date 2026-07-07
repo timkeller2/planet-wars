@@ -778,6 +778,21 @@ export class Ship {
 
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
+    
+    if (this.lastX === undefined || this.lastY === undefined) {
+      this.lastX = this.x;
+      this.lastY = this.y;
+      this.stationaryTimer = 0;
+    }
+    const dxMove = this.x - this.lastX;
+    const dyMove = this.y - this.lastY;
+    if (Math.abs(dxMove) < 0.1 && Math.abs(dyMove) < 0.1) {
+      this.stationaryTimer += deltaTime;
+    } else {
+      this.stationaryTimer = 0;
+    }
+    this.lastX = this.x;
+    this.lastY = this.y;
 
     let friendlyWellPlanet = null;
     let neutralWellPlanet = null;
@@ -2618,7 +2633,8 @@ export class Ship {
             isCruiserBombing = true;
           }
         }
-        if (!isCruiser || (isCruiserBombing && (!this.planetBombardTimer || this.planetBombardTimer <= 0) && (!enemyNearby || this.bombs >= 1))) {
+        const stationaryReqMet = (this.stationaryTimer || 0) >= 3000;
+        if (!isCruiser || (isCruiserBombing && (!this.planetBombardTimer || this.planetBombardTimer <= 0) && (!enemyNearby || this.bombs >= 1) && stationaryReqMet)) {
           let validPlanets = [];
           for (const p of allPlanets) {
             if (p.owner && this.owner && p.owner.id === this.owner.id) continue;
