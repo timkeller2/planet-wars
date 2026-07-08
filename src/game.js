@@ -4822,20 +4822,21 @@ export class Game {
       }
     }
 
-    // 10-minute global discount decrease timer
+    // 15-second global discount decrease timer
     if (this.globalDiscountTimer === undefined) {
       this.globalDiscountTimer = 0;
     }
     this.globalDiscountTimer += deltaTime;
-    if (this.globalDiscountTimer >= 600000) {
+    if (this.globalDiscountTimer >= 15000) {
       this.globalDiscountTimer = 0;
-      for (const type of Object.keys(this.globalUpgradeModifiers)) {
-        if (this.globalUpgradeModifiers[type] > -0.50) {
-          const randDec = 0.10 + Math.random() * 0.10; // random amount from 0.10 to 0.20
-          this.globalUpgradeModifiers[type] = Math.round(Math.max(-0.50, this.globalUpgradeModifiers[type] - randDec) * 100) / 100;
-        }
+      
+      const availableTypes = Object.keys(this.globalUpgradeModifiers).filter(type => this.globalUpgradeModifiers[type] > -0.50);
+      if (availableTypes.length > 0) {
+        const type = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+        const randDec = Math.random() * 0.01; // random amount from 0 to 0.01 (0 to 1%)
+        this.globalUpgradeModifiers[type] = Math.round(Math.max(-0.50, this.globalUpgradeModifiers[type] - randDec) * 10000) / 10000;
+        // console.log(`[GLOBAL DISCOUNT INCREASE] Ticked 15-second global modifier decrease for ${type}. Current modifier: ${this.globalUpgradeModifiers[type]}`);
       }
-      console.log("[GLOBAL DISCOUNT INCREASE] Ticked 10-minute global modifier decrease. Current modifiers:", this.globalUpgradeModifiers);
     }
 
     // Ion Storm movement and cleanup (skip stationary hazards)
