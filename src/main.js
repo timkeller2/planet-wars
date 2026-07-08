@@ -2842,6 +2842,18 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     ];
 
+    // Open Recordings option
+    options.push({
+      text: '📼 BATTLE RECORDINGS',
+      action: () => {
+        const recordingsModal = document.getElementById('recordings-modal');
+        if (recordingsModal) {
+          recordingsModal.classList.remove('hidden');
+          renderRecordingsList(); // Render the latest if we have it
+        }
+      }
+    });
+
     // Check if player has selected ships or planets to show "MOVE HERE"
     const hasSelection = (selectedShips && selectedShips.length > 0) || (selectedPlanets && selectedPlanets.length > 0);
     if (hasSelection) {
@@ -2880,18 +2892,6 @@ function getPlanetTradeIncomePerMin(planet) {
       action: () => {
         if (typeof cycleHudToggle === 'function') {
           cycleHudToggle();
-        }
-      }
-    });
-
-    // Open Recordings option
-    options.push({
-      text: '📼 BATTLE RECORDINGS',
-      action: () => {
-        const recordingsModal = document.getElementById('recordings-modal');
-        if (recordingsModal) {
-          recordingsModal.classList.remove('hidden');
-          renderRecordingsList(); // Render the latest if we have it
         }
       }
     });
@@ -6862,6 +6862,7 @@ function getPlanetTradeIncomePerMin(planet) {
       btn.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         deletedReplayIds.add(r.id);
+        lastReplaysFingerprint = ''; // force re-render
         renderRecordingsList(); // refresh
       });
       
