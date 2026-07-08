@@ -7365,6 +7365,11 @@ function getPlanetTradeIncomePerMin(planet) {
       const s2 = f2.ships.find(s => s.id === s1.id) || s1;
       const curX = s1.x + (s2.x - s1.x) * progress;
       const curY = s1.y + (s2.y - s1.y) * progress;
+      
+      if (!isClientPositionVisible(curX, curY)) {
+        return;
+      }
+      
       let curA = s1.angle;
       
       // Interpolate angle without spinning
