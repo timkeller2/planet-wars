@@ -13525,12 +13525,12 @@ function getPlanetTradeIncomePerMin(planet) {
             const softCapFillColor = `rgba(${lightR}, ${lightG}, ${lightB}, 0.25)`;
             const softCapStrokeColor = `rgba(${lightR}, ${lightG}, ${lightB}, 0.4)`;
 
-            // 2. Slightly darker version for the current maxships circle (multiply by 0.55)
+            // 2. Slightly darker version for the hard limit capacity circle (based on sizeClass)
             const darkR = Math.floor(r * 0.55);
             const darkG = Math.floor(g * 0.55);
             const darkB = Math.floor(b * 0.55);
-            const currentMaxShipsFillColor = `rgba(${darkR}, ${darkG}, ${darkB}, 0.35)`;
-            const currentMaxShipsStrokeColor = `rgba(${darkR}, ${darkG}, ${darkB}, 0.55)`;
+            const capacityFillColor = `rgba(${darkR}, ${darkG}, ${darkB}, 0.35)`;
+            const capacityStrokeColor = `rgba(${darkR}, ${darkG}, ${darkB}, 0.55)`;
 
             // Draw soft cap circle first
             ctx.beginPath();
@@ -13541,22 +13541,13 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.lineWidth = 1;
             ctx.stroke();
 
-            // Draw current maxships circle over it
-            if (p.maxShips > 0) {
-              ctx.beginPath();
-              ctx.arc(p.x, p.y, p.maxShips / 4, 0, Math.PI * 2);
-              ctx.fillStyle = currentMaxShipsFillColor;
-              ctx.fill();
-              ctx.strokeStyle = currentMaxShipsStrokeColor;
-              ctx.lineWidth = 1;
-              ctx.stroke();
-            }
-
-            // 3. Draw faint gray ring for size class (if habitability < 100)
-            if (p.habitability < 100 && p.sizeClass > 0) {
+            // Draw capacity circle over it based on sizeClass
+            if (p.sizeClass > 0) {
               ctx.beginPath();
               ctx.arc(p.x, p.y, p.sizeClass / 4, 0, Math.PI * 2);
-              ctx.strokeStyle = 'rgba(150, 150, 150, 0.3)';
+              ctx.fillStyle = capacityFillColor;
+              ctx.fill();
+              ctx.strokeStyle = capacityStrokeColor;
               ctx.lineWidth = 1;
               ctx.stroke();
             }
