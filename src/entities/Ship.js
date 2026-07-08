@@ -1120,7 +1120,7 @@ export class Ship {
               const dy = this.y - targetShip.y;
               const dist = Math.sqrt(dx * dx + dy * dy);
               const bumpRange = Math.max(this.maxHealth || 0, targetShip.maxHealth || 0) * 1.30;
-              const stopDistance = bumpRange + 10;
+              const stopDistance = bumpRange + 25;
               if (dist > stopDistance) {
                 this.targetX = targetShip.x + (dx / dist) * stopDistance;
                 this.targetY = targetShip.y + (dy / dist) * stopDistance;
@@ -1345,7 +1345,7 @@ export class Ship {
               const dy = this.y - selected.ship.y;
               const dist = Math.sqrt(dx * dx + dy * dy);
               const bumpRange = Math.max(this.maxHealth || 0, selected.ship.maxHealth || 0) * 1.30;
-              const stopDistance = bumpRange + 10;
+              const stopDistance = bumpRange + 25;
               if (dist > stopDistance) {
                 this.targetX = selected.ship.x + (dx / dist) * stopDistance;
                 this.targetY = selected.ship.y + (dy / dist) * stopDistance;
