@@ -6759,6 +6759,8 @@ export class Game {
                 package: s.package,
                 count: s.count,
                 cohort: s.cohort,
+                cruiserStyle: s.cruiserStyle,
+                classType: s.classType,
                 style: s.style,
                 maxsupplies: s.maxsupplies,
                 specialbombs: s.specialbombs,

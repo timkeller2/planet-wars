@@ -7312,14 +7312,55 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.fillStyle = ownerColor;
         ctx.fillRect(-3, -3, 6, 6);
       } else if (s1.isCruiser) {
-        ctx.beginPath();
-        drawRacialShipHull(ctx, s1.style || 'Federation', s1.cohort || 'alpha', s1.radius || 15, s1.maxsupplies > 0);
-        ctx.closePath();
-        ctx.fillStyle = ownerColor;
-        ctx.fill();
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        let style = s1.cruiserStyle || s1.style || (serverState.players.find(p => p.id === s1.ownerId)?.cruiserStyle) || 'Federation';
+        let drawnShipImage = false;
+        
+        if (graphicalMode && transparentShipsCanvas && !(style === 'Romulan' && s1.classType === 'corvette')) {
+          let normalizedStyle = style;
+          if (normalizedStyle) {
+            normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
+          }
+          if (!FACTION_MAPPING[normalizedStyle]) {
+            normalizedStyle = 'Klingon';
+          }
+          const faction = FACTION_MAPPING[normalizedStyle];
+          const classRow = CLASS_MAPPING[s1.classType || 'corvette'];
+          if (faction && classRow) {
+            let drawScale = ((6 + (s1.maxHealth || 0)) / 240) * 1.30;
+            if (s1.classType === 'corvette') {
+              drawScale *= 1.6;
+            } else if (s1.classType === 'frigate') {
+              drawScale *= 1.4;
+            }
+            ctx.scale(1/shipScale, 1/shipScale);
+            ctx.rotate(Math.PI / 2);
+            
+            const drawnW = faction.w * drawScale;
+            const drawnH = classRow.h * drawScale;
+            
+            ctx.drawImage(
+              transparentShipsCanvas,
+              faction.x, classRow.y, faction.w, classRow.h,
+              -drawnW / 2, -drawnH / 2, drawnW, drawnH
+            );
+            
+            ctx.rotate(-Math.PI / 2);
+            ctx.scale(shipScale, shipScale);
+            drawnShipImage = true;
+          }
+        }
+        
+        if (!drawnShipImage) {
+          ctx.beginPath();
+          drawRacialShipHull(ctx, style, s1.cohort || 'alpha', s1.radius || 15, s1.maxsupplies > 0);
+          ctx.closePath();
+          ctx.fillStyle = ownerColor;
+          ctx.fill();
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+
 
         if (s1.specialbombs > 0 || s1.specialfuel > 0 || s1.specialduranium > 0) {
           const size = s1.radius || 15;
@@ -7358,19 +7399,19 @@ function getPlanetTradeIncomePerMin(planet) {
 
           if (s1.specialfuel > 0) {
             let engines = [{ x: 0, y: size * 0.6 }];
-            if (s1.style === 'Federation') {
+            if (style === 'Federation') {
               engines = [{ x: size * 0.8, y: size * 0.8 }, { x: -size * 0.8, y: size * 0.8 }];
-            } else if (s1.style === 'Romulan') {
+            } else if (style === 'Romulan') {
               engines = [{ x: size * 0.5, y: size * 0.25 }, { x: -size * 0.5, y: size * 0.25 }];
-            } else if (s1.style === 'Gorn') {
+            } else if (style === 'Gorn') {
               if (s1.cohort === 'battleship' || s1.cohort === 'titan') {
                 engines = [{ x: size * 0.43, y: size * 0.86 }, { x: -size * 0.43, y: size * 0.86 }];
               } else {
                 engines = [{ x: 0, y: size * 0.8 }];
               }
-            } else if (s1.style === 'Tholian') {
+            } else if (style === 'Tholian') {
               engines = [{ x: 0, y: size * 0.6 }];
-            } else if (s1.style === 'Lyran') {
+            } else if (style === 'Lyran') {
               engines = [{ x: 0, y: size * 0.9 }];
             }
             const numEngines = engines.length;
