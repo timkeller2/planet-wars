@@ -6757,7 +6757,27 @@ export class Game {
                 isMarineFleet: s.isMarineFleet,
                 radius: s.radius,
                 package: s.package,
-                count: s.count
+                count: s.count,
+                cohort: s.cohort,
+                style: s.style,
+                maxsupplies: s.maxsupplies,
+                specialbombs: s.specialbombs,
+                specialfuel: s.specialfuel,
+                specialduranium: s.specialduranium,
+                isUpgrading: s.isUpgrading,
+                armor: s.armor,
+                maxArmor: s.maxArmor,
+                armorPoints: s.armorPoints,
+                shields: s.shields,
+                shieldPoints: s.shieldPoints,
+                sensorarrays: s.sensorarrays,
+                labs: s.labs,
+                engine: s.engine,
+                munitions: s.munitions,
+                targeting: s.targeting,
+                damagecontrol: s.damagecontrol,
+                supply_ship: s.supply_ship,
+                extended_fuel: s.extended_fuel
               });
               b.participants.add(s.owner ? s.owner.id : 'monsters');
             }
@@ -6846,6 +6866,9 @@ export class Game {
               if (nearestPlanet) {
                 battleName = 'Battle of ' + nearestPlanet.name;
               }
+              const d = new Date(timeNow);
+              const timeStr = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0') + ':' + d.getSeconds().toString().padStart(2, '0');
+              battleName = battleName + ' (' + timeStr + ')';
 
               // Diagnostic log for battle replay
               const totalShips = b.frames.reduce((sum, f) => sum + f.ships.length, 0);
@@ -6868,7 +6891,7 @@ export class Game {
               });
               
               // Limit stored replays to prevent memory bloating
-              if (this.completedBattleReplays.length > 15) {
+              if (this.completedBattleReplays.length > 50) {
                 this.completedBattleReplays.shift();
               }
               

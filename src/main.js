@@ -4359,6 +4359,16 @@ function getPlanetTradeIncomePerMin(planet) {
     if (topLeftHud) topLeftHud.classList.add('hidden');
     if (topRightHud) topRightHud.classList.add('hidden');
     if (selTiles) selTiles.classList.add('hidden');
+  } else {
+    // Force visibility on non-touch devices
+    if (scoreBoard) scoreBoard.classList.remove('hidden');
+    hudToggleState = 0;
+    const topLeftHud = document.getElementById('top-left-hud');
+    const topRightHud = document.getElementById('top-right-hud');
+    const selTiles = document.getElementById('selection-tiles-container');
+    if (topLeftHud) topLeftHud.classList.remove('hidden');
+    if (topRightHud) topRightHud.classList.remove('hidden');
+    if (selTiles) selTiles.classList.remove('hidden');
   }
 
   function cycleHudToggle() {
@@ -7293,17 +7303,79 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.fillStyle = ownerColor;
         ctx.fillRect(-3, -3, 6, 6);
       } else if (s1.isCruiser) {
-        ctx.strokeStyle = ownerColor;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(15, 0);
-        ctx.lineTo(-10, -10);
-        ctx.lineTo(-5, 0);
-        ctx.lineTo(-10, 10);
+        drawRacialShipHull(ctx, s1.style || 'Federation', s1.cohort || 'alpha', s1.radius || 15, s1.maxsupplies > 0);
         ctx.closePath();
+        ctx.fillStyle = ownerColor;
         ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
         ctx.stroke();
+
+        if (s1.specialbombs > 0 || s1.specialfuel > 0 || s1.specialduranium > 0) {
+          const size = s1.radius || 15;
+          const dotRadius = Math.max(1.2, size * 0.08);
+
+          const drawDotCluster = (cx, cy, count, fill, stroke, lw) => {
+            if (count <= 0) return;
+            ctx.fillStyle = fill;
+            ctx.strokeStyle = stroke;
+            ctx.lineWidth = lw;
+            if (count === 1) {
+              ctx.beginPath();
+              ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+            } else {
+              const R = dotRadius * 1.5;
+              for (let i = 0; i < count; i++) {
+                const theta = (i * 2 * Math.PI) / count;
+                const dx = cx + R * Math.cos(theta);
+                const dy = cy + R * Math.sin(theta);
+                ctx.beginPath();
+                ctx.arc(dx, dy, dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+              }
+            }
+          };
+
+          if (s1.specialbombs > 0) {
+            const leftCount = Math.floor(s1.specialbombs / 2);
+            const rightCount = Math.ceil(s1.specialbombs / 2);
+            drawDotCluster(-size * 0.75, size * 0.15, leftCount, '#ff0000', '#000000', dotRadius * 0.3);
+            drawDotCluster(size * 0.75, size * 0.15, rightCount, '#ff0000', '#000000', dotRadius * 0.3);
+          }
+
+          if (s1.specialfuel > 0) {
+            let engines = [{ x: 0, y: size * 0.6 }];
+            if (s1.style === 'Federation') {
+              engines = [{ x: size * 0.8, y: size * 0.8 }, { x: -size * 0.8, y: size * 0.8 }];
+            } else if (s1.style === 'Romulan') {
+              engines = [{ x: size * 0.5, y: size * 0.25 }, { x: -size * 0.5, y: size * 0.25 }];
+            } else if (s1.style === 'Gorn') {
+              if (s1.cohort === 'battleship' || s1.cohort === 'titan') {
+                engines = [{ x: size * 0.43, y: size * 0.86 }, { x: -size * 0.43, y: size * 0.86 }];
+              } else {
+                engines = [{ x: 0, y: size * 0.8 }];
+              }
+            } else if (s1.style === 'Tholian') {
+              engines = [{ x: 0, y: size * 0.6 }];
+            } else if (s1.style === 'Lyran') {
+              engines = [{ x: 0, y: size * 0.9 }];
+            }
+            const numEngines = engines.length;
+            for (let j = 0; j < numEngines; j++) {
+              const engine = engines[j];
+              const engineCount = Math.floor(s1.specialfuel / numEngines) + (j < (s1.specialfuel % numEngines) ? 1 : 0);
+              drawDotCluster(engine.x, engine.y, engineCount, '#ffff00', '#000000', dotRadius * 0.3);
+            }
+          }
+
+          if (s1.specialduranium > 0) {
+            drawDotCluster(0, 0, s1.specialduranium, '#aaaaaa', '#000000', dotRadius * 0.3);
+          }
+        }
       } else {
         ctx.fillStyle = ownerColor;
         ctx.beginPath();
@@ -7312,13 +7384,78 @@ function getPlanetTradeIncomePerMin(planet) {
       }
       ctx.restore();
       
+      const drawnW = 20 * shipScale;
+      const drawnH = 20 * shipScale;
+      
       if (s1.maxHealth > 0) {
-        const hpPct = s1.health / s1.maxHealth;
-        const barW = 20 * shipScale;
+        ctx.save();
+        ctx.translate(curX, curY);
+        
+        // Health
         ctx.fillStyle = '#ff0000';
-        ctx.fillRect(curX - barW / 2, curY - 20 * shipScale, barW, 3);
+        ctx.fillRect(-drawnW/2, -drawnH/2 - 8, drawnW, 3);
         ctx.fillStyle = '#00ff00';
-        ctx.fillRect(curX - barW / 2, curY - 20 * shipScale, barW * hpPct, 3);
+        ctx.fillRect(-drawnW/2, -drawnH/2 - 8, drawnW * Math.max(0, s1.health / s1.maxHealth), 3);
+        
+        // Shields
+        if (s1.shields > 0) {
+          const maxShields = s1.maxShields ? s1.maxShields : (Math.ceil(2 + Math.floor(Math.sqrt(serverState.players.find(p=>p.id===s1.ownerId)?.techScore||0))/5) * s1.shields);
+          if (maxShields > 0) {
+             ctx.fillStyle = 'rgba(0, 255, 255, 0.3)';
+             ctx.fillRect(-drawnW/2, -drawnH/2 - 12, drawnW, 3);
+             ctx.fillStyle = 'rgba(0, 255, 255, 1.0)';
+             ctx.fillRect(-drawnW/2, -drawnH/2 - 12, drawnW * Math.max(0, (s1.shieldPoints||0) / maxShields), 3);
+          }
+        }
+        
+        // Armor
+        if (s1.maxArmor > 0) {
+           ctx.fillStyle = 'rgba(255, 200, 0, 0.3)';
+           ctx.fillRect(-drawnW/2, -drawnH/2 - 16, drawnW, 3);
+           ctx.fillStyle = 'rgba(255, 200, 0, 1.0)';
+           ctx.fillRect(-drawnW/2, -drawnH/2 - 16, drawnW * Math.max(0, (s1.armorPoints||0) / s1.maxArmor), 3);
+        }
+        
+        // Upgrades
+        const activeUpgrades = [];
+        if ((s1.sensorarrays || 0) > 0) activeUpgrades.push({ symbol: '📡', count: s1.sensorarrays });
+        if ((s1.labs || 0) > 0) activeUpgrades.push({ symbol: '🔬', count: s1.labs });
+        if ((s1.shields || 0) > 0) activeUpgrades.push({ symbol: '🛡️', count: s1.shields });
+        if ((s1.armor || 0) > 0) activeUpgrades.push({ symbol: '⛨', count: s1.armor });
+        if ((s1.engine || 0) > 0) activeUpgrades.push({ symbol: '🚀', count: s1.engine });
+        if ((s1.munitions || 0) > 0) activeUpgrades.push({ symbol: '💣', count: s1.munitions });
+        if ((s1.targeting || 0) > 0) activeUpgrades.push({ symbol: '🎯', count: s1.targeting });
+        if ((s1.damagecontrol || 0) > 0) activeUpgrades.push({ symbol: '🔧', count: s1.damagecontrol });
+        if ((s1.supply_ship || 0) > 0) activeUpgrades.push({ symbol: '📦', count: s1.supply_ship });
+        if ((s1.extended_fuel || 0) > 0) activeUpgrades.push({ symbol: '⛽', count: s1.extended_fuel });
+
+        if (activeUpgrades.length > 0) {
+          ctx.font = `${Math.max(8, 10 * shipScale)}px Arial`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          const maxCols = Math.min(5, activeUpgrades.length);
+          const iconSpacing = 12 * shipScale;
+          const startX = -((maxCols - 1) * iconSpacing) / 2;
+          
+          activeUpgrades.forEach((u, idx) => {
+            const row = Math.floor(idx / 5);
+            const col = idx % 5;
+            const x = startX + col * iconSpacing;
+            const y = drawnH / 2 + 8 + row * iconSpacing;
+            
+            ctx.fillStyle = '#fff';
+            ctx.fillText(u.symbol, x, y);
+            
+            if (u.count > 1) {
+              ctx.font = `${Math.max(6, 8 * shipScale)}px monospace`;
+              ctx.fillStyle = '#0f0';
+              ctx.fillText(u.count.toString(), x + 6 * shipScale, y + 6 * shipScale);
+              ctx.font = `${Math.max(8, 10 * shipScale)}px Arial`;
+            }
+          });
+        }
+
+        ctx.restore();
       }
 
       if (s1.name && (s1.isCruiser || s1.isAmoeba)) {
