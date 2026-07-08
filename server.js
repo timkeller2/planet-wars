@@ -10,6 +10,9 @@ import fs from 'fs';
 import * as dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 dotenv.config();
 
 let genAI = null;
@@ -67,8 +70,6 @@ Question from ${player.name}: "${question}"`;
 }
 
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const GAME_VERSION = "1.0.0";
 const savesDir = path.join(__dirname, 'saves');
