@@ -6294,6 +6294,13 @@ function getPlanetTradeIncomePerMin(planet) {
           if (c._replayTouchStart) { c.removeEventListener('touchstart', c._replayTouchStart); c._replayTouchStart = null; }
           if (c._replayTouchMove) { c.removeEventListener('touchmove', c._replayTouchMove); c._replayTouchMove = null; }
           if (c._replayTouchEnd) { c.removeEventListener('touchend', c._replayTouchEnd); c._replayTouchEnd = null; }
+          if (c._replayMouseDown) {
+            c.removeEventListener('mousedown', c._replayMouseDown);
+            c.removeEventListener('mousemove', c._replayMouseMove);
+            c.removeEventListener('mouseup', c._replayMouseUp);
+            c.removeEventListener('mouseleave', c._replayMouseLeave);
+            c._replayMouseDown = null; c._replayMouseMove = null; c._replayMouseUp = null; c._replayMouseLeave = null;
+          }
         }
         
         const activeReplays = lastSeenReplays ? lastSeenReplays.filter(r => !deletedReplayIds.has(r.id)) : [];
@@ -6938,6 +6945,47 @@ function getPlanetTradeIncomePerMin(planet) {
         if (canvas._replayTouchStart) canvas.removeEventListener('touchstart', canvas._replayTouchStart);
         if (canvas._replayTouchMove) canvas.removeEventListener('touchmove', canvas._replayTouchMove);
         if (canvas._replayTouchEnd) canvas.removeEventListener('touchend', canvas._replayTouchEnd);
+        if (canvas._replayMouseDown) {
+          canvas.removeEventListener('mousedown', canvas._replayMouseDown);
+          canvas.removeEventListener('mousemove', canvas._replayMouseMove);
+          canvas.removeEventListener('mouseup', canvas._replayMouseUp);
+          canvas.removeEventListener('mouseleave', canvas._replayMouseLeave);
+        }
+
+        activeReplay._panX = 0;
+        activeReplay._panY = 0;
+
+        canvas._replayMouseDown = (e) => {
+          if (e.button !== 0) return;
+          canvas._replayIsPanning = true;
+          canvas._replayLastPanX = e.clientX;
+          canvas._replayLastPanY = e.clientY;
+        };
+        canvas._replayMouseMove = (e) => {
+          if (!canvas._replayIsPanning) return;
+          const rect = canvas.getBoundingClientRect();
+          const cssScaleX = canvas.width / rect.width;
+          const cssScaleY = canvas.height / rect.height;
+          const dx = (e.clientX - canvas._replayLastPanX) * cssScaleX;
+          const dy = (e.clientY - canvas._replayLastPanY) * cssScaleY;
+          
+          const viewSize = (activeReplay.radius * 1.2) / (activeReplay._zoom || 1.0);
+          const drawScale = canvas.width / viewSize;
+
+          activeReplay._panX += dx / drawScale;
+          activeReplay._panY += dy / drawScale;
+          
+          canvas._replayLastPanX = e.clientX;
+          canvas._replayLastPanY = e.clientY;
+        };
+        canvas._replayMouseUp = () => { canvas._replayIsPanning = false; };
+        canvas._replayMouseLeave = () => { canvas._replayIsPanning = false; };
+        
+        canvas.addEventListener('mousedown', canvas._replayMouseDown);
+        canvas.addEventListener('mousemove', canvas._replayMouseMove);
+        canvas.addEventListener('mouseup', canvas._replayMouseUp);
+        canvas.addEventListener('mouseleave', canvas._replayMouseLeave);
+
         // Mouse wheel zoom
         canvas._replayWheelHandler = (e) => {
           e.preventDefault();
@@ -7285,7 +7333,7 @@ function getPlanetTradeIncomePerMin(planet) {
     ctx.save();
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.scale(scale, scale);
-    ctx.translate(-activeReplay.x, -activeReplay.y);
+    ctx.translate(-activeReplay.x + (activeReplay._panX || 0), -activeReplay.y + (activeReplay._panY || 0));
     
     let progress = 0;
     if (f2.timeOffset > f1.timeOffset) {
@@ -7385,6 +7433,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
         
         if (!drawnShipImage) {
+          ctx.rotate(-Math.PI / 2);
           ctx.beginPath();
           drawRacialShipHull(ctx, style, s1.cohort || 'alpha', s1.radius || 15, s1.maxsupplies > 0);
           ctx.closePath();
