@@ -1110,23 +1110,31 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     } else if (style === 'Gorn') {
       if (cohort === 'destroyer_group') {
-        // Gorn Destroyer (heavy angular spearhead with double nose-gun pods)
-        ctx.moveTo(0, -size * 0.425);
-        ctx.lineTo(size * 0.2, -size * 0.375);
-        ctx.lineTo(size * 0.2, -size * 0.25);
-        ctx.lineTo(size * 0.5, -size * 0.4);
-        ctx.lineTo(size * 0.6, -size * 0.4);
-        ctx.lineTo(size * 0.6, size * 0.15);
-        ctx.lineTo(size * 0.35, size * 0.23125);
-        ctx.lineTo(size * 0.25, size * 0.29375);
-        ctx.lineTo(0, size * 0.31875);
-        ctx.lineTo(-size * 0.25, size * 0.29375);
-        ctx.lineTo(-size * 0.35, size * 0.23125);
-        ctx.lineTo(-size * 0.6, size * 0.15);
-        ctx.lineTo(-size * 0.6, -size * 0.4);
-        ctx.lineTo(-size * 0.5, -size * 0.4);
-        ctx.lineTo(-size * 0.2, -size * 0.25);
-        ctx.lineTo(-size * 0.2, -size * 0.375);
+        // Gorn Destroyer (heavy angular spearhead with double nose-gun pods + bolts)
+        const s = size * 1.2;
+        ctx.moveTo(0, -s * 0.425);
+        ctx.lineTo(s * 0.15, -s * 0.375);
+        ctx.lineTo(s * 0.15, -s * 0.55); // Right bolt inner
+        ctx.lineTo(s * 0.2, -s * 0.55);  // Right bolt outer
+        ctx.lineTo(s * 0.2, -s * 0.375); // Right bolt base
+        ctx.lineTo(s * 0.2, -s * 0.25);
+        ctx.lineTo(s * 0.5, -s * 0.4);
+        ctx.lineTo(s * 0.6, -s * 0.4);
+        ctx.lineTo(s * 0.6, s * 0.0);    // Reduced vertical wing thickness
+        ctx.lineTo(s * 0.35, s * 0.1);
+        ctx.lineTo(s * 0.25, s * 0.15);
+        ctx.lineTo(0, s * 0.2);
+        ctx.lineTo(-s * 0.25, s * 0.15);
+        ctx.lineTo(-s * 0.35, s * 0.1);
+        ctx.lineTo(-s * 0.6, s * 0.0);
+        ctx.lineTo(-s * 0.6, -s * 0.4);
+        ctx.lineTo(-s * 0.5, -s * 0.4);
+        ctx.lineTo(-s * 0.2, -s * 0.25);
+        ctx.lineTo(-s * 0.2, -s * 0.375); // Left bolt base
+        ctx.lineTo(-s * 0.2, -s * 0.55);  // Left bolt outer
+        ctx.lineTo(-s * 0.15, -s * 0.55); // Left bolt inner
+        ctx.lineTo(-s * 0.15, -s * 0.375);
+        ctx.lineTo(0, -s * 0.425);
       } else if (cohort === 'cruiser_group') {
         ctx.moveTo(-size * 0.4, -size * 0.8);
         ctx.lineTo(size * 0.4, -size * 0.8);
