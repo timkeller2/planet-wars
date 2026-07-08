@@ -6172,7 +6172,7 @@ export class Game {
     // Resolve cruiser stacking when not moving
     const nonMovingCruisers = [];
     for (const ship of this.ships) {
-      if (ship.active && ship.isCruiser && ship.maxHealth > 0 && !ship.isCruiserMoving()) {
+      if (ship.active && ship.isCruiser && ship.maxHealth > 0 && ship.stationaryTimer > 0) {
         nonMovingCruisers.push(ship);
       }
     }
@@ -6191,7 +6191,7 @@ export class Game {
             const dy = shipB.y - shipA.y;
             const distSq = dx * dx + dy * dy;
             
-            const minDistance = Math.max(shipA.maxHealth || 0, shipB.maxHealth || 0) * 1.30 + 25;
+            const minDistance = Math.max(shipA.maxHealth || 0, shipB.maxHealth || 0) * 1.30;
             const minDistanceSq = minDistance * minDistance;
             
             if (distSq < minDistanceSq) {
