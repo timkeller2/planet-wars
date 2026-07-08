@@ -89,7 +89,7 @@ export class Planet {
     }
 
     // Cap initial radius to sizeClass
-    this.radius = Math.min(this.sizeClass, this.maxShips) / 4;
+    this.radius = this.sizeClass / 4;
     this.supplies = Math.random() * this.maxShips;
 
     // Sci-Fi Planetary Resources System
@@ -151,7 +151,7 @@ export class Planet {
 
   setRadius(newRadius) {
     this.maxShips = Math.max(15, newRadius * 4);
-    this.radius = this.sizeClass ? Math.min(this.sizeClass, this.maxShips) / 4 : newRadius;
+    this.radius = this.sizeClass ? this.sizeClass / 4 : newRadius;
   }
 
   increaseMaxShips(amount = 1) {
@@ -163,7 +163,7 @@ export class Planet {
       increase /= 3;
     }
     this.maxShips += increase;
-    this.radius = Math.min(this.sizeClass, this.maxShips) / 4;
+    this.radius = this.sizeClass / 4;
 
     if (oldMax < 150 && this.maxShips >= 150) {
       this.preferredResourceWantedEvent = true;
@@ -174,7 +174,7 @@ export class Planet {
 
   decreaseMaxShips(amount = 1, silent = false) {
     this.maxShips = Math.max(5, this.maxShips - amount);
-    this.radius = Math.min(this.sizeClass, this.maxShips) / 4;
+    this.radius = this.sizeClass / 4;
     if (!silent) {
       this.capacityDecreaseEvent = true;
     }

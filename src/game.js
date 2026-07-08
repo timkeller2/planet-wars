@@ -1406,7 +1406,7 @@ export class Game {
       targetPlanet.sympathy[player.id] = targetPlanet.maxShips;
       targetPlanet.supplies = targetPlanet.maxShips;
       targetPlanet.ships = targetPlanet.maxShips;
-      targetPlanet.radius = Math.min(targetPlanet.sizeClass, targetPlanet.maxShips) / 4;
+      targetPlanet.radius = targetPlanet.sizeClass / 4;
       targetPlanet.habitability = 100;
       targetPlanet.justAssigned = true;
       targetPlanet.justAssignedTimer = 0;
@@ -2239,7 +2239,7 @@ export class Game {
           newPlanet.habitability = 150;
           newPlanet.maxShips = spec.maxShips;
           newPlanet.supplies = Math.random() * newPlanet.maxShips;
-          newPlanet.radius = Math.min(newPlanet.sizeClass, newPlanet.maxShips) / 4;
+          newPlanet.radius = newPlanet.sizeClass / 4;
         }
         return newPlanet;
       };
@@ -2458,7 +2458,7 @@ export class Game {
             newPlanet.habitability = 150;
             newPlanet.maxShips = radius * 4;
             newPlanet.supplies = Math.random() * newPlanet.maxShips;
-            newPlanet.radius = Math.min(newPlanet.sizeClass, newPlanet.maxShips) / 4;
+            newPlanet.radius = newPlanet.sizeClass / 4;
           }
           this.addPlanet(newPlanet);
         }
