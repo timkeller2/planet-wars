@@ -6262,7 +6262,10 @@ function getPlanetTradeIncomePerMin(planet) {
       overlay.innerHTML = `
         <div class="boarding-combat-header">
           <span><span id="boarding-combat-title">BOARDING ACTION</span> (<span id="boarding-combat-timer">10.0</span>s)</span>
-          <button class="boarding-combat-close-btn" id="boarding-combat-close-btn">&times;</button>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button id="boarding-combat-delete-btn" style="display: none; background: #c00; border: 1px solid #f00; color: #fff; padding: 2px 8px; border-radius: 3px; cursor: pointer; font-family: 'Orbitron', sans-serif; font-size: 0.8rem; font-weight: bold;">DELETE</button>
+            <button class="boarding-combat-close-btn" id="boarding-combat-close-btn">&times;</button>
+          </div>
         </div>
         <div class="boarding-combat-body">
           <canvas id="boardingCombatCanvas" width="356" height="160"></canvas>
@@ -6270,6 +6273,14 @@ function getPlanetTradeIncomePerMin(planet) {
         </div>
       `;
       document.body.appendChild(overlay);
+      
+      document.getElementById('boarding-combat-delete-btn').addEventListener('click', () => {
+        if (activeReplay) {
+          deletedReplayIds.add(activeReplay.id);
+          lastReplaysFingerprint = ''; // force re-render
+          document.getElementById('boarding-combat-close-btn').click();
+        }
+      });
       
       document.getElementById('boarding-combat-close-btn').addEventListener('click', () => {
         overlay.style.display = 'none';
@@ -6283,6 +6294,15 @@ function getPlanetTradeIncomePerMin(planet) {
           if (c._replayTouchStart) { c.removeEventListener('touchstart', c._replayTouchStart); c._replayTouchStart = null; }
           if (c._replayTouchMove) { c.removeEventListener('touchmove', c._replayTouchMove); c._replayTouchMove = null; }
           if (c._replayTouchEnd) { c.removeEventListener('touchend', c._replayTouchEnd); c._replayTouchEnd = null; }
+        }
+        
+        const activeReplays = lastSeenReplays ? lastSeenReplays.filter(r => !deletedReplayIds.has(r.id)) : [];
+        if (activeReplays.length > 0) {
+          const modal = document.getElementById('recordings-modal');
+          if (modal) {
+            modal.classList.remove('hidden');
+            renderRecordingsList(lastSeenReplays);
+          }
         }
       });
     }
@@ -6771,6 +6791,7 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   const deletedReplayIds = new Set();
+  const viewedReplayIds = new Set();
   let activeReplay = null;
   let activeReplayStartTime = 0;
   let processedReplayEventIds = new Set();
@@ -6815,6 +6836,15 @@ function getPlanetTradeIncomePerMin(planet) {
       
       btn.innerHTML = `<span style="font-weight: bold; color: #0ff;">${r.name}</span><span style="float: right; color: #aaa;">${durationStr}</span>`;
       btn.dataset.replayId = r.id;
+      
+      if (viewedReplayIds.has(r.id)) {
+        btn.style.opacity = '0.5';
+        btn.style.border = '1px solid rgba(0, 229, 255, 0.2)';
+      } else {
+        btn.style.opacity = '1.0';
+        btn.style.border = '1px solid #0ff';
+        btn.style.boxShadow = '0 0 8px rgba(0, 255, 0, 0.5)';
+      }
       
       btn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -6881,6 +6911,8 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   function playReplay(replay) {
+    viewedReplayIds.add(replay.id);
+    lastReplaysFingerprint = ''; // force update of list highlighting
     isReplayMode = true;
     activeReplay = replay;
     activeReplayStartTime = Date.now();
@@ -6889,6 +6921,8 @@ function getPlanetTradeIncomePerMin(planet) {
 
     ensureBoardingCombatWindowExists();
     const overlay = document.getElementById('boarding-combat-overlay');
+    const deleteBtn = document.getElementById('boarding-combat-delete-btn');
+    if (deleteBtn) deleteBtn.style.display = 'block';
     const canvas = document.getElementById('boardingCombatCanvas');
     if (overlay) {
       overlay.style.display = 'block';
