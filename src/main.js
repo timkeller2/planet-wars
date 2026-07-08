@@ -13567,30 +13567,14 @@ function getPlanetTradeIncomePerMin(planet) {
               b = num & 255;
             }
 
-            // 1. Lighter version for the soft cap circle (mix with white)
-            const lightR = Math.floor(r + (255 - r) * 0.6);
-            const lightG = Math.floor(g + (255 - g) * 0.6);
-            const lightB = Math.floor(b + (255 - b) * 0.6);
-            const softCapFillColor = `rgba(${lightR}, ${lightG}, ${lightB}, 0.25)`;
-            const softCapStrokeColor = `rgba(${lightR}, ${lightG}, ${lightB}, 0.4)`;
-
-            // 2. Slightly darker version for the hard limit capacity circle (based on sizeClass)
+            // Slightly darker version for the hard limit capacity circle (based on sizeClass)
             const darkR = Math.floor(r * 0.55);
             const darkG = Math.floor(g * 0.55);
             const darkB = Math.floor(b * 0.55);
             const capacityFillColor = `rgba(${darkR}, ${darkG}, ${darkB}, 0.35)`;
             const capacityStrokeColor = `rgba(${darkR}, ${darkG}, ${darkB}, 0.55)`;
 
-            // Draw soft cap circle first
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, threshold / 4, 0, Math.PI * 2);
-            ctx.fillStyle = softCapFillColor;
-            ctx.fill();
-            ctx.strokeStyle = softCapStrokeColor;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            // Draw capacity circle over it based on sizeClass
+            // Draw capacity circle based on sizeClass
             if (p.sizeClass > 0) {
               ctx.beginPath();
               ctx.arc(p.x, p.y, p.sizeClass / 4, 0, Math.PI * 2);
