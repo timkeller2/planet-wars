@@ -4327,7 +4327,10 @@ export class Game {
     const nowTime = Date.now();
     this.boardingReplays = this.boardingReplays.filter(r => nowTime - r.timestamp < 120000);
     if (this.completedBattleReplays) {
-      this.completedBattleReplays = this.completedBattleReplays.filter(r => nowTime - r.timestamp < 120000);
+      this.completedBattleReplays = this.completedBattleReplays.filter(r => {
+        const timeToKeep = Math.max(120000, 10 * (r.duration || 0));
+        return nowTime - r.timestamp < timeToKeep;
+      });
     }
 
     for (const player of this.allPlayers) {
@@ -6865,9 +6868,20 @@ export class Game {
               });
               
               // Limit stored replays to prevent memory bloating
-              if (this.completedBattleReplays.length > 25) {
+              if (this.completedBattleReplays.length > 15) {
                 this.completedBattleReplays.shift();
               }
+              
+              const durationSecs = Math.max(0, Math.floor((timeNow - b.startTime) / 1000));
+              const mins = Math.floor(durationSecs / 60);
+              const secs = durationSecs % 60;
+              const durationStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+              
+              this.pendingChatMessages = this.pendingChatMessages || [];
+              this.pendingChatMessages.push({
+                playerId: 'all',
+                text: `A new battle recording (${battleName}, ${durationStr}) is available for review.`
+              });
             }
           }
           this.ongoingBattles.splice(i, 1);

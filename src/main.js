@@ -2441,7 +2441,12 @@ function getPlanetTradeIncomePerMin(planet) {
       lastSelectionIdsStr = "";
       return;
     }
-    container.style.display = 'flex';
+    const topLeftHud = document.getElementById('top-left-hud');
+    if (topLeftHud && topLeftHud.classList.contains('hidden')) {
+      container.style.display = 'none';
+    } else {
+      container.style.display = 'flex';
+    }
 
     const currentSelectionIdsStr = "P:" + selectedPlanets.map(p => p.id).sort().join(",") + 
                                   "|S:" + selectedShips.map(s => s.id).sort().join(",") +
@@ -2852,10 +2857,33 @@ function getPlanetTradeIncomePerMin(planet) {
 
     // Toggle leaderboard option
     options.push({
-      text: '🏆 TOGGLE LEADERBOARD / HUD',
+      text: '🏆 TOGGLE LEADERBOARD',
       action: () => {
-        if (typeof cycleLeaderboardAndHudToggle === 'function') {
-          cycleLeaderboardAndHudToggle();
+        const lbContainer = document.getElementById('score-board');
+        if (lbContainer) {
+          lbContainer.classList.toggle('hidden');
+        }
+      }
+    });
+
+    // Toggle HUD option
+    options.push({
+      text: '🖥️ TOGGLE HUD',
+      action: () => {
+        if (typeof cycleHudToggle === 'function') {
+          cycleHudToggle();
+        }
+      }
+    });
+
+    // Open Recordings option
+    options.push({
+      text: '📼 BATTLE RECORDINGS',
+      action: () => {
+        const recordingsModal = document.getElementById('recordings-modal');
+        if (recordingsModal) {
+          recordingsModal.classList.remove('hidden');
+          renderRecordingsList(); // Render the latest if we have it
         }
       }
     });
@@ -2888,14 +2916,23 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     });
 
-    // Dismiss option
-    options.push({
-      text: '❌ DISMISS MENU',
-      class: 'danger',
-      action: () => {
-        // Just closes
-      }
-    });
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    if (isTouchDevice) {
+      options.push({
+        text: '🔍 CYCLE FOCUS (TAB)',
+        action: () => {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' }));
+        }
+      });
+      options.push({
+        text: '💤 CYCLE IDLE UNITS (.)',
+        action: () => {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: '.' }));
+        }
+      });
+    }
+
+
 
     // Build DOM elements
     options.forEach(opt => {
@@ -4310,32 +4347,38 @@ function getPlanetTradeIncomePerMin(planet) {
   const leaderboardContent = document.getElementById('leaderboard-content');
   const scoreBoard = document.getElementById('score-board');
 
-  let leaderboardToggleState = 0; // 0: all visible, 1: leaderboard hidden, 2: leaderboard & top HUD hidden
-  function cycleLeaderboardAndHudToggle() {
-    leaderboardToggleState = (leaderboardToggleState + 1) % 3;
-    const scoreBoardEl = document.getElementById('score-board');
+  let hudToggleState = 0; // 0: all visible, 1: HUD hidden
+
+  const isTouchDeviceInitial = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if (isTouchDeviceInitial) {
+    if (scoreBoard) scoreBoard.classList.add('hidden');
+    hudToggleState = 1;
     const topLeftHud = document.getElementById('top-left-hud');
     const topRightHud = document.getElementById('top-right-hud');
+    const selTiles = document.getElementById('selection-tiles-container');
+    if (topLeftHud) topLeftHud.classList.add('hidden');
+    if (topRightHud) topRightHud.classList.add('hidden');
+    if (selTiles) selTiles.classList.add('hidden');
+  }
 
-    if (leaderboardToggleState === 0) {
-      if (scoreBoardEl) scoreBoardEl.classList.remove('hidden');
+  function cycleHudToggle() {
+    hudToggleState = (hudToggleState + 1) % 2;
+    const topLeftHud = document.getElementById('top-left-hud');
+    const topRightHud = document.getElementById('top-right-hud');
+    const selTiles = document.getElementById('selection-tiles-container');
+
+    if (hudToggleState === 0) {
       if (topLeftHud) topLeftHud.classList.remove('hidden');
       if (topRightHud) topRightHud.classList.remove('hidden');
-    } else if (leaderboardToggleState === 1) {
-      if (scoreBoardEl) scoreBoardEl.classList.add('hidden');
-      if (topLeftHud) topLeftHud.classList.remove('hidden');
-      if (topRightHud) topRightHud.classList.remove('hidden');
-    } else if (leaderboardToggleState === 2) {
-      if (scoreBoardEl) scoreBoardEl.classList.add('hidden');
+      if (selTiles) selTiles.classList.remove('hidden');
+      if (typeof updateSelectionTiles === 'function') updateSelectionTiles();
+    } else {
       if (topLeftHud) topLeftHud.classList.add('hidden');
       if (topRightHud) topRightHud.classList.add('hidden');
+      if (selTiles) selTiles.classList.add('hidden');
     }
   }
-  window.cycleLeaderboardAndHudToggle = cycleLeaderboardAndHudToggle;
-
-  bindActionClick('btn-leaderboard', () => {
-    cycleLeaderboardAndHudToggle();
-  });
+  window.cycleHudToggle = cycleHudToggle;
 
   const helpBtn = document.getElementById('help-btn');
   const helpModal = document.getElementById('help-modal');
@@ -4368,6 +4411,7 @@ function getPlanetTradeIncomePerMin(planet) {
     helpBackContainer.style.display = 'none';
     helpTitle.textContent = 'How to Play';
   }
+  window.showHelpIndex = showHelpIndex;
 
   function showHelpTopic(topic) {
     helpIndex.classList.add('hidden');
@@ -4378,18 +4422,26 @@ function getPlanetTradeIncomePerMin(planet) {
     helpTitle.textContent = topicTitles[topic] || 'How to Play';
   }
 
-  bindActionClick(helpBtn, () => {
-    helpModal.classList.remove('hidden');
-    showHelpIndex();
-  });
+
 
   bindActionClick(closeHelp, () => {
     helpModal.classList.add('hidden');
   });
+  
+  const closeRecordings = document.getElementById('close-recordings');
+  if (closeRecordings) {
+    bindActionClick(closeRecordings, () => {
+      document.getElementById('recordings-modal').classList.add('hidden');
+    });
+  }
 
   window.addEventListener('click', (event) => {
     if (event.target === helpModal) {
       helpModal.classList.add('hidden');
+    }
+    const recordingsModal = document.getElementById('recordings-modal');
+    if (recordingsModal && event.target === recordingsModal) {
+      recordingsModal.classList.add('hidden');
     }
     // Dismiss info panel with a click outside the container
     if (activeInfoPanel && !panelOpenedThisTick) {
@@ -4398,9 +4450,10 @@ function getPlanetTradeIncomePerMin(planet) {
         closeInfoPanel();
       }
     }
-    // Dismiss touch context menu with a click outside
+    // Dismiss touch context menu with a click outside or not on a valid option
     if (touchContextMenu && !touchContextMenu.classList.contains('hidden')) {
-      if (!touchContextMenu.contains(event.target)) {
+      const clickedOption = event.target.closest('.touch-context-option');
+      if (!clickedOption) {
         closeTouchContextMenu();
       }
     }
@@ -6704,43 +6757,60 @@ function getPlanetTradeIncomePerMin(planet) {
   let processedReplayEventIds = new Set();
   let isReplayMode = false;
 
-  function syncReplayButtons(replays) {
-    const container = document.getElementById('replay-buttons-container');
+  let lastSeenReplays = [];
+  function renderRecordingsList(replays) {
+    if (replays) lastSeenReplays = replays;
+    const container = document.getElementById('recordings-list');
     if (!container) return;
 
-    if (!replays || replays.length === 0) {
-      container.innerHTML = '';
+    if (!lastSeenReplays || lastSeenReplays.length === 0) {
+      container.innerHTML = '<p style="color: #aaa; text-align: center;">No recordings available.</p>';
       return;
     }
 
     const nowTime = Date.now();
-    const activeReplays = replays.filter(r => !deletedReplayIds.has(r.id) && (nowTime - r.timestamp < 120000));
+    // Replays exist for the longer of 120s or 10*duration, but the server handles pruning them. 
+    // We just filter locally deleted ones.
+    const activeReplays = lastSeenReplays.filter(r => !deletedReplayIds.has(r.id));
 
-    const currentBtnIds = Array.from(container.children).map(c => c.dataset.replayId).join(',');
-    const newBtnIds = activeReplays.map(r => r.id).join(',');
-
-    if (currentBtnIds !== newBtnIds) {
-      container.innerHTML = '';
-      activeReplays.forEach(r => {
-        const btn = document.createElement('button');
-        btn.className = 'replay-btn';
-        btn.textContent = r.name;
-        btn.dataset.replayId = r.id;
-        
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          playReplay(r);
-        });
-        
-        btn.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          deletedReplayIds.add(r.id);
-          syncReplayButtons(replays);
-        });
-        
-        container.appendChild(btn);
-      });
+    if (activeReplays.length === 0) {
+      container.innerHTML = '<p style="color: #aaa; text-align: center;">No recordings available.</p>';
+      return;
     }
+
+    container.innerHTML = '';
+    activeReplays.forEach(r => {
+      const btn = document.createElement('button');
+      btn.className = 'cyber-btn';
+      btn.style.width = '100%';
+      btn.style.textAlign = 'left';
+      btn.style.padding = '10px';
+      
+      let durationStr = '00:00';
+      if (r.duration) {
+         const totalSeconds = Math.max(0, Math.floor(r.duration / 1000));
+         const mins = Math.floor(totalSeconds / 60);
+         const secs = totalSeconds % 60;
+         durationStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      }
+      
+      btn.innerHTML = `<span style="font-weight: bold; color: #0ff;">${r.name}</span><span style="float: right; color: #aaa;">${durationStr}</span>`;
+      btn.dataset.replayId = r.id;
+      
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('recordings-modal').classList.add('hidden');
+        playReplay(r);
+      });
+      
+      btn.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        deletedReplayIds.add(r.id);
+        renderRecordingsList(); // refresh
+      });
+      
+      container.appendChild(btn);
+    });
   }
 
   function createReplayVisualTroop(u, side, color) {
@@ -7303,7 +7373,7 @@ function getPlanetTradeIncomePerMin(planet) {
     const combinedReplays = [];
     if (state.boardingReplays) combinedReplays.push(...state.boardingReplays);
     if (state.battleReplays) combinedReplays.push(...state.battleReplays);
-    syncReplayButtons(combinedReplays);
+    renderRecordingsList(combinedReplays);
   }
 
   function formatTime(seconds) {
@@ -9438,6 +9508,11 @@ function getPlanetTradeIncomePerMin(planet) {
       } else if (clickedShip) {
         wasAlreadySelectedOnMouseDown = selectedShips.some(s => s.id === clickedShip.id);
       }
+    } else if (event.button === 2) {
+      if (selectedShips.length === 0 && selectedPlanets.length === 0) {
+        openTouchContextMenu(event.clientX, event.clientY, posX, posY);
+        return;
+      }
     }
 
     handlePointerDown(posX, posY, event.shiftKey, false, event.button);
@@ -10103,6 +10178,15 @@ function getPlanetTradeIncomePerMin(planet) {
     if (startScreen && !startScreen.classList.contains('hidden')) {
       return;
     }
+    if (event.key === 'Escape') {
+      const touchContextMenu = document.getElementById('touch-context-menu');
+      if (touchContextMenu && !touchContextMenu.classList.contains('hidden')) {
+        closeTouchContextMenu();
+        event.preventDefault();
+        return;
+      }
+    }
+
     if (document.activeElement && 
         (document.activeElement.tagName === 'INPUT' || 
          document.activeElement.tagName === 'SELECT' || 
@@ -10615,8 +10699,15 @@ function getPlanetTradeIncomePerMin(planet) {
     if (event.key.toLowerCase() === 'q') {
       bombOrderNext = bombOrderNext === 'ships' ? false : 'ships';
     }
-    if (event.key.toLowerCase() === 'l') {
-      cycleLeaderboardAndHudToggle();
+    if (event.key === 'F1') {
+      event.preventDefault();
+      const helpModal = document.getElementById('help-modal');
+      if (helpModal) {
+        helpModal.classList.remove('hidden');
+        if (typeof showHelpIndex === 'function') {
+          showHelpIndex();
+        }
+      }
     }
     if (event.key.toLowerCase() === 's') {
       const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id);
@@ -11455,7 +11546,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
     const btnUpgradeMode = document.getElementById('btn-upgrade-mode');
     const actionButtonsLeft = document.getElementById('action-buttons-left');
-    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-leaderboard', 'help-btn', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-dismantle', 'btn-info'];
+    const stdButtons = ['btn-bomb', 'btn-bomb-ships', 'btn-scout', 'btn-cruiser', 'btn-patrol', 'btn-cruiser-scout', 'btn-cruiser-attack', 'btn-dismantle', 'btn-info'];
     const upButtonsMap = {
       'btn-up-sensorarray': 'sensorarrays',
       'btn-up-lab': 'labs',
@@ -12065,10 +12156,10 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      const simpleStd = ['btn-leaderboard', 'help-btn'];
-      for (const btnId of simpleStd) {
-        const el = document.getElementById(btnId);
-        if (el) el.style.display = 'inline-flex';
+      const btnWarp = document.getElementById('btn-warp');
+      if (btnWarp) {
+        const hasSelection = (selectedPlanets.length > 0 || selectedShips.length > 0);
+        btnWarp.style.display = hasSelection ? 'inline-flex' : 'none';
       }
 
       const btnInfo = document.getElementById('btn-info');

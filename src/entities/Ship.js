@@ -5662,6 +5662,67 @@ export class Ship {
       this.timeSinceLastMoved = (this.timeSinceLastMoved || 0) + (deltaTime / 1000);
     }
 
+    // AI Fleet Idle behavior (non-cruisers)
+    if (!this.isCruiser && this.owner && this.owner.isAI && this.timeSinceLastMoved >= 2.0 && game && !this.targetPlanet && this.targetX === null && this.targetY === null && !this.stationedPlanetId) {
+      this.timeSinceLastMoved = 0; // Reset timer so it doesn't spam every frame
+      
+      let bestScore = Infinity;
+      let bestCandidate = null;
+      
+      const getTargetScore = (target) => {
+        const dx = target.x - this.x;
+        const dy = target.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        let targetShips = target.isCruiser ? (target.health || 10) : target.ships;
+        if (target.owner && target.owner.id === this.owner.id) {
+           return (targetShips * -0.5) + (dist * 0.1) - 500; // friendly (highly prefer to reinforce if nearby)
+        }
+        return targetShips + (dist * 0.1); // enemy
+      };
+
+      const searchRadius = 1500;
+      
+      if (allPlanets) {
+        for (const p of allPlanets) {
+          if (p.isDeepSpaceAnomaly) continue;
+          const dx = p.x - this.x;
+          const dy = p.y - this.y;
+          if (dx * dx + dy * dy <= searchRadius * searchRadius) {
+            if (p.owner && p.owner.id === this.owner.id && p.ships < p.maxShips * 0.5) {
+              const score = getTargetScore(p);
+              if (score < bestScore) { bestScore = score; bestCandidate = p; }
+            } else if (!p.owner || p.owner.id !== this.owner.id) {
+              const score = getTargetScore(p);
+              if (score < bestScore) { bestScore = score; bestCandidate = p; }
+            }
+          }
+        }
+      }
+      
+      const shipsArray = allShips || (game && game.ships);
+      if (shipsArray) {
+        for (const s of shipsArray) {
+          if (s.active && s.isCruiser && s.owner && s.owner.id !== this.owner.id && !s.isAmoeba) {
+            const dx = s.x - this.x;
+            const dy = s.y - this.y;
+            if (dx * dx + dy * dy <= searchRadius * searchRadius) {
+              const score = getTargetScore(s);
+              if (score < bestScore) { bestScore = score; bestCandidate = s; }
+            }
+          }
+        }
+      }
+      
+      if (bestCandidate) {
+        if (bestCandidate.isCruiser || (bestCandidate.maxHealth !== undefined && !bestCandidate.isAmoeba)) {
+          this.targetX = bestCandidate.x;
+          this.targetY = bestCandidate.y;
+        } else {
+          this.targetPlanet = bestCandidate;
+        }
+      }
+    }
+
   }
 
   tryAutoResourceConversion() {
