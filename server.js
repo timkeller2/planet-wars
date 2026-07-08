@@ -7,6 +7,65 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import readline from 'readline';
 import fs from 'fs';
+import * as dotenv from 'dotenv';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+dotenv.config();
+
+let genAI = null;
+let aiModel = null;
+let gameCodeContext = '';
+
+if (process.env.GEMINI_API_KEY) {
+  genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  aiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Using flash for speed, 1.5 has large context
+  try {
+    const gameJsPath = path.join(__dirname, 'src', 'game.js');
+    if (fs.existsSync(gameJsPath)) {
+      gameCodeContext = fs.readFileSync(gameJsPath, 'utf8');
+    }
+  } catch(e) {
+    console.error('Could not load game.js for AI context', e);
+  }
+  console.log('[AI Chatbot] Gemini initialized.');
+} else {
+  console.warn('[AI Chatbot] GEMINI_API_KEY not found in .env file. AI Chatbot is disabled.');
+}
+
+async function askAI(question, player, io, game) {
+  if (!aiModel) return;
+  
+  try {
+    const prompt = `You are a helpful AI assistant inside a multiplayer space strategy game called Amoeba Wars. 
+The player "${player.name}" is asking you a question about the game.
+Answer concisely and immersively in the context of a sci-fi universe. 
+Here is the source code of the game's core logic (game.js) to understand the rules and mechanics. Do not mention that you are reading the source code, just answer their question based on the rules defined in it. Do not invent rules that are not in the code.
+
+=== SOURCE CODE ===
+${gameCodeContext}
+
+=== QUESTION ===
+Question from ${player.name}: "${question}"`;
+
+    const result = await aiModel.generateContent(prompt);
+    const response = await result.response;
+    const aiText = response.text().trim();
+    
+    io.emit('chatMessage', {
+      sender: '🤖 AI Bot',
+      color: '#e0aaff',
+      text: aiText
+    });
+  } catch (error) {
+    console.error('[AI Chatbot Error]', error);
+    io.emit('chatMessage', {
+      sender: '🤖 AI Bot',
+      color: '#ff3333',
+      text: "Sorry commander, my neural nets are experiencing interference."
+    });
+  }
+}
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1057,6 +1116,33 @@ async function bootstrap() {
           return;
         }
         const cleanTextToBroadcast = cleanText.substring(0, 100);
+
+        if (cleanText.startsWith('.') && aiModel) {
+          const question = cleanText.substring(1).trim();
+          
+          io.emit('chatMessage', {
+            sender: player.name,
+            color: player.color,
+            text: cleanTextToBroadcast
+          });
+          
+          socket.emit('chatMessage', {
+            sender: '🤖 AI Bot',
+            color: '#e0aaff',
+            text: 'Processing inquiry...'
+          });
+          
+          askAI(question, player, io, game);
+          return;
+        } else if (cleanText.startsWith('.')) {
+          socket.emit('chatMessage', {
+            sender: 'System',
+            color: '#ff3333',
+            text: 'AI Chatbot is not configured (missing GEMINI_API_KEY in .env file).'
+          });
+          return;
+        }
+
         io.emit('chatMessage', {
           sender: player.name,
           color: player.color,
