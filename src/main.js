@@ -4357,7 +4357,8 @@ function getPlanetTradeIncomePerMin(planet) {
 
   let hudToggleState = 0; // 0: all visible, 1: HUD hidden
 
-  const isTouchDeviceInitial = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isTouchDeviceInitial = isMobile && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
   if (isTouchDeviceInitial) {
     if (scoreBoard) scoreBoard.classList.add('hidden');
     hudToggleState = 1;
