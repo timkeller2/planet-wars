@@ -8833,6 +8833,44 @@ function getPlanetTradeIncomePerMin(planet) {
     return Math.round(playerMod * 100);
   }
 
+  function getCombinedDiscountForShip(ship, type) {
+    if (!serverState) return 0;
+    const typeKeyMap = {
+      sensorarrays: 'sensorarray',
+      labs: 'lab',
+      armor: 'armor',
+      shields: 'shield',
+      engine: 'engine',
+      munitions: 'munitions',
+      targeting: 'targeting',
+      damagecontrol: 'damagecontrol',
+      supply_ship: 'supplyship',
+      extended_fuel: 'extendedfuel',
+      diplomat: 'diplomat',
+      marines: 'marines',
+      
+      sensorarray: 'sensorarray',
+      lab: 'lab',
+      shield: 'shield',
+      supplyship: 'supplyship',
+      extendedfuel: 'extendedfuel'
+    };
+    const normType = typeKeyMap[type] || type;
+    
+    const globalMod = (serverState.globalUpgradeModifiers && serverState.globalUpgradeModifiers[normType] !== undefined)
+      ? Math.max(-0.50, serverState.globalUpgradeModifiers[normType])
+      : 0.0;
+      
+    let playerMod = 0.0;
+    const playerObj = serverState.players ? serverState.players.find(p => p.id === ship.ownerId) : null;
+    if (playerObj && playerObj.upgradeModifiers && playerObj.upgradeModifiers[normType] !== undefined) {
+      playerMod = playerObj.upgradeModifiers[normType];
+    }
+    
+    const modifier = Math.max(-0.75, globalMod + playerMod);
+    return Math.round(-modifier * 100);
+  }
+
   function hasCruiserUpgradeCapacity(ship) {
     if (!ship) return false;
     const hasTokens = (ship.upgradeTokens || 0) > 0;
@@ -11891,6 +11929,20 @@ function getPlanetTradeIncomePerMin(planet) {
           const costSpan = el.querySelector('.btn-cost');
           if (costSpan) {
             costSpan.textContent = hasTokens ? '1 Token' : uCost;
+            if (!hasTokens) {
+              const combinedDiscount = getCombinedDiscountForShip(entity, prop);
+              if (combinedDiscount > 50) {
+                costSpan.style.color = '#0f0';
+              } else if (combinedDiscount > 25) {
+                costSpan.style.color = '#b0f';
+              } else if (combinedDiscount > 0) {
+                costSpan.style.color = '#ff0';
+              } else {
+                costSpan.style.color = '#f00';
+              }
+            } else {
+              costSpan.style.color = '';
+            }
           }
 
           const discountSpan = el.querySelector('.btn-discount');
