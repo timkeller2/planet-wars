@@ -1497,7 +1497,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const classRow = CLASS_MAPPING[classType];
       if (faction && classRow) {
         const maxDim = Math.max(faction.w, classRow.h);
-        const buttonScale = (isCruiserBtn ? 36 : 20) / maxDim;
+        const buttonScale = (isCruiserBtn ? 36 * 1.30 : 20) / maxDim;
         const drawnW = faction.w * buttonScale;
         const drawnH = classRow.h * buttonScale;
         
@@ -1511,7 +1511,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     if (!drawnButtonImage) {
-      let size = isCruiserBtn ? 14 : 8;
+      let size = isCruiserBtn ? 14 * 1.30 : 8;
       if (style === 'Romulan' && classType === 'corvette') {
         size *= 1.35;
       }
@@ -2123,7 +2123,7 @@ function getPlanetTradeIncomePerMin(planet) {
           let angle = s.angle || 0;
           let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
           let style = s.cruiserStyle || (ownerPlayer ? ownerPlayer.cruiserStyle : 'Klingon');
-          let size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0);
+          let size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0) * 1.30;
           if (style === 'Romulan' && s.classType === 'corvette') {
             size *= 1.35;
           }
@@ -2151,7 +2151,7 @@ function getPlanetTradeIncomePerMin(planet) {
             const faction = FACTION_MAPPING[normalizedStyle];
             const classRow = CLASS_MAPPING[s.classType || 'corvette'];
             if (faction && classRow) {
-              let drawScale = (6 + (s.maxHealth || 0)) / 240;
+              let drawScale = ((6 + (s.maxHealth || 0)) / 240) * 1.30;
               if (s.classType === 'corvette') {
                 drawScale *= 1.6;
               } else if (s.classType === 'frigate') {
@@ -9089,7 +9089,7 @@ function getPlanetTradeIncomePerMin(planet) {
       for (const ship of serverState.ships) {
         if (!ship.active || ship.ownerId !== localPlayer.id) continue;
         const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
-        const hitRadius = ship.count > 1 ? maxSpread + 10 : 25;
+        const hitRadius = ship.count > 1 ? maxSpread + 10 : (ship.isCruiser ? 32 : 25);
         const sdx = ship.x - pos.x;
         const sdy = ship.y - pos.y;
         if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
@@ -9250,7 +9250,7 @@ function getPlanetTradeIncomePerMin(planet) {
         for (const ship of serverState.ships) {
           if (!ship.active) continue;
           // Reduced targeting radius: 15px for cruisers, 12px for amoebas, 10px for fleets
-          const hitRadius = ship.isCruiser ? 15 : (ship.isAmoeba ? 12 : 10);
+          const hitRadius = ship.isCruiser ? 20 : (ship.isAmoeba ? 12 : 10);
           const sdx = ship.x - clickPos.x;
           const sdy = ship.y - clickPos.y;
           if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
@@ -9581,7 +9581,7 @@ function getPlanetTradeIncomePerMin(planet) {
       for (const ship of serverState.ships) {
         if (!ship.active) continue;
         const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
-        const hitRadius = ship.count > 1 ? maxSpread + 10 : 25;
+        const hitRadius = ship.count > 1 ? maxSpread + 10 : (ship.isCruiser ? 32 : 25);
         const sdx = ship.x - pos.x;
         const sdy = ship.y - pos.y;
         if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
@@ -16608,7 +16608,7 @@ function getPlanetTradeIncomePerMin(planet) {
           let angle = s.angle || 0;
           let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
           let style = s.cruiserStyle || (ownerPlayer ? ownerPlayer.cruiserStyle : 'Klingon');
-          let size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0);
+          let size = ((6 + (s.maxHealth || 0) * 1.0) / 3.0) * 1.30;
           if (style === 'Romulan' && s.classType === 'corvette') {
             size *= 1.35;
           }
@@ -16636,7 +16636,7 @@ function getPlanetTradeIncomePerMin(planet) {
             const faction = FACTION_MAPPING[normalizedStyle];
             const classRow = CLASS_MAPPING[s.classType || 'corvette'];
             if (faction && classRow) {
-              let scale = (6 + (s.maxHealth || 0)) / 240;
+              let scale = ((6 + (s.maxHealth || 0)) / 240) * 1.30;
               if (s.classType === 'corvette') {
                 scale *= 1.6;
               } else if (s.classType === 'frigate') {
