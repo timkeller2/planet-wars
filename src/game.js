@@ -6191,7 +6191,7 @@ export class Game {
             const dy = shipB.y - shipA.y;
             const distSq = dx * dx + dy * dy;
             
-            const minDistance = Math.max(shipA.maxHealth || 0, shipB.maxHealth || 0);
+            const minDistance = Math.max(shipA.maxHealth || 0, shipB.maxHealth || 0) * 1.30 + 25;
             const minDistanceSq = minDistance * minDistance;
             
             if (distSq < minDistanceSq) {
