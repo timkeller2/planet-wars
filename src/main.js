@@ -6777,20 +6777,20 @@ function getPlanetTradeIncomePerMin(planet) {
   let isReplayMode = false;
 
   let lastSeenReplays = [];
+  let lastReplaysFingerprint = '';
+
   function renderRecordingsList(replays) {
     if (replays) lastSeenReplays = replays;
     const container = document.getElementById('recordings-list');
     if (!container) return;
 
-    if (!lastSeenReplays || lastSeenReplays.length === 0) {
-      container.innerHTML = '<p style="color: #aaa; text-align: center;">No recordings available.</p>';
-      return;
-    }
-
-    const nowTime = Date.now();
-    // Replays exist for the longer of 120s or 10*duration, but the server handles pruning them. 
-    // We just filter locally deleted ones.
     const activeReplays = lastSeenReplays.filter(r => !deletedReplayIds.has(r.id));
+    const fingerprint = activeReplays.map(r => r.id + '-' + (r.duration || 0)).join(',');
+    
+    if (fingerprint === lastReplaysFingerprint) {
+      return; // Skip re-rendering to prevent destroying DOM elements during clicks
+    }
+    lastReplaysFingerprint = fingerprint;
 
     if (activeReplays.length === 0) {
       container.innerHTML = '<p style="color: #aaa; text-align: center;">No recordings available.</p>';
