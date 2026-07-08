@@ -3231,9 +3231,18 @@ export class Ship {
             if (!ts || !ts.active || !ts.owner || ts.owner.id !== this.owner.id) {
               needNewTarget = true;
             } else {
-              // Update target coords dynamically to follow the moving ship!
-              this.targetX = ts.x;
-              this.targetY = ts.y;
+              const dx = this.x - ts.x;
+              const dy = this.y - ts.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              const bumpRange = Math.max(this.maxHealth || 0, ts.maxHealth || 0) * 1.30;
+              const stopDistance = bumpRange + 25;
+              if (dist > stopDistance) {
+                this.targetX = ts.x + (dx / dist) * stopDistance;
+                this.targetY = ts.y + (dy / dist) * stopDistance;
+              } else {
+                this.targetX = this.x;
+                this.targetY = this.y;
+              }
             }
           }
         }
