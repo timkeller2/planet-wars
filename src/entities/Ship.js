@@ -65,6 +65,8 @@ export class Ship {
     this.scoutFuelRetreatTargetShipId = null;
     this.scoutAttackEnabled = false;
     this.useResources = false;
+    this.loadMode = false;
+    this.unloadMode = false;
     this.isResearching = false;
     this.researchFuelRetreating = false;
     this.researchFuelRetreatTargetPlanetId = null;

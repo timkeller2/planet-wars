@@ -7500,7 +7500,7 @@ export class Game {
 
       // 3. Load / Deposit Marines
       if (ship.inFriendlyWell && (ship.marines || 0) > 0) {
-        if (ship.scoutAttackEnabled === true) {
+        if (ship.loadMode === true) {
           // "load marines up to capacity from planets with > 50% ships at cost of 1 ship from nearby planet for each marine"
           const capacity = Math.ceil((ship.marines * ship.maxHealth) / 2) + 5;
           for (const p of this.planets) {
@@ -7532,7 +7532,7 @@ export class Game {
               }
             }
           }
-        } else {
+        } else if (ship.unloadMode === true) {
           // Deposit marines up to the planet's capacity if inside a friendly planet's gravity well
           for (const p of this.planets) {
             if ((ship.marineCount || 0) <= 0) break;

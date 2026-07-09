@@ -10960,7 +10960,7 @@ function getPlanetTradeIncomePerMin(planet) {
         return;
       }
     }
-    if (event.key.toLowerCase() === 'u') {
+    if (event.key.toLowerCase() === 'r') {
       const selectedCruisers = getSelectedCruisers();
       if (selectedCruisers.length > 0) {
         event.preventDefault();
@@ -10978,6 +10978,34 @@ function getPlanetTradeIncomePerMin(planet) {
         for (const p of selectedPlanets) {
           p.useResources = nextState;
           socket.emit('togglePlanetUseResources', { planetId: p.id, enabled: nextState });
+        }
+        return;
+      }
+    }
+    if (event.key.toLowerCase() === 'l') {
+      const selectedCruisers = getSelectedCruisers();
+      if (selectedCruisers.length > 0) {
+        event.preventDefault();
+        const anyNotLoading = selectedCruisers.some(c => !c.loadMode);
+        const nextState = anyNotLoading;
+        for (const ship of selectedCruisers) {
+          ship.loadMode = nextState;
+          if (nextState) ship.unloadMode = false;
+          socket.emit('toggleCruiserLoadMode', { shipId: ship.id, enabled: nextState });
+        }
+        return;
+      }
+    }
+    if (event.key.toLowerCase() === 'u') {
+      const selectedCruisers = getSelectedCruisers();
+      if (selectedCruisers.length > 0) {
+        event.preventDefault();
+        const anyNotUnloading = selectedCruisers.some(c => !c.unloadMode);
+        const nextState = anyNotUnloading;
+        for (const ship of selectedCruisers) {
+          ship.unloadMode = nextState;
+          if (nextState) ship.loadMode = false;
+          socket.emit('toggleCruiserUnloadMode', { shipId: ship.id, enabled: nextState });
         }
         return;
       }
@@ -11384,6 +11412,32 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     });
   }
+
+  bindActionClick('btn-cruiser-load', () => {
+    const selectedCruisers = getSelectedCruisers();
+    if (selectedCruisers.length > 0) {
+      const anyNotLoading = selectedCruisers.some(c => !c.loadMode);
+      const nextState = anyNotLoading;
+      for (const ship of selectedCruisers) {
+        ship.loadMode = nextState;
+        if (nextState) ship.unloadMode = false;
+        socket.emit('toggleCruiserLoadMode', { shipId: ship.id, enabled: nextState });
+      }
+    }
+  });
+
+  bindActionClick('btn-cruiser-unload', () => {
+    const selectedCruisers = getSelectedCruisers();
+    if (selectedCruisers.length > 0) {
+      const anyNotUnloading = selectedCruisers.some(c => !c.unloadMode);
+      const nextState = anyNotUnloading;
+      for (const ship of selectedCruisers) {
+        ship.unloadMode = nextState;
+        if (nextState) ship.loadMode = false;
+        socket.emit('toggleCruiserUnloadMode', { shipId: ship.id, enabled: nextState });
+      }
+    }
+  });
 
   bindActionClick('btn-cruiser-use-resources', () => {
     const selectedCruisers = getSelectedCruisers();
@@ -12470,9 +12524,70 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
+      const btnCruiserLoad = document.getElementById('btn-cruiser-load');
+      if (btnCruiserLoad) {
+        let showLoad = false;
+        if (selectedCruisers.length > 0 && serverState && serverState.planets) {
+          showLoad = selectedCruisers.some(c => {
+            const capacity = (c.marines || 0) > 0 ? Math.ceil((c.marines * c.maxHealth) / 2) + 5 : 0;
+            if (capacity <= 0 || (c.marineCount || 0) >= capacity) return false;
+            return serverState.planets.some(p => {
+              if (p.ownerId !== localPlayer.id) return false;
+              const pOwner = serverState.players.find(pl => pl.id === p.ownerId);
+              let gr = p.maxShips * 1.5;
+              if (p.isMilitary && p.ships >= p.maxShips) gr *= 1.5;
+              if (pOwner && !pOwner.isAI && p.focusMode === 'garrison' && p.ships >= p.maxShips) gr += (p.ships / 2);
+              const tb = pOwner ? 0.01 * Math.sqrt(pOwner.techScore || 0) : 0;
+              const eb = pOwner ? 0.01 * Math.sqrt(pOwner.expScore || 0) : 0;
+              gr = gr * (1 + tb + eb);
 
+              const dx = p.x - c.x;
+              const dy = p.y - c.y;
+              if (dx * dx + dy * dy <= gr * gr) {
+                return p.ships > (p.maxShips * 0.5);
+              }
+              return false;
+            });
+          });
+        }
+        btnCruiserLoad.style.display = showLoad ? 'inline-flex' : 'none';
+        if (showLoad) {
+          const anyLoading = selectedCruisers.some(c => c.loadMode);
+          btnCruiserLoad.classList.toggle('action-btn-active', anyLoading);
+        }
+      }
 
+      const btnCruiserUnload = document.getElementById('btn-cruiser-unload');
+      if (btnCruiserUnload) {
+        let showUnload = false;
+        if (selectedCruisers.length > 0 && serverState && serverState.planets) {
+          showUnload = selectedCruisers.some(c => {
+            if ((c.marineCount || 0) <= 0) return false;
+            return serverState.planets.some(p => {
+              if (p.ownerId !== localPlayer.id) return false;
+              const pOwner = serverState.players.find(pl => pl.id === p.ownerId);
+              let gr = p.maxShips * 1.5;
+              if (p.isMilitary && p.ships >= p.maxShips) gr *= 1.5;
+              if (pOwner && !pOwner.isAI && p.focusMode === 'garrison' && p.ships >= p.maxShips) gr += (p.ships / 2);
+              const tb = pOwner ? 0.01 * Math.sqrt(pOwner.techScore || 0) : 0;
+              const eb = pOwner ? 0.01 * Math.sqrt(pOwner.expScore || 0) : 0;
+              gr = gr * (1 + tb + eb);
 
+              const dx = p.x - c.x;
+              const dy = p.y - c.y;
+              if (dx * dx + dy * dy <= gr * gr) {
+                return p.ships < p.maxShips;
+              }
+              return false;
+            });
+          });
+        }
+        btnCruiserUnload.style.display = showUnload ? 'inline-flex' : 'none';
+        if (showUnload) {
+          const anyUnloading = selectedCruisers.some(c => c.unloadMode);
+          btnCruiserUnload.classList.toggle('action-btn-active', anyUnloading);
+        }
+      }
 
       const btnDismantle = document.getElementById('btn-dismantle');
       if (btnDismantle) {

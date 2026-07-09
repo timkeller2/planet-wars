@@ -1402,6 +1402,40 @@ async function bootstrap() {
       }
     });
 
+    socket.on('toggleCruiserLoadMode', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const { shipId, enabled } = data;
+      if (shipId === undefined || enabled === undefined) return;
+
+      const ship = game.ships.find(s => s.id === shipId);
+      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+        ship.loadMode = !!enabled;
+        if (ship.loadMode) {
+          ship.unloadMode = false;
+        }
+      }
+    });
+
+    socket.on('toggleCruiserUnloadMode', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      const { shipId, enabled } = data;
+      if (shipId === undefined || enabled === undefined) return;
+
+      const ship = game.ships.find(s => s.id === shipId);
+      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
+        ship.unloadMode = !!enabled;
+        if (ship.unloadMode) {
+          ship.loadMode = false;
+        }
+      }
+    });
+
     socket.on('togglePlanetUseResources', (data) => {
       if (!game.isRunning || game.isPaused) return;
       const player = connectedClients.get(socket.id);
