@@ -1411,6 +1411,7 @@ export class Game {
       targetPlanet.justAssigned = true;
       targetPlanet.justAssignedTimer = 0;
       targetPlanet.homeworldOf = player.id;
+      targetPlanet.minerals = 4;
       targetPlanet.focusMode = 'economy';
       
       // Ensure homeworld has a preferred resource
@@ -1518,8 +1519,9 @@ export class Game {
       if (planet.resources) {
         for (const res of planet.resources) {
           if (resourcesList.includes(res)) {
-            counts[res]++;
-            totalDeposits++;
+            const weight = (planet.minerals || 3) / 3;
+            counts[res] += weight;
+            totalDeposits += weight;
           }
         }
       }
@@ -5690,6 +5692,9 @@ export class Game {
       if (planet.focusMode === 'commerce') {
         const isFull = planet.ships >= planet.maxShips;
         effShips = isFull ? planet.ships * 4 : planet.ships * 2;
+        if (planet.minerals && planet.minerals > 3) {
+          effShips *= (planet.minerals / 3);
+        }
       }
 
       // Group enemy cruisers/amoebas max health in the planet's gravity well by owner
@@ -5884,6 +5889,9 @@ export class Game {
             if (planet.focusMode === 'commerce') {
               const isFull = planet.ships >= planet.maxShips;
               eff = isFull ? planet.ships * 4 : planet.ships * 2;
+              if (planet.minerals && planet.minerals > 3) {
+                eff *= (planet.minerals / 3);
+              }
             }
             playerEffectiveShips += eff;
           }
@@ -5918,6 +5926,9 @@ export class Game {
               if (planet.focusMode === 'commerce') {
                 const isFull = planet.ships >= planet.maxShips;
                 eff = isFull ? baseShips * 4 : baseShips * 2;
+                if (planet.minerals && planet.minerals > 3) {
+                  eff *= (planet.minerals / 3);
+                }
               }
               otherEffectiveShips += eff;
               

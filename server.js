@@ -1636,7 +1636,7 @@ async function bootstrap() {
 
       const validModes = ['economy', 'research', 'garrison', 'commerce', 'mining', 'terraforming', 'homeworld'];
       if (!validModes.includes(data.focusMode)) return;
-      if (data.focusMode === 'commerce' && planet.maxShips <= 100) return;
+      if (data.focusMode === 'commerce' && false) return;
       if (data.focusMode === 'terraforming') {
         const techBonus = Math.floor(Math.sqrt(player.techScore || 0));
         const settings = game.settings || {};
@@ -2365,6 +2365,7 @@ async function bootstrap() {
           preferredResourceWantedEvent: prwEvent,
           sizeClass: p.sizeClass || 0,
           habitability: p.habitability || 0,
+          minerals: p.minerals || 3,
           supplies: p.supplies,
           diplomacyWarmupTimer: p.diplomacyWarmupTimer || 0,
           activeDiplomatId: p.activeDiplomatId || null,
@@ -2893,6 +2894,7 @@ async function bootstrap() {
               expScore: p.expScore || 0,
               sizeClass: p.sizeClass || 0,
               habitability: p.habitability || 0,
+              minerals: p.minerals || 3,
               inRevolt: p.inRevolt || false,
               revoltTimer: p.revoltTimer || 0,
               isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false,

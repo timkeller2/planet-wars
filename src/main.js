@@ -44,6 +44,18 @@ const habIcons = {
   'Gaia': '🍀'
 };
 
+function getMineralsName(minerals) {
+  switch (minerals) {
+    case 1: return 'Destitute';
+    case 2: return 'Poor';
+    case 3: return 'Typical';
+    case 4: return 'Abundant';
+    case 5: return 'Rich';
+    case 6: return 'Very Rich';
+    default: return 'Typical';
+  }
+}
+
 function getHabName(habitability) {
   const hab = habitability || 0;
   if (hab < 20) return 'Toxic';
@@ -3192,6 +3204,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const ownerColor = owner ? owner.color : '#888';
 
       const sizeClassText = p.sizeClass < 70 ? 'Tiny' : p.sizeClass < 90 ? 'Small' : p.sizeClass < 110 ? 'Standard' : p.sizeClass < 140 ? 'Large' : p.sizeClass < 180 ? 'Huge' : 'Super Planet';
+      const mineralsName = getMineralsName(p.minerals);
       const habName = getHabName(p.habitability);
       const raceName = p.racialAffinity || '';
       const focusName = p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy';
@@ -3215,7 +3228,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       const racePart = raceName ? `${raceName} ` : '';
-      titleHTML = `<span style="color: ${ownerColor}">${p.name} - ${racePart}${sizeClassText} ${habName} ${focusName} World${isLastKnown ? ' <span style="font-size:0.75rem;color:#aaa;">(Last Known)</span>' : ''}</span>`;
+      titleHTML = `<span style="color: ${ownerColor}">${p.name} - ${sizeClassText} ${mineralsName} ${habName} ${racePart}${focusName} World${isLastKnown ? ' <span style="font-size:0.75rem;color:#aaa;">(Last Known)</span>' : ''}</span>`;
 
       const lines = [];
 
@@ -10664,7 +10677,7 @@ function getPlanetTradeIncomePerMin(planet) {
           focusModeActive = false;
           return;
         }
-        if (key === 'c' && planet.focusMode !== 'commerce' && planet.maxShips > 100) {
+        if (key === 'c' && planet.focusMode !== 'commerce') {
           event.preventDefault();
           socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'commerce' });
           focusModeActive = false;
@@ -11957,7 +11970,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const el = document.getElementById(btnId);
         if (el) {
           let shouldShow = (selectedPlanetFocus.focusMode !== mode);
-          if (mode === 'commerce' && selectedPlanetFocus.maxShips <= 100) {
+          if (mode === 'commerce' && false) {
             shouldShow = false;
           }
           if (mode === 'mining') {

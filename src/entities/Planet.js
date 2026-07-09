@@ -15,6 +15,18 @@ export function getHabName(habitability) {
   return 'Gaia';
 }
 
+export function getMineralsName(minerals) {
+  switch (minerals) {
+    case 1: return 'Destitute';
+    case 2: return 'Poor';
+    case 3: return 'Typical';
+    case 4: return 'Abundant';
+    case 5: return 'Rich';
+    case 6: return 'Very Rich';
+    default: return 'Typical';
+  }
+}
+
 function randomWeightedMiddle(min, max, iterations = 3) {
   let sum = 0;
   for (let i = 0; i < iterations; i++) {
@@ -81,6 +93,8 @@ export class Planet {
 
     this.sizeClass = Math.floor(Math.random() * 91) + 60;
     this.habitability = Math.round(10 + Math.pow(Math.random(), 2) * 140);
+    const mineralRolls = [1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6];
+    this.minerals = mineralRolls[Math.floor(Math.random() * mineralRolls.length)];
 
     const potential = this.sizeClass * (this.habitability / 100);
     if (this.maxShips > potential) {
@@ -191,18 +205,11 @@ export class Planet {
     
     if (this.ships < growthLimit || this.owner.isAI) {
       const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
-      const lowPopMultiplier = Math.min(1.0, 0.10 + 0.02 * Math.max(0, this.ships - 5));
-      const effectiveMaxShips = this.rampageBoost ? this.maxShips * 3 : this.maxShips;
       const prodDivisor = 100 / (settings?.productionMultiple || 1.0);
-      let rate = (Math.max(10, effectiveMaxShips - this.ships) / prodDivisor) * (1 + techBonus) * lowPopMultiplier;
-      if (this.homeworldOf === this.owner.id) {
-        rate *= 2;
-      }
-      if (isHuman) {
-        if (rate > 1.0) {
-          rate = 1.0 + ((rate - 1.0) / 3);
-        }
-      }
+      let baseVal = Math.min(this.ships, this.maxShips) / prodDivisor;
+      let rate = Math.max((this.habitability / 1000), baseVal) * (1 + techBonus);
+
+      rate *= ((this.minerals || 3) / 3);
       return rate;
     }
     return 0;
@@ -308,16 +315,6 @@ export class Planet {
             this.sympathy[this.owner.id] = this.maxShips;
           }
 
-          if (oldMode === 'garrison' && this.focusMode !== 'garrison' && this.ships > this.maxShips) {
-            const extraShips = this.ships - this.maxShips;
-            this.ships = this.maxShips;
-            this.sacrificedShips = (this.sacrificedShips || 0) + extraShips;
-            const upgrades = Math.floor(this.sacrificedShips / 20);
-            if (upgrades > 0) {
-              this.sacrificedShips %= 20;
-              this.increaseMaxShips(upgrades);
-            }
-          }
           this.focusTransition = null;
         }
       }
@@ -361,39 +358,27 @@ export class Planet {
 
     if (this.owner) {
       const growthLimit = (isHuman && focus === 'garrison') ? this.maxShips * 2 : this.maxShips;
-      if (this.ships < growthLimit || (this.owner && this.owner.isAI)) {
-        const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
-        const lowPopMultiplier = Math.min(1.0, 0.10 + 0.02 * Math.max(0, this.ships - 5));
-        const effectiveMaxShips = this.rampageBoost ? this.maxShips * 3 : this.maxShips;
-        const prodDivisor = 100 / (settings?.productionMultiple || 1.0);
-        let effectiveRate = (Math.max(10, effectiveMaxShips - this.ships) / prodDivisor) * (1 + techBonus) * lowPopMultiplier;
-        if (this.homeworldOf === this.owner.id) {
-          effectiveRate *= 2;
-        }
-        if (this.habitability > 140) {
-          effectiveRate *= 2;
-        }
-        if (!this.owner.isAI) {
-          if (effectiveRate > 1.0) {
-            effectiveRate = 1.0 + ((effectiveRate - 1.0) / 3);
-          }
-        }
-        const canUseRes = !!(this.useResources || (this.owner && this.owner.tradeLimitToggle === true));
+      const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
+      const prodDivisor = 100 / (settings?.productionMultiple || 1.0);
+      let baseVal = Math.min(this.ships, this.maxShips) / prodDivisor;
+      let effectiveRate = Math.max((this.habitability / 1000), baseVal) * (1 + techBonus);
 
-        if (canUseRes && this.preferredResource && this.owner.resources) {
-          const qty = this.owner.resources[this.preferredResource] || 0;
-          if (qty > 0) {
-            let mult = 1;
-            if (this.maxShips >= 150) mult = 4;
-            else if (this.maxShips >= 120) mult = 3;
-            else if (this.maxShips >= 100) mult = 2;
-            effectiveRate *= (1 + (Math.sqrt(qty) * mult) / 100);
-          }
+      if (this.preferredResource && this.owner.resources) {
+        const qty = this.owner.resources[this.preferredResource] || 0;
+        if (qty > 0) {
+          let mult = 1;
+          if (this.maxShips >= 150) mult = 4;
+          else if (this.maxShips >= 120) mult = 3;
+          else if (this.maxShips >= 100) mult = 2;
+          effectiveRate *= (1 + (Math.sqrt(qty) * mult) / 100);
         }
-        if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
-          effectiveRate *= 1.30;
-        }
-        effectiveRate *= ((50 + this.habitability / 2) / 100);
+      }
+      if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
+        effectiveRate *= 1.30;
+      }
+      effectiveRate *= ((this.minerals || 3) / 3);
+
+      if (this.ships < growthLimit || (this.owner && this.owner.isAI)) {
         this.productionProgress += effectiveRate * (deltaTime / 1000);
         if (this.productionProgress >= 1) {
           let newShips = Math.floor(this.productionProgress);
@@ -403,6 +388,17 @@ export class Planet {
         }
       } else {
         this.productionProgress = 0;
+        if (!this.owner.isAI && (focus === 'economy' || focus === 'homeworld')) {
+          const rawTech = this.owner.techScore ? Math.sqrt(this.owner.techScore) : 0;
+          const threshold = this.sizeClass * ((this.habitability + rawTech) / 100);
+          const conversionRate = (this.maxShips >= threshold) ? (1 / 45) : (1 / 15);
+          
+          let shipsWouldBeProduced = effectiveRate * (deltaTime / 1000);
+          let increase = shipsWouldBeProduced * conversionRate;
+          
+          this.maxShips += increase;
+          this.radius = this.sizeClass / 4;
+        }
       }
     } else {
       this.productionProgress = 0;
@@ -411,7 +407,7 @@ export class Planet {
     // Increase max capacity, tech score, or maintain garrison mode if full
     const isFull = this.owner && (this.ships >= (isHuman && focus === 'garrison' ? this.maxShips * 2 : this.maxShips));
     if (isFull || (this.owner && this.owner.isAI && this.ships >= this.maxShips)) {
-      const timeToIncrease = focus === 'terraforming' ? 30 : 10;
+      const timeToIncrease = focus === 'terraforming' ? 30 : (focus === 'research' ? 15 : 10);
       this.capacityProgress += (deltaTime / 1000);
       if (this.capacityProgress >= timeToIncrease) {
         if (isHuman) {
@@ -437,45 +433,17 @@ export class Planet {
               } else {
                 this.techIncreaseEvent = true;
               }
-              this.ships = Math.max(0, this.ships - 2);
             } else {
               if (this.isResearch) {
                 this.owner.techScore = (this.owner.techScore || 0) + 1;
                 this.techIncreaseEvent = true;
               }
-              this.ships = Math.max(0, this.ships - 1);
-            }
-            // Decay ships back to maxShips (or twice maxShips if Garrison)
-            const limit = (this.owner && !this.owner.isAI && this.focusMode === 'garrison') ? this.maxShips * 2 : this.maxShips;
-            if (this.ships > limit && !this.retainedShips) {
-              this.ships = limit;
             }
           } else if (focus === 'economy' || focus === 'homeworld') {
-            // Grow max capacity, no tech score
+            // Max capacity growth is now continuous in the production block
             if (this.rampageEvent) {
               this.decreaseMaxShips(1);
               if (this.maxShips < 5) this.dead = true;
-            } else {
-              const increaseAmount = this.homeworldOf ? 2 : 1;
-              this.increaseMaxShips(increaseAmount);
-            }
-            // Decay ships back to maxShips (or twice maxShips if Garrison)
-            const limit = (this.owner && !this.owner.isAI && this.focusMode === 'garrison') ? this.maxShips * 2 : this.maxShips;
-            if (this.ships > limit && !this.retainedShips) {
-              this.ships = limit;
-            }
-          } else if (focus === 'garrison') {
-            // Grow up to twice max capacity, no grow max capacity or tech score
-            // Decay ships back to twice maxShips
-            const cap = this.maxShips * 2;
-            if (this.ships > cap) {
-              this.ships = cap;
-            }
-          } else if (focus === 'commerce') {
-            // Decay ships back to maxShips
-            const limit = this.maxShips;
-            if (this.ships > limit && !this.retainedShips) {
-              this.ships = limit;
             }
           } else if (focus === 'terraforming') {
             const oldHab = this.habitability;
@@ -504,11 +472,6 @@ export class Planet {
               });
             }
 
-            // Decay ships back to maxShips
-            const limit = this.maxShips;
-            if (this.ships > limit && !this.retainedShips) {
-              this.ships = limit;
-            }
           }
         } else {
           // AI controlled planets continue to operate as they have before
@@ -649,6 +612,7 @@ export class Planet {
       let rate = baseRatePerMinute * (1 + techBonus);
       if (focus === 'mining') rate *= 2;
       if (this.ships >= this.maxShips && focus === 'mining') rate *= 2;
+      rate *= ((this.minerals || 3) / 3);
 
       // Convert from per-minute to per-millisecond and apply deltaTime
       const perMs = rate / 60000;
@@ -667,6 +631,15 @@ export class Planet {
         }
         this.owner.resources[res] = (this.owner.resources[res] || 0) + resRate * deltaTime;
       }
+    }
+
+    const isHumanOwner = this.owner && !this.owner.isAI;
+    const decayLimit = (isHumanOwner && this.focusMode === 'garrison') ? this.maxShips * 2 : this.maxShips;
+    if (this.ships > decayLimit && !this.retainedShips) {
+      const overage = this.ships - decayLimit;
+      const decayRate = overage / 50; // ships per second
+      this.ships -= decayRate * (deltaTime / 1000);
+      if (this.ships < decayLimit) this.ships = decayLimit;
     }
 
     if (this.preferredResourceWantedEvent && game && !this.preferredResourceWantedChatQueued) {
