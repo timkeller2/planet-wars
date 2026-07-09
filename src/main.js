@@ -7623,7 +7623,7 @@ function getPlanetTradeIncomePerMin(planet) {
     
     f1.lasers.forEach(l => {
       ctx.strokeStyle = l.color;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(l.startX, l.startY);
       ctx.lineTo(l.endX, l.endY);
@@ -7631,6 +7631,7 @@ function getPlanetTradeIncomePerMin(planet) {
     });
     
     f1.explosions.forEach(e => {
+      if (!e.isMassive) return;
       ctx.fillStyle = e.color;
       ctx.globalAlpha = Math.max(0, 1 - (e.age / e.duration));
       ctx.beginPath();

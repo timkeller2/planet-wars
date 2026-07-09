@@ -426,6 +426,7 @@ export class Ship {
   handlePlayerMoveOrder(destination, game) {
     if (!this.isCruiser) return;
     this.flightTime = 0;
+    this.bumpImmunityTimer = 1000;
 
     // Save stationed destination
     if (destination && destination.planet) {
@@ -780,6 +781,9 @@ export class Ship {
 
   update(deltaTime, allShips, explosions, allPlanets, lasers, ionStorms, mapWidth, game = null) {
     if (!this.active) return;
+    if (this.bumpImmunityTimer && this.bumpImmunityTimer > 0) {
+      this.bumpImmunityTimer -= deltaTime;
+    }
     
     if (this.lastX === undefined || this.lastY === undefined) {
       this.lastX = this.x;

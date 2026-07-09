@@ -6184,7 +6184,7 @@ export class Game {
     // Resolve cruiser stacking when not moving
     const nonMovingCruisers = [];
     for (const ship of this.ships) {
-      if (ship.active && ship.isCruiser && ship.maxHealth > 0 && ship.stationaryTimer > 0) {
+      if (ship.active && ship.isCruiser && ship.maxHealth > 0 && ship.stationaryTimer > 0 && (!ship.bumpImmunityTimer || ship.bumpImmunityTimer <= 0)) {
         nonMovingCruisers.push(ship);
       }
     }
@@ -6812,7 +6812,7 @@ export class Game {
             const dy = e.y - b.y;
             if (dx*dx + dy*dy <= bRadSq) {
               frame.explosions.push({
-                x: e.x, y: e.y, size: e.size, color: e.color, age: e.age, duration: e.duration
+                x: e.x, y: e.y, size: e.size, color: e.color, age: e.age, duration: e.duration, isMassive: e.isMassive
               });
             }
           }
@@ -7509,8 +7509,69 @@ export class Game {
         ship.crew = Math.min(ship.maxHealth + ship.health, (ship.crew || 0) + 1 * dt);
       }
 
-      // 3. Load / Deposit Marines
-      if (ship.inFriendlyWell && (ship.marines || 0) > 0) {
+      // 3. Marine Invasion Checks (Preempts friendly load/deposit)
+      let invasionLaunched = false;
+      const maxMarinesCapacity = (ship.marines || 0) > 0 ? Math.ceil(((ship.marines || 0) * (ship.maxHealth || 0)) / 2) + 5 : 0;
+      
+      // 3a. Unload Mode Invasion (Enemy planet gravity well)
+      if (ship.unloadMode === true && (ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
+        const hasEnoughMarines = maxMarinesCapacity > 0 && ship.marineCount > 0.5 * maxMarinesCapacity;
+        if (hasEnoughMarines) {
+          for (const p of this.planets) {
+            if (!p.dead && (!p.owner || p.owner.id !== ship.owner.id)) {
+              const dx = p.x - ship.x;
+              const dy = p.y - ship.y;
+              const distSq = dx * dx + dy * dy;
+              const gr = p.getGravityRadius();
+              if (distSq < gr * gr) {
+                const count = Math.floor(ship.marineCount);
+                if (count > 0) {
+                  this.queueMarineLaunch(ship, {
+                    targetType: 'planet',
+                    targetId: p.id,
+                    isBoardingFleet: false,
+                    count: count
+                  });
+                  ship.marineCount = 0;
+                  ship.marineLaunchCooldown = 15.0;
+                  invasionLaunched = true;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 3b. Revolt Reaction Invasion (Enemy planet gravity well)
+      if (!invasionLaunched && ship.loadMode !== true && (ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
+        for (const p of this.planets) {
+          if (!p.dead && p.inRevolt && (!p.owner || p.owner.id !== ship.owner.id)) {
+            const dx = p.x - ship.x;
+            const dy = p.y - ship.y;
+            const distSq = dx * dx + dy * dy;
+            const gr = p.getGravityRadius();
+            if (distSq < gr * gr) {
+              const count = Math.floor(ship.marineCount);
+              if (count > 0) {
+                this.queueMarineLaunch(ship, {
+                  targetType: 'planet',
+                  targetId: p.id,
+                  isBoardingFleet: false,
+                  count: count
+                });
+                ship.marineCount = 0;
+                ship.marineLaunchCooldown = 15.0;
+                invasionLaunched = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // 3c. Load / Deposit Marines
+      if (!invasionLaunched && ship.inFriendlyWell && (ship.marines || 0) > 0) {
         if (ship.loadMode === true) {
           // "load marines up to capacity from planets with > 50% ships at cost of 1 ship from nearby planet for each marine"
           const capacity = Math.ceil((ship.marines * ship.maxHealth) / 2) + 5;
@@ -7693,120 +7754,7 @@ export class Game {
         }
       }
 
-      // 4b. Marine Planet Attack Check
-      const maxMarinesCapacity = (ship.marines || 0) > 0 ? Math.ceil(((ship.marines || 0) * (ship.maxHealth || 0)) / 2) + 5 : 0;
-      const isTargetingPlanet = (ship.cruiserTargetType === 'planet' && ship.cruiserTargetId !== null);
-      const hasEnoughMarines = maxMarinesCapacity > 0 && ship.marineCount > 0.5 * maxMarinesCapacity && ship.scoutAttackEnabled === true && isTargetingPlanet;
-
-      if ((ship.marineCount || 0) > 0 && hasEnoughMarines && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
-        let targetPlanet = null;
-        if (ship.cruiserTargetType === 'planet' && ship.cruiserTargetId !== null) {
-          const p = this.planets.find(p => p.id === ship.cruiserTargetId);
-          if (p && (!p.owner || p.owner.id !== ship.owner.id)) {
-            targetPlanet = p;
-          }
-        }
-
-        if (targetPlanet) {
-          const count = Math.floor(ship.marineCount);
-          if (count > 0) {
-            this.queueMarineLaunch(ship, {
-              targetType: 'planet',
-              targetId: targetPlanet.id,
-              isBoardingFleet: false,
-              count: count
-            });
-            ship.marineCount = 0;
-            ship.marineLaunchCooldown = 15.0;
-          }
-        }
-      }
-
-      // 4c. Marine Revolt Planet Assault Check
-      if (ship.scoutAttackEnabled === true && (ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
-        for (const p of this.planets) {
-          if (p.inRevolt && p.revoltTimer <= 7500) {
-            const dx = p.x - ship.x;
-            const dy = p.y - ship.y;
-            const distSq = dx * dx + dy * dy;
-            const gr = p.getGravityRadius();
-            if (distSq < gr * gr) {
-              // Find all friendly qualifying cruisers within gravity range of this planet
-              const qualifyingCruisers = cruisers.filter(other => {
-                if (other.owner && ship.owner && other.owner.id === ship.owner.id) {
-                  if (other.scoutAttackEnabled === true && (other.marineCount || 0) > 0 && (!other.marineLaunchCooldown || other.marineLaunchCooldown <= 0)) {
-                    const odx = p.x - other.x;
-                    const ody = p.y - other.y;
-                    const odistSq = odx * odx + ody * ody;
-                    const ogr = p.getGravityRadius();
-                    return odistSq < ogr * ogr;
-                  }
-                }
-                return false;
-              });
-
-              const totalAvailableMarines = qualifyingCruisers.reduce((sum, c) => sum + (c.marineCount || 0), 0);
-              if (totalAvailableMarines >= 0.5 * p.ships) {
-                for (const qc of qualifyingCruisers) {
-                  const count = Math.floor(qc.marineCount);
-                  if (count > 0) {
-                    this.queueMarineLaunch(qc, {
-                      targetType: 'planet',
-                      targetId: p.id,
-                      isBoardingFleet: false,
-                      count: count
-                    });
-                    qc.marineCount = 0;
-                    qc.marineLaunchCooldown = 15.0;
-                  }
-                }
-                break; // Stop looking at other revolt planets for the current cruiser since it just launched
-              }
-            }
-          }
-        }
-      }
-
-      // 4d. Auto-Marine Launch (Overflying Planet or Bombard Range Revolt Exception)
-      if (ship.scoutAttackEnabled === true && (ship.marineCount || 0) >= 1 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0) && (ship.stationaryTimer || 0) >= 3000) {
-        let laserTechBonus = 0;
-        if (ship.owner && ship.owner.upgrades && ship.owner.upgrades.sensorarray) {
-          laserTechBonus = ship.owner.upgrades.sensorarray * 0.15;
-        }
-        const xpRangeBonus = (ship.level || 0) * 0.05;
-        const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
-        let firingRange = baseDogfightRange * 1.10;
-        if (ship.bombs > 0) firingRange += baseDogfightRange * 0.10;
-        if (ship.package === 'sniper') firingRange *= 1.4;
-        else if (ship.package === 'brute') firingRange *= 0.7;
-
-        for (const p of this.planets) {
-          if (p.dead || (p.owner && ship.owner && p.owner.id === ship.owner.id) || p.inTransition) continue;
-          
-          const dx = p.x - ship.x;
-          const dy = p.y - ship.y;
-          const distSq = dx * dx + dy * dy;
-          
-          const isStandardLaunch = (distSq < p.radius * p.radius);
-          const maxRange = firingRange + p.radius;
-          const isRevoltException = p.inRevolt && distSq <= maxRange * maxRange;
-          
-          if (isStandardLaunch || isRevoltException) {
-            const count = Math.floor(ship.marineCount);
-            if (count > 0) {
-              this.queueMarineLaunch(ship, {
-                targetType: 'planet',
-                targetId: p.id,
-                isBoardingFleet: false,
-                count: count
-              });
-              ship.marineCount = 0;
-              ship.marineLaunchCooldown = 15.0;
-            }
-            break;
-          }
-        }
-      }
+      // (Marine Invasion checks moved to step 3a and 3b)
 
 
       // 5. Boarding Trigger Checks (New: Direct Boarding if disabled & isolated)

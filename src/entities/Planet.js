@@ -93,7 +93,12 @@ export class Planet {
 
     this.sizeClass = Math.floor(Math.random() * 91) + 60;
     this.habitability = Math.round(10 + Math.pow(Math.random(), 2) * 140);
-    const mineralRolls = [1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6];
+    let mineralRolls = [1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6];
+    if (this.habitability < 20) {
+      mineralRolls = [1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 6]; // 3x Very Rich
+    } else if (this.habitability < 30) {
+      mineralRolls = [1, 2, 2, 3, 3, 4, 4, 5, 5, 5, 5, 6]; // 2x Rich
+    }
     this.minerals = mineralRolls[Math.floor(Math.random() * mineralRolls.length)];
 
     const potential = this.sizeClass * (this.habitability / 100);
@@ -205,7 +210,7 @@ export class Planet {
     
     if (this.ships < growthLimit || this.owner.isAI) {
       const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
-      const prodDivisor = 100 / (settings?.productionMultiple || 1.0);
+      const prodDivisor = 250 / (settings?.productionMultiple || 1.0);
       let baseVal = Math.min(this.ships, this.maxShips) / prodDivisor;
       let rate = Math.max((this.habitability / 1000), baseVal) * (1 + techBonus);
 
@@ -359,7 +364,7 @@ export class Planet {
     if (this.owner) {
       const growthLimit = (isHuman && focus === 'garrison') ? this.maxShips * 2 : this.maxShips;
       const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
-      const prodDivisor = 100 / (settings?.productionMultiple || 1.0);
+      const prodDivisor = 250 / (settings?.productionMultiple || 1.0);
       let baseVal = Math.min(this.ships, this.maxShips) / prodDivisor;
       let effectiveRate = Math.max((this.habitability / 1000), baseVal) * (1 + techBonus);
 
@@ -635,7 +640,7 @@ export class Planet {
 
     const isHumanOwner = this.owner && !this.owner.isAI;
     const decayLimit = (isHumanOwner && this.focusMode === 'garrison') ? this.maxShips * 2 : this.maxShips;
-    if (this.ships > decayLimit && !this.retainedShips) {
+    if (this.owner && this.ships > decayLimit && !this.retainedShips) {
       const overage = this.ships - decayLimit;
       const decayRate = overage / 50; // ships per second
       this.ships -= decayRate * (deltaTime / 1000);
