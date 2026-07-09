@@ -2663,7 +2663,7 @@ export class Ship {
               const distSq = pdx * pdx + pdy * pdy;
               let combinedRange = effectiveRange + p.radius;
               if (isCruiser && isCruiserBombing) {
-                combinedRange = p.radius + 25;
+                combinedRange = p.radius;
               }
               if (distSq < combinedRange * combinedRange) {
                 validPlanets.push(p);

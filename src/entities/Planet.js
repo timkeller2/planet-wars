@@ -364,8 +364,16 @@ export class Planet {
     if (this.owner) {
       const growthLimit = (isHuman && focus === 'garrison') ? this.maxShips * 2 : this.maxShips;
       const techBonus = this.owner.techScore ? 0.01 * Math.sqrt(this.owner.techScore) : 0;
-      const prodDivisor = 250 / (settings?.productionMultiple || 1.0);
-      let baseVal = Math.min(this.ships, this.maxShips) / prodDivisor;
+      const prodDivisor = 200 / (settings?.productionMultiple || 1.0);
+      let term1 = Math.min(this.ships, 50);
+      let term2 = Math.min(Math.max(0, this.maxShips - this.ships), 50);
+      let rawSum = term1 + term2; // Omitted the anomalous '/ 250' from the prompt
+      let cappedSum = Math.min(rawSum, this.ships * 2);
+      let baseVal = cappedSum / prodDivisor;
+      if (this.ships > 100) {
+        const largeDivisor = 500 / (settings?.productionMultiple || 1.0);
+        baseVal += (this.ships - 100) / largeDivisor;
+      }
       let effectiveRate = Math.max((this.habitability / 1000), baseVal) * (1 + techBonus);
 
       if (this.preferredResource && this.owner.resources) {

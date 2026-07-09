@@ -12575,26 +12575,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (btnCruiserUnload) {
         let showUnload = false;
         if (selectedCruisers.length > 0 && serverState && serverState.planets) {
-          showUnload = selectedCruisers.some(c => {
-            if ((c.marineCount || 0) <= 0) return false;
-            return serverState.planets.some(p => {
-              if (p.ownerId !== localPlayer.id) return false;
-              const pOwner = serverState.players.find(pl => pl.id === p.ownerId);
-              let gr = p.maxShips * 1.5;
-              if (p.isMilitary && p.ships >= p.maxShips) gr *= 1.5;
-              if (pOwner && !pOwner.isAI && p.focusMode === 'garrison' && p.ships >= p.maxShips) gr += (p.ships / 2);
-              const tb = pOwner ? 0.01 * Math.sqrt(pOwner.techScore || 0) : 0;
-              const eb = pOwner ? 0.01 * Math.sqrt(pOwner.expScore || 0) : 0;
-              gr = gr * (1 + tb + eb);
-
-              const dx = p.x - c.x;
-              const dy = p.y - c.y;
-              if (dx * dx + dy * dy <= gr * gr) {
-                return p.ships < p.maxShips;
-              }
-              return false;
-            });
-          });
+          showUnload = selectedCruisers.some(c => (c.marineCount || 0) > 0);
         }
         btnCruiserUnload.style.display = showUnload ? 'inline-flex' : 'none';
         if (showUnload) {

@@ -2550,6 +2550,8 @@ async function bootstrap() {
           accumulatedTech: s.accumulatedTech || 0,
           isDiplomacy: s.isDiplomacy || false,
           scoutAttackEnabled: s.scoutAttackEnabled || false,
+          loadMode: s.loadMode || false,
+          unloadMode: s.unloadMode || false,
           useResources: s.useResources || false,
           isMaterializing: s.isMaterializing || false,
           materializeProgress: s.materializeProgress !== undefined ? s.materializeProgress : 1.0,
