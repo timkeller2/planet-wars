@@ -1717,6 +1717,19 @@ async function bootstrap() {
       }
     });
 
+    socket.on('deleteReplay', (replayId) => {
+      if (!replayId || typeof replayId !== 'string') return;
+      if (!game || !game.isRunning) return;
+      
+      if (game.completedBattleReplays) {
+        game.completedBattleReplays = game.completedBattleReplays.filter(r => r.id !== replayId);
+      }
+      if (game.boardingReplays) {
+        game.boardingReplays = game.boardingReplays.filter(r => r.id !== replayId);
+      }
+      console.log(`[Delete Replay] Client requested to delete replay ${replayId}`);
+    });
+
     socket.on('loadSaveGame', (saveName) => {
       if (!saveName || typeof saveName !== 'string') return;
       const sanitized = saveName.replace(/[^a-zA-Z0-9_\-]/g, '');

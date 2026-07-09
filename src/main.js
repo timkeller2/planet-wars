@@ -6277,6 +6277,7 @@ function getPlanetTradeIncomePerMin(planet) {
       document.getElementById('boarding-combat-delete-btn').addEventListener('click', () => {
         if (activeReplay) {
           deletedReplayIds.add(activeReplay.id);
+          socket.emit('deleteReplay', activeReplay.id);
           lastReplaysFingerprint = ''; // force re-render
           document.getElementById('boarding-combat-close-btn').click();
         }
@@ -6862,7 +6863,9 @@ function getPlanetTradeIncomePerMin(planet) {
       btn.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         deletedReplayIds.add(r.id);
+        socket.emit('deleteReplay', r.id);
         lastReplaysFingerprint = ''; // force re-render
+        renderRecordingsList(lastSeenReplays);
         renderRecordingsList(); // refresh
       });
       
@@ -7439,7 +7442,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
         
         if (!drawnShipImage) {
-          ctx.rotate(-Math.PI / 2);
+          ctx.rotate(Math.PI / 2);
           ctx.beginPath();
           drawRacialShipHull(ctx, style, s1.cohort || 'alpha', s1.radius || 15, s1.maxsupplies > 0);
           ctx.closePath();
