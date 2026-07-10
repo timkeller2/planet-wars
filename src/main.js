@@ -7876,7 +7876,29 @@ function getPlanetTradeIncomePerMin(planet) {
 
       creditsDisplay.style.display = 'block';
       const hasMoneyBags = myPlayer.otherEffectiveShips !== undefined && myPlayer.playerEffectiveShips !== undefined && myPlayer.otherEffectiveShips >= myPlayer.playerEffectiveShips && myPlayer.playerEffectiveShips > 0;
-      creditsDisplay.innerHTML = `💲${Math.floor(creditsVal)}<span style="font-size: 80%; font-weight: normal; margin-left: 2px; opacity: 0.85;">${incomeInt >= 0 ? '+' : ''}${incomeInt}${hasMoneyBags ? '💰' : ''}</span>`;
+      
+      let domesticTradeShips = 0;
+      let foreignTradeShips = 0;
+      if (myPlayer.tradingPartners) {
+        for (const partner of myPlayer.tradingPartners) {
+          if (partner.name === 'Domestic Ships') {
+            domesticTradeShips += partner.ships;
+          } else {
+            foreignTradeShips += partner.ships;
+          }
+        }
+      }
+      const totalTradeShips = Math.floor(domesticTradeShips + foreignTradeShips);
+      let superscriptColor = '#4caf50';
+      if (foreignTradeShips >= domesticTradeShips * 1.5) {
+        superscriptColor = '#d500f9';
+      } else if (foreignTradeShips < domesticTradeShips / 2) {
+        superscriptColor = '#ff3333';
+      } else if (foreignTradeShips < domesticTradeShips) {
+        superscriptColor = '#ffeb3b';
+      }
+
+      creditsDisplay.innerHTML = `💲${Math.floor(creditsVal)}<span style="font-size: 80%; font-weight: normal; margin-left: 2px; opacity: 0.85;">${incomeInt >= 0 ? '+' : ''}${incomeInt}${hasMoneyBags ? '💰' : ''}</span><sup style="margin-left: 4px; font-size: 0.7rem; color: ${superscriptColor}; font-weight: bold;">${totalTradeShips}</sup>`;
       
       if (serverState.settings && serverState.settings.financialVictoryTarget && serverState.settings.financialVictoryTarget !== 'none') {
         let maxCredits = 0;
@@ -12557,28 +12579,8 @@ function getPlanetTradeIncomePerMin(planet) {
       const btnCruiserLoad = document.getElementById('btn-cruiser-load');
       if (btnCruiserLoad) {
         let showLoad = false;
-        if (selectedCruisers.length > 0 && serverState && serverState.planets) {
-          showLoad = selectedCruisers.some(c => {
-            const capacity = (c.marines || 0) > 0 ? Math.ceil((c.marines * c.maxHealth) / 2) + 5 : 0;
-            if (capacity <= 0 || (c.marineCount || 0) >= capacity) return false;
-            return serverState.planets.some(p => {
-              if (p.ownerId !== localPlayer.id) return false;
-              const pOwner = serverState.players.find(pl => pl.id === p.ownerId);
-              let gr = p.maxShips * 1.5;
-              if (p.isMilitary && p.ships >= p.maxShips) gr *= 1.5;
-              if (pOwner && !pOwner.isAI && p.focusMode === 'garrison' && p.ships >= p.maxShips) gr += (p.ships / 2);
-              const tb = pOwner ? 0.01 * Math.sqrt(pOwner.techScore || 0) : 0;
-              const eb = pOwner ? 0.01 * Math.sqrt(pOwner.expScore || 0) : 0;
-              gr = gr * (1 + tb + eb);
-
-              const dx = p.x - c.x;
-              const dy = p.y - c.y;
-              if (dx * dx + dy * dy <= gr * gr) {
-                return p.ships > (p.maxShips * 0.5);
-              }
-              return false;
-            });
-          });
+        if (selectedCruisers.length > 0) {
+          showLoad = selectedCruisers.some(c => (c.marines || 0) > 0);
         }
         btnCruiserLoad.style.display = showLoad ? 'inline-flex' : 'none';
         if (showLoad) {
@@ -12590,8 +12592,8 @@ function getPlanetTradeIncomePerMin(planet) {
       const btnCruiserUnload = document.getElementById('btn-cruiser-unload');
       if (btnCruiserUnload) {
         let showUnload = false;
-        if (selectedCruisers.length > 0 && serverState && serverState.planets) {
-          showUnload = selectedCruisers.some(c => (c.marineCount || 0) > 0);
+        if (selectedCruisers.length > 0) {
+          showUnload = selectedCruisers.some(c => (c.marines || 0) > 0);
         }
         btnCruiserUnload.style.display = showUnload ? 'inline-flex' : 'none';
         if (showUnload) {
@@ -16833,7 +16835,8 @@ function getPlanetTradeIncomePerMin(planet) {
           if (s.bombs && s.bombs > 0) {
             for (let b = 0; b < s.bombs; b++) {
               const timeOffset = Date.now() / 2000;
-              const bAngle = (b * Math.PI * 2) / s.bombs + s.id + timeOffset * ((b % 2 === 0) ? 1 : -1);
+              const numericId = s.id ? s.id.toString().charCodeAt(s.id.length - 1) : 0;
+              const bAngle = (b * Math.PI * 2) / s.bombs + numericId + timeOffset * ((b % 2 === 0) ? 1 : -1);
               const bRadius = size * 0.4 * (1 + (b % 3) * 0.2); 
               const bx = s.x + Math.cos(bAngle) * bRadius;
               const by = s.y + Math.sin(bAngle) * bRadius;

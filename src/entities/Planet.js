@@ -233,7 +233,7 @@ export class Planet {
         this.supplies = Math.random() * this.maxShips;
       }
       const baseRate = this.owner ? 3 : 0.75;
-      const regenRatePerMs = (baseRate * (this.maxShips / 100)) / 60000;
+      const regenRatePerMs = (baseRate * (this.maxShips / 100) * ((this.minerals || 3) / 3)) / 60000;
       this.supplies = Math.min(this.maxShips, this.supplies + regenRatePerMs * deltaTime);
     }
     this.prorateSympathiesIfNeeded();

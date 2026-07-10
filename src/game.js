@@ -4277,7 +4277,7 @@ export class Game {
           ship.gainXp(completions, this, ship.x, ship.y);
         }
         
-        const localShipXpBonus = ship.getLocalXpBonus();
+        const localShipXpBonus = (typeof ship.getLocalXpBonus === 'function') ? ship.getLocalXpBonus() : 0;
         const playerXpBonus = Math.sqrt(ship.owner.expScore || 0);
         const playerTechBonus = Math.sqrt(ship.owner.techScore || 0);
         const chance = localShipXpBonus * 3 + playerXpBonus - playerTechBonus;
@@ -6009,9 +6009,9 @@ export class Game {
       // Handle Trade Options Regeneration at decreasing intervals
       const myTradeOptions = player.tradeOptions || 0;
       const penaltyDelay = myTradeOptions < 0 ? Math.abs(myTradeOptions) * 30000 : 0;
-      let baseRegenSeconds = 60;
+      let baseRegenSeconds = 180;
       if (player.tradeCapacity > 0) {
-        baseRegenSeconds = 60 / player.tradeCapacity;
+        baseRegenSeconds = 180 / player.tradeCapacity;
       }
       const tradeRegenInterval = (baseRegenSeconds * 1000) + penaltyDelay;
       player.tradeRegenInterval = tradeRegenInterval;

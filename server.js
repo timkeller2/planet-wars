@@ -1777,7 +1777,7 @@ async function bootstrap() {
       }
       
       if (replay) {
-        const player = game.allPlayers.find(p => p.id === socket.playerId);
+        const player = connectedClients.get(socket.id);
         if (player) {
           const responseReplay = Object.assign({}, replay);
           if (game.settings?.fogOfWar && responseReplay.planets && responseReplay.planets.length > 0) {
@@ -1786,6 +1786,22 @@ async function bootstrap() {
           socket.emit('replayDataResponse', responseReplay);
         }
       }
+    });
+
+    socket.on('requestReplayList', () => {
+      if (!game || !game.isRunning) return;
+      const replayList = [];
+      if (game.completedBattleReplays) {
+        game.completedBattleReplays.forEach(r => {
+          replayList.push({ id: r.id, name: r.name, duration: r.duration });
+        });
+      }
+      if (game.boardingReplays) {
+        game.boardingReplays.forEach(r => {
+          replayList.push({ id: r.id, name: r.name || 'Boarding Action', duration: r.duration });
+        });
+      }
+      socket.emit('replayListUpdate', replayList);
     });
 
     socket.on('loadSaveGame', (saveName) => {
@@ -3136,9 +3152,7 @@ async function bootstrap() {
         }).map(r => ({ id: r.id, name: r.name, duration: r.duration || r.totalDuration || 0, timestamp: r.timestamp })) : []
       };
       
-      if (state.battleReplays.length > 0 || state.boardingReplays.length > 0) {
-        console.log(`[REPLAY] Sending to ${player.name}: battle=${state.battleReplays.map(r=>r.name).join(',')} boarding=${state.boardingReplays.map(r=>r.name).join(',')}`);
-      }
+
       
       if (game.pendingHabClassChanges && game.pendingHabClassChanges.length > 0) {
         for (const ev of game.pendingHabClassChanges) {
