@@ -873,6 +873,59 @@ export class Ship {
       this.shieldShowTimer = Math.max(0, (this.shieldShowTimer || 0) - deltaTime / 1000);
       this.shieldRegenCooldown = Math.max(0, (this.shieldRegenCooldown || 0) - deltaTime / 1000);
 
+      if (this.shieldShowTimer <= 0.5 && this.maxHealth > 0 && !this.isAmoeba && (this.shields || 0) > 0 && (this.shieldPoints || 0) >= 0.5 && game && game.spatialGrid) {
+        // Run proximity check every ~1s using a timer to avoid overhead
+        this.proximityCheckTimer = (this.proximityCheckTimer || 0) + deltaTime;
+        if (this.proximityCheckTimer >= 1000) {
+          this.proximityCheckTimer = 0;
+          let enemyNear = false;
+          const searchRadiusSq = 90000; // 300px * 300px
+          
+          const candidateShips = (typeof game.getShipsInRadiusSq === 'function') 
+            ? game.getShipsInRadiusSq(this.x, this.y, searchRadiusSq) 
+            : [];
+            
+          for (const otherShip of candidateShips) {
+            if (!otherShip.active || otherShip.owner === this.owner) continue;
+            let isEnemy = otherShip.isAmoeba || (otherShip.owner && otherShip.owner.id === 'monsters');
+            if (this.owner && otherShip.owner && this.owner.atWarWith && this.owner.atWarWith[otherShip.owner.id] && Date.now() < this.owner.atWarWith[otherShip.owner.id]) {
+              isEnemy = true;
+            }
+            if (isEnemy) {
+              const dx = otherShip.x - this.x;
+              const dy = otherShip.y - this.y;
+              if (dx * dx + dy * dy <= searchRadiusSq) {
+                enemyNear = true;
+                break;
+              }
+            }
+          }
+
+          if (!enemyNear && game.planetGrid && typeof game.planetGrid.getPlanetsInRadiusSq === 'function') {
+            const candidatePlanets = game.planetGrid.getPlanetsInRadiusSq(this.x, this.y, searchRadiusSq);
+            for (const p of candidatePlanets) {
+              if (p.dead || p.owner === this.owner || !p.owner) continue;
+              let isEnemy = p.owner.id === 'monsters';
+              if (this.owner && p.owner && this.owner.atWarWith && this.owner.atWarWith[p.owner.id] && Date.now() < this.owner.atWarWith[p.owner.id]) {
+                isEnemy = true;
+              }
+              if (isEnemy) {
+                const dx = p.x - this.x;
+                const dy = p.y - this.y;
+                if (dx * dx + dy * dy <= searchRadiusSq) {
+                  enemyNear = true;
+                  break;
+                }
+              }
+            }
+          }
+
+          if (enemyNear) {
+            this.shieldShowTimer = 1.5;
+          }
+        }
+      }
+
       // --- REACTOR & EXTENDED FUEL TANKS LOGIC ---
       // 1. Reactor cooldown decrement
       this.reactorCooldown = Math.max(0, (this.reactorCooldown || 0) - deltaTime);

@@ -12901,8 +12901,9 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
           for (const shipId of shipIds) {
-            const ship = findServerShip(shipId);
-            if (ship) {
+            let source = findServerShip(shipId);
+            if (!source) source = findServerPlanet(shipId);
+            if (source) {
               anyBeingResearched = true;
               if (p.anomaly.completing) {
                 anyCompleting = true;
@@ -12910,11 +12911,11 @@ function getPlanetTradeIncomePerMin(planet) {
               // Target coordinates (anomaly center)
               const tx = p.anomaly.x;
               const ty = p.anomaly.y;
-              // Source coordinates (cruiser center)
-              const sx = ship.x;
-              const sy = ship.y;
+              // Source coordinates (cruiser or planet center)
+              const sx = source.x;
+              const sy = source.y;
               
-              // Angle from ship to anomaly
+              // Angle from source to anomaly
               const angle = Math.atan2(ty - sy, tx - sx);
               
               ctx.save();
@@ -17003,43 +17004,8 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.restore();
           }
 
-          // Determine if Cruiser Shields should be visible
-          let showShields = (s.shieldShowTimer || 0) > 0;
-          if (!showShields && s.isCruiser && (s.shields || 0) > 0 && (s.shieldPoints || 0) >= 0.5 && serverState) {
-            const checkRadiusSq = 90000; // 300px * 300px
-            const cruiserOwner = serverState.players.find(p => p.id === s.ownerId);
-            if (cruiserOwner) {
-              for (const otherShip of serverState.ships) {
-                if (!otherShip.active || otherShip.ownerId === s.ownerId) continue;
-                let isEnemy = otherShip.ownerId === 'monsters' || !!(otherShip.ownerId && cruiserOwner.atWarWith && cruiserOwner.atWarWith[otherShip.ownerId] && Date.now() < cruiserOwner.atWarWith[otherShip.ownerId]);
-                if (isEnemy) {
-                  const dx = otherShip.x - s.x;
-                  const dy = otherShip.y - s.y;
-                  if (dx * dx + dy * dy <= checkRadiusSq) {
-                    showShields = true;
-                    break;
-                  }
-                }
-              }
-              if (!showShields) {
-                for (const p of serverState.planets) {
-                  if (p.dead || p.ownerId === s.ownerId || !p.ownerId) continue;
-                  let isEnemy = p.ownerId === 'monsters' || !!(cruiserOwner.atWarWith && cruiserOwner.atWarWith[p.ownerId] && Date.now() < cruiserOwner.atWarWith[p.ownerId]);
-                  if (isEnemy) {
-                    const dx = p.x - s.x;
-                    const dy = p.y - s.y;
-                    if (dx * dx + dy * dy <= checkRadiusSq) {
-                      showShields = true;
-                      break;
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-          // Draw Cruiser Shields as a yellow circle around the ship
-          if (s.isCruiser && (s.shields || 0) > 0 && showShields && (s.shieldPoints || 0) >= 0.5) {
+          // Draw Cruiser Shields as a yellow circle around the ship if within 30s of firing/being fired upon
+          if (s.isCruiser && (s.shields || 0) > 0 && (s.shieldShowTimer || 0) > 0 && (s.shieldPoints || 0) >= 0.5) {
             ctx.save();
             ctx.beginPath();
             ctx.arc(s.x, s.y, (s.maxHealth || 30) * 2, 0, Math.PI * 2);

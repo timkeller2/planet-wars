@@ -4977,6 +4977,111 @@ export class Game {
       }
     }
 
+    // Process research per-planet (planets acting like cruisers with labs)
+    for (const p of this.planets) {
+      if (p.dead || !p.owner || p.isDeepSpaceAnomaly) continue;
+
+      const isFocusResearch = p.focusMode === 'research';
+      if (!isFocusResearch && !p.isResearch) continue;
+
+      const labs = p.isResearch ? 2 : 1;
+      
+      // Duck-type the planet so it works in this.researchAnomaly
+      p.labs = labs;
+      p.expScore = 0; // Planets don't have xp natively
+      p.isActivelyResearching = false;
+      
+      const gravityRadius = p.getGravityRadius();
+      const searchRadiusSq = gravityRadius * gravityRadius;
+      
+      // 1. Check if completing an anomaly
+      let completingPlanet = null;
+      for (const targetP of this.planets) {
+        if (targetP.anomaly && targetP.anomaly.completing && targetP.anomaly.completingShipId === p.id) {
+          completingPlanet = targetP;
+          break;
+        }
+      }
+      
+      let completedOrResearched = false;
+      
+      if (completingPlanet) {
+        const dx = p.x - completingPlanet.anomaly.x;
+        const dy = p.y - completingPlanet.anomaly.y;
+        if (dx * dx + dy * dy <= searchRadiusSq) {
+          this.researchAnomaly(completingPlanet, p, deltaTime);
+          completedOrResearched = true;
+        }
+      }
+      
+      if (!completedOrResearched) {
+        // Find best anomaly within gravity well
+        let targetAnomaly = null;
+        let highestProgress = -1;
+        for (const targetP of this.planets) {
+          if (!targetP.anomaly || targetP.anomaly.completing || targetP.anomaly.researched) continue;
+          
+          const currentProgress = (targetP.anomaly.progress && typeof targetP.anomaly.progress === 'object')
+            ? (targetP.anomaly.progress[p.owner.id] || 0)
+            : (typeof targetP.anomaly.progress === 'number' ? targetP.anomaly.progress : 0);
+            
+          const dx = p.x - targetP.anomaly.x;
+          const dy = p.y - targetP.anomaly.y;
+          if (dx * dx + dy * dy <= searchRadiusSq) {
+            if (currentProgress > highestProgress || (currentProgress === highestProgress && (!targetAnomaly || targetP.id < targetAnomaly.id))) {
+              highestProgress = currentProgress;
+              targetAnomaly = targetP;
+            }
+          }
+        }
+        
+        if (targetAnomaly) {
+          this.researchAnomaly(targetAnomaly, p, deltaTime);
+          completedOrResearched = true;
+        }
+      }
+      
+      // Research hazards (storms and minefields)
+      let targetHazard = null;
+      for (const storm of this.ionStorms) {
+        const dx = storm.x - p.x;
+        const dy = storm.y - p.y;
+        const distSq = dx * dx + dy * dy;
+        const effRadar = gravityRadius;
+        if (distSq <= (effRadar + storm.radius) * (effRadar + storm.radius)) {
+          if (storm.type === 'minefield') {
+            const k = storm.knowledge[p.owner.id] || 0;
+            const tR = Math.sqrt(p.owner.techScore || 0);
+            const eR = Math.sqrt(p.owner.expScore || 0);
+            const effectiveIntensity = Math.max(0, storm.intensity - k - (tR + eR) / 2);
+            if (effectiveIntensity > 0 && storm.mines > 0) {
+              targetHazard = { type: 'minefield', storm: storm };
+              break;
+            }
+          } else {
+            const k = storm.knowledge[p.owner.id] || 0;
+            const tR = Math.sqrt(p.owner.techScore || 0);
+            const eR = Math.sqrt(p.owner.expScore || 0);
+            const effectiveIntensity = Math.max(0, storm.intensity - k - (tR + eR) / 2);
+            if (effectiveIntensity > 0) {
+              targetHazard = { type: 'storm', storm: storm };
+              break;
+            }
+          }
+        }
+      }
+      
+      if (targetHazard) {
+        if (!targetHazard.storm.knowledge[p.owner.id]) targetHazard.storm.knowledge[p.owner.id] = 0;
+        targetHazard.storm.knowledge[p.owner.id] += (p.labs * deltaTime) / 120000;
+        p.isActivelyResearching = true;
+        
+        const knowledgeGained = (p.labs * deltaTime) / 120000;
+        p.owner.techScore = (p.owner.techScore || 0) + knowledgeGained;
+        p.accumulatedTech = (p.accumulatedTech || 0) + knowledgeGained;
+      }
+    }
+
     // Now process research per-ship
     for (const ship of this.ships) {
       if (ship.active && ship.isCruiser && ship.owner) {
