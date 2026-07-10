@@ -4251,7 +4251,8 @@ export class Game {
         rateMultiplier = 3;
       }
       
-      const xpMultiplier = 1 + (ship.getLocalXpBonus() * 3) / 100;
+      const xpBonus = (typeof ship.getLocalXpBonus === 'function') ? ship.getLocalXpBonus() : 0;
+      const xpMultiplier = 1 + (xpBonus * 3) / 100;
       const knowledgeGained = (ship.labs * deltaTime * xpMultiplier * rateMultiplier) / 120000;
       
       ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
@@ -4272,7 +4273,9 @@ export class Game {
           currentProgress = completions;
         }
         
-        ship.gainXp(completions, this, ship.x, ship.y);
+        if (typeof ship.gainXp === 'function') {
+          ship.gainXp(completions, this, ship.x, ship.y);
+        }
         
         const localShipXpBonus = ship.getLocalXpBonus();
         const playerXpBonus = Math.sqrt(ship.owner.expScore || 0);
@@ -4300,6 +4303,7 @@ export class Game {
   }
 
   update(deltaTime) {
+    const startTime = performance.now();
     if (!this.boardingReplays) {
       this.boardingReplays = [];
     }
@@ -5340,7 +5344,8 @@ export class Game {
                             x: finalTx,
                             y: finalTy,
                             color: '#44f',
-                            age: 0
+                            age: 0,
+                            isHazard: true
                           });
                           this.explosions.push({
                             x: finalTx,
@@ -5518,7 +5523,7 @@ export class Game {
             }
 
             if (risk > 0 && Math.random() * 100 < risk) {
-              this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
+              this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0, isHazard: true });
               const boltX = ship.x + (Math.random() - 0.5) * 80;
               const boltY = ship.y - 30 - Math.random() * 50;
               const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
@@ -5627,7 +5632,7 @@ export class Game {
                 if (storm.initialMines > 0) {
                   storm.radius = storm.initialRadius * (storm.mines / storm.initialMines);
                 }
-                this.explosions.push({ x: ship.x, y: ship.y, color: '#44f', age: 0 });
+                this.explosions.push({ x: ship.x, y: ship.y, color: '#44f', age: 0, isHazard: true });
                 const boltX = ship.x + (Math.random() - 0.5) * 80;
                 const boltY = ship.y - 30 - Math.random() * 50;
                 const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
@@ -6294,7 +6299,7 @@ export class Game {
                 ship.active = false;
               }
               const explosionColor = '#ff0';
-              this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0 });
+              this.explosions.push({ x: ship.x, y: ship.y, color: explosionColor, age: 0, isHazard: true });
               const boltX = ship.x + (Math.random() - 0.5) * 80;
               const boltY = ship.y - 30 - Math.random() * 50;
               const midX = (ship.x + boltX) / 2 + (Math.random() - 0.5) * 40;
@@ -6457,7 +6462,8 @@ export class Game {
           x: victim.x,
           y: victim.y,
           color: victim.owner ? victim.owner.color : '#fff',
-          age: 0
+          age: 0,
+          isDeath: true
         });
       }
     }
@@ -7489,7 +7495,18 @@ export class Game {
       const completingShipId = planet.anomaly ? planet.anomaly.completingShipId : null;
       let targetShip = this.ships.find(s => s.id === completingShipId);
       if (!targetShip) {
-        targetShip = this.ships.find(s => s.active && s.isCruiser && s.ownerId === player.id);
+        let minDistSq = Infinity;
+        for (const s of this.ships) {
+          if (s.active && s.isCruiser && s.ownerId === player.id) {
+            const dx = s.x - planet.x;
+            const dy = s.y - planet.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq < minDistSq) {
+              minDistSq = distSq;
+              targetShip = s;
+            }
+          }
+        }
       }
       if (targetShip) {
         targetShip.upgradeTokens = (targetShip.upgradeTokens || 0) + numTokens;

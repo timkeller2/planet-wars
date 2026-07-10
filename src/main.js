@@ -5094,6 +5094,12 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   });
 
+  socket.on('replayDataResponse', (replayData) => {
+    if (replayData) {
+      playReplay(replayData);
+    }
+  });
+
   bindActionClick(resetAfkBtn, () => {
     socket.emit('resetAFK');
     afkWarningOverlay.classList.add('hidden');
@@ -6872,7 +6878,7 @@ function getPlanetTradeIncomePerMin(planet) {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         document.getElementById('recordings-modal').classList.add('hidden');
-        playReplay(r);
+        socket.emit('requestReplayData', r.id);
       });
       
       btn.addEventListener('contextmenu', (e) => {
@@ -16826,7 +16832,8 @@ function getPlanetTradeIncomePerMin(planet) {
           
           if (s.bombs && s.bombs > 0) {
             for (let b = 0; b < s.bombs; b++) {
-              const bAngle = (b * Math.PI * 2) / s.bombs + s.id;
+              const timeOffset = Date.now() / 2000;
+              const bAngle = (b * Math.PI * 2) / s.bombs + s.id + timeOffset * ((b % 2 === 0) ? 1 : -1);
               const bRadius = size * 0.4 * (1 + (b % 3) * 0.2); 
               const bx = s.x + Math.cos(bAngle) * bRadius;
               const by = s.y + Math.sin(bAngle) * bRadius;
@@ -17853,7 +17860,10 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           } else {
             ctx.beginPath();
-            const maxRadius = exp.isMassive ? 400 : 35;
+            let maxRadius = 15;
+            if (exp.isMassive) maxRadius = 400;
+            else if (exp.isDeath || exp.isHazard) maxRadius = 35;
+            
             ctx.arc(exp.x, exp.y, exp.age * maxRadius, 0, Math.PI * 2);
             ctx.fillStyle = `rgba(255, 255, 255, ${Math.max(0, 1 - exp.age)})`;
             ctx.fill();
@@ -18211,7 +18221,9 @@ function getPlanetTradeIncomePerMin(planet) {
 
   // Continuous render loop — keeps the visual state in sync with the camera
   // so that click hit-testing always matches what is on screen.
+  let renderFrameCount = 0;
   function renderLoop() {
+    const startTime = performance.now();
     try {
       updateSelectionTimes();
       draw();
@@ -18220,6 +18232,13 @@ function getPlanetTradeIncomePerMin(planet) {
       checkMusicRotation();
     } catch (e) {
       console.error('[PlanetWars] draw() error:', e);
+    }
+    const duration = performance.now() - startTime;
+    renderFrameCount++;
+    if (duration > 20 && renderFrameCount % 60 === 0) { // Log occasionally if it's consistently slow
+      console.log(`[PROFILING] renderLoop took ${Math.round(duration)}ms`);
+    } else if (duration > 50) {
+      console.log(`[PROFILING] MAJOR SLOW FRAME: renderLoop took ${Math.round(duration)}ms`);
     }
     requestAnimationFrame(renderLoop);
   }

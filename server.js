@@ -1764,6 +1764,30 @@ async function bootstrap() {
       console.log(`[Delete Replay] Client requested to delete replay ${replayId}`);
     });
 
+    socket.on('requestReplayData', (replayId) => {
+      if (!replayId || typeof replayId !== 'string') return;
+      if (!game || !game.isRunning) return;
+      
+      let replay = null;
+      if (game.completedBattleReplays) {
+        replay = game.completedBattleReplays.find(r => r.id === replayId);
+      }
+      if (!replay && game.boardingReplays) {
+        replay = game.boardingReplays.find(r => r.id === replayId);
+      }
+      
+      if (replay) {
+        const player = game.allPlayers.find(p => p.id === socket.playerId);
+        if (player) {
+          const responseReplay = Object.assign({}, replay);
+          if (game.settings?.fogOfWar && responseReplay.planets && responseReplay.planets.length > 0) {
+            responseReplay.planets = responseReplay.planets.filter(rp => player.discoveredPlanets && player.discoveredPlanets.has(rp.id));
+          }
+          socket.emit('replayDataResponse', responseReplay);
+        }
+      }
+    });
+
     socket.on('loadSaveGame', (saveName) => {
       if (!saveName || typeof saveName !== 'string') return;
       const sanitized = saveName.replace(/[^a-zA-Z0-9_\-]/g, '');
@@ -3104,19 +3128,12 @@ async function bootstrap() {
           if (r.participants && !r.participants.includes(player.id)) return false;
           if (game.settings?.fogOfWar && !isVisible(r.x || 0, r.y || 0)) return false;
           return true;
-        }) : [],
+        }).map(r => ({ id: r.id, name: r.name, duration: r.duration || r.totalDuration || 0, timestamp: r.timestamp })) : [],
         battleReplays: game.completedBattleReplays ? game.completedBattleReplays.filter(r => {
           if (!r.participants.includes(player.id)) return false;
           if (game.settings?.fogOfWar && !isVisible(r.x, r.y)) return false;
           return true;
-        }).map(r => {
-          // Strip planets the player hasn't discovered yet (fog of war)
-          if (game.settings?.fogOfWar && r.planets && r.planets.length > 0) {
-            const filteredPlanets = r.planets.filter(rp => player.discoveredPlanets && player.discoveredPlanets.has(rp.id));
-            return Object.assign({}, r, { planets: filteredPlanets });
-          }
-          return r;
-        }) : []
+        }).map(r => ({ id: r.id, name: r.name, duration: r.duration || r.totalDuration || 0, timestamp: r.timestamp })) : []
       };
       
       if (state.battleReplays.length > 0 || state.boardingReplays.length > 0) {

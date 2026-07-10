@@ -5967,7 +5967,8 @@ export class Ship {
               x: this.x,
               y: this.y,
               color: this.owner ? this.owner.color : '#fff',
-              age: 0
+              age: 0,
+              isDeath: true
             });
           }
         }
@@ -6108,7 +6109,8 @@ export class Ship {
               x: this.x,
               y: this.y,
               color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
-              age: 0
+              age: 0,
+              isDeath: true
             });
           }
         }
