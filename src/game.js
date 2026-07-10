@@ -565,6 +565,41 @@ export class Game {
     return amoeba;
   }
 
+  spawnGoldenAmoeba() {
+    if (!this.monsterPlayer) return null;
+    
+    let largestPlanet = this.planets[0];
+    for (const p of this.planets) {
+      if ((p.maxShips || 0) > (largestPlanet.maxShips || 0)) {
+        largestPlanet = p;
+      }
+    }
+    
+    const spawnX = largestPlanet ? largestPlanet.x + (Math.random() - 0.5) * 100 : this.width / 2;
+    const spawnY = largestPlanet ? largestPlanet.y + (Math.random() - 0.5) * 100 : this.height / 2;
+
+    const amoeba = new Ship(this.nextShipId++, spawnX, spawnY, null, this.monsterPlayer);
+    amoeba.isAmoeba = true;
+    amoeba.isGoldenAmoeba = true;
+    amoeba.name = "The Golden Amoeba";
+    amoeba.cruiserStyle = 'Romulan';
+    amoeba.speed = 10;
+    amoeba.maxHealth = 15;
+    amoeba.health = 15;
+    this.ships.push(amoeba);
+    
+    if (this.events) {
+      this.events.push({
+        text: "A strange temporal distortion is detected... The Golden Amoeba has appeared!",
+        type: 'diplomacy',
+        color: '#ffd700',
+        age: 0,
+        duration: 8.0
+      });
+    }
+    return amoeba;
+  }
+
   assignRandomShipName(ship) {
     if (!ship.isCruiser || ship.isAmoeba) return;
 
@@ -822,7 +857,7 @@ export class Game {
 
     // 1. Gravity well check
     for (const pl of this.planets) {
-      if (pl.owner && pl.owner.id === player.id) {
+      if ((pl.owner && pl.owner.id === player.id) || getEffectiveSympathy(pl, player.id, this.ships, player, this) > 0) {
         const gr = pl.getGravityRadius();
         const dx = pl.x - p.x;
         const dy = pl.y - p.y;
@@ -862,7 +897,7 @@ export class Game {
 
     // 1. Gravity well check
     for (const pl of this.planets) {
-      if (pl.owner && pl.owner.id === player.id) {
+      if ((pl.owner && pl.owner.id === player.id) || getEffectiveSympathy(pl, player.id, this.ships, player, this) > 0) {
         const gr = pl.getGravityRadius();
         const dx = pl.x - s.x;
         const dy = pl.y - s.y;
@@ -4275,22 +4310,19 @@ export class Game {
     }
     
     if (this.marketPrices) {
-      this.marketFluctuationTimer = (this.marketFluctuationTimer || 0) + deltaTime;
-      const fluctuationInterval = 60000; // 60 seconds
-      if (this.marketFluctuationTimer >= fluctuationInterval) {
-        this.marketFluctuationTimer = 0;
-        
-        const numAIPlayers = this.allPlayers.filter(p => p.isAI).length;
-        const resources = Object.keys(this.marketPrices);
-        
-        // Randomly select numAIPlayers resources
-        const resourcesToAdjust = [];
-        for (let i = 0; i < numAIPlayers; i++) {
+      const numAIPlayers = this.allPlayers.filter(p => p.isAI).length;
+      if (numAIPlayers > 0) {
+        this.marketFluctuationTimer = (this.marketFluctuationTimer || 0) + deltaTime;
+        const fluctuationInterval = (180 / numAIPlayers) * 1000;
+        if (this.marketFluctuationTimer >= fluctuationInterval) {
+          this.marketFluctuationTimer = 0;
+          
+          const resources = Object.keys(this.marketPrices);
+          const resourcesToAdjust = [];
           if (resources.length > 0) {
             const rIndex = Math.floor(Math.random() * resources.length);
-            resourcesToAdjust.push(resources.splice(rIndex, 1)[0]);
+            resourcesToAdjust.push(resources[rIndex]);
           }
-        }
         
         const rarityToPrice = {
           'common': 4,
@@ -4324,6 +4356,7 @@ export class Game {
             }
           }
         }
+        }
       }
     }
     const nowTime = Date.now();
@@ -4337,6 +4370,23 @@ export class Game {
 
     for (const player of this.allPlayers) {
       player.wasAlive = player.isAlive !== false;
+    }
+
+    if (this.gameStartTime && Date.now() - this.gameStartTime > 5000) {
+      if (!this.goldenAmoebaSpawned && this.monsterPlayer) {
+        let amoebaCount = 0;
+        for (const ship of this.ships) {
+          if (ship.active && ship.isAmoeba) amoebaCount++;
+        }
+        let monsterPlanetCount = 0;
+        for (const planet of this.planets) {
+          if (planet.owner && planet.owner.id === this.monsterPlayer.id) monsterPlanetCount++;
+        }
+        if (amoebaCount === 0 && monsterPlanetCount === 0) {
+          this.goldenAmoebaSpawned = true;
+          this.spawnGoldenAmoeba();
+        }
+      }
     }
 
     if (!this.wreckages) this.wreckages = [];
@@ -5750,8 +5800,10 @@ export class Game {
       let commerceWorlds = 0;
       let controlledHomeworlds = 0;
       let controlsOwnHomeworld = false;
+      let playerEffectiveShips = 0;
 
       for (const planet of this.planets) {
+        if (planet.dead) continue;
         if (planet.owner && planet.owner.id === player.id) {
           if (planet.focusMode === 'garrison') {
             garrisonWorlds++;
@@ -5767,11 +5819,23 @@ export class Game {
               controlsOwnHomeworld = true;
             }
           }
+
+          let eff = planet.ships;
+          if (planet.focusMode === 'commerce') {
+            const isFull = planet.ships >= planet.maxShips;
+            eff = isFull ? planet.ships * 4 : planet.ships * 2;
+            if (planet.minerals && planet.minerals > 3) {
+              eff *= (planet.minerals / 3);
+            }
+          }
+          playerEffectiveShips += eff;
         }
       }
 
+      player.effectiveShips = playerEffectiveShips;
+
       player.commandLimit = 5 + (player.planetCount || 0) + (garrisonWorlds * 2) + (fullGarrisonWorlds * 2) + (controlledHomeworlds * 2) + (controlsOwnHomeworld ? 3 : 0);
-      player.tradeCapacity = Math.ceil((player.planetCount || 0) / 5) + commerceWorlds;
+      player.tradeCapacity = Math.ceil(playerEffectiveShips / 400);
       player.stockpileCapacity = (player.commandLimit || 0) + (player.tradeCapacity || 0);
 
       player.storageFeeAccumulator = (player.storageFeeAccumulator || 0) + deltaTime;
@@ -5833,10 +5897,13 @@ export class Game {
       }
 
       // Handle Trade Options Regeneration at decreasing intervals
-      const tradeRegenRate = 1 + commerceWorlds;
       const myTradeOptions = player.tradeOptions || 0;
       const penaltyDelay = myTradeOptions < 0 ? Math.abs(myTradeOptions) * 30000 : 0;
-      const tradeRegenInterval = (60000 / tradeRegenRate) + penaltyDelay;
+      let baseRegenSeconds = 60;
+      if (player.tradeCapacity > 0) {
+        baseRegenSeconds = 60 / player.tradeCapacity;
+      }
+      const tradeRegenInterval = (baseRegenSeconds * 1000) + penaltyDelay;
       player.tradeRegenInterval = tradeRegenInterval;
       player.tradeRegenAccumulator = (player.tradeRegenAccumulator || 0) + deltaTime;
       while (player.tradeRegenAccumulator >= tradeRegenInterval) {
@@ -5878,24 +5945,7 @@ export class Game {
 
       // Passive trading income based on effective ships of all friendly/neutral planets, capped based on player's own effective ships
       if (player !== this.monsterPlayer) {
-        let playerEffectiveShips = 0;
-        
-        // 1. Calculate player's own effective ships (doubled if commerce focus, quadrupled if commerce focus and at full ships)
-        for (const planet of this.planets) {
-          if (planet.dead) continue;
-          const isOwn = (planet.owner && planet.owner.id === player.id);
-          if (isOwn) {
-            let eff = planet.ships;
-            if (planet.focusMode === 'commerce') {
-              const isFull = planet.ships >= planet.maxShips;
-              eff = isFull ? planet.ships * 4 : planet.ships * 2;
-              if (planet.minerals && planet.minerals > 3) {
-                eff *= (planet.minerals / 3);
-              }
-            }
-            playerEffectiveShips += eff;
-          }
-        }
+        let playerEffectiveShips = player.effectiveShips || 0;
 
         // 2. Group other qualifying partners' effective ships
         const otherPartners = {};
@@ -6459,6 +6509,41 @@ export class Game {
                 cruiser.beakerIncreaseEvent = (cruiser.beakerIncreaseEvent || 0) + techGain;
               }
             }
+          }
+        }
+      }
+    }
+
+    // Golden Amoeba Reward Check
+    if (this.goldenAmoebaSpawned && !this.goldenAmoebaRewarded) {
+      const gAmoeba = this.ships.find(s => s.isGoldenAmoeba);
+      if (gAmoeba && !gAmoeba.active) {
+        this.goldenAmoebaRewarded = true;
+        let killerShip = null;
+        let lastTime = 0;
+        for (const ship of this.ships) {
+          if (ship.lastAttackTimeOnShip && ship.lastAttackTimeOnShip[gAmoeba.id]) {
+            if (ship.lastAttackTimeOnShip[gAmoeba.id] > lastTime) {
+              lastTime = ship.lastAttackTimeOnShip[gAmoeba.id];
+              killerShip = ship;
+            }
+          }
+        }
+        if (killerShip && killerShip.owner && killerShip.owner !== this.monsterPlayer) {
+          const killer = killerShip.owner;
+          killer.techScore = (killer.techScore || 0) + 50;
+          killer.expScore = (killer.expScore || 0) + 50;
+          killer.happiness = (killer.happiness || 0) + 50;
+          killer.credits = (killer.credits || 0) + 500;
+          
+          if (this.events) {
+            this.events.push({
+              text: `${killer.name} has destroyed The Golden Amoeba!`,
+              type: 'diplomacy',
+              color: '#ffd700',
+              age: 0,
+              duration: 5.0
+            });
           }
         }
       }

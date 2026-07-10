@@ -399,18 +399,95 @@ export class Planet {
           this.ships += newShips;
           this.decreaseMaxShips(0.04 * newShips, true);
         }
+      } else if (focus === 'rootoutspies') {
+        this.productionProgress += effectiveRate * (deltaTime / 1000);
+        let phantomShips = Math.floor(this.productionProgress);
+        if (phantomShips >= 3) {
+          let cycles = Math.floor(phantomShips / 3);
+          this.productionProgress -= (cycles * 3);
+          
+          let highestSympathy = 0;
+          let highestEnemyId = null;
+          if (this.sympathy) {
+            for (const playerId in this.sympathy) {
+              if (playerId !== this.owner.id) {
+                let sym = this.sympathy[playerId];
+                if (sym > highestSympathy) {
+                  highestSympathy = sym;
+                  highestEnemyId = playerId;
+                }
+              }
+            }
+          }
+          
+          if (highestEnemyId) {
+            this.sympathy[highestEnemyId] = Math.max(0, this.sympathy[highestEnemyId] - cycles);
+            if (this.owner) {
+              this.owner.spyRootedEvents = this.owner.spyRootedEvents || new Set();
+              this.owner.spyRootedEvents.add(this.id);
+            }
+          } else {
+            this.focusMode = 'commerce';
+          }
+        }
       } else {
-        this.productionProgress = 0;
-        if (!this.owner.isAI && (focus === 'economy' || focus === 'homeworld')) {
-          const rawTech = this.owner.techScore ? Math.sqrt(this.owner.techScore) : 0;
-          const threshold = this.sizeClass * ((this.habitability + rawTech) / 100);
-          const conversionRate = (this.maxShips >= threshold) ? (1 / 45) : (1 / 15);
-          
+        if (!this.owner.isAI && (focus === 'economy' || focus === 'homeworld' || focus === 'terraforming')) {
           let shipsWouldBeProduced = effectiveRate * (deltaTime / 1000);
-          let increase = shipsWouldBeProduced * conversionRate;
           
-          this.maxShips += increase;
-          this.radius = this.sizeClass / 4;
+          if (this.useResources && (this.owner.credits || 0) > 0) {
+            const dtSec = deltaTime / 1000;
+            const creditsToUse = Math.min(this.owner.credits, dtSec);
+            this.owner.credits -= creditsToUse;
+            shipsWouldBeProduced += creditsToUse;
+          }
+
+          if (focus === 'economy' || focus === 'homeworld') {
+            this.productionProgress = 0;
+            const rawTech = this.owner.techScore ? Math.sqrt(this.owner.techScore) : 0;
+            const threshold = this.sizeClass * ((this.habitability + rawTech) / 100);
+            const conversionRate = (this.maxShips >= threshold) ? (1 / 15) : (1 / 5);
+            
+            let increase = shipsWouldBeProduced * conversionRate;
+            this.maxShips += increase;
+            this.radius = this.sizeClass / 4;
+          } else if (focus === 'terraforming') {
+            this.productionProgress += shipsWouldBeProduced;
+            if (this.productionProgress >= 15) {
+              const cycles = Math.floor(this.productionProgress / 15);
+              this.productionProgress -= (cycles * 15);
+
+              for (let i = 0; i < cycles; i++) {
+                const oldHab = this.habitability;
+                this.habitability += 1;
+                
+                const oldName = getHabName(oldHab);
+                if (oldName === 'Jungle' && getHabName(this.habitability) === 'Ocean') {
+                  this.habitability = 100; // Terran
+                } else if (oldName === 'Desert' && getHabName(this.habitability) === 'Tundra') {
+                  this.habitability = 90; // Arid
+                } else if (oldName === 'Ocean' && getHabName(this.habitability) === 'Arid') {
+                  this.habitability = 100; // Terran
+                }
+
+                const newName = getHabName(this.habitability);
+                if (oldName !== newName && game) {
+                  game.pendingHabClassChanges = game.pendingHabClassChanges || [];
+                  game.pendingHabClassChanges.push({
+                    planetId: this.id,
+                    planetName: this.name,
+                    ownerId: this.owner ? this.owner.id : null,
+                    oldClass: oldName,
+                    newClass: newName,
+                    x: this.x,
+                    y: this.y
+                  });
+                }
+                this.habitability = Math.min(100, Math.max(0, this.habitability));
+              }
+            }
+          }
+        } else {
+          this.productionProgress = 0;
         }
       }
     } else {
@@ -458,33 +535,6 @@ export class Planet {
               this.decreaseMaxShips(1);
               if (this.maxShips < 5) this.dead = true;
             }
-          } else if (focus === 'terraforming') {
-            const oldHab = this.habitability;
-            this.habitability += 1;
-            
-            const oldName = getHabName(oldHab);
-            if (oldName === 'Jungle' && getHabName(this.habitability) === 'Ocean') {
-              this.habitability = 100; // Terran
-            } else if (oldName === 'Desert' && getHabName(this.habitability) === 'Tundra') {
-              this.habitability = 90; // Arid
-            } else if (oldName === 'Ocean' && getHabName(this.habitability) === 'Arid') {
-              this.habitability = 100; // Terran
-            }
-
-            const newName = getHabName(this.habitability);
-            if (oldName !== newName && game) {
-              game.pendingHabClassChanges = game.pendingHabClassChanges || [];
-              game.pendingHabClassChanges.push({
-                planetId: this.id,
-                planetName: this.name,
-                ownerId: this.owner ? this.owner.id : null,
-                oldClass: oldName,
-                newClass: newName,
-                x: this.x,
-                y: this.y
-              });
-            }
-
           }
         } else {
           // AI controlled planets continue to operate as they have before

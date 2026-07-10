@@ -1907,7 +1907,7 @@ export class Ship {
                   explosions.push({
                     x: this.x,
                     y: this.y,
-                    color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
+                    color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
                     age: 0
                   });
                 }
@@ -1922,7 +1922,7 @@ export class Ship {
               explosions.push({
                 x: this.x,
                 y: this.y,
-                color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
+                color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
                 age: 0
               });
             }
@@ -2589,7 +2589,7 @@ export class Ship {
               startY: startY,
               endX: enemyShip.x,
               endY: enemyShip.y,
-              color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
+              color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
               age: 0,
               duration: usedBomb ? 3 * Math.max(0.8, 0.4 + (shotsPerVolley * 0.08)) : Math.max(0.8, 0.4 + (shotsPerVolley * 0.08)),
               width: usedBomb ? 8 : undefined,
@@ -2748,7 +2748,7 @@ export class Ship {
                   startX: this.x, startY: this.y,
                   endX: p.x + (Math.random() - 0.5) * p.radius, 
                   endY: p.y + (Math.random() - 0.5) * p.radius,
-                  color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
+                  color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
                   age: 0, duration: 0.6, width: 8,
                   isAmoebaAttack: !!this.isAmoeba,
                   cruiserStyle: this.owner ? this.owner.cruiserStyle : null
@@ -4125,7 +4125,7 @@ export class Ship {
             startY: startY,
             endX: this.targetPlanet.x,
             endY: this.targetPlanet.y,
-            color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
+            color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
             age: 0,
             duration: 0.8,
             isAmoebaAttack: !!this.isAmoeba,
@@ -6054,7 +6054,7 @@ export class Ship {
             explosions.push({
               x: this.x,
               y: this.y,
-              color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
+              color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
               age: 0
             });
           }
@@ -6063,7 +6063,7 @@ export class Ship {
         explosions.push({
           x: this.x,
           y: this.y,
-          color: this.owner ? this.owner.color : (this.isAmoeba ? 'amoeba' : '#fff'),
+          color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
           age: 0
         });
       }

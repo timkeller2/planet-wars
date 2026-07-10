@@ -3207,7 +3207,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const mineralsName = getMineralsName(p.minerals);
       const habName = getHabName(p.habitability);
       const raceName = p.racialAffinity || '';
-      const focusName = p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy';
+      const focusName = p.focusMode === 'rootoutspies' ? 'Root Out Spies' : (p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy');
 
       let prefBonusStr = '';
       if (p.preferredResource) {
@@ -5673,10 +5673,12 @@ function getPlanetTradeIncomePerMin(planet) {
         if (!p.inFog && p.justAssigned && !lastPlanetAssignments[p.id]) {
           const owner = state.players.find(pl => pl.id === p.ownerId);
           const playerName = owner && owner.name ? owner.name : 'Unknown Player';
+          const isAI = owner && owner.isAI;
+          const msgText = isAI ? `${playerName} appears through a temporal rift!` : `${playerName} enters the fray from ${p.name || 'Unknown'}!`;
           floatingAnimations.push({
             x: p.x,
             y: p.y,
-            text: `${playerName} enters the fray from ${p.name || 'Unknown'}!`,
+            text: msgText,
             type: 'colonize',
             age: 0,
             duration: 3.0
@@ -9834,10 +9836,10 @@ function getPlanetTradeIncomePerMin(planet) {
       }
       
       wasAlreadySelectedOnMouseDown = false;
-      if (clickedPlanet) {
-        wasAlreadySelectedOnMouseDown = selectedPlanets.some(p => p.id === clickedPlanet.id);
-      } else if (clickedShip) {
+      if (clickedShip) {
         wasAlreadySelectedOnMouseDown = selectedShips.some(s => s.id === clickedShip.id);
+      } else if (clickedPlanet) {
+        wasAlreadySelectedOnMouseDown = selectedPlanets.some(p => p.id === clickedPlanet.id);
       }
     } else if (event.button === 2) {
       if (selectedShips.length === 0 && selectedPlanets.length === 0) {
@@ -10687,6 +10689,12 @@ function getPlanetTradeIncomePerMin(planet) {
         if (key === 'm' && planet.focusMode !== 'mining' && planet.resources && planet.resources.length > 0) {
           event.preventDefault();
           socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'mining' });
+          focusModeActive = false;
+          return;
+        }
+        if (key === 's' && planet.focusMode !== 'rootoutspies') {
+          event.preventDefault();
+          socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'rootoutspies' });
           focusModeActive = false;
           return;
         }
@@ -11541,6 +11549,7 @@ function getPlanetTradeIncomePerMin(planet) {
   registerFocusBtn('btn-focus-mining', 'mining');
   registerFocusBtn('btn-focus-terraforming', 'terraforming');
   registerFocusBtn('btn-focus-homeworld', 'homeworld');
+  registerFocusBtn('btn-focus-rootoutspies', 'rootoutspies');
 
   // Bind Sci-Fi Planetary Resources UI window actions & bank sell button
 
@@ -11914,7 +11923,8 @@ function getPlanetTradeIncomePerMin(planet) {
       'btn-focus-commerce': 'commerce',
       'btn-focus-mining': 'mining',
       'btn-focus-terraforming': 'terraforming',
-      'btn-focus-homeworld': 'homeworld'
+      'btn-focus-homeworld': 'homeworld',
+      'btn-focus-rootoutspies': 'rootoutspies'
     };
     const selectedPlanetFocus = getSelectedPlanetForFocus();
     if (!selectedPlanetFocus) {
@@ -14488,7 +14498,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
             if (isHuman) {
               const focus = p.focusMode || 'economy';
-              const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))));
+              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
               const badgeRadius = pillHeight / 2;
               const badgeX = p.x + textWidth / 2 + 8 + badgeRadius + 2;
 
@@ -14527,7 +14537,7 @@ function getPlanetTradeIncomePerMin(planet) {
             // In graphical mode, draw focus mode badge directly to the right of the planet graphic
             if (isHuman) {
               const focus = p.focusMode || 'economy';
-              const modeIndicator = focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))));
+              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
               const badgeRadius = 10;
               const badgeX = p.x + p.radius + badgeRadius + 4;
               const badgeY = p.y;
@@ -16807,11 +16817,25 @@ function getPlanetTradeIncomePerMin(planet) {
           const oldFill = ctx.fillStyle;
           const oldStroke = ctx.strokeStyle;
           const oldLineWidth = ctx.lineWidth;
-          ctx.fillStyle = "rgba(0, 100, 0, 0.7)";
-          ctx.strokeStyle = "#0f0";
+          ctx.fillStyle = s.isGoldenAmoeba ? "rgba(200, 150, 0, 0.7)" : "rgba(0, 100, 0, 0.7)";
+          ctx.strokeStyle = s.isGoldenAmoeba ? "#ffd700" : "#0f0";
           ctx.lineWidth = 2;
           ctx.fill();
           ctx.stroke();
+          
+          if (s.bombs && s.bombs > 0) {
+            for (let b = 0; b < s.bombs; b++) {
+              const bAngle = (b * Math.PI * 2) / s.bombs + s.id;
+              const bRadius = size * 0.4 * (1 + (b % 3) * 0.2); 
+              const bx = s.x + Math.cos(bAngle) * bRadius;
+              const by = s.y + Math.sin(bAngle) * bRadius;
+              ctx.beginPath();
+              ctx.arc(bx, by, 1.5, 0, Math.PI * 2);
+              ctx.fillStyle = s.isGoldenAmoeba ? `rgba(255, ${200 + ((b * 41) % 50)}, 0, 0.9)` : `rgba(0, ${150 + ((b * 71) % 100)}, 0, 0.9)`;
+              ctx.fill();
+            }
+          }
+
           ctx.fillStyle = oldFill;
           ctx.strokeStyle = oldStroke;
           ctx.lineWidth = oldLineWidth;
@@ -16979,13 +17003,48 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.restore();
           }
 
-          // Draw Cruiser Shields as a yellow circle around the ship if within 30s of firing/being fired upon
-          if (s.isCruiser && (s.shields || 0) > 0 && (s.shieldShowTimer || 0) > 0 && (s.shieldPoints || 0) > 0) {
+          // Determine if Cruiser Shields should be visible
+          let showShields = (s.shieldShowTimer || 0) > 0;
+          if (!showShields && s.isCruiser && (s.shields || 0) > 0 && (s.shieldPoints || 0) >= 0.5 && serverState) {
+            const checkRadiusSq = 90000; // 300px * 300px
+            const cruiserOwner = serverState.players.find(p => p.id === s.ownerId);
+            if (cruiserOwner) {
+              for (const otherShip of serverState.ships) {
+                if (!otherShip.active || otherShip.ownerId === s.ownerId) continue;
+                let isEnemy = otherShip.ownerId === 'monsters' || !!(otherShip.ownerId && cruiserOwner.atWarWith && cruiserOwner.atWarWith[otherShip.ownerId] && Date.now() < cruiserOwner.atWarWith[otherShip.ownerId]);
+                if (isEnemy) {
+                  const dx = otherShip.x - s.x;
+                  const dy = otherShip.y - s.y;
+                  if (dx * dx + dy * dy <= checkRadiusSq) {
+                    showShields = true;
+                    break;
+                  }
+                }
+              }
+              if (!showShields) {
+                for (const p of serverState.planets) {
+                  if (p.dead || p.ownerId === s.ownerId || !p.ownerId) continue;
+                  let isEnemy = p.ownerId === 'monsters' || !!(cruiserOwner.atWarWith && cruiserOwner.atWarWith[p.ownerId] && Date.now() < cruiserOwner.atWarWith[p.ownerId]);
+                  if (isEnemy) {
+                    const dx = p.x - s.x;
+                    const dy = p.y - s.y;
+                    if (dx * dx + dy * dy <= checkRadiusSq) {
+                      showShields = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Draw Cruiser Shields as a yellow circle around the ship
+          if (s.isCruiser && (s.shields || 0) > 0 && showShields && (s.shieldPoints || 0) >= 0.5) {
             ctx.save();
             ctx.beginPath();
             ctx.arc(s.x, s.y, (s.maxHealth || 30) * 2, 0, Math.PI * 2);
             ctx.strokeStyle = '#ffff00'; // Yellow
-            ctx.lineWidth = Math.ceil(Math.sqrt(s.shieldPoints) / 3);
+            ctx.lineWidth = Math.max(0.2, Math.sqrt(s.shieldPoints) / 2);
             ctx.stroke();
             ctx.restore();
           }

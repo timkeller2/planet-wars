@@ -1634,7 +1634,7 @@ async function bootstrap() {
       if (!planet || !planet.owner || planet.owner.id !== player.id) return;
       if (planet.inRevolt) return;
 
-      const validModes = ['economy', 'research', 'garrison', 'commerce', 'mining', 'terraforming', 'homeworld'];
+      const validModes = ['economy', 'research', 'garrison', 'commerce', 'mining', 'terraforming', 'homeworld', 'rootoutspies'];
       if (!validModes.includes(data.focusMode)) return;
       if (data.focusMode === 'commerce' && false) return;
       if (data.focusMode === 'terraforming') {
@@ -2726,7 +2726,8 @@ async function bootstrap() {
         if (player.isAI || !hasEntities) return true; // AI and spectators see all
         
         for (const p of game.planets) {
-          if (p.owner && p.owner.id === player.id) {
+          const hasSympathy = p.sympathy && p.sympathy[player.id] > 0;
+          if ((p.owner && p.owner.id === player.id) || hasSympathy) {
             const gravityRadius = p.getGravityRadius();
             const pct = hazardSensorReductionPct(p.x, p.y, player.id);
             const effectiveGravity = Math.max(10, gravityRadius * pct);
@@ -2750,7 +2751,8 @@ async function bootstrap() {
         if (player.isAI || !hasEntities) return true;
         
         for (const p of game.planets) {
-          if (p.owner && p.owner.id === player.id) {
+          const hasSympathy = p.sympathy && p.sympathy[player.id] > 0;
+          if ((p.owner && p.owner.id === player.id) || hasSympathy) {
             const gravityRadius = p.getGravityRadius() * 1.5;
             const pct = hazardSensorReductionPct(p.x, p.y, player.id);
             const effectiveGravity = Math.max(10, gravityRadius * pct);
