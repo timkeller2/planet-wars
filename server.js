@@ -21,7 +21,7 @@ let gameCodeContext = '';
 
 if (process.env.GEMINI_API_KEY) {
   genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  aiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Using flash for speed, 1.5 has large context
+  aiModel = genAI.getGenerativeModel({ model: "gemini-flash-latest" }); // Using flash for speed, 1.5 has large context
   try {
     const gameJsPath = path.join(__dirname, 'src', 'game.js');
     if (fs.existsSync(gameJsPath)) {
@@ -2683,16 +2683,15 @@ async function bootstrap() {
       const visibleFleets = [];
 
       // Helper: compute sensor range reduction from storms/nebulae at a position
-      const hazardSensorReductionPct = (x, y, ownerId) => {
+      const tR = player.techScore ? Math.sqrt(player.techScore) : 0;
+      const eR = player.expScore ? Math.sqrt(player.expScore) : 0;
+      const hazardSensorReductionPct = (x, y) => {
         let penaltyPct = 0;
         for (const h of game.ionStorms) {
           if (h.type === 'minefield') continue;
           const hdx = x - h.x, hdy = y - h.y;
           if (hdx * hdx + hdy * hdy <= h.radius * h.radius) {
-            const owner = game.allPlayers.find(p => p.id === ownerId);
-            const k = h.knowledge[ownerId] || 0;
-            const tR = owner ? Math.sqrt(owner.techScore || 0) : 0;
-            const eR = owner ? Math.sqrt(owner.expScore || 0) : 0;
+            const k = h.knowledge[player.id] || 0;
             const eff = Math.max(0, h.intensity - k - (tR + eR) / 2);
             penaltyPct += eff / 100;
           }
@@ -2755,9 +2754,33 @@ async function bootstrap() {
             }
           }
           visibleFleets.push(...clusters.map(c => {
-            const pct = hazardSensorReductionPct(c.x, c.y, player.id);
-            return { ...c, radarRange: Math.max(10, c.radarRange * pct) };
+            const pct = hazardSensorReductionPct(c.x, c.y);
+            return { ...c, radarRange: Math.max(10, c.radarRange * pct), radarRangeSq: Math.pow(Math.max(10, c.radarRange * pct), 2) };
           }));
+        }
+      }
+
+      // Pre-calculate visibility zones for this tick to avoid O(N) looping inside isVisible
+      const visiblePlanetZones = [];
+      const silhouettePlanetZones = [];
+      for (const p of game.planets) {
+        const hasSympathy = p.sympathy && p.sympathy[player.id] > 0;
+        if ((p.owner && p.owner.id === player.id) || hasSympathy) {
+          const gravityRadius = p.getGravityRadius();
+          const pct = hazardSensorReductionPct(p.x, p.y);
+          const effectiveGravity = Math.max(10, gravityRadius * pct);
+          visiblePlanetZones.push({ x: p.x, y: p.y, rSq: effectiveGravity * effectiveGravity });
+          const silhouetteGravity = Math.max(10, gravityRadius * 1.5 * pct);
+          silhouettePlanetZones.push({ x: p.x, y: p.y, rSq: silhouetteGravity * silhouetteGravity });
+        }
+      }
+
+      const silhouetteFleetZones = [];
+      for (const fleet of playerFleets.values()) {
+        const extendedRadar = fleet.radarRange * 1.5;
+        const rangeSq = extendedRadar * extendedRadar;
+        for (const s of fleet.ships) {
+          silhouetteFleetZones.push({ x: s.x, y: s.y, rSq: rangeSq });
         }
       }
 
@@ -2765,23 +2788,18 @@ async function bootstrap() {
         if (!game.settings?.fogOfWar) return true;
         if (player.isAI || !hasEntities) return true; // AI and spectators see all
         
-        for (const p of game.planets) {
-          const hasSympathy = p.sympathy && p.sympathy[player.id] > 0;
-          if ((p.owner && p.owner.id === player.id) || hasSympathy) {
-            const gravityRadius = p.getGravityRadius();
-            const pct = hazardSensorReductionPct(p.x, p.y, player.id);
-            const effectiveGravity = Math.max(10, gravityRadius * pct);
-            const dx = p.x - x;
-            const dy = p.y - y;
-            if (dx*dx + dy*dy <= effectiveGravity*effectiveGravity) return true;
-          }
+        for (let i = 0; i < visiblePlanetZones.length; i++) {
+          const z = visiblePlanetZones[i];
+          const dx = z.x - x;
+          const dy = z.y - y;
+          if (dx*dx + dy*dy <= z.rSq) return true;
         }
         
-        for (const cluster of visibleFleets) {
-          const rangeSq = cluster.radarRange * cluster.radarRange;
+        for (let i = 0; i < visibleFleets.length; i++) {
+          const cluster = visibleFleets[i];
           const dx = cluster.x - x;
           const dy = cluster.y - y;
-          if (dx*dx + dy*dy <= rangeSq) return true;
+          if (dx*dx + dy*dy <= cluster.radarRangeSq) return true;
         }
         return false;
       };
@@ -2790,26 +2808,18 @@ async function bootstrap() {
         if (!game.settings?.fogOfWar) return true;
         if (player.isAI || !hasEntities) return true;
         
-        for (const p of game.planets) {
-          const hasSympathy = p.sympathy && p.sympathy[player.id] > 0;
-          if ((p.owner && p.owner.id === player.id) || hasSympathy) {
-            const gravityRadius = p.getGravityRadius() * 1.5;
-            const pct = hazardSensorReductionPct(p.x, p.y, player.id);
-            const effectiveGravity = Math.max(10, gravityRadius * pct);
-            const dx = p.x - x;
-            const dy = p.y - y;
-            if (dx*dx + dy*dy <= effectiveGravity*effectiveGravity) return true;
-          }
+        for (let i = 0; i < silhouettePlanetZones.length; i++) {
+          const z = silhouettePlanetZones[i];
+          const dx = z.x - x;
+          const dy = z.y - y;
+          if (dx*dx + dy*dy <= z.rSq) return true;
         }
         
-        for (const fleet of playerFleets.values()) {
-          const extendedRadar = fleet.radarRange * 1.5;
-          const rangeSq = extendedRadar * extendedRadar;
-          for (const s of fleet.ships) {
-            const dx = s.x - x;
-            const dy = s.y - y;
-            if (dx*dx + dy*dy <= rangeSq) return true;
-          }
+        for (let i = 0; i < silhouetteFleetZones.length; i++) {
+          const z = silhouetteFleetZones[i];
+          const dx = z.x - x;
+          const dy = z.y - y;
+          if (dx*dx + dy*dy <= z.rSq) return true;
         }
         return false;
       };

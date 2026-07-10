@@ -94,8 +94,6 @@ function playRandomIntroTrack() {
   if (!musicCheckbox || !musicCheckbox.checked || !bgMusic) return;
 
   const introTracks = [
-    'A little loud, but pretty good.mp3',
-    'Deep Space Ambience.wav',
     'Intense option.mp3',
     'Pretty and Steady.mp3',
     'Solid option.mp3'
@@ -824,7 +822,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
   const getMaxFuel = (s) => {
     const baseFuel = s.maxHealth / 5;
-    return baseFuel + (s.extended_fuel || 0) * baseFuel;
+    return baseFuel + (s.extended_fuel || 0) * (baseFuel * 2);
   };
 
   const getMaxShields = (s) => {
@@ -12094,12 +12092,12 @@ function getPlanetTradeIncomePerMin(planet) {
         'labs': 'Adds +1 Lab research tick speed per level (up to +5) to generate tech points',
         'armor': 'Adds +4 flat + 10% max health armor points per level to withstand damage',
         'shields': 'Provides energy shield points that absorb damage first. Max capacity: (2 + 1/5 player tech bonus, rounded up) per level. Regens anywhere at 5%/sec.',
-        'engine': 'Adds +3 speed and +3°/sec turn rate per level for highly responsive steering',
+        'engine': 'Adds +3 speed and +3°/sec turn rate per level. Unlocks Dilithium Reactor: charges in friendly well at 0.05 Dil/sec (max 10/level). Emergency auto-restores fuel on a (60/level)s cooldown.',
         'munitions': 'Adds +1 bomb capacity and +1 splash damage rating per level to standard weapon dogfights',
         'targeting': 'Adds +5% weapon range and +5% laser accuracy hit chance per level in combat',
         'damagecontrol': 'Adds +50% out-of-combat repair and +20% deep-space repair rate per level. Also increases shield regen rate by +50% of the base rate per level.',
         'supply_ship': 'Adds +12 max supplies, and +(25 + level*10)% supply cost discount per level. Penalties: -3 speed, -5% accuracy, -5 weapon range, -20 sensor range (min 25), -2 weapon volleys (min 1) per level',
-        'extended_fuel': 'Each level increases the maximum fuel capacity for the cruiser by the base amount at no penalty',
+        'extended_fuel': 'Each level increases the maximum fuel capacity for the cruiser by twice the base amount at no penalty',
         'diplomat': 'Adds diplomat subversion to project 1 passive sympathy/min or reduce 1 enemy sympathy/min',
         'marines': 'Adds +1 marine capacity factor per level to drastically boost planetary boarding success',
         'command': 'Gives command points equal to (xp bonus * level) / 4 to ships in sensor range. Stacks. Caps at 1.5 * highest xp bonus among commanders. Points act as local xp bonus and add 1/2 value to speed'

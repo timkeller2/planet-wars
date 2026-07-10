@@ -20,7 +20,7 @@ export function getEffectiveSympathy(planet, playerId, allShips, player = null, 
         } else {
           // Check if any of the player's ships currently has the planet in its radar range
           const maxPossibleRadarRadiusSq = 375 * 375; // Extended cruiser radar is max 375
-          const radarSearchShips = (game && game.spatialGrid) ? game.getShipsInRadiusSq(planet.x, planet.y, maxPossibleRadarRadiusSq) : allShips;
+          const radarSearchShips = (game && game.ships && typeof game.ships.getShipsInRadiusSq === 'function') ? game.ships.getShipsInRadiusSq(planet.x, planet.y, maxPossibleRadarRadiusSq) : allShips;
           
           for (const ship of radarSearchShips) {
             if (ship.active && ship.owner && ship.owner.id === playerId) {
@@ -49,7 +49,7 @@ export function getEffectiveSympathy(planet, playerId, allShips, player = null, 
       const gr = planet.getGravityRadius();
       const maxDistSq = gr * gr;
       
-      const searchShips = (game && game.spatialGrid) ? game.getShipsInRadiusSq(planet.x, planet.y, maxDistSq) : allShips;
+      const searchShips = (game && game.ships && typeof game.ships.getShipsInRadiusSq === 'function') ? game.ships.getShipsInRadiusSq(planet.x, planet.y, maxDistSq) : allShips;
       
       for (const ship of searchShips) {
         if (ship.active && ship.owner && ship.owner.id === playerId) {
@@ -105,6 +105,7 @@ class SpatialGridArray extends Array {
     this.grid = new Map();
     this.amoebaCount = 0;
   }
+  static get [Symbol.species]() { return Array; }
   updateGrid() {
     this.grid.clear();
     let aCount = 0;
@@ -966,9 +967,21 @@ export class Game {
 
     // Helper to calculate distance from a position/planet to the 3rd closest non-homeworld planet
     const getGroupDist = (pos) => {
-      const others = this.planets.filter(p => p !== pos && !p.homeworldOf);
-      const dists = others.map(p => Math.sqrt((p.x - pos.x)**2 + (p.y - pos.y)**2)).sort((a, b) => a - b);
-      return dists.length >= 3 ? dists[2] : (dists.length >= 2 ? dists[1] : (dists[0] || Infinity));
+      let min1 = Infinity, min2 = Infinity, min3 = Infinity;
+      for (let i = 0; i < this.planets.length; i++) {
+        const p = this.planets[i];
+        if (p === pos || p.homeworldOf) continue;
+        const dx = p.x - pos.x;
+        const dy = p.y - pos.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < min1) { min3 = min2; min2 = min1; min1 = distSq; }
+        else if (distSq < min2) { min3 = min2; min2 = distSq; }
+        else if (distSq < min3) { min3 = distSq; }
+      }
+      if (min3 !== Infinity) return Math.sqrt(min3);
+      if (min2 !== Infinity) return Math.sqrt(min2);
+      if (min1 !== Infinity) return Math.sqrt(min1);
+      return Infinity;
     };
 
     if ((hwSizeSetting === 'pioneers' || hwSizeSetting === 'pioneers-corvettes') && !player.isAI) {
@@ -7123,7 +7136,13 @@ export class Game {
     }
     
     // Remove inactive ships that died during this tick so they don't persist
-    this.ships = this.ships.filter(s => s.active);
+    let activeIndex = 0;
+    for (let i = 0; i < this.ships.length; i++) {
+      if (this.ships[i].active) {
+        this.ships[activeIndex++] = this.ships[i];
+      }
+    }
+    this.ships.length = activeIndex;
    }
 
    eliminatePlayer(eliminatedPlayer, conqueror) {

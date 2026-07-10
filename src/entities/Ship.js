@@ -332,7 +332,7 @@ export class Ship {
 
   getMaxFuel() {
     const baseFuel = this.maxHealth / 5;
-    return baseFuel + (this.extended_fuel || 0) * baseFuel;
+    return baseFuel + (this.extended_fuel || 0) * (baseFuel * 2);
   }
 
   getMaxShields() {
@@ -930,16 +930,9 @@ export class Ship {
       // 1. Reactor cooldown decrement
       this.reactorCooldown = Math.max(0, (this.reactorCooldown || 0) - deltaTime);
 
-      if ((this.extended_fuel || 0) > 0) {
-        // 2. Free fuel regeneration: 1 fuel per level of extended fuel tanks every 3 minutes
-        this.freeFuelTimer = (this.freeFuelTimer || 0) + deltaTime;
-        if (this.freeFuelTimer >= 180000) {
-          this.freeFuelTimer -= 180000;
-          this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + this.extended_fuel);
-        }
-
-        // 3. Accumulate reactor points if dilithium is available (1 point per second, no partial units)
-        const reactorCap = this.extended_fuel * 10;
+      if ((this.engine || 0) > 0) {
+        // Accumulate reactor points if dilithium is available (1 point per second, no partial units)
+        const reactorCap = this.engine * 10;
         const currentReactor = this.reactor || 0;
         if (this.inFriendlyWell && currentReactor < reactorCap) {
           this.reactorTimer = (this.reactorTimer || 0) + deltaTime;
@@ -961,12 +954,12 @@ export class Ship {
           this.reactorTimer = 0;
         }
 
-        // 4. Consume reactor points to restore fuel if below 1/2 fuel and cooldown is ready
-        if (this.reactorCooldown <= 0 && (this.reactor || 0) > 0 && (this.fuel || 0) < this.getMaxFuel() / 2) {
-          const amount = Math.min(this.extended_fuel, this.reactor);
+        // Consume reactor points to restore fuel if below (maxFuel - engine) and cooldown is ready
+        if (this.reactorCooldown <= 0 && (this.reactor || 0) > 0 && (this.fuel || 0) < this.getMaxFuel() - this.engine) {
+          const amount = Math.min(this.engine, this.reactor);
           this.reactor -= amount;
           this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + amount);
-          this.reactorCooldown = 15000; // 15 second cooldown
+          this.reactorCooldown = (60 / this.engine) * 1000; // Cooldown based on engine level
         }
       }
     }
