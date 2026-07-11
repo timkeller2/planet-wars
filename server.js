@@ -993,6 +993,16 @@ async function bootstrap() {
       if (player && text && typeof text === 'string' && text.trim().length > 0) {
         const cleanText = text.trim();
         
+        if (cleanText.toLowerCase() === 'perf') {
+          globalShowPerfMessages = !globalShowPerfMessages;
+          socket.emit('chatMessage', {
+            sender: 'System',
+            color: '#ff00ff',
+            text: `Performance stats reporting is now ${globalShowPerfMessages ? 'ON' : 'OFF'}.`
+          });
+          return;
+        }
+
         if (cleanText.startsWith('-save')) {
           const parts = cleanText.split(/\s+/);
           const saveName = parts.slice(1).join(' ').trim();
@@ -2062,6 +2072,7 @@ async function bootstrap() {
   let noClientStartTime = null;
 
   let perfStats = { ticks: 0, tickTime: 0, updateTime: 0, payloadTime: 0, maxTick: 0, maxUpdate: 0, maxPayload: 0 };
+  let globalShowPerfMessages = false;
 
   setInterval(() => {
     const currentTime = Date.now();
@@ -3229,11 +3240,13 @@ async function bootstrap() {
       console.log(msg);
       
       // Broadcast to in-game chat so the user can easily see it without needing console access
-      io.emit('chatMessage', {
-        sender: 'System',
-        color: '#ff00ff',
-        text: msg
-      });
+      if (globalShowPerfMessages) {
+        io.emit('chatMessage', {
+          sender: 'System',
+          color: '#ff00ff',
+          text: msg
+        });
+      }
       
       perfStats = { ticks: 0, tickTime: 0, updateTime: 0, payloadTime: 0, maxTick: 0, maxUpdate: 0, maxPayload: 0 };
     }

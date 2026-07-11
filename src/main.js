@@ -4515,8 +4515,13 @@ function getPlanetTradeIncomePerMin(planet) {
       appendAiChatMessage('You', text, '#00e5ff');
       socket.emit('aiChatMessage', text);
       aiChatInput.value = '';
-      aiChatInput.focus();
     }
+    // Always return focus to the input, use setTimeout to ensure it happens after click/blur events
+    setTimeout(() => {
+      if (aiChatInput) {
+        aiChatInput.focus();
+      }
+    }, 10);
   }
 
   if (sendAiChatBtn) {
@@ -4525,6 +4530,10 @@ function getPlanetTradeIncomePerMin(planet) {
 
   if (aiChatInput) {
     aiChatInput.addEventListener('keydown', (e) => {
+      // Prevent the global chat from capturing the Enter key
+      if (e.key === 'Enter') {
+        e.stopPropagation();
+      }
       // Allow Shift+Enter for newlines, Enter to send
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -10627,6 +10636,13 @@ function getPlanetTradeIncomePerMin(planet) {
       const touchContextMenu = document.getElementById('touch-context-menu');
       if (touchContextMenu && !touchContextMenu.classList.contains('hidden')) {
         closeTouchContextMenu();
+        event.preventDefault();
+        return;
+      }
+
+      const chatModal = document.getElementById('ai-chat-modal');
+      if (chatModal && !chatModal.classList.contains('hidden')) {
+        chatModal.classList.add('hidden');
         event.preventDefault();
         return;
       }
