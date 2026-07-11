@@ -5076,7 +5076,7 @@ export class Game {
       p.expScore = 0; // Planets don't have xp natively
       p.isActivelyResearching = false;
       
-      const gravityRadius = p.getGravityRadius();
+      const gravityRadius = Math.min(600, p.getGravityRadius());
       const searchRadiusSq = gravityRadius * gravityRadius;
       
       // 1. Check if completing an anomaly
