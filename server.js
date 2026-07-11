@@ -15,6 +15,7 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
+
 let genAI = null;
 let aiModel = null;
 let gameCodeContext = '';
@@ -120,6 +121,12 @@ async function bootstrap() {
   });
 
   const isProd = process.env.NODE_ENV === 'production';
+  
+  app.get('/dump', (req, res) => {
+    console.log("DUMP ENDPOINT HIT! Exiting for profile.");
+    res.send("Exiting...");
+    process.exit(0);
+  });
 
   if (isProd) {
     app.use(express.static(path.join(__dirname, 'dist')));
@@ -2044,6 +2051,8 @@ async function bootstrap() {
   let tickCount = 0;
   let noClientStartTime = null;
 
+  let perfStats = { ticks: 0, tickTime: 0, updateTime: 0, payloadTime: 0, maxTick: 0, maxUpdate: 0, maxPayload: 0 };
+
   setInterval(() => {
     const currentTime = Date.now();
     const tickStartPerf = performance.now();
@@ -3187,10 +3196,27 @@ async function bootstrap() {
     
     const tickEndPerf = performance.now();
     const tickDur = tickEndPerf - tickStartPerf;
+    const updateDur = updateEndPerf - tickStartPerf;
+    const payloadDur = tickEndPerf - updateEndPerf;
+    
+    perfStats.ticks++;
+    perfStats.tickTime += tickDur;
+    perfStats.updateTime += updateDur;
+    perfStats.payloadTime += payloadDur;
+    if (tickDur > perfStats.maxTick) perfStats.maxTick = tickDur;
+    if (updateDur > perfStats.maxUpdate) perfStats.maxUpdate = updateDur;
+    if (payloadDur > perfStats.maxPayload) perfStats.maxPayload = payloadDur;
+
     if (tickDur > 100) {
-      const updateDur = updateEndPerf - tickStartPerf;
-      const payloadDur = tickEndPerf - updateEndPerf;
       console.log(`[PERF WARN] Server tick took ${tickDur.toFixed(2)}ms (Limit ${TICK_RATE}ms). game.update: ${updateDur.toFixed(2)}ms, payload/emit: ${payloadDur.toFixed(2)}ms, ships: ${game.ships.length}`);
+    }
+
+    if (perfStats.ticks >= 300) { // Log every ~15 seconds at 20fps
+      const avgTick = perfStats.tickTime / perfStats.ticks;
+      const avgUpdate = perfStats.updateTime / perfStats.ticks;
+      const avgPayload = perfStats.payloadTime / perfStats.ticks;
+      console.log(`[PERF REPORT] Avg Tick: ${avgTick.toFixed(2)}ms | Max: ${perfStats.maxTick.toFixed(2)}ms || Avg Update: ${avgUpdate.toFixed(2)}ms | Max Update: ${perfStats.maxUpdate.toFixed(2)}ms || Avg Payload: ${avgPayload.toFixed(2)}ms | Max Payload: ${perfStats.maxPayload.toFixed(2)}ms || Ships: ${game.ships.length}`);
+      perfStats = { ticks: 0, tickTime: 0, updateTime: 0, payloadTime: 0, maxTick: 0, maxUpdate: 0, maxPayload: 0 };
     }
 
     // Clear upgrade enhancement events after broadcasting to all clients

@@ -7,6 +7,11 @@ import { AIController } from './systems/AIController.js';
 
 export function getEffectiveSympathy(planet, playerId, allShips, player = null, game = null) {
   const baseSympathy = planet.sympathy ? (planet.sympathy[playerId] || 0) : 0;
+  
+  if (planet._tickEffectiveSympathy) {
+      return planet._tickEffectiveSympathy.get(playerId) || 0;
+  }
+
   let extraSympathy = 0;
   if (allShips && (!planet.owner || planet.owner.id !== playerId)) {
     let isKnown = false;
@@ -18,21 +23,16 @@ export function getEffectiveSympathy(planet, playerId, allShips, player = null, 
         if (resolvedPlayer.discoveredPlanets && resolvedPlayer.discoveredPlanets.has(planet.id)) {
           isKnown = true;
         } else {
-          // Check if any of the player's ships currently has the planet in its radar range
-          const maxPossibleRadarRadiusSq = 375 * 375; // Extended cruiser radar is max 375
-          const radarSearchShips = (game && game.ships && typeof game.ships.getShipsInRadiusSq === 'function') ? game.ships.getShipsInRadiusSq(planet.x, planet.y, maxPossibleRadarRadiusSq) : allShips;
-          
-          for (const ship of radarSearchShips) {
+          for (const ship of allShips) {
             if (ship.active && ship.owner && ship.owner.id === playerId) {
               const dx = ship.x - planet.x;
               const dy = ship.y - planet.y;
               const distSq = dx * dx + dy * dy;
-              
-              let radarRange = 50; // default standard ship radar range
+              let radarRange = 50;
               if (ship.isCruiser || ship.maxHealth > 0) {
                 radarRange = ship.cruiserRadarRange ? ship.cruiserRadarRange() : Math.min(250, 5 * (ship.maxHealth || 0));
               }
-              const extendedRadar = radarRange * 1.5; // server uses extended radar range for visibility (1.5x)
+              const extendedRadar = radarRange * 1.5;
               if (distSq <= extendedRadar * extendedRadar) {
                 isKnown = true;
                 break;
@@ -48,10 +48,7 @@ export function getEffectiveSympathy(planet, playerId, allShips, player = null, 
     if (isKnown) {
       const gr = planet.getGravityRadius();
       const maxDistSq = gr * gr;
-      
-      const searchShips = (game && game.ships && typeof game.ships.getShipsInRadiusSq === 'function') ? game.ships.getShipsInRadiusSq(planet.x, planet.y, maxDistSq) : allShips;
-      
-      for (const ship of searchShips) {
+      for (const ship of allShips) {
         if (ship.active && ship.owner && ship.owner.id === playerId) {
           const dx = ship.x - planet.x;
           const dy = ship.y - planet.y;
@@ -846,17 +843,18 @@ export class Game {
     if (!player) return false;
     if (player.id === 'monsters') return false;
 
-    // If fog of war is NOT enabled, everything is visible
+    if (p._tickVisibleTo) {
+        return p._tickVisibleTo.has(player.id);
+    }
+
     if (!this.settings || !this.settings.fogOfWar) {
       return true;
     }
 
-    // A player can always see their own planets
     if (p.owner && p.owner.id === player.id) {
       return true;
     }
 
-    // 1. Gravity well check
     for (const pl of this.planets) {
       if ((pl.owner && pl.owner.id === player.id) || getEffectiveSympathy(pl, player.id, this.ships, player, this) > 0) {
         const gr = pl.getGravityRadius();
@@ -866,10 +864,8 @@ export class Game {
       }
     }
 
-    // 2. Sympathy check
     if (getEffectiveSympathy(p, player.id, this.ships, player, this) > 0) return true;
 
-    // 3. Ship sensor check
     for (const s of this.ships) {
        if (s.active && s.owner && s.owner.id === player.id) {
         const radarRange = (s.isCruiser && typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : 50;
@@ -4316,7 +4312,9 @@ export class Game {
   }
 
   update(deltaTime) {
-    const startTime = performance.now();
+    const perfUpdateStart = performance.now();
+    let perfPoints = [];
+    
     if (!this.boardingReplays) {
       this.boardingReplays = [];
     }
@@ -4324,6 +4322,107 @@ export class Game {
     if (!this.planetGridPopulated && this.planets && this.planets.length > 0) {
       this.planetGrid.populate(this.planets);
       this.planetGridPopulated = true;
+    }
+
+    for (const p of this.planets) {
+       p._tickExtraSympathy = new Map();
+       p._tickShipSensorVisible = new Set();
+       p._tickShipExtendedSensorVisible = new Set();
+       p._tickEffectiveSympathy = new Map();
+    }
+    
+    for (const s of this.ships) {
+      if (!s.active || !s.owner) continue;
+      
+      const pId = s.owner.id;
+      let radarRange = 50;
+      if (s.isCruiser || s.maxHealth > 0) {
+        radarRange = (typeof s.cruiserRadarRange === 'function') ? s.cruiserRadarRange() : Math.min(250, 5 * (s.maxHealth || 0));
+      }
+      
+      const shipHp = (s.isCruiser || s.maxHealth > 0) ? (5 + s.maxHealth * 0.5) : ((s.count || 1) * 0.5);
+      
+      for (const p of this.planets) {
+         const dx = s.x - p.x;
+         const dy = s.y - p.y;
+         const distSq = dx * dx + dy * dy;
+         
+         if (distSq <= radarRange * radarRange) {
+             p._tickShipSensorVisible.add(pId);
+         }
+         
+         const extendedRadarSq = (radarRange * 1.5) * (radarRange * 1.5);
+         if (distSq <= extendedRadarSq) {
+             p._tickShipExtendedSensorVisible.add(pId);
+         }
+         
+         const gr = p.getGravityRadius(); 
+         if (distSq <= gr * gr) {
+             p._tickExtraSympathy.set(pId, (p._tickExtraSympathy.get(pId) || 0) + shipHp);
+         }
+      }
+    }
+    
+    for (const p of this.planets) {
+       for (const player of this.allPlayers) {
+          const pId = player.id;
+          const baseSympathy = p.sympathy ? (p.sympathy[pId] || 0) : 0;
+          let extraSympathy = 0;
+          
+          let isKnown = (!this.settings || !this.settings.fogOfWar) || 
+                        (player.discoveredPlanets && player.discoveredPlanets.has(p.id)) ||
+                        p._tickShipExtendedSensorVisible.has(pId);
+          
+          if (isKnown) {
+             extraSympathy = p._tickExtraSympathy.get(pId) || 0;
+          }
+          
+          let finalExtra = extraSympathy;
+          if (extraSympathy > baseSympathy * 2) {
+             finalExtra = baseSympathy * 2 + (extraSympathy - baseSympathy * 2) / 3;
+          }
+          p._tickEffectiveSympathy.set(pId, baseSympathy + finalExtra);
+       }
+    }
+    
+    for (const p of this.planets) {
+       p._tickVisibleTo = new Set();
+       for (const player of this.allPlayers) {
+          const pId = player.id;
+          if (pId === 'monsters') continue;
+          if (!this.settings || !this.settings.fogOfWar) {
+             p._tickVisibleTo.add(pId);
+             continue;
+          }
+          if (p.owner && p.owner.id === pId) {
+             p._tickVisibleTo.add(pId);
+             continue;
+          }
+          if (p._tickEffectiveSympathy.get(pId) > 0) {
+             p._tickVisibleTo.add(pId);
+             continue;
+          }
+          if (p._tickShipSensorVisible.has(pId)) {
+             p._tickVisibleTo.add(pId);
+             continue;
+          }
+          
+          let visibleFromOtherPlanet = false;
+          for (const otherPl of this.planets) {
+             if (otherPl.id !== p.id && ((otherPl.owner && otherPl.owner.id === pId) || otherPl._tickEffectiveSympathy.get(pId) > 0)) {
+                 const gr = otherPl.getGravityRadius();
+                 const dx = otherPl.x - p.x;
+                 const dy = otherPl.y - p.y;
+                 if (dx * dx + dy * dy <= gr * gr) {
+                     visibleFromOtherPlanet = true;
+                     break;
+                 }
+             }
+          }
+          if (visibleFromOtherPlanet) {
+             p._tickVisibleTo.add(pId);
+          }
+       }
     }
     
     if (this.marketPrices) {
@@ -4388,6 +4487,7 @@ export class Game {
     for (const player of this.allPlayers) {
       player.wasAlive = player.isAlive !== false;
     }
+    perfPoints.push({ name: 'pre-players', time: performance.now() });
 
     if (this.gameStartTime && Date.now() - this.gameStartTime > 5000) {
       if (!this.goldenAmoebaSpawned && this.monsterPlayer) {
@@ -6215,6 +6315,7 @@ export class Game {
         planet.update(deltaTime, this.planets, this.settings, this);
       }
     }
+    perfPoints.push({ name: 'planet-loop', time: performance.now() });
 
     // Owned planets exert sympathy on neutral and enemy planets within their gravity well that have less ships than them at the rate of 1 per minute.
     for (const sourcePlanet of this.planets) {

@@ -2333,8 +2333,9 @@ export class Ship {
         if (this.maxHealth > 0 && !this.isAmoeba && this.bombs <= 0 && !hasSupplies) {
           const isFirstVal = (this.volleyShotIndex === 0 || this.volleyShotIndex === undefined);
           if (isFirstVal && validTargets.length > 0) {
-            if ((this.fuel || 0) >= 0.05) {
-              this.fuel = Math.max(0, this.fuel - 0.05);
+            const volleyFuelCost = 0.01 * shotsPerVolley;
+            if ((this.fuel || 0) >= volleyFuelCost) {
+              this.fuel = Math.max(0, this.fuel - volleyFuelCost);
               this.volleyPaidFuel = true;
             } else {
               this.volleyPaidFuel = false;

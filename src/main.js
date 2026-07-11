@@ -6830,9 +6830,16 @@ function getPlanetTradeIncomePerMin(planet) {
   function renderRecordingsList(replays) {
     if (replays) lastSeenReplays = replays;
     const container = document.getElementById('recordings-list');
-    if (!container) return;
 
     const activeReplays = lastSeenReplays.filter(r => !deletedReplayIds.has(r.id));
+    
+    const recBtn = document.getElementById('btn-recordings');
+    if (recBtn) {
+      recBtn.style.display = activeReplays.length > 0 ? 'block' : 'none';
+    }
+
+    if (!container) return;
+
     const fingerprint = activeReplays.map(r => r.id + '-' + (r.duration || 0)).join(',');
     
     if (fingerprint === lastReplaysFingerprint) {
@@ -11089,6 +11096,21 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
     }
+    if (event.key.toLowerCase() === 'v') {
+      const recBtn = document.getElementById('btn-recordings');
+      if (recBtn && recBtn.style.display !== 'none') {
+        event.preventDefault();
+        const recordingsModal = document.getElementById('recordings-modal');
+        if (recordingsModal) {
+          if (recordingsModal.classList.contains('hidden')) {
+            recordingsModal.classList.remove('hidden');
+            renderRecordingsList();
+          } else {
+            recordingsModal.classList.add('hidden');
+          }
+        }
+      }
+    }
     if (event.key.toLowerCase() === 'q') {
       bombOrderNext = bombOrderNext === 'ships' ? false : 'ships';
     }
@@ -11191,6 +11213,17 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   }
   bindActionClick('btn-info', () => { toggleInfoForSelected(); });
+  bindActionClick('btn-recordings', () => { 
+    const recordingsModal = document.getElementById('recordings-modal');
+    if (recordingsModal) {
+      if (recordingsModal.classList.contains('hidden')) {
+        recordingsModal.classList.remove('hidden');
+        renderRecordingsList();
+      } else {
+        recordingsModal.classList.add('hidden');
+      }
+    }
+  });
   bindActionClick('btn-warp', () => { warpOrderNext = !warpOrderNext; });
   bindActionClick('btn-bomb', () => { bombOrderNext = bombOrderNext === 'eco' ? false : 'eco'; });
   bindActionClick('btn-bomb-ships', () => { bombOrderNext = bombOrderNext === 'ships' ? false : 'ships'; });
