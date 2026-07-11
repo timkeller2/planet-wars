@@ -716,7 +716,7 @@ async function bootstrap() {
           let minAllowedCredits = 0;
           const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
           if (ownsHomeworld) {
-            minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
+            minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
           }
 
           const creditsAvailable = (player.credits || 0) - minAllowedCredits;
@@ -836,7 +836,7 @@ async function bootstrap() {
           let minAllowedCredits = 0;
           const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
           if (ownsHomeworld) {
-            minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
+            minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
           }
 
           let closestPlanet = null;
@@ -1599,7 +1599,7 @@ async function bootstrap() {
         let minAllowedCredits = 0;
         const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
         if (ownsHomeworld) {
-          minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
+          minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
         }
         
         if (myCredits - currentPrice < minAllowedCredits) return;
@@ -1685,7 +1685,7 @@ async function bootstrap() {
       if (player.id !== 'monsters') {
         const ownsHw = game.planets.some(p => p.homeworldOf === player.id && p.owner === player);
         if (ownsHw) {
-          minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
+          minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
         }
       }
       const creditsAvailable = player.useCredits !== false ? Math.max(0, (player.credits || 0) - minAllowedCredits) : 0;

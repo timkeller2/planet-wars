@@ -2805,7 +2805,7 @@ export class Game {
       if (source.owner) {
         const ownsHomeworld = this.planets.some(p => p.homeworldOf === source.owner.id && p.owner && p.owner.id === source.owner.id);
         if (ownsHomeworld) {
-          minAllowedCredits = -(1000 + Math.floor(source.owner.totalShips || 0));
+          minAllowedCredits = -Math.floor(source.owner.totalTradeShips || 0);
         }
       }
       const creditsAvailable = source.owner ? (source.owner.credits - minAllowedCredits) : 0;
@@ -3104,7 +3104,7 @@ export class Game {
       if (source.owner) {
         const ownsHomeworld = this.planets.some(p => p.homeworldOf === source.owner.id && p.owner && p.owner.id === source.owner.id);
         if (ownsHomeworld) {
-          minAllowedCredits = -(1000 + Math.floor(source.owner.totalShips || 0));
+          minAllowedCredits = -Math.floor(source.owner.totalTradeShips || 0);
         }
       }
       const creditsAvailable = source.owner ? (source.owner.credits - minAllowedCredits) : 0;
@@ -3264,7 +3264,7 @@ export class Game {
       if (owner) {
         const ownsHomeworld = this.planets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id);
         if (ownsHomeworld) {
-          minAllowedCredits = -(1000 + Math.floor(owner.totalShips || 0));
+          minAllowedCredits = -Math.floor(owner.totalTradeShips || 0);
         }
       }
 
@@ -3486,7 +3486,7 @@ export class Game {
       if (owner) {
         const ownsHomeworld = this.planets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id);
         if (ownsHomeworld) {
-          minAllowedCredits = -(1000 + Math.floor(owner.totalShips || 0));
+          minAllowedCredits = -Math.floor(owner.totalTradeShips || 0);
         }
       }
 
@@ -4505,7 +4505,7 @@ export class Game {
         let minAllowedCredits = 0;
         const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
         if (ownsHomeworld) {
-          minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
+          minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
         }
 
         // 5. Check if credits are above the debt limit (after subtracting 200)
@@ -6066,7 +6066,7 @@ export class Game {
           let minAllowedCredits = 0;
           const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
           if (ownsHomeworld) {
-            minAllowedCredits = -(1000 + Math.floor(player.totalShips || 0));
+            minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
           }
 
           const creditsAvailable = Math.max(0, (player.credits || 0) - minAllowedCredits);
@@ -6258,11 +6258,13 @@ export class Game {
         }
         player.playerEffectiveShips = playerEffectiveShips;
         player.otherEffectiveShips = otherEffectiveShips;
+        player.totalTradeShips = playerEffectiveShips + otherEffectiveShips;
       } else {
         player.passiveIncomeRate = 0;
         player.tradingPartners = [];
         player.playerEffectiveShips = 0;
         player.otherEffectiveShips = 0;
+        player.totalTradeShips = 0;
       }
     }
     

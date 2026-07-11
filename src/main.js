@@ -7863,10 +7863,10 @@ function getPlanetTradeIncomePerMin(planet) {
         let limitHtml = "";
         const ownsHw = serverState.planets.some(p => p.homeworldOf === localPlayer.id && p.ownerId === localPlayer.id);
         if (ownsHw) {
-          const limitVal = 1000 + Math.floor(myPlayer.totalShips || 0);
+          const limitVal = Math.floor(myPlayer.totalTradeShips || 0);
           limitHtml = `
             <div style="font-size: 0.75rem; color: #ff3333; margin-top: 8px; text-align: center; border-top: 1px dashed rgba(255, 51, 51, 0.2); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
-              Debt Limit: -${limitVal} credits (1000 + total ships)<br>
+              Debt Limit: -${limitVal} credits (total trade ships)<br>
               Debt incurs ${(currentDebtPenalty * 100).toFixed(1)}%/min interest.<br>
               <span style="color: #4caf50;">Positive balance earns 1%/min interest.</span>
             </div>
@@ -8763,7 +8763,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (serverState && serverState.planets && myPlayer) {
       const ownsHomeworld = serverState.planets.some(p => p.homeworldOf === myPlayer.id && p.ownerId === myPlayer.id);
       if (ownsHomeworld) {
-        minAllowedCredits = -(1000 + Math.floor(myPlayer.totalShips || 0));
+        minAllowedCredits = -Math.floor(myPlayer.totalTradeShips || 0);
       }
     }
     return myPlayer ? ((myPlayer.credits || 0) - minAllowedCredits) : 0;
