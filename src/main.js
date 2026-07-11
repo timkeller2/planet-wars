@@ -1854,7 +1854,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (p.focusTransition) {
         const progress = p.focusTransition.progress || 0;
         const target = p.focusTransition.targetMode;
-        const emoji = target === 'research' ? '🔭' : (target === 'garrison' ? '🛡️' : (target === 'commerce' ? '💲' : (target === 'mining' ? '⛏️' : (target === 'terraforming' ? '🌱' : '📈'))));
+        const emoji = target === 'research' ? '🔬' : (target === 'garrison' ? '🛡️' : (target === 'commerce' ? '💲' : (target === 'mining' ? '⛏️' : (target === 'terraforming' ? '🌱' : '📈'))));
         
         ctxTile.save();
         ctxTile.beginPath();
@@ -10727,21 +10727,22 @@ function getPlanetTradeIncomePerMin(planet) {
     if (event.key === '.') {
       event.preventDefault();
       if (serverState && localPlayer) {
-        const idleShips = serverState.ships.filter(s => {
-          if (!s.active || s.ownerId !== localPlayer.id || !s.isCruiser || s.isReturnPod || s.isBoardingFleet || s.isAmoeba) return false;
-          if (!s.stationaryTimer || s.stationaryTimer <= 0) return false;
-          if (s.isResearching || s.isDiplomacy || s.isScouting || s.isPatrolling) return false;
-          return true;
-        }).sort((a, b) => a.id - b.id);
+        const myCruisers = serverState.ships.filter(s => {
+          return s.active && s.ownerId === localPlayer.id && s.isCruiser && !s.isReturnPod && !s.isBoardingFleet && !s.isAmoeba;
+        }).sort((a, b) => (b.maxHealth || 0) - (a.maxHealth || 0));
 
-        if (idleShips.length > 0) {
+        if (myCruisers.length > 0) {
           let nextIndex = 0;
-          if (typeof window.lastIdleFocusIndex === 'number') {
-            nextIndex = (window.lastIdleFocusIndex + 1) % idleShips.length;
+          const currentSelectedId = (selectedShips.length === 1) ? selectedShips[0].id : window.lastFocusedCruiserId;
+          if (currentSelectedId) {
+            const currentIndex = myCruisers.findIndex(s => s.id === currentSelectedId);
+            if (currentIndex !== -1) {
+              nextIndex = (currentIndex + 1) % myCruisers.length;
+            }
           }
-          window.lastIdleFocusIndex = nextIndex;
-
-          const targetShip = idleShips[nextIndex];
+          
+          const targetShip = myCruisers[nextIndex];
+          window.lastFocusedCruiserId = targetShip.id;
           
           selectedPlanets = [];
           selectedShips = [targetShip];
@@ -14211,7 +14212,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (p.focusTransition) {
           const progress = p.focusTransition.progress || 0;
           const target = p.focusTransition.targetMode;
-          const emoji = target === 'research' ? '🔭' : (target === 'garrison' ? '🛡️' : (target === 'commerce' ? '💲' : (target === 'mining' ? '⛏️' : (target === 'terraforming' ? '🌱' : '📈'))));
+          const emoji = target === 'research' ? '🔬' : (target === 'garrison' ? '🛡️' : (target === 'commerce' ? '💲' : (target === 'mining' ? '⛏️' : (target === 'terraforming' ? '🌱' : '📈'))));
           
           // 1. Draw glowing rotating progress ring
           ctx.save();
@@ -14644,7 +14645,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
             if (isHuman) {
               const focus = p.focusMode || 'economy';
-              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔭' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
+              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
               const badgeRadius = pillHeight / 2;
               const badgeX = p.x + textWidth / 2 + 8 + badgeRadius + 2;
 
@@ -14683,7 +14684,7 @@ function getPlanetTradeIncomePerMin(planet) {
             // In graphical mode, draw focus mode badge directly to the right of the planet graphic
             if (isHuman) {
               const focus = p.focusMode || 'economy';
-              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔭' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
+              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
               const badgeRadius = 10;
               const badgeX = p.x + p.radius + badgeRadius + 4;
               const badgeY = p.y;

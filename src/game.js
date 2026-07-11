@@ -5117,10 +5117,11 @@ export class Game {
       const isFocusResearch = p.focusMode === 'research';
       if (!isFocusResearch && !p.isResearch) continue;
 
-      const labs = p.isResearch ? 2 : 1;
+      const originalLabs = p.labs || 0;
+      const focusLabs = p.isResearch ? 2 : 1;
       
       // Duck-type the planet so it works in this.researchAnomaly
-      p.labs = labs;
+      p.labs = originalLabs + focusLabs;
       p.expScore = 0; // Planets don't have xp natively
       p.isActivelyResearching = false;
       
@@ -5143,7 +5144,19 @@ export class Game {
         const dy = p.y - completingPlanet.anomaly.y;
         if (dx * dx + dy * dy <= searchRadiusSq) {
           this.researchAnomaly(completingPlanet, p, deltaTime);
+          
+          completingPlanet.anomaly.completingTimeLeft = (completingPlanet.anomaly.completingTimeLeft || 0) - deltaTime;
+          if (completingPlanet.anomaly.completingTimeLeft <= 0) {
+            completingPlanet.anomaly.researched = true;
+            completingPlanet.anomaly.completing = false;
+            this.triggerAnomalyCompletion(completingPlanet, p.owner);
+          }
           completedOrResearched = true;
+        } else {
+          completingPlanet.anomaly.completing = false;
+          completingPlanet.anomaly.completingTimeLeft = 0;
+          completingPlanet.anomaly.completingShipId = null;
+          completingPlanet.anomaly.completingPlayerId = null;
         }
       }
       
@@ -5213,6 +5226,8 @@ export class Game {
         p.owner.techScore = (p.owner.techScore || 0) + knowledgeGained;
         p.accumulatedTech = (p.accumulatedTech || 0) + knowledgeGained;
       }
+      
+      p.labs = originalLabs;
     }
 
     // Now process research per-ship
