@@ -13797,6 +13797,27 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.fill();
         }
 
+        const numSplotches = Math.max(0, (p.minerals || 1) - 1);
+        if (numSplotches > 0) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(218, 165, 32, 0.85)'; // Goldenrod for minerals
+          ctx.shadowBlur = 0;
+          
+          for (let i = 0; i < numSplotches; i++) {
+            const seed = p.id * 37 + i * 19;
+            const angle = (seed % 360) * Math.PI / 180;
+            const dist = (seed % 100) / 100 * (p.radius * 0.6); 
+            const splotchX = p.x + Math.cos(angle) * dist;
+            const splotchY = p.y + Math.sin(angle) * dist;
+            const splotchRadius = 2 + (seed % 3);
+            
+            ctx.beginPath();
+            ctx.arc(splotchX, splotchY, splotchRadius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+
         if (isSelected) {
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
