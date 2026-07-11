@@ -47,11 +47,12 @@ const habIcons = {
 function getMineralsName(minerals) {
   switch (minerals) {
     case 1: return 'Destitute';
-    case 2: return 'Poor';
-    case 3: return 'Typical';
-    case 4: return 'Abundant';
+    case 2: return 'Very Poor';
+    case 3: return 'Poor';
+    case 4: return 'Typical';
     case 5: return 'Rich';
     case 6: return 'Very Rich';
+    case 7: return 'Ultra Rich';
     default: return 'Typical';
   }
 }
@@ -13798,7 +13799,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
 
         const statsVisible = !p.inFog || p.permanentlyTracked || !!lastKnownPlanets[p.id];
-        const numSplotches = statsVisible ? Math.max(0, (p.minerals || 1) - 1) : 0;
+        const numSplotches = statsVisible ? Math.max(0, (p.minerals || 4) - 1) : 0;
         if (numSplotches > 0) {
           ctx.save();
           ctx.fillStyle = 'rgba(218, 165, 32, 0.85)'; // Goldenrod for minerals

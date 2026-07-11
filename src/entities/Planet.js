@@ -18,11 +18,12 @@ export function getHabName(habitability) {
 export function getMineralsName(minerals) {
   switch (minerals) {
     case 1: return 'Destitute';
-    case 2: return 'Poor';
-    case 3: return 'Typical';
-    case 4: return 'Abundant';
+    case 2: return 'Very Poor';
+    case 3: return 'Poor';
+    case 4: return 'Typical';
     case 5: return 'Rich';
     case 6: return 'Very Rich';
+    case 7: return 'Ultra Rich';
     default: return 'Typical';
   }
 }
@@ -93,11 +94,11 @@ export class Planet {
 
     this.sizeClass = Math.floor(Math.random() * 91) + 60;
     this.habitability = Math.round(10 + Math.pow(Math.random(), 2) * 140);
-    let mineralRolls = [1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 6];
+    let mineralRolls = [1, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 7];
     if (this.habitability < 20) {
-      mineralRolls = [1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 6]; // 3x Very Rich
+      mineralRolls = [1, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 7]; // 3x Very Rich
     } else if (this.habitability < 30) {
-      mineralRolls = [1, 2, 2, 3, 3, 4, 4, 5, 5, 5, 5, 6]; // 2x Rich
+      mineralRolls = [1, 3, 3, 4, 4, 5, 5, 6, 6, 6, 6, 7]; // 2x Rich
     }
     this.minerals = mineralRolls[Math.floor(Math.random() * mineralRolls.length)];
 
@@ -214,7 +215,7 @@ export class Planet {
       let baseVal = Math.min(this.ships, this.maxShips) / prodDivisor;
       let rate = Math.max((this.habitability / 1000), baseVal) * (1 + techBonus);
 
-      rate *= ((this.minerals || 3) / 3);
+      rate *= ((this.minerals || 4) / 4);
       return rate;
     }
     return 0;
@@ -233,7 +234,7 @@ export class Planet {
         this.supplies = Math.random() * this.maxShips;
       }
       const baseRate = this.owner ? 3 : 0.75;
-      const regenRatePerMs = (baseRate * (this.maxShips / 100) * ((this.minerals || 3) / 3)) / 60000;
+      const regenRatePerMs = (baseRate * (this.maxShips / 100) * ((this.minerals || 4) / 4)) / 60000;
       this.supplies = Math.min(this.maxShips, this.supplies + regenRatePerMs * deltaTime);
     }
     this.prorateSympathiesIfNeeded();
@@ -389,7 +390,7 @@ export class Planet {
       if (this.racialAffinity && this.racialAffinity === this.owner.cruiserStyle) {
         effectiveRate *= 1.30;
       }
-      effectiveRate *= ((this.minerals || 3) / 3);
+      effectiveRate *= ((this.minerals || 4) / 4);
 
       if (this.ships < growthLimit || (this.owner && this.owner.isAI)) {
         this.productionProgress += effectiveRate * (deltaTime / 1000);
@@ -675,7 +676,7 @@ export class Planet {
       let rate = baseRatePerMinute * (1 + techBonus);
       if (focus === 'mining') rate *= 2;
       if (this.ships >= this.maxShips && focus === 'mining') rate *= 2;
-      rate *= ((this.minerals || 3) / 3);
+      rate *= ((this.minerals || 4) / 4);
 
       // Convert from per-minute to per-millisecond and apply deltaTime
       const perMs = rate / 60000;

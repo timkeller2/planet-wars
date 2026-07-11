@@ -1455,7 +1455,7 @@ export class Game {
       targetPlanet.justAssigned = true;
       targetPlanet.justAssignedTimer = 0;
       targetPlanet.homeworldOf = player.id;
-      targetPlanet.minerals = 4;
+      targetPlanet.minerals = 5;
       targetPlanet.focusMode = 'economy';
       
       // Ensure homeworld has a preferred resource
@@ -1563,7 +1563,7 @@ export class Game {
       if (planet.resources) {
         for (const res of planet.resources) {
           if (resourcesList.includes(res)) {
-            const weight = (planet.minerals || 3) / 3;
+            const weight = (planet.minerals || 4) / 4;
             counts[res] += weight;
             totalDeposits += weight;
           }
@@ -5996,8 +5996,8 @@ export class Game {
       if (planet.focusMode === 'commerce') {
         const isFull = planet.ships >= planet.maxShips;
         effShips = isFull ? planet.ships * 4 : planet.ships * 2;
-        if (planet.minerals && planet.minerals > 3) {
-          effShips *= (planet.minerals / 3);
+        if (planet.minerals && planet.minerals > 4) {
+          effShips *= (planet.minerals / 4);
         }
       }
 
@@ -6078,8 +6078,8 @@ export class Game {
           if (planet.focusMode === 'commerce') {
             const isFull = planet.ships >= planet.maxShips;
             eff = isFull ? planet.ships * 4 : planet.ships * 2;
-            if (planet.minerals && planet.minerals > 3) {
-              eff *= (planet.minerals / 3);
+            if (planet.minerals && planet.minerals > 4) {
+              eff *= (planet.minerals / 4);
             }
           }
           playerEffectiveShips += eff;
@@ -6230,8 +6230,8 @@ export class Game {
               if (planet.focusMode === 'commerce') {
                 const isFull = planet.ships >= planet.maxShips;
                 eff = isFull ? baseShips * 4 : baseShips * 2;
-                if (planet.minerals && planet.minerals > 3) {
-                  eff *= (planet.minerals / 3);
+                if (planet.minerals && planet.minerals > 4) {
+                  eff *= (planet.minerals / 4);
                 }
               }
               otherEffectiveShips += eff;
