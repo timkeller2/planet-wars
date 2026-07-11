@@ -13797,7 +13797,8 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.fill();
         }
 
-        const numSplotches = Math.max(0, (p.minerals || 1) - 1);
+        const statsVisible = !p.inFog || p.permanentlyTracked || !!lastKnownPlanets[p.id];
+        const numSplotches = statsVisible ? Math.max(0, (p.minerals || 1) - 1) : 0;
         if (numSplotches > 0) {
           ctx.save();
           ctx.fillStyle = 'rgba(218, 165, 32, 0.85)'; // Goldenrod for minerals

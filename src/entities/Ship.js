@@ -3271,8 +3271,14 @@ export class Ship {
               const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
               const sRed = this.getLocalXpBonus();
               const effectiveIntensity = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
-              if (effectiveIntensity >= 5) {
-                return true;
+              if (storm.type === 'minefield') {
+                if (effectiveIntensity > 10) {
+                  return true;
+                }
+              } else {
+                if (effectiveIntensity >= 5) {
+                  return true;
+                }
               }
             }
           }
