@@ -3298,9 +3298,6 @@ export class Game {
           owner.buildCounts[classType] = (owner.buildCounts[classType] || 0) + 1;
         }
         source.decreaseMaxShips(costCap);
-        if (remainingCostShips > 0) {
-          source.ships = Math.max(0, source.ships - (remainingCostShips / shipsFactor));
-        }
 
         const angle = Math.random() * Math.PI * 2;
         const spawnDist = source.radius + 20;
@@ -3348,10 +3345,11 @@ export class Game {
         ship.materializeProgress = 0.0;
         const shipPct = Math.max(0.1, Math.min(1.0, source.ships / source.maxShips));
         ship.materializeDuration = (finalMaxHealth / 2) / shipPct;
+        const trueCostShips = remainingCostShips / shipsFactor;
         ship.sourcePlanet = source;
-        ship.buildCostShipsTotal = remainingCostShips;
+        ship.buildCostShipsTotal = trueCostShips;
         ship.buildCostCreditsTotal = creditsPaid;
-        ship.buildCostShipsRemaining = remainingCostShips;
+        ship.buildCostShipsRemaining = trueCostShips;
         ship.buildCostCreditsRemaining = creditsPaid;
 
         this.assignRandomShipName(ship);
@@ -3569,9 +3567,6 @@ export class Game {
           }
         }
         source.decreaseMaxShips(costCap);
-        if (remainingCostShips > 0) {
-          source.ships = Math.max(0, source.ships - (remainingCostShips / shipsFactor));
-        }
 
         const angle = Math.random() * Math.PI * 2;
         const spawnDist = source.radius + 20;
@@ -3625,10 +3620,11 @@ export class Game {
         const shipPct = Math.max(0.1, Math.min(1.0, source.ships / source.maxShips));
         ship.materializeDuration = duration / shipPct;
         
+        const trueCostShips = remainingCostShips / shipsFactor;
         ship.sourcePlanet = source;
-        ship.buildCostShipsTotal = remainingCostShips;
+        ship.buildCostShipsTotal = trueCostShips;
         ship.buildCostCreditsTotal = creditsPaid;
-        ship.buildCostShipsRemaining = remainingCostShips;
+        ship.buildCostShipsRemaining = trueCostShips;
         ship.buildCostCreditsRemaining = creditsPaid;
 
         ship.configUpgrades = upgrades;
