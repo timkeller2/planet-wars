@@ -523,7 +523,7 @@ export class Game {
     let speedFactor = 1.0;
     if (this.battlecam > 1) {
       const extra = this.battlecam - 1;
-      speedFactor = Math.max(0.2, 1.0 - extra * 0.1);
+      speedFactor = Math.max(0.3, 1.0 - extra * 0.1);
     }
 
     this._calculatingBattlecamSpeed = true;
