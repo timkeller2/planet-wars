@@ -8974,7 +8974,15 @@ function getPlanetTradeIncomePerMin(planet) {
       const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
       const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
       const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
-      const canAfford = isUnlocked && creditsAvailable >= finalCost && effectiveShips >= baseCostShips && (selectedPlanetBuild.maxShips - baseCfg.costCap) >= 5;
+      
+      const useCredits = myPlayer && myPlayer.useCredits !== false;
+      let canAfford = false;
+      if (useCredits && creditsAvailable >= finalCost && effectiveShips >= baseCostShips) {
+        canAfford = true;
+      } else if (effectiveShips >= finalCost) {
+        canAfford = true;
+      }
+      if (!isUnlocked || (selectedPlanetBuild.maxShips - baseCfg.costCap) < 5) canAfford = false;
 
       if (costMult > 1) {
         btn.style.borderColor = '#ffeb3b';
@@ -11390,7 +11398,15 @@ function getPlanetTradeIncomePerMin(planet) {
           const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
           const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
           const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
-          const canAfford = creditsAvailable >= costShips && effectiveShips >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
+          
+          const useCredits = myPlayer && myPlayer.useCredits !== false;
+          let canAfford = false;
+          if (useCredits && creditsAvailable >= costShips && effectiveShips >= costShips) {
+            canAfford = true;
+          } else if (effectiveShips >= costShips) {
+            canAfford = true;
+          }
+          if ((selectedPlanetBuild.maxShips - cfg.costCap) < 5) canAfford = false;
           if (canAfford) {
             socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
           }
@@ -11449,7 +11465,15 @@ function getPlanetTradeIncomePerMin(planet) {
             const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
             const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
             const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
-            const canAfford = creditsAvailable >= costShips && effectiveShips >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
+            
+            const useCredits = myPlayer && myPlayer.useCredits !== false;
+            let canAfford = false;
+            if (useCredits && creditsAvailable >= costShips && effectiveShips >= costShips) {
+              canAfford = true;
+            } else if (effectiveShips >= costShips) {
+              canAfford = true;
+            }
+            if ((selectedPlanetBuild.maxShips - cfg.costCap) < 5) canAfford = false;
             if (canAfford) {
               socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
             }

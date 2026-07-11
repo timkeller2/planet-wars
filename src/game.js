@@ -3268,13 +3268,26 @@ export class Game {
         }
       }
 
+      const useCredits = owner && owner.useCredits !== false;
       const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
       const shipsFactor = source.isMilitary ? 2 : 1;
       const effectiveShips = source.ships * shipsFactor;
 
-      if (creditsAvailable >= costShips && effectiveShips >= costShips && (source.maxShips - costCap) >= 5) {
-        const creditsPaid = costShips;
-        const remainingCostShips = 0;
+      let canAfford = false;
+      let creditsPaid = 0;
+      let remainingCostShips = costShips;
+
+      if (useCredits && creditsAvailable >= costShips && effectiveShips >= costShips) {
+        canAfford = true;
+        creditsPaid = costShips;
+        remainingCostShips = 0;
+      } else if (effectiveShips >= costShips) {
+        canAfford = true;
+        creditsPaid = 0;
+        remainingCostShips = costShips;
+      }
+
+      if (canAfford && (source.maxShips - costCap) >= 5) {
         const extraShips = source.ships;
         const bonusHp = Math.min(4, Math.floor(Math.max(0, extraShips) / 25));
         const finalMaxHealth = maxHealth + bonusHp;
@@ -3285,6 +3298,9 @@ export class Game {
           owner.buildCounts[classType] = (owner.buildCounts[classType] || 0) + 1;
         }
         source.decreaseMaxShips(costCap);
+        if (remainingCostShips > 0) {
+          source.ships = Math.max(0, source.ships - (remainingCostShips / shipsFactor));
+        }
 
         const angle = Math.random() * Math.PI * 2;
         const spawnDist = source.radius + 20;
@@ -3490,13 +3506,26 @@ export class Game {
         }
       }
 
+      const useCredits = owner && owner.useCredits !== false;
       const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
       const shipsFactor = source.isMilitary ? 2 : 1;
       const effectiveShips = source.ships * shipsFactor;
 
-      if (creditsAvailable >= finalCost && effectiveShips >= baseCostShips && (source.maxShips - costCap) >= 5) {
-        const creditsPaid = finalCost;
-        const remainingCostShips = 0;
+      let canAfford = false;
+      let creditsPaid = 0;
+      let remainingCostShips = finalCost;
+
+      if (useCredits && creditsAvailable >= finalCost && effectiveShips >= baseCostShips) {
+        canAfford = true;
+        creditsPaid = finalCost;
+        remainingCostShips = 0;
+      } else if (effectiveShips >= finalCost) {
+        canAfford = true;
+        creditsPaid = 0;
+        remainingCostShips = finalCost;
+      }
+
+      if (canAfford && (source.maxShips - costCap) >= 5) {
         const extraShips = source.ships;
         const bonusHp = Math.min(4, Math.floor(Math.max(0, extraShips) / 25));
         const finalMaxHealth = maxHealth + bonusHp;
@@ -3540,6 +3569,9 @@ export class Game {
           }
         }
         source.decreaseMaxShips(costCap);
+        if (remainingCostShips > 0) {
+          source.ships = Math.max(0, source.ships - (remainingCostShips / shipsFactor));
+        }
 
         const angle = Math.random() * Math.PI * 2;
         const spawnDist = source.radius + 20;
