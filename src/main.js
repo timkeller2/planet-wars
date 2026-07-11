@@ -4515,6 +4515,7 @@ function getPlanetTradeIncomePerMin(planet) {
       appendAiChatMessage('You', text, '#00e5ff');
       socket.emit('aiChatMessage', text);
       aiChatInput.value = '';
+      aiChatInput.focus();
     }
   }
 
