@@ -6003,7 +6003,9 @@ export class Game {
     // Dynamic calculations for player limits and trade options
     for (const player of this.allPlayers) {
       if ((player.credits || 0) < 0) {
-        player.credits += player.credits * (0.025 / 60000) * deltaTime;
+        const debtTier = Math.floor(Math.abs(player.credits) / 1000);
+        const penaltyRate = 0.025 + (debtTier * 0.02);
+        player.credits += player.credits * (penaltyRate / 60000) * deltaTime;
       } else if ((player.credits || 0) > 0) {
         player.credits += player.credits * (0.005 / 60000) * deltaTime;
       }
