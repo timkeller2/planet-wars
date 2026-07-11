@@ -6007,7 +6007,7 @@ export class Game {
         const penaltyRate = 0.025 + (debtTier * 0.02);
         player.credits += player.credits * (penaltyRate / 60000) * deltaTime;
       } else if ((player.credits || 0) > 0) {
-        player.credits += player.credits * (0.005 / 60000) * deltaTime;
+        player.credits += player.credits * (0.01 / 60000) * deltaTime;
       }
       let garrisonWorlds = 0;
       let fullGarrisonWorlds = 0;

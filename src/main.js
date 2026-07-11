@@ -7802,7 +7802,7 @@ function getPlanetTradeIncomePerMin(planet) {
         currentDebtPenalty = 0.025 + (debtTier * 0.02);
         interestRatePerMin = creditsVal * currentDebtPenalty;
       } else {
-        interestRatePerMin = creditsVal * 0.005;
+        interestRatePerMin = creditsVal * 0.01;
       }
       const fleetCostRatePerMin = myPlayer.fleetCostRate || 0;
       let totalTradeRatePerMin = 0;
@@ -7868,14 +7868,14 @@ function getPlanetTradeIncomePerMin(planet) {
             <div style="font-size: 0.75rem; color: #ff3333; margin-top: 8px; text-align: center; border-top: 1px dashed rgba(255, 51, 51, 0.2); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
               Debt Limit: -${limitVal} credits (1000 + total ships)<br>
               Debt incurs ${(currentDebtPenalty * 100).toFixed(1)}%/min interest.<br>
-              <span style="color: #4caf50;">Positive balance earns 0.5%/min interest.</span>
+              <span style="color: #4caf50;">Positive balance earns 1%/min interest.</span>
             </div>
           `;
         } else {
           limitHtml = `
             <div style="font-size: 0.75rem; color: #88a; margin-top: 8px; text-align: center; border-top: 1px dashed rgba(255, 255, 255, 0.1); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
               Control your Homeworld to access negative credit financing.<br>
-              <span style="color: #4caf50;">Positive balance earns 0.5%/min interest.</span>
+              <span style="color: #4caf50;">Positive balance earns 1%/min interest.</span>
             </div>
           `;
         }
