@@ -1304,8 +1304,8 @@ export class Ship {
                 const tx = p.x + r * Math.cos(theta);
                 const ty = p.y + r * Math.sin(theta);
                 
-                // 1. Avoid active ion storms or minefields with effective intensity >= 5
-                let hazardIntensityVal = 0;
+                // 1. Avoid active ion storms with effective intensity >= 5, or minefields > 10
+                let isHazardous = false;
                 if (ionStorms) {
                   for (const h of ionStorms) {
                     if (h.type !== 'nebula') {
@@ -1317,15 +1317,24 @@ export class Ship {
                         const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
                         const sRed = this.getLocalXpBonus();
                         const effectiveIntensity = Math.max(0, h.intensity - knowledge - (tRed + eRed) / 2 - sRed);
-                        if (effectiveIntensity > hazardIntensityVal) {
-                          hazardIntensityVal = effectiveIntensity;
+                        
+                        if (h.type === 'minefield') {
+                          if (effectiveIntensity > 10) {
+                            isHazardous = true;
+                            break;
+                          }
+                        } else {
+                          if (effectiveIntensity >= 5) {
+                            isHazardous = true;
+                            break;
+                          }
                         }
                       }
                     }
                   }
                 }
                 
-                if (hazardIntensityVal >= 5) {
+                if (isHazardous) {
                   continue; // Avoid this candidate
                 }
                 
