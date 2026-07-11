@@ -719,7 +719,7 @@ async function bootstrap() {
             minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
           }
 
-          const creditsAvailable = (player.credits || 0) - minAllowedCredits;
+          const creditsAvailable = player.useCredits !== false ? ((player.credits || 0) - minAllowedCredits) : 0;
           if (creditsAvailable >= cost) {
             // Start the 30-second transition instead of applying immediately
             planet.upgradeTransition = {
@@ -843,7 +843,7 @@ async function bootstrap() {
           let closestDistSq = Infinity;
 
           for (const p of game.planets) {
-            const creditsAvailable = (player.credits || 0) - minAllowedCredits;
+            const creditsAvailable = player.useCredits !== false ? ((player.credits || 0) - minAllowedCredits) : 0;
             if (p.owner && p.owner.id === player.id && (p.ships + creditsAvailable) >= cost) {
               const gravityRadius = p.getGravityRadius();
               
@@ -1595,6 +1595,7 @@ async function bootstrap() {
         const currentPrice = basePrice + penalty + 1;
         
         // Debt limit check
+        if (player.useCredits === false) return;
         const myCredits = player.credits || 0;
         let minAllowedCredits = 0;
         const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);

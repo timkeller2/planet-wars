@@ -8759,6 +8759,7 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   function getCreditsAvailableForConfig(myPlayer) {
+    if (!myPlayer || myPlayer.useCredits === false) return 0;
     let minAllowedCredits = 0;
     if (serverState && serverState.planets && myPlayer) {
       const ownsHomeworld = serverState.planets.some(p => p.homeworldOf === myPlayer.id && p.ownerId === myPlayer.id);

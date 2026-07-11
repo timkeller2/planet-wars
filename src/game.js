@@ -3268,7 +3268,7 @@ export class Game {
         }
       }
 
-      const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
+      const creditsAvailable = (owner && owner.useCredits !== false) ? (owner.credits - minAllowedCredits) : 0;
       const shipsFactor = source.isMilitary ? 2 : 1;
       const effectiveShips = source.ships * shipsFactor;
 
@@ -3490,7 +3490,7 @@ export class Game {
         }
       }
 
-      const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
+      const creditsAvailable = (owner && owner.useCredits !== false) ? (owner.credits - minAllowedCredits) : 0;
       const shipsFactor = source.isMilitary ? 2 : 1;
       const effectiveShips = source.ships * shipsFactor;
 
