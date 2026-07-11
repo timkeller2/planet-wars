@@ -4441,56 +4441,7 @@ export class Game {
        }
     }
     
-    if (this.marketPrices) {
-      const numAIPlayers = this.allPlayers.filter(p => p.isAI).length;
-      if (numAIPlayers > 0) {
-        this.marketFluctuationTimer = (this.marketFluctuationTimer || 0) + deltaTime;
-        const fluctuationInterval = (180 / numAIPlayers) * 1000;
-        if (this.marketFluctuationTimer >= fluctuationInterval) {
-          this.marketFluctuationTimer = 0;
-          
-          const resources = Object.keys(this.marketPrices);
-          const resourcesToAdjust = [];
-          if (resources.length > 0) {
-            const rIndex = Math.floor(Math.random() * resources.length);
-            resourcesToAdjust.push(resources[rIndex]);
-          }
-        
-        const rarityToPrice = {
-          'common': 4,
-          'normal': 8,
-          'rare': 12,
-          'exotic': 16
-        };
-        for (const res of resourcesToAdjust) {
-          const currentPrice = this.marketPrices[res];
-          const rarity = this.resourceRarities ? this.resourceRarities[res] : 'normal';
-          const basePrice = rarityToPrice[rarity] || 10;
-          const roll = Math.random();
-          
-          if (currentPrice < basePrice) {
-            if (roll < 0.50) {
-              this.marketPrices[res]++;
-            } else if (roll < 0.75) {
-              this.marketPrices[res] = Math.max(1, this.marketPrices[res] - 1);
-            }
-          } else if (currentPrice > basePrice) {
-            if (roll < 0.50) {
-              this.marketPrices[res] = Math.max(1, this.marketPrices[res] - 1);
-            } else if (roll < 0.75) {
-              this.marketPrices[res]++;
-            }
-          } else {
-            if (roll < 0.25) {
-              this.marketPrices[res]++;
-            } else if (roll < 0.50) {
-              this.marketPrices[res] = Math.max(1, this.marketPrices[res] - 1);
-            }
-          }
-        }
-        }
-      }
-    }
+    // Market prices now only change through player actions
     const nowTime = Date.now();
     this.boardingReplays = this.boardingReplays.filter(r => nowTime - r.timestamp < 120000);
     if (this.completedBattleReplays) {

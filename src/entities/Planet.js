@@ -95,6 +95,11 @@ export class Planet {
     this.sizeClass = Math.floor(Math.random() * 91) + 60;
     this.habitability = Math.round(10 + Math.pow(Math.random(), 2) * 140);
     let mineralRolls = [1, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 7];
+    if (this.habitability < 20) {
+      mineralRolls = [1, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 7]; // 3x Very Rich
+    } else if (this.habitability < 30) {
+      mineralRolls = [1, 3, 3, 4, 4, 5, 5, 6, 6, 6, 6, 7]; // 2x Rich
+    }
     this.minerals = mineralRolls[Math.floor(Math.random() * mineralRolls.length)];
 
     const potential = this.sizeClass * (this.habitability / 100);
