@@ -3211,11 +3211,20 @@ async function bootstrap() {
       console.log(`[PERF WARN] Server tick took ${tickDur.toFixed(2)}ms (Limit ${TICK_RATE}ms). game.update: ${updateDur.toFixed(2)}ms, payload/emit: ${payloadDur.toFixed(2)}ms, ships: ${game.ships.length}`);
     }
 
-    if (perfStats.ticks >= 300) { // Log every ~15 seconds at 20fps
+    if (perfStats.ticks >= 600) { // Log every ~30 seconds at 20fps
       const avgTick = perfStats.tickTime / perfStats.ticks;
       const avgUpdate = perfStats.updateTime / perfStats.ticks;
       const avgPayload = perfStats.payloadTime / perfStats.ticks;
-      console.log(`[PERF REPORT] Avg Tick: ${avgTick.toFixed(2)}ms | Max: ${perfStats.maxTick.toFixed(2)}ms || Avg Update: ${avgUpdate.toFixed(2)}ms | Max Update: ${perfStats.maxUpdate.toFixed(2)}ms || Avg Payload: ${avgPayload.toFixed(2)}ms | Max Payload: ${perfStats.maxPayload.toFixed(2)}ms || Ships: ${game.ships.length}`);
+      const msg = `[PERF] Avg Tick: ${avgTick.toFixed(1)}ms (Max ${perfStats.maxTick.toFixed(1)}) | Upd: ${avgUpdate.toFixed(1)}ms | Emit: ${avgPayload.toFixed(1)}ms | Ships: ${game.ships.length}`;
+      console.log(msg);
+      
+      // Broadcast to in-game chat so the user can easily see it without needing console access
+      io.emit('chatMessage', {
+        sender: 'System',
+        color: '#ff00ff',
+        text: msg
+      });
+      
       perfStats = { ticks: 0, tickTime: 0, updateTime: 0, payloadTime: 0, maxTick: 0, maxUpdate: 0, maxPayload: 0 };
     }
 
