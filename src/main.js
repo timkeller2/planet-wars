@@ -2864,6 +2864,19 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     });
 
+    // Open Chat Robot option
+    options.push({
+      text: '🤖 CHAT ROBOT',
+      action: () => {
+        const chatModal = document.getElementById('ai-chat-modal');
+        if (chatModal) {
+          chatModal.classList.remove('hidden');
+          const chatInput = document.getElementById('ai-chat-input');
+          if (chatInput) chatInput.focus();
+        }
+      }
+    });
+
     // Check if player has selected ships or planets to show "MOVE HERE"
     const hasSelection = (selectedShips && selectedShips.length > 0) || (selectedPlanets && selectedPlanets.length > 0);
     if (hasSelection) {
@@ -4465,6 +4478,60 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   }
 
+  const aiChatModalEl = document.getElementById('ai-chat-modal');
+  const closeAiChatBtn = document.getElementById('btn-close-ai-chat');
+  const sendAiChatBtn = document.getElementById('btn-send-ai-chat');
+  const aiChatInput = document.getElementById('ai-chat-input');
+  const aiChatHistory = document.getElementById('ai-chat-history');
+
+  function appendAiChatMessage(sender, text, color) {
+    if (!aiChatHistory) return;
+    const msgDiv = document.createElement('div');
+    msgDiv.style.marginBottom = '8px';
+    const senderSpan = document.createElement('span');
+    senderSpan.style.color = color;
+    senderSpan.textContent = `[${sender}] `;
+    
+    const textSpan = document.createElement('span');
+    textSpan.style.color = '#fff';
+    // Replace newlines with <br> for proper rendering
+    textSpan.innerHTML = text.replace(/\n/g, '<br>');
+    
+    msgDiv.appendChild(senderSpan);
+    msgDiv.appendChild(textSpan);
+    aiChatHistory.appendChild(msgDiv);
+    aiChatHistory.scrollTop = aiChatHistory.scrollHeight;
+  }
+
+  if (closeAiChatBtn && aiChatModalEl) {
+    bindActionClick(closeAiChatBtn, () => {
+      aiChatModalEl.classList.add('hidden');
+    });
+  }
+
+  function sendAiChat() {
+    const text = aiChatInput.value.trim();
+    if (text && socket) {
+      appendAiChatMessage('You', text, '#00e5ff');
+      socket.emit('aiChatMessage', text);
+      aiChatInput.value = '';
+    }
+  }
+
+  if (sendAiChatBtn) {
+    bindActionClick(sendAiChatBtn, sendAiChat);
+  }
+
+  if (aiChatInput) {
+    aiChatInput.addEventListener('keydown', (e) => {
+      // Allow Shift+Enter for newlines, Enter to send
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendAiChat();
+      }
+    });
+  }
+
   window.addEventListener('click', (event) => {
     if (event.target === helpModal) {
       helpModal.classList.add('hidden');
@@ -4472,6 +4539,10 @@ function getPlanetTradeIncomePerMin(planet) {
     const recordingsModal = document.getElementById('recordings-modal');
     if (recordingsModal && event.target === recordingsModal) {
       recordingsModal.classList.add('hidden');
+    }
+    const aiChatModal = document.getElementById('ai-chat-modal');
+    if (aiChatModal && event.target === aiChatModal) {
+      aiChatModal.classList.add('hidden');
     }
     // Dismiss info panel with a click outside the container
     if (activeInfoPanel && !panelOpenedThisTick) {
@@ -4910,6 +4981,13 @@ function getPlanetTradeIncomePerMin(planet) {
           chatInteracted = false;
         }
       }
+    }
+  });
+
+  socket.on('aiChatResponse', (msg) => {
+    // Requires appendAiChatMessage to be in scope
+    if (typeof appendAiChatMessage === 'function') {
+      appendAiChatMessage(msg.sender || '🤖 AI Bot', msg.text, msg.color || '#e0aaff');
     }
   });
 
@@ -11124,6 +11202,17 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
     }
+    if (event.key === '?') {
+      event.preventDefault();
+      const chatModal = document.getElementById('ai-chat-modal');
+      if (chatModal) {
+        chatModal.classList.toggle('hidden');
+        if (!chatModal.classList.contains('hidden')) {
+          const chatInput = document.getElementById('ai-chat-input');
+          if (chatInput) chatInput.focus();
+        }
+      }
+    }
     if (event.key.toLowerCase() === 's') {
       const selectedCruisers = selectedShips.filter(s => s.isCruiser && s.ownerId === localPlayer.id);
       if (selectedCruisers.length > 0) {
@@ -12125,7 +12214,7 @@ function getPlanetTradeIncomePerMin(planet) {
         'labs': 'Adds +1 Lab research tick speed per level (up to +5) to generate tech points',
         'armor': 'Adds +4 flat + 10% max health armor points per level to withstand damage',
         'shields': 'Provides energy shield points that absorb damage first. Max capacity: (2 + 1/5 player tech bonus, rounded up) per level. Regens anywhere at 5%/sec.',
-        'engine': 'Adds +3 speed and +3°/sec turn rate per level. Unlocks Dilithium Reactor: charges in friendly well at 0.05 Dil/sec (max 10/level). Emergency auto-restores fuel on a (60/level)s cooldown.',
+        'engine': 'Adds +3 speed and +3°/sec turn rate per level. Unlocks Dilithium Reactor: charges in friendly well at 0.05 Dil/sec (max 10/level). Emergency auto-restores fuel on a (30/level)s cooldown.',
         'munitions': 'Adds +1 bomb capacity and +1 splash damage rating per level to standard weapon dogfights',
         'targeting': 'Adds +5% weapon range and +5% laser accuracy hit chance per level in combat',
         'damagecontrol': 'Adds +50% out-of-combat repair and +20% deep-space repair rate per level. Also increases shield regen rate by +50% of the base rate per level.',

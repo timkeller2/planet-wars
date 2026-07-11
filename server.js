@@ -36,38 +36,32 @@ if (process.env.GEMINI_API_KEY) {
   console.warn('[AI Chatbot] GEMINI_API_KEY not found in .env file. AI Chatbot is disabled.');
 }
 
-async function askAI(question, player, io, game) {
-  if (!aiModel) return;
-  
-  try {
-    const prompt = `You are a helpful AI assistant inside a multiplayer space strategy game called Amoeba Wars. 
-The player "${player.name}" is asking you a question about the game.
+const playerChatSessions = new Map();
+
+function getOrCreateChatSession(playerId, playerName) {
+  if (!aiModel) return null;
+  if (!playerChatSessions.has(playerId)) {
+    const chat = aiModel.startChat({
+      history: [
+        {
+          role: "user",
+          parts: [{ text: `You are a helpful AI assistant inside a multiplayer space strategy game called Amoeba Wars. 
+The player "${playerName}" is asking you questions about the game.
 Answer concisely and immersively in the context of a sci-fi universe. 
 Here is the source code of the game's core logic (game.js) to understand the rules and mechanics. Do not mention that you are reading the source code, just answer their question based on the rules defined in it. Do not invent rules that are not in the code.
 
 === SOURCE CODE ===
-${gameCodeContext}
-
-=== QUESTION ===
-Question from ${player.name}: "${question}"`;
-
-    const result = await aiModel.generateContent(prompt);
-    const response = await result.response;
-    const aiText = response.text().trim();
-    
-    io.emit('chatMessage', {
-      sender: '🤖 AI Bot',
-      color: '#e0aaff',
-      text: aiText
+${gameCodeContext}` }]
+        },
+        {
+          role: "model",
+          parts: [{ text: "Understood commander. I am ready." }]
+        }
+      ]
     });
-  } catch (error) {
-    console.error('[AI Chatbot Error]', error);
-    io.emit('chatMessage', {
-      sender: '🤖 AI Bot',
-      color: '#ff3333',
-      text: "Sorry commander, my neural nets are experiencing interference."
-    });
+    playerChatSessions.set(playerId, chat);
   }
+  return playerChatSessions.get(playerId);
 }
 
 
@@ -1125,25 +1119,22 @@ async function bootstrap() {
         }
         const cleanTextToBroadcast = cleanText.substring(0, 100);
 
-        if (cleanText.startsWith('.') && aiModel) {
-          const question = cleanText.substring(1).trim();
-          
-          io.emit('chatMessage', {
-            sender: player.name,
-            color: player.color,
-            text: cleanTextToBroadcast
-          });
-          
-          socket.emit('chatMessage', {
-            sender: '🤖 AI Bot',
-            color: '#e0aaff',
-            text: 'Processing inquiry...'
-          });
-          
-          askAI(question, player, io, game);
-          return;
-        } else if (cleanText.startsWith('.')) {
-          socket.emit('chatMessage', {
+        io.emit('chatMessage', {
+          sender: player.name,
+          color: player.color,
+          text: cleanTextToBroadcast
+        });
+      }
+    });
+
+    socket.on('aiChatMessage', async (question) => {
+      const player = connectedClients.get(socket.id);
+      if (player && question && typeof question === 'string') {
+        const cleanQuestion = question.trim();
+        if (!cleanQuestion) return;
+
+        if (!aiModel) {
+          socket.emit('aiChatResponse', {
             sender: 'System',
             color: '#ff3333',
             text: 'AI Chatbot is not configured (missing GEMINI_API_KEY in .env file).'
@@ -1151,11 +1142,30 @@ async function bootstrap() {
           return;
         }
 
-        io.emit('chatMessage', {
-          sender: player.name,
-          color: player.color,
-          text: cleanTextToBroadcast
+        socket.emit('aiChatResponse', {
+          sender: '🤖 AI Bot',
+          color: '#e0aaff',
+          text: 'Processing inquiry...'
         });
+
+        try {
+          const chatSession = getOrCreateChatSession(player.id, player.name);
+          const result = await chatSession.sendMessage(`Question from ${player.name}: "${cleanQuestion}"`);
+          const aiText = result.response.text().trim();
+          
+          socket.emit('aiChatResponse', {
+            sender: '🤖 AI Bot',
+            color: '#e0aaff',
+            text: aiText
+          });
+        } catch (error) {
+          console.error('[AI Chatbot Error]', error);
+          socket.emit('aiChatResponse', {
+            sender: '🤖 AI Bot',
+            color: '#ff3333',
+            text: "Sorry commander, my neural nets are experiencing interference."
+          });
+        }
       }
     });
 

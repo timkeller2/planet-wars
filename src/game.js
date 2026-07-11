@@ -1771,6 +1771,8 @@ export class Game {
             sData.targetPlanetId = v ? v.id : null;
           } else if (k === 'owner') {
             sData.ownerId = v ? v.id : null;
+          } else if (k === 'boardingPlayer') {
+            sData.boardingPlayerId = v ? v.id : null;
           } else if (k === 'insideHazards') {
             sData.insideHazards = v ? Array.from(v) : [];
           } else if (typeof v !== 'function') {
@@ -1961,7 +1963,7 @@ export class Game {
         const s = new Ship(sData.id, sData.x, sData.y, targetPlanet, owner, sData.targetX, sData.targetY);
 
         for (const [k, v] of Object.entries(sData)) {
-          if (k !== 'targetPlanetId' && k !== 'ownerId') {
+          if (k !== 'targetPlanetId' && k !== 'ownerId' && k !== 'boardingPlayerId') {
             if (k === 'insideHazards') {
               if (Array.isArray(v)) {
                 s.insideHazards = new Set(v);
@@ -1977,6 +1979,9 @@ export class Game {
         }
         s.owner = owner;
         s.targetPlanet = targetPlanet;
+        if (sData.boardingPlayerId) {
+          s.boardingPlayer = playersMap.get(sData.boardingPlayerId) || null;
+        }
         if (s.name) {
           this.usedShipNames.add(s.name);
         }
@@ -4408,17 +4413,28 @@ export class Game {
           }
           
           let visibleFromOtherPlanet = false;
-          for (const otherPl of this.planets) {
-             if (otherPl.id !== p.id && ((otherPl.owner && otherPl.owner.id === pId) || otherPl._tickEffectiveSympathy.get(pId) > 0)) {
-                 const gr = otherPl.getGravityRadius();
-                 const dx = otherPl.x - p.x;
-                 const dy = otherPl.y - p.y;
-                 if (dx * dx + dy * dy <= gr * gr) {
-                     visibleFromOtherPlanet = true;
-                     break;
-                 }
+          
+          if (!p.overlappingPlanets || p._lastPlanetCount !== this.planets.length) {
+              p.overlappingPlanets = [];
+              p._lastPlanetCount = this.planets.length;
+              for (const otherPl of this.planets) {
+                  if (otherPl.id === p.id) continue;
+                  const gr = otherPl.getGravityRadius();
+                  const dx = otherPl.x - p.x;
+                  const dy = otherPl.y - p.y;
+                  if (dx * dx + dy * dy <= gr * gr) {
+                      p.overlappingPlanets.push(otherPl);
+                  }
+              }
+          }
+
+          for (const otherPl of p.overlappingPlanets) {
+             if ((otherPl.owner && otherPl.owner.id === pId) || otherPl._tickEffectiveSympathy.get(pId) > 0) {
+                 visibleFromOtherPlanet = true;
+                 break;
              }
           }
+          
           if (visibleFromOtherPlanet) {
              p._tickVisibleTo.add(pId);
           }

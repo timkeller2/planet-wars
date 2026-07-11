@@ -959,7 +959,7 @@ export class Ship {
           const amount = Math.min(this.engine, this.reactor);
           this.reactor -= amount;
           this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + amount);
-          this.reactorCooldown = (60 / this.engine) * 1000; // Cooldown based on engine level
+          this.reactorCooldown = (30 / this.engine) * 1000; // Cooldown based on engine level
         }
       }
     }
