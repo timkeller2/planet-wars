@@ -1164,7 +1164,7 @@ export class Ship {
         if (this.retreatTargetShipId && allShips) {
           const targetShip = allShips.find(s => s.id === this.retreatTargetShipId);
           if (targetShip && targetShip.active) {
-            const cannotTransfer = (targetShip.extended_fuel || 0) > 0 && (targetShip.supply_ship || 0) === 0;
+            const cannotTransfer = false;
             const hasExcessFuel = (targetShip.fuel || 0) > 4 && !cannotTransfer;
             const hasSupplies = (targetShip.supplies || 0) > 0;
             if (hasExcessFuel || hasSupplies) {
@@ -1250,7 +1250,7 @@ export class Ship {
           if (allShips && this.owner && (needsFuelForCruiser || needsRepairsForCruiser || needsRearmForCruiser)) {
             for (const other of allShips) {
               if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id) {
-                const cannotTransfer = (other.extended_fuel || 0) > 0 && (other.supply_ship || 0) === 0;
+                const cannotTransfer = false;
                 const hasExcessFuel = (other.fuel || 0) > 4 && !cannotTransfer;
                 const hasSupplies = (other.supplies || 0) > 0;
                 
@@ -4477,7 +4477,7 @@ export class Ship {
         const radarRangeSq = radarRange * radarRange;
         const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(this.x, this.y, radarRangeSq) : allShips;
         for (const other of candidateShips) {
-          const cannotTransfer = (other.extended_fuel || 0) > 0;
+          const cannotTransfer = false;
           if (other.active && other.id !== this.id && other.isCruiser && other.owner && other.owner.id === this.owner.id && (other.fuel || 0) > 4 && (other.fuel || 0) > (this.fuel || 0) + 2 && !cannotTransfer) {
             const dx = other.x - this.x;
             const dy = other.y - this.y;
