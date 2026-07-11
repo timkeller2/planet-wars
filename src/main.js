@@ -1854,7 +1854,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (p.focusTransition) {
         const progress = p.focusTransition.progress || 0;
         const target = p.focusTransition.targetMode;
-        const emoji = target === 'research' ? '🔬' : (target === 'garrison' ? '🛡️' : (target === 'commerce' ? '💲' : (target === 'mining' ? '⛏️' : (target === 'terraforming' ? '🌱' : '📈'))));
+        const emoji = target === 'research' ? '🔭' : (target === 'garrison' ? '🛡️' : (target === 'commerce' ? '💲' : (target === 'mining' ? '⛏️' : (target === 'terraforming' ? '🌱' : '📈'))));
         
         ctxTile.save();
         ctxTile.beginPath();
@@ -14211,7 +14211,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if (p.focusTransition) {
           const progress = p.focusTransition.progress || 0;
           const target = p.focusTransition.targetMode;
-          const emoji = target === 'research' ? '🔬' : (target === 'garrison' ? '🛡️' : (target === 'commerce' ? '💲' : (target === 'mining' ? '⛏️' : (target === 'terraforming' ? '🌱' : '📈'))));
+          const emoji = target === 'research' ? '🔭' : (target === 'garrison' ? '🛡️' : (target === 'commerce' ? '💲' : (target === 'mining' ? '⛏️' : (target === 'terraforming' ? '🌱' : '📈'))));
           
           // 1. Draw glowing rotating progress ring
           ctx.save();
@@ -14644,7 +14644,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
             if (isHuman) {
               const focus = p.focusMode || 'economy';
-              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
+              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔭' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
               const badgeRadius = pillHeight / 2;
               const badgeX = p.x + textWidth / 2 + 8 + badgeRadius + 2;
 
@@ -14683,7 +14683,7 @@ function getPlanetTradeIncomePerMin(planet) {
             // In graphical mode, draw focus mode badge directly to the right of the planet graphic
             if (isHuman) {
               const focus = p.focusMode || 'economy';
-              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
+              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔭' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
               const badgeRadius = 10;
               const badgeX = p.x + p.radius + badgeRadius + 4;
               const badgeY = p.y;

@@ -2703,7 +2703,7 @@ export class Ship {
           for (const p of allPlanets) {
             if (p.owner && this.owner && p.owner.id === this.owner.id) continue;
             if (this.isAmoeba && !p.owner && (this.amoebaGrowCooldown || 0) > 0) continue;
-            if (p.ships > 0) {
+            if (p.ships >= 0) {
               if (isCruiser && p.id !== this.cruiserTargetId && this.scoutAttackEnabled !== true) continue;
               const pdx = p.x - this.x;
               const pdy = p.y - this.y;
