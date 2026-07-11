@@ -3161,25 +3161,7 @@ function getPlanetTradeIncomePerMin(planet) {
       lines.push({ label: 'Research Progress', value: `${p.anomaly.progress || 0} / ${p.anomaly.difficulty}`, color: '#ffb74d' });
       lines.push({ label: 'Difficulty', value: `${p.anomaly.difficulty}`, color: anomalyColor });
       
-      // Calculate likely reward
-      const selectedCruiser = getSelectedCruiser();
-      const localShipXpBonus = selectedCruiser ? (Math.sqrt(selectedCruiser.expScore || 0) + (selectedCruiser.commandPoints || 0)) : 0;
-      const accuracyChance = Math.min(100, Math.max(0, Math.round(50 + localShipXpBonus * 3)));
-      
-      // Deterministic roll based on anomaly ID
-      const hashVal = getDeterministicProgressAccuracy(p.anomaly.id);
-      const isAccurate = hashVal < accuracyChance;
-      
-      const rewardOptions = ['discount', 'credits', 'tech', 'xp', 'hab', 'rare_resource_cache', 'upgrade_token'];
       const trueType = p.anomaly.rewardType || 'credits';
-      let displayedType = trueType;
-      
-      if (!isAccurate) {
-        const trueIndex = rewardOptions.indexOf(trueType);
-        const incorrectIndex = (trueIndex + 1 + (hashVal % (rewardOptions.length - 1))) % rewardOptions.length;
-        displayedType = rewardOptions[incorrectIndex];
-      }
-      
       const rewardLabels = {
         discount: 'Upgrade Discount',
         credits: 'Credits Reward',
@@ -3190,9 +3172,8 @@ function getPlanetTradeIncomePerMin(planet) {
         upgrade_token: 'Upgrade Tokens'
       };
       
-      const displayLabel = rewardLabels[displayedType] || 'Unknown';
-      lines.push({ label: 'Likely Reward', value: displayLabel, color: '#00e5ff' });
-      lines.push({ label: 'Scanner Accuracy', value: `${accuracyChance}%`, color: '#888' });
+      const displayLabel = rewardLabels[trueType] || 'Unknown';
+      lines.push({ label: 'Reward', value: displayLabel, color: '#00e5ff' });
 
       for (const line of lines) {
         const displayLabel = formatTooltipString(line.label);

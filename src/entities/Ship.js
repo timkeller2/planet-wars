@@ -5468,9 +5468,35 @@ export class Ship {
                                    this.researchFuelRetreating ||
                                    this.diplomacyFuelRetreating;
 
-      if (isRetreatingToRefuel && allShips && destX !== null && destY !== null) {
-        const activeAmoebas = allShips.filter(s => s.active && s.isAmoeba);
-        if (activeAmoebas.length > 0) {
+      if (isRetreatingToRefuel && destX !== null && destY !== null) {
+        const hazards = [];
+        if (allShips) {
+          const activeAmoebas = allShips.filter(s => s.active && s.isAmoeba);
+          for (const amoeba of activeAmoebas) {
+            const amoebaRange = typeof amoeba.getWeaponRange === 'function' ? amoeba.getWeaponRange() : 40;
+            hazards.push({ x: amoeba.x, y: amoeba.y, radius: amoebaRange + 45 });
+          }
+        }
+        if (ionStorms) {
+          const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
+          const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
+          const sRed = this.getLocalXpBonus();
+          for (const storm of ionStorms) {
+            const knowledge = storm.knowledge[this.owner ? this.owner.id : ''] || 0;
+            const effectiveIntensity = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+            let isHazardous = false;
+            if (storm.type === 'minefield') {
+              if (effectiveIntensity > 10) isHazardous = true;
+            } else if (storm.type !== 'nebula') {
+              if (effectiveIntensity >= 5) isHazardous = true;
+            }
+            if (isHazardous) {
+              hazards.push({ x: storm.x, y: storm.y, radius: storm.radius + 100 });
+            }
+          }
+        }
+
+        if (hazards.length > 0) {
           const blockers = [];
           const selfX = this.x;
           const selfY = this.y;
@@ -5482,19 +5508,17 @@ export class Ship {
             const uX = vX / len;
             const uY = vY / len;
 
-            for (const amoeba of activeAmoebas) {
-              const amoebaRange = typeof amoeba.getWeaponRange === 'function' ? amoeba.getWeaponRange() : 40;
-              const dangerRadius = amoebaRange + 45;
-
-              const distToAmoeba = Math.sqrt((amoeba.x - selfX) * (amoeba.x - selfX) + (amoeba.y - selfY) * (amoeba.y - selfY));
+            for (const hazard of hazards) {
+              const dangerRadius = hazard.radius;
+              const distToHazard = Math.sqrt((hazard.x - selfX) * (hazard.x - selfX) + (hazard.y - selfY) * (hazard.y - selfY));
               
-              if (distToAmoeba < dangerRadius) {
+              if (distToHazard < dangerRadius) {
                 // Already inside danger radius: flee directly away from it while heading towards target
                 const targetDirX = uX;
                 const targetDirY = uY;
                 
-                let repelDirX = selfX - amoeba.x;
-                let repelDirY = selfY - amoeba.y;
+                let repelDirX = selfX - hazard.x;
+                let repelDirY = selfY - hazard.y;
                 const repelLen = Math.sqrt(repelDirX * repelDirX + repelDirY * repelDirY);
                 if (repelLen > 0.01) {
                   repelDirX /= repelLen;
@@ -5515,17 +5539,17 @@ export class Ship {
                 break;
               } else {
                 // Check if segment intersects the danger circle
-                const cX = amoeba.x - selfX;
-                const cY = amoeba.y - selfY;
+                const cX = hazard.x - selfX;
+                const cY = hazard.y - selfY;
                 const t = cX * uX + cY * uY;
                 const tClamped = Math.max(0, Math.min(len, t));
                 const pX = selfX + tClamped * uX;
                 const pY = selfY + tClamped * uY;
-                const distSq = (pX - amoeba.x) * (pX - amoeba.x) + (pY - amoeba.y) * (pY - amoeba.y);
+                const distSq = (pX - hazard.x) * (pX - hazard.x) + (pY - hazard.y) * (pY - hazard.y);
 
                 if (distSq < dangerRadius * dangerRadius) {
                   blockers.push({
-                    amoeba: amoeba,
+                    hazard: hazard,
                     dangerRadius: dangerRadius,
                     tClamped: tClamped,
                     pX: pX,
@@ -5538,11 +5562,11 @@ export class Ship {
             if (blockers.length > 0) {
               blockers.sort((a, b) => a.tClamped - b.tClamped);
               const closestBlocker = blockers[0];
-              const amoeba = closestBlocker.amoeba;
+              const hazard = closestBlocker.hazard;
               const dangerRadius = closestBlocker.dangerRadius;
               
-              let cpX = closestBlocker.pX - amoeba.x;
-              let cpY = closestBlocker.pY - amoeba.y;
+              let cpX = closestBlocker.pX - hazard.x;
+              let cpY = closestBlocker.pY - hazard.y;
               const distCP = Math.sqrt(cpX * cpX + cpY * cpY);
               
               let perpX = 0;
@@ -5555,8 +5579,8 @@ export class Ship {
                 perpY = uX;
               }
 
-              destX = amoeba.x + perpX * dangerRadius;
-              destY = amoeba.y + perpY * dangerRadius;
+              destX = hazard.x + perpX * dangerRadius;
+              destY = hazard.y + perpY * dangerRadius;
             }
           }
         }
