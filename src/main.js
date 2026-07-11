@@ -8759,7 +8759,6 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   function getCreditsAvailableForConfig(myPlayer) {
-    if (!myPlayer || myPlayer.useCredits === false) return 0;
     let minAllowedCredits = 0;
     if (serverState && serverState.planets && myPlayer) {
       const ownsHomeworld = serverState.planets.some(p => p.homeworldOf === myPlayer.id && p.ownerId === myPlayer.id);
@@ -12326,8 +12325,9 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
+          const creditsForPayment = myPlayer && myPlayer.useCredits !== false ? Math.max(0, creditsAvailable) : 0;
           const entityResourceShips = isPlanet ? entity.ships : (upgradeQual ? upgradeQual.planet.ships : 0);
-          const canAfford = hasTokens || (isPlanet ? (creditsAvailable >= uCost) : ((entityResourceShips + creditsAvailable) >= uCost));
+          const canAfford = hasTokens || (isPlanet ? (creditsForPayment >= uCost) : ((entityResourceShips + creditsForPayment) >= uCost));
           
           if (!canAfford || !displayUpgrade) {
             el.style.opacity = '0.5';
