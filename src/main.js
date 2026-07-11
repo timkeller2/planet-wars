@@ -1683,7 +1683,9 @@ function getPlanetTradeIncomePerMin(planet) {
 
     // 2. Set up centered coordinate system
     ctxTile.save();
-    ctxTile.translate(width / 2, height / 2);
+    let centerY = height / 2;
+    if (type === 'ship') centerY = height * 0.7;
+    ctxTile.translate(width / 2, centerY);
     ctxTile.scale(scale, scale);
     ctxTile.translate(-unit.x, -unit.y);
 

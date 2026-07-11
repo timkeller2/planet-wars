@@ -1034,7 +1034,7 @@ export class Ship {
               } else if (key === 'munitions') {
                 this.splashDamage = val;
               } else if (key === 'supply_ship') {
-                this.maxsupplies = val * 12;
+                this.maxsupplies = val * (this.maxHealth / 2);
                 this.supplies = 0;
               } else if (key === 'extended_fuel') {
                 const baseFuel = this.maxHealth / 5;
@@ -1675,7 +1675,7 @@ export class Ship {
             this.splashDamage = this.munitions;
             this.bombs = this.getMaxBombs();
           } else if (prop === 'supply_ship') {
-            this.maxsupplies = (this.supply_ship || 0) * 12;
+            this.maxsupplies = (this.supply_ship || 0) * (this.maxHealth / 2);
           } else if (prop === 'extended_fuel') {
             this.fuel = this.getMaxFuel();
           } else if (prop === 'marines') {
@@ -1741,7 +1741,7 @@ export class Ship {
             } else if (this.upgradeProp === 'munitions') {
               this.splashDamage = this.munitions;
             } else if (this.upgradeProp === 'supply_ship') {
-              this.maxsupplies = (this.supply_ship || 0) * 12;
+              this.maxsupplies = (this.supply_ship || 0) * (this.maxHealth / 2);
             } else if (this.upgradeProp === 'extended_fuel') {
               const baseFuel = this.maxHealth / 5;
               this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + baseFuel);

@@ -2061,7 +2061,7 @@ export class Game {
     this.ionStormDamageTimer = 0;
     this.minefieldDamageTimer = 0;
     this.ionStormsCreated = 0;
-    this.nextShipId = this.nextShipId || 1;
+    this.nextShipId = Math.max(this.nextShipId || 1000000, 1000000);
     this.gameTime = 0;
     this.timeRemaining = null;
     let rampageDelayMultiple = 1.0;
@@ -4214,7 +4214,14 @@ export class Game {
   }
 
   researchAnomaly(p, ship, deltaTime) {
-    if (!p.anomaly || p.anomaly.completing || p.anomaly.researched) return;
+    if (!p.anomaly || p.anomaly.researched) return;
+    
+    if (p.anomaly.completing) {
+      p.anomaly.beingResearched = true;
+      if (!p.anomaly.researchingShipIds) p.anomaly.researchingShipIds = [];
+      if (!p.anomaly.researchingShipIds.includes(ship.id)) p.anomaly.researchingShipIds.push(ship.id);
+      return;
+    }
 
     if (!p.anomaly.progress) {
       p.anomaly.progress = {};
@@ -4614,7 +4621,7 @@ export class Game {
               ship.splashDamage = ship.munitions;
             }
             if (ship.supply_ship) {
-              ship.maxsupplies = ship.supply_ship * 12;
+              ship.maxsupplies = ship.supply_ship * (ship.maxHealth / 2);
             }
 
             // Load full supplies/marines/bombs/fuel/shields
@@ -4939,7 +4946,7 @@ export class Game {
             pirate.splashDamage = pirate.munitions;
           }
           if (pirate.supply_ship) {
-            pirate.maxsupplies = pirate.supply_ship * 12;
+            pirate.maxsupplies = pirate.supply_ship * (pirate.maxHealth / 2);
             pirate.supplies = 0;
           }
 
@@ -5076,7 +5083,7 @@ export class Game {
       p.expScore = 0; // Planets don't have xp natively
       p.isActivelyResearching = false;
       
-      const gravityRadius = Math.min(600, p.getGravityRadius());
+      const gravityRadius = p.getGravityRadius();
       const searchRadiusSq = gravityRadius * gravityRadius;
       
       // 1. Check if completing an anomaly
