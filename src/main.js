@@ -4913,6 +4913,13 @@ function getPlanetTradeIncomePerMin(planet) {
     });
   }
 
+  const sellBtnElem = document.getElementById('btn-sell-resources');
+  if (sellBtnElem) {
+    sellBtnElem.addEventListener('click', () => {
+      socket.emit('sellBundle');
+    });
+  }
+
   document.addEventListener('keydown', (e) => {
     if (chatContainer && chatContainer.classList.contains('chat-active')) {
       if (e.key === 'PageUp' || e.key === 'PageDown') {
@@ -8241,93 +8248,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
       }
-      
-      // Uncapped surplus scan
-      const eligible = [];
-      for (const r of resourcesList) {
-        if (r === 'latinum') {
-          const qty = myPlayer.resources?.latinum || 0;
-          const latinumSold = Math.min(4, Math.floor(qty));
-          if (latinumSold >= 1) {
-            eligible.push({ name: 'latinum', count: latinumSold });
-          }
-        } else {
-          const qty = myPlayer.resources?.[r] || 0;
-          if (qty >= 1.0) {
-            eligible.push({ name: r, count: 1 });
-          }
-        }
-      }
-      
-      const toSell = eligible;
-      let L = 0;
-      for (const item of eligible) {
-        L += item.count;
-      }
-      
-      const sellPrice = L + 2;
-      let totalGain = sellPrice * L;
-      const latinumItem = eligible.find(item => item.name === 'latinum');
-      const latinumCount = latinumItem ? latinumItem.count : 0;
-      if (latinumCount > 0) {
-        totalGain = Math.round(totalGain * (1 + 0.10 * latinumCount));
-      }
-      
-      const sellBtn = document.getElementById('btn-sell-resources');
-      if (sellBtn) {
-        const resourceEmojis = {
-          antimatter: '🌀',
-          tritanium: '🔩',
-          merculite: '☄️',
-          dilithium: '💎',
-          duranium: '🔲',
-          deuterium: '💧',
-          latinum: '🏺'
-        };
-        
-        const now = Date.now();
-        const cooldownRemaining = myPlayer.lastBundleSaleTime ? Math.max(0, 5 * 60 * 1000 - (now - myPlayer.lastBundleSaleTime)) : 0;
 
-        if (cooldownRemaining > 0) {
-          const secs = Math.ceil(cooldownRemaining / 1000);
-          const mins = Math.floor(secs / 60);
-          const remSecs = secs % 60;
-          const timeStr = `${mins}:${remSecs < 10 ? '0' : ''}${remSecs}`;
-          sellBtn.textContent = `COOLDOWN: ${timeStr}`;
-          sellBtn.disabled = true;
-          sellBtn.style.opacity = '0.5';
-          sellBtn.style.pointerEvents = 'none';
-        } else {
-          if (L > 0) {
-            const iconParts = [];
-            for (const item of toSell) {
-              const emoji = resourceEmojis[item.name] || '';
-              for (let c = 0; c < item.count; c++) {
-                iconParts.push(emoji);
-              }
-            }
-            const iconStr = iconParts.join('');
-            sellBtn.textContent = `${iconStr}: +${totalGain}`;
-          } else {
-            sellBtn.textContent = 'SELL: +0';
-          }
-
-          const availableOptions = myPlayer.tradeOptions !== undefined ? myPlayer.tradeOptions : 5;
-          // Don't gray it out if the player has at least one trade option (availableOptions >= 1), only if they have none (< 1)
-          if (L === 0 || availableOptions < 1) {
-            sellBtn.disabled = true;
-            sellBtn.style.opacity = '0.5';
-            sellBtn.style.pointerEvents = 'none';
-          } else {
-            sellBtn.disabled = false;
-            sellBtn.style.opacity = '1.0';
-            sellBtn.style.pointerEvents = 'auto';
-          }
-        }
-        
-        sellBtn.style.display = 'flex';
-      }
-    }
 
     const pCount = myPlayer.planetCount || 0;
     const totalEconomy = myPlayer.totalCapacity || 0;

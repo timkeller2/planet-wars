@@ -2095,7 +2095,10 @@ export class Ship {
     }
     const shotsPerVolley = maxShots;
     let shotsFired = 0;
-
+    if (this.amoebaBombCooldown && this.amoebaBombCooldown > 0) {
+      this.amoebaBombCooldown -= (deltaTime / 1000);
+    }
+    
     this.fireCooldown -= (deltaTime / 1000);
     if (this.fireCooldown <= 0 && maxShots > 0) {
       let amoebaCount = 1;
@@ -2426,13 +2429,22 @@ export class Ship {
             bombConsumption *= 0.5;
           }
 
-          if (this.maxHealth > 0 && this.bombs > 0 && this.volleyShotIndex === 0 && !this.isAmoeba && !isAftCruiserShot && isWithinBombRange) {
-            usedBomb = true;
-            this.bombs -= bombConsumption;
-            if (this.bombs < 0) this.bombs = 0;
-            if (this.specialbombs > 0) {
-              this.specialbombs -= bombConsumption;
-              if (this.specialbombs < 0) this.specialbombs = 0;
+          if (this.maxHealth > 0 && this.bombs > 0 && this.volleyShotIndex === 0 && !isAftCruiserShot && isWithinBombRange) {
+            if (this.isAmoeba) {
+              if (!this.amoebaBombCooldown || this.amoebaBombCooldown <= 0) {
+                usedBomb = true;
+                this.bombs -= 1;
+                this.amoebaBombCooldown = 2.0;
+                if (this.bombs < 0) this.bombs = 0;
+              }
+            } else {
+              usedBomb = true;
+              this.bombs -= bombConsumption;
+              if (this.bombs < 0) this.bombs = 0;
+              if (this.specialbombs > 0) {
+                this.specialbombs -= bombConsumption;
+                if (this.specialbombs < 0) this.specialbombs = 0;
+              }
             }
           }
 
@@ -2711,6 +2723,7 @@ export class Ship {
           let validPlanets = [];
           for (const p of allPlanets) {
             if (p.owner && this.owner && p.owner.id === this.owner.id) continue;
+            if (this.isAmoeba && p.isDeepSpaceAnomaly) continue;
             if (this.isAmoeba && !p.owner && (this.amoebaGrowCooldown || 0) > 0) continue;
             if (p.ships >= 0) {
               if (isCruiser && p.id !== this.cruiserTargetId && this.scoutAttackEnabled !== true) continue;
@@ -2822,7 +2835,14 @@ export class Ship {
               }
               this.planetBombardTimer = 2.0;
             } else {
-              this.bombs--;
+              if (this.isAmoeba) {
+                if (!this.amoebaBombCooldown || this.amoebaBombCooldown <= 0) {
+                  this.bombs--;
+                  this.amoebaBombCooldown = 2.0;
+                }
+              } else {
+                this.bombs--;
+              }
             }
           }
         }

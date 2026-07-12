@@ -3493,7 +3493,7 @@ export class Game {
         totalUpgradesCount--;
       }
 
-      const finalCost = Math.round((baseCostShips + totalUpgradeCost) * 0.8);
+      const finalCost = Math.round(baseCostShips + totalUpgradeCost);
       console.log(`[SERVER-CONFIG-COST] Name: ${configName}, classType: ${classType}, upgrades:`, JSON.stringify(upgrades), `baseCostShips: ${baseCostShips}, totalUpgradeCost: ${totalUpgradeCost}, finalCost: ${finalCost}`);
 
       let minAllowedCredits = 0;
@@ -6167,18 +6167,15 @@ export class Game {
           }
           if (hasAll && (player.resources['latinum'] || 0) >= 4) {
             player.lastBundleSaleTime = now;
-            const L = 10;
-            const sellPrice = L + 2;
             for (const res of resList) {
               player.resources[res] -= 1;
             }
             player.resources['latinum'] -= 4;
-            let totalGain = sellPrice * L;
-            totalGain = Math.round(totalGain * (1 + 0.10 * 4));
+            
+            let totalGain = 200;
             player.credits = (player.credits || 0) + totalGain;
             
-            const optionsExpended = Math.ceil(1 + L / 2);
-            player.tradeOptions -= optionsExpended;
+            player.tradeOptions -= 5;
             
             console.log(`[Auto Bundle Sale] Executed for player ${player.id}. Gained ${totalGain} credits.`);
           }
