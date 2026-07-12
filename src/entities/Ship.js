@@ -5982,6 +5982,14 @@ export class Ship {
         if (isAttackerCruiser && isDefenderCruiserOrAmoeba && hitRollMadeBy > 0) {
           shrugChance = Math.max(0, shrugChance - hitRollMadeBy / 3);
         }
+        
+        if (attacker && attacker.x !== undefined && attacker.y !== undefined) {
+          const dx = attacker.x - this.x;
+          const dy = attacker.y - this.y;
+          if (Math.sqrt(dx * dx + dy * dy) < 30) {
+            shrugChance = 0; // Shields do not deflect at point blank range
+          }
+        }
         if (Math.random() < shrugChance) {
           // Damage shrugged off
           if (this.isAmoeba && explosions) {

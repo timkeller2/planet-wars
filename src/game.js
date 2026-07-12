@@ -442,6 +442,7 @@ export class Game {
       antimatter: 15, deuterium: 15,
       latinum: 20
     };
+    this.bundleValue = 200;
     this.marketFluctuationTimer = 0;
     this.highestSpeedMilestoneTriggered = 0;
     this.wreckages = [];
@@ -1618,6 +1619,7 @@ export class Game {
       settings: this.settings,
       globalUpgradeModifiers: this.globalUpgradeModifiers,
       marketPrices: this.marketPrices,
+      bundleValue: this.bundleValue,
       marketFluctuationTimer: this.marketFluctuationTimer,
       resourceRarities: this.resourceRarities,
       exploredGrid: this.exploredGrid,
@@ -1815,6 +1817,7 @@ export class Game {
       antimatter: 15, deuterium: 15,
       latinum: 20
     };
+    this.bundleValue = state.bundleValue || 200;
     this.marketFluctuationTimer = state.marketFluctuationTimer || 0;
     this.resourceRarities = state.resourceRarities;
     this.exploredGrid = state.exploredGrid;
@@ -6172,12 +6175,13 @@ export class Game {
             }
             player.resources['latinum'] -= 4;
             
-            let totalGain = 200;
+            let totalGain = this.bundleValue || 200;
             player.credits = (player.credits || 0) + totalGain;
+            this.bundleValue = (this.bundleValue || 200) + 20;
             
             player.tradeOptions -= 5;
             
-            console.log(`[Auto Bundle Sale] Executed for player ${player.id}. Gained ${totalGain} credits.`);
+            console.log(`[Auto Bundle Sale] Executed for player ${player.id}. Gained ${totalGain} credits. New Bundle Value: ${this.bundleValue}`);
           }
         }
       }

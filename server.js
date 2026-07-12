@@ -3169,6 +3169,7 @@ async function bootstrap() {
         happinessEvents: visibleHappinessEvents,
         galacticCapacity: game.galacticCapacity,
         marketPrices: game.marketPrices || {},
+        bundleValue: game.bundleValue || 200,
         resourceRarities: game.resourceRarities || {},
         isPaused: game.isPaused,
         isRunning: game.isRunning,

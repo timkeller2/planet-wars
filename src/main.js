@@ -1684,7 +1684,7 @@ function getPlanetTradeIncomePerMin(planet) {
     // 2. Set up centered coordinate system
     ctxTile.save();
     let centerY = height / 2;
-    if (type === 'ship') centerY = height * 0.7;
+    if (type === 'ship') centerY = height * 0.55;
     ctxTile.translate(width / 2, centerY);
     ctxTile.scale(scale, scale);
     ctxTile.translate(-unit.x, -unit.y);
@@ -8157,6 +8157,10 @@ function getPlanetTradeIncomePerMin(planet) {
             const sellSub = priceIndicator.querySelector('.res-sell-price');
             if (buySup) buySup.textContent = '';
             if (sellSub) sellSub.textContent = '';
+          }
+
+          if (res === 'latinum' && serverState && serverState.bundleValue) {
+            card.title = `Latinum - High-value trade resource. 4 latinum, 5 trade options and 1 of every other resource may be sold for ${serverState.bundleValue} credits if your trade options are at capacity.`;
           }
 
           if (!card._hasMarketListeners) {
