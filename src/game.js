@@ -1595,7 +1595,7 @@ export class Game {
           this.resourceRarities[r] = 'normal';
         }
       }
-      if (this.marketPrices) {
+      if (this.marketPrices && !this.isRunning) {
         this.marketPrices[r] = rarityToPrice[this.resourceRarities[r]];
       }
     }
@@ -5961,7 +5961,7 @@ export class Game {
             this.pendingChatMessages = this.pendingChatMessages || [];
             this.pendingChatMessages.push({
               playerId: 'all',
-              text: `⚠️ Game speed has been reduced to ${Math.round(newSpeed * 100)}% because of a successful player (${player.name || player.id} is controlling ${score} planets + cruisers)!`
+              text: `⚠️ Game speed has been reduced to ${Math.round(newSpeed * 100)}% because of a successful player (${player.name || player.id} is controlling ${score} units)!`
             });
           }
         }

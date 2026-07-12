@@ -8248,7 +8248,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
       }
-
+    }
 
     const pCount = myPlayer.planetCount || 0;
     const totalEconomy = myPlayer.totalCapacity || 0;
@@ -8889,7 +8889,7 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       const totalUpgradeCost = getConfigurationUpgradeCost(cfg.classType, cfg.upgrades, myPlayer);
-      const finalCost = Math.round((baseCostShips + totalUpgradeCost) * 0.8);
+      const finalCost = Math.round(baseCostShips + totalUpgradeCost);
       console.log(`[CLIENT-CONFIG-COST] Name: ${cfg.name}, upgrades:`, JSON.stringify(cfg.upgrades), `baseCostShips: ${baseCostShips}, totalUpgradeCost: ${totalUpgradeCost}, finalCost: ${finalCost}`);
 
       const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
@@ -17690,9 +17690,10 @@ function getPlanetTradeIncomePerMin(planet) {
               const pRadius = 1.0 + randSize * 2.0;
               const opacity = Math.max(0, 1.0 - pProgress);
 
-              ctx.fillStyle = `rgba(0, 255, 0, ${opacity * 0.85})`;
-              const pSize = pRadius * 2;
-              ctx.fillRect(px - pRadius, py - pRadius, pSize, pSize);
+              ctx.fillStyle = `rgba(30, 110, 40, ${opacity * 0.90})`;
+              ctx.beginPath();
+              ctx.arc(px, py, pRadius * 1.5, 0, Math.PI * 2);
+              ctx.fill();
             }
           } else if (laser.color === 'cruiser-projectile') {
             const curX = laser.startX + (laser.endX - laser.startX) * progress;
