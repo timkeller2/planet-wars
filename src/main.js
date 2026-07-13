@@ -7973,14 +7973,15 @@ function getPlanetTradeIncomePerMin(planet) {
       let foreignTradeShips = 0;
       if (myPlayer.tradingPartners) {
         for (const partner of myPlayer.tradingPartners) {
+          const shipVal = partner.cappedShips !== undefined ? partner.cappedShips : partner.ships;
           if (partner.name === 'Domestic Ships') {
-            domesticTradeShips += partner.ships;
+            domesticTradeShips += shipVal;
           } else {
-            foreignTradeShips += partner.ships;
+            foreignTradeShips += shipVal;
           }
         }
       }
-      const totalTradeShips = Math.floor(domesticTradeShips + foreignTradeShips);
+      const totalTradeShips = Math.floor(myPlayer.totalTradeShips || 0);
       let superscriptColor = '#4caf50';
       if (foreignTradeShips >= domesticTradeShips * 1.5) {
         superscriptColor = '#d500f9';

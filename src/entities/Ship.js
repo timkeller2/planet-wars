@@ -2769,12 +2769,14 @@ export class Ship {
               finalPlanetHitChance = Math.min(1.0, finalPlanetHitChance * 2 + munitionsBonus);
             }
             if (Math.random() < finalPlanetHitChance) {
-              if (p.ships > 0) {
+              if (p.ships >= 0) {
                 if (isCruiser) {
                   // For cruisers, delay decrementing p.ships until the explosion (arrival)
                   destroyedDefender = true;
                 } else {
-                  p.ships -= 1;
+                  if (p.ships > 0) {
+                    p.ships -= 1;
+                  }
                   destroyedDefender = true;
                 }
               }

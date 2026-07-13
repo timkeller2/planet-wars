@@ -1769,12 +1769,10 @@ export class Game {
       ships: this.ships.map(s => {
         const sData = {};
         for (const [k, v] of Object.entries(s)) {
-          if (k === 'targetPlanet') {
-            sData.targetPlanetId = v ? v.id : null;
-          } else if (k === 'owner') {
-            sData.ownerId = v ? v.id : null;
-          } else if (k === 'boardingPlayer') {
-            sData.boardingPlayerId = v ? v.id : null;
+          if (v && typeof v === 'object' && v.constructor && v.constructor.name === 'Planet') {
+            sData[`${k}Id`] = v.id;
+          } else if (v && typeof v === 'object' && v.constructor && v.constructor.name === 'Player') {
+            sData[`${k}Id`] = v.id;
           } else if (k === 'insideHazards') {
             sData.insideHazards = v ? Array.from(v) : [];
           } else if (typeof v !== 'function') {
@@ -1966,7 +1964,7 @@ export class Game {
         const s = new Ship(sData.id, sData.x, sData.y, targetPlanet, owner, sData.targetX, sData.targetY);
 
         for (const [k, v] of Object.entries(sData)) {
-          if (k !== 'targetPlanetId' && k !== 'ownerId' && k !== 'boardingPlayerId') {
+          if (k !== 'targetPlanetId' && k !== 'ownerId' && k !== 'boardingPlayerId' && k !== 'sourcePlanetId') {
             if (k === 'insideHazards') {
               if (Array.isArray(v)) {
                 s.insideHazards = new Set(v);
@@ -1975,6 +1973,14 @@ export class Game {
               } else {
                 s.insideHazards = new Set();
               }
+            } else if (k.endsWith('PlanetId') && k !== 'planetBombardTimer') {
+              const propName = k.slice(0, -2);
+              s[propName] = planetsMap.get(v) || null;
+              s[k] = v;
+            } else if (k.endsWith('PlayerId')) {
+              const propName = k.slice(0, -2);
+              s[propName] = playersMap.get(v) || null;
+              s[k] = v;
             } else {
               s[k] = v;
             }
@@ -1982,6 +1988,9 @@ export class Game {
         }
         s.owner = owner;
         s.targetPlanet = targetPlanet;
+        if (sData.sourcePlanetId) {
+          s.sourcePlanet = planetsMap.get(sData.sourcePlanetId) || null;
+        }
         if (sData.boardingPlayerId) {
           s.boardingPlayer = playersMap.get(sData.boardingPlayerId) || null;
         }
@@ -6281,13 +6290,14 @@ export class Game {
             player.tradingPartners.push({
               name: key,
               ships: shipsNonCapped,
+              cappedShips: shipsCapped,
               rate: qualifyingShipsSum > 0 ? ((shipsCapped / qualifyingShipsSum) * tradingIncomeRate) : 0
             });
           }
         }
         player.playerEffectiveShips = playerEffectiveShips;
         player.otherEffectiveShips = otherEffectiveShips;
-        player.totalTradeShips = playerEffectiveShips + otherEffectiveShips;
+        player.totalTradeShips = qualifyingShipsSum;
       } else {
         player.passiveIncomeRate = 0;
         player.tradingPartners = [];
@@ -6639,18 +6649,22 @@ export class Game {
           if (laser.destroysDefender) {
             if (laser.targetPlanetId !== undefined) {
               const targetPlanet = this.planets.find(pl => pl.id === laser.targetPlanetId);
-              if (targetPlanet && targetPlanet.ships > 0) {
+              if (targetPlanet && targetPlanet.ships >= 0) {
                 const oldShips = targetPlanet.ships;
-                targetPlanet.ships -= 1;
-                let toDestroy = 0;
-                if (laser.splashDamage && laser.splashDamage > 0) {
-                  const splashLimit = Math.floor(targetPlanet.ships / 50);
-                  const splash = Math.min(laser.splashDamage, splashLimit);
-                  toDestroy = Math.min(targetPlanet.ships, splash);
-                  targetPlanet.ships -= toDestroy;
+                if (targetPlanet.ships > 0) {
+                  targetPlanet.ships -= 1;
+                  let toDestroy = 0;
+                  if (laser.splashDamage && laser.splashDamage > 0) {
+                    const splashLimit = Math.floor(targetPlanet.ships / 50);
+                    const splash = Math.min(laser.splashDamage, splashLimit);
+                    toDestroy = Math.min(targetPlanet.ships, splash);
+                    targetPlanet.ships -= toDestroy;
+                  }
                 }
                 const actualKilled = oldShips - targetPlanet.ships;
-                targetPlanet.addExperience(actualKilled);
+                if (actualKilled > 0) {
+                  targetPlanet.addExperience(actualKilled);
+                }
 
                 const sourceShip = this.ships.find(sh => sh.id === laser.sourceShipId);
                 if (sourceShip && sourceShip.owner && targetPlanet.owner && targetPlanet.owner.id !== sourceShip.owner.id) {
