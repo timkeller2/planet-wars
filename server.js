@@ -142,7 +142,7 @@ async function bootstrap() {
   }
 
   // Initialize server game instance
-  let game = new Game({ width: 1920, height: 1620 });
+  let game = new Game({ width: 3840, height: 3240 });
   game.initMap();
   game.gameStartTime = Date.now();
   game.isRunning = true;

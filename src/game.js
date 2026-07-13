@@ -314,7 +314,12 @@ export class Game {
     const allColors = [
       '#f0f', '#ff0', '#f00', '#0f0', '#00f', '#f80', '#80f', // Original 7
       '#08f', '#0f8', '#8f0', '#f08', '#f88', '#8f8', '#88f', '#fff',
-      '#a40', '#0a4', '#40a', '#a04', '#4a0', '#04a', '#a44', '#4a4', '#aaa'
+      '#a40', '#0a4', '#40a', '#a04', '#4a0', '#04a', '#a44', '#4a4', '#aaa',
+      '#cc0000', '#00cc00', '#0000cc', '#cccc00', '#00cccc', '#cc00cc',
+      '#ff6666', '#66ff66', '#6666ff', '#ffff66', '#66ffff', '#ff66ff',
+      '#993300', '#339900', '#003399', '#990033', '#330099', '#009933',
+      '#ff9933', '#33ff99', '#9933ff', '#ff3399', '#99ff33', '#3399ff',
+      '#dddddd', '#888888', '#444444'
     ];
     
     const aiNames = [
@@ -343,7 +348,7 @@ export class Game {
     }
     
     this.aiPlayers = [];
-    for (let i = 0; i < 23; i++) {
+    for (let i = 0; i < 46; i++) {
       this.aiPlayers.push(new Player(shuffledNames[i] || `ai${i+1}`, allColors[i], true));
     }
     
@@ -2240,7 +2245,7 @@ export class Game {
     const height = this.height;
     
     // Create random planets
-    const numPlanets = this.settings && this.settings.planetCount ? this.settings.planetCount : 50;
+    const numPlanets = this.settings && this.settings.planetCount ? this.settings.planetCount : 100;
     
     let countMegaSuper = width >= 3000 ? 1 : 0;
     let countSuper = width >= 3000 ? 3 : 1;
