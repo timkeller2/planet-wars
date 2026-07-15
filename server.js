@@ -123,6 +123,56 @@ async function bootstrap() {
     process.exit(0);
   });
 
+  function computeDelta(oldObj, newObj) {
+    if (oldObj === newObj) return undefined;
+    if (oldObj === null || newObj === null || typeof oldObj !== 'object' || typeof newObj !== 'object') {
+      return newObj;
+    }
+    
+    if (Array.isArray(newObj)) {
+      const delta = [];
+      let changed = false;
+      for (let i = 0; i < Math.max(oldObj.length, newObj.length); i++) {
+        if (i >= newObj.length) {
+          delta.push('__DEL__');
+          changed = true;
+        } else if (i >= oldObj.length) {
+          delta.push(newObj[i]);
+          changed = true;
+        } else {
+          const d = computeDelta(oldObj[i], newObj[i]);
+          if (d !== undefined) {
+            delta.push(d);
+            changed = true;
+          } else {
+            delta.push(null);
+          }
+        }
+      }
+      while (delta.length > 0 && delta[delta.length - 1] === null) {
+        delta.pop();
+      }
+      return changed ? delta : undefined;
+    }
+
+    const delta = {};
+    let changed = false;
+    for (const key in newObj) {
+      const d = computeDelta(oldObj[key], newObj[key]);
+      if (d !== undefined) {
+        delta[key] = d;
+        changed = true;
+      }
+    }
+    for (const key in oldObj) {
+      if (!(key in newObj)) {
+        delta[key] = '__DEL__';
+        changed = true;
+      }
+    }
+    return changed ? delta : undefined;
+  }
+
   if (isProd) {
     app.use(express.static(path.join(__dirname, 'dist')));
   } else {
@@ -151,6 +201,20 @@ async function bootstrap() {
   
   const connectedClients = new Map(); // socket.id -> player reference
   let lastHumanActivityTime = Date.now();
+
+  // After map restarts / loads, clients clear serverState and only accept full gameStateUpdate
+  // packets. Deltas against a stale lastGameState are ignored client-side, so the map stays
+  // blank until the periodic full resync (tickCount % 60 ≈ 3s). Force a full snapshot ASAP.
+  function invalidateClientGameStates(socketIds = null) {
+    const ids = socketIds || Array.from(connectedClients.keys());
+    for (const socketId of ids) {
+      const sock = io.sockets.sockets.get(socketId);
+      if (sock) {
+        sock.lastGameState = null;
+        sock.needsFullState = true;
+      }
+    }
+  }
 
   function getSocketIdForPlayer(playerId) {
     for (const [socketId, player] of connectedClients.entries()) {
@@ -558,6 +622,8 @@ async function bootstrap() {
       assignedPlayer.lastCommandTime = Date.now();
       connectedClients.set(socket.id, assignedPlayer);
       socket.emit('assignedPlayer', assignedPlayer);
+      // First snapshot for this socket should be a full state, not a delta
+      invalidateClientGameStates([socket.id]);
     } else {
       // Spectator
       socket.emit('spectator');
@@ -1808,6 +1874,10 @@ async function bootstrap() {
       if (replay) {
         const player = connectedClients.get(socket.id);
         if (player) {
+          // Only participants may fetch full replay data
+          if (replay.participants && replay.participants.length > 0 && !replay.participants.includes(player.id)) {
+            return;
+          }
           const responseReplay = Object.assign({}, replay);
           if (game.settings?.fogOfWar && responseReplay.planets && responseReplay.planets.length > 0) {
             responseReplay.planets = responseReplay.planets.filter(rp => player.discoveredPlanets && player.discoveredPlanets.has(rp.id));
@@ -1819,15 +1889,21 @@ async function bootstrap() {
 
     socket.on('requestReplayList', () => {
       if (!game || !game.isRunning) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
       const replayList = [];
       if (game.completedBattleReplays) {
         game.completedBattleReplays.forEach(r => {
-          replayList.push({ id: r.id, name: r.name, duration: r.duration });
+          if (r.participants && r.participants.includes(player.id)) {
+            replayList.push({ id: r.id, name: r.name, duration: r.duration });
+          }
         });
       }
       if (game.boardingReplays) {
         game.boardingReplays.forEach(r => {
-          replayList.push({ id: r.id, name: r.name || 'Boarding Action', duration: r.duration });
+          if (r.participants && r.participants.includes(player.id)) {
+            replayList.push({ id: r.id, name: r.name || 'Boarding Action', duration: r.duration });
+          }
         });
       }
       socket.emit('replayListUpdate', replayList);
@@ -1875,6 +1951,7 @@ async function bootstrap() {
         for (const [socketId, activePlayer] of connectedClients.entries()) {
           io.to(socketId).emit('assignedPlayer', activePlayer);
         }
+        invalidateClientGameStates();
 
         // Notify all clients that a game has successfully loaded
         io.emit('gameLoadedAndStarted', sanitized);
@@ -1952,6 +2029,7 @@ async function bootstrap() {
         for (const [socketId, activePlayer] of connectedClients.entries()) {
           io.to(socketId).emit('assignedPlayer', activePlayer);
         }
+        invalidateClientGameStates();
       }
 
       const p = connectedClients.get(socket.id);
@@ -1963,6 +2041,8 @@ async function bootstrap() {
           p.cruiserStyle = null;
         }
         game.tryAssignPlanet(p);
+        // Homeworld just assigned — force full state so the map appears immediately
+        invalidateClientGameStates([socket.id]);
       }
     });
 
@@ -2052,6 +2132,8 @@ async function bootstrap() {
       for (const [socketId, activePlayer] of connectedClients.entries()) {
         io.to(socketId).emit('assignedPlayer', activePlayer);
       }
+      // Clients wipe serverState on restart and ignore deltas until a full snapshot arrives
+      invalidateClientGameStates();
     });
 
     socket.on('disconnect', () => {
@@ -2213,18 +2295,71 @@ async function bootstrap() {
 
     tickCount++;
 
+    // Decide who needs a packet this tick BEFORE building the expensive full payload.
+    // Healthy clients receive ~10 FPS; congested sockets are rate-limited further.
+    // Client-side dead reckoning + smoothing fills in the frames between packets.
+    // needsFullState always sends immediately so post-start / post-load maps aren't blank.
+    const recipients = [];
+    for (const [socketId, player] of connectedClients.entries()) {
+      const sock = io.sockets.sockets.get(socketId);
+      let shouldSend = false;
+      if (sock && sock.needsFullState) {
+        shouldSend = true;
+      } else if (sock && sock.conn && sock.conn.writeBuffer) {
+        const bufferLen = sock.conn.writeBuffer.length;
+        if (bufferLen > 8) {
+          // Extremely congested socket: drop the tick entirely to allow the buffer to clear
+          continue;
+        } else if (bufferLen > 3) {
+          // Mildly congested socket: rate-limit to 5 FPS
+          shouldSend = (tickCount % 4 === 0);
+        } else {
+          // Healthy socket: 10 FPS network updates
+          shouldSend = (tickCount % 2 === 0);
+        }
+      } else {
+        shouldSend = (tickCount % 2 === 0);
+      }
+      if (shouldSend) {
+        recipients.push({ socketId, player });
+      }
+    }
 
+    if (recipients.length === 0) {
+      // No clients need a payload this tick — skip O(planets*ships) serialization entirely.
+      // Keep one-shot VFX event queues from growing while nobody is watching.
+      game.upgradeEnhanceEvents = [];
+      game.accuracyEvents = [];
+      game.happinessEvents = [];
+      game.pendingHabClassChanges = [];
+
+      const tickEndPerf = performance.now();
+      const tickDur = tickEndPerf - tickStartPerf;
+      const updateDur = updateEndPerf - tickStartPerf;
+      const payloadDur = tickEndPerf - updateEndPerf;
+      perfStats.ticks++;
+      perfStats.tickTime += tickDur;
+      perfStats.updateTime += updateDur;
+      perfStats.payloadTime += payloadDur;
+      if (tickDur > perfStats.maxTick) perfStats.maxTick = tickDur;
+      if (updateDur > perfStats.maxUpdate) perfStats.maxUpdate = updateDur;
+      if (payloadDur > perfStats.maxPayload) perfStats.maxPayload = payloadDur;
+      return;
+    }
 
     // Compute planet visual state
     const allPlanetsMapped = game.planets.map(p => {
         const incomingShips = [];
-        const searchShips = game.spatialGrid ? game.getShipsInRadiusSq(p.x, p.y, 22500) : game.ships;
-        for (const s of searchShips) {
-          if (s.active && s.targetPlanet === p && s.owner !== p.owner) {
-            const dx = s.x - p.x;
-            const dy = s.y - p.y;
-            if (dx*dx + dy*dy < 22500) {
-              incomingShips.push(s);
+        // Deep-space anomalies / dead worlds never show attacker odds — skip spatial query
+        if (!p.isDeepSpaceAnomaly && !p.dead) {
+          const searchShips = game.spatialGrid ? game.getShipsInRadiusSq(p.x, p.y, 22500) : game.ships;
+          for (const s of searchShips) {
+            if (s.active && s.targetPlanet === p && s.owner !== p.owner) {
+              const dx = s.x - p.x;
+              const dy = s.y - p.y;
+              if (dx*dx + dy*dy < 22500) {
+                incomingShips.push(s);
+              }
             }
           }
         }
@@ -2250,38 +2385,41 @@ async function bootstrap() {
             
             let friendlyPlanetBoost = 0;
             let defenderPlanetPenalty = 0;
-            for (const otherPlanet of game.planets) {
-              if (otherPlanet !== p) {
-                const dx = otherPlanet.x - p.x;
-                const dy = otherPlanet.y - p.y;
-                const gravityRadius = otherPlanet.getGravityRadius();
-                
-                if (dx*dx + dy*dy < gravityRadius * gravityRadius) {
-                  if (otherPlanet.owner === owner) {
-                    let mult = 0.002;
-                    if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
-                      if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) {
-                        mult = 0.0045;
-                      } else if (otherPlanet.ships >= otherPlanet.maxShips) {
-                        mult = 0.003;
-                      }
+            // Nearby gravity wells only — use planet spatial grid when available
+            const nearbyForOdds = (game.planetGridPopulated && game.planetGrid)
+              ? game.planetGrid.getPlanetsInRadiusSq(p.x, p.y, 400 * 400)
+              : game.planets;
+            for (const otherPlanet of nearbyForOdds) {
+              if (otherPlanet === p || otherPlanet.isDeepSpaceAnomaly) continue;
+              const dx = otherPlanet.x - p.x;
+              const dy = otherPlanet.y - p.y;
+              const gravityRadius = otherPlanet.getGravityRadius();
+              
+              if (dx*dx + dy*dy < gravityRadius * gravityRadius) {
+                if (otherPlanet.owner === owner) {
+                  let mult = 0.002;
+                  if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
+                    if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) {
+                      mult = 0.0045;
+                    } else if (otherPlanet.ships >= otherPlanet.maxShips) {
+                      mult = 0.003;
                     }
-                    friendlyPlanetBoost += mult * Math.floor(otherPlanet.ships / 10);
-                  } else if (p.owner !== null && otherPlanet.owner === p.owner) {
-                    let mult = 0.002;
-                    if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
-                      if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) {
-                        mult = 0.0045;
-                      } else if (otherPlanet.ships >= otherPlanet.maxShips) {
-                        mult = 0.003;
-                      }
-                    }
-                    let bonus = mult * Math.floor(otherPlanet.ships / 10);
-                    if (otherPlanet.inRevolt) {
-                      bonus *= 0.5;
-                    }
-                    defenderPlanetPenalty += bonus;
                   }
+                  friendlyPlanetBoost += mult * Math.floor(otherPlanet.ships / 10);
+                } else if (p.owner !== null && otherPlanet.owner === p.owner) {
+                  let mult = 0.002;
+                  if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
+                    if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) {
+                      mult = 0.0045;
+                    } else if (otherPlanet.ships >= otherPlanet.maxShips) {
+                      mult = 0.003;
+                    }
+                  }
+                  let bonus = mult * Math.floor(otherPlanet.ships / 10);
+                  if (otherPlanet.inRevolt) {
+                    bonus *= 0.5;
+                  }
+                  defenderPlanetPenalty += bonus;
                 }
               }
             }
@@ -2639,37 +2777,6 @@ async function bootstrap() {
         return null;
       }
     });
-
-    const recipients = [];
-    for (const [socketId, player] of connectedClients.entries()) {
-      const sock = io.sockets.sockets.get(socketId);
-      let shouldSend = false;
-      if (sock && sock.conn && sock.conn.writeBuffer) {
-        const bufferLen = sock.conn.writeBuffer.length;
-        if (bufferLen > 8) {
-          // Extremely congested socket: drop the tick entirely to allow the buffer to clear
-          continue;
-        } else if (bufferLen > 3) {
-          // Mildly congested socket: rate-limit to 5 FPS to reduce traffic without losing telemetry
-          shouldSend = (tickCount % 4 === 0);
-        } else {
-          // Healthy socket: rate-limit to 10 FPS to save bandwidth/CPU, client interpolates to 60 FPS
-          shouldSend = (tickCount % 2 === 0);
-        }
-      } else {
-        shouldSend = (tickCount % 2 === 0);
-      }
-      if (shouldSend) {
-        recipients.push({ socketId, player });
-      }
-    }
-
-    if (recipients.length === 0) {
-      // Clear events that accumulate per-tick
-      game.upgradeEnhanceEvents = [];
-      game.accuracyEvents = [];
-      return;
-    }
 
     for (const { socketId, player } of recipients) {
 
@@ -3183,15 +3290,15 @@ async function bootstrap() {
         height: game.height,
         gameStartTime: game.gameStartTime,
         exploredCells: playerExploredCells,
+        // Participants always keep their own recordings in the list, even if they have left
+        // sensor range of the battle site (FoW must not hide a fight you were in).
         boardingReplays: game.boardingReplays ? game.boardingReplays.filter(r => {
-          if (r.participants && !r.participants.includes(player.id)) return false;
-          if (game.settings?.fogOfWar && !isVisible(r.x || 0, r.y || 0)) return false;
-          return true;
+          if (!r.participants || r.participants.length === 0) return false;
+          return r.participants.includes(player.id);
         }).map(r => ({ id: r.id, name: r.name, duration: r.duration || r.totalDuration || 0, timestamp: r.timestamp })) : [],
         battleReplays: game.completedBattleReplays ? game.completedBattleReplays.filter(r => {
-          if (!r.participants.includes(player.id)) return false;
-          if (game.settings?.fogOfWar && !isVisible(r.x, r.y)) return false;
-          return true;
+          if (!r.participants || r.participants.length === 0) return false;
+          return r.participants.includes(player.id);
         }).map(r => ({ id: r.id, name: r.name, duration: r.duration || r.totalDuration || 0, timestamp: r.timestamp })) : []
       };
       
@@ -3215,7 +3322,20 @@ async function bootstrap() {
         }
       }
 
-      io.to(socketId).emit('gameStateUpdate', state);
+      const sock = io.sockets.sockets.get(socketId);
+      if (sock) {
+        if (!sock.lastGameState || sock.needsFullState || tickCount % 60 === 0) {
+          io.to(socketId).emit('gameStateUpdate', state);
+          sock.lastGameState = state;
+          sock.needsFullState = false;
+        } else {
+          const delta = computeDelta(sock.lastGameState, state);
+          if (delta !== undefined) {
+            io.to(socketId).emit('gameStateDelta', delta);
+          }
+          sock.lastGameState = state;
+        }
+      }
     }
     
     const tickEndPerf = performance.now();

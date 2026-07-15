@@ -5128,6 +5128,8 @@ function getPlanetTradeIncomePerMin(planet) {
     
     hasCenteredOnHomeworld = false;
     resetClientModeFlags();
+    serverState = null;
+    clearServerStateMaps();
     lastKnownPlanets = {};
     lastKnownHazards = {};
   });
@@ -5212,6 +5214,8 @@ function getPlanetTradeIncomePerMin(planet) {
   let floatingAnimations = [];
   let lastPlanetSpyRooted = {};
   let visualShips = new Map();
+  let lastNetworkUpdateMs = 0;
+  let lastShipSmoothMs = 0;
 
   const sounds = {
     laser: new Audio('/laser.wav'),
@@ -5544,7 +5548,46 @@ function getPlanetTradeIncomePerMin(planet) {
   let clientPlanetOwners = {};
   let clientLastBundleSaleTime = -1;
 
-  socket.on('gameStateUpdate', (state) => {
+  function applyDelta(state, delta) {
+    if (delta === undefined) return state;
+    if (delta === '__DEL__') return undefined;
+    if (delta === null || typeof delta !== 'object') return delta;
+    
+    if (Array.isArray(delta)) {
+      if (!Array.isArray(state)) state = [];
+      for (let i = 0; i < delta.length; i++) {
+        if (delta[i] === '__DEL__') {
+          // spliced later
+        } else if (delta[i] !== null) {
+          state[i] = applyDelta(state[i], delta[i]);
+        }
+      }
+      for (let i = delta.length - 1; i >= 0; i--) {
+        if (delta[i] === '__DEL__') {
+          state.splice(i, 1);
+        }
+      }
+      return state;
+    }
+
+    if (typeof state !== 'object' || state === null || Array.isArray(state)) {
+      state = {};
+    }
+    
+    for (const key in delta) {
+      if (delta[key] === '__DEL__') {
+        delete state[key];
+      } else {
+        state[key] = applyDelta(state[key], delta[key]);
+      }
+    }
+    return state;
+  }
+
+  function processGameState(state) {
+    if (state.ships) {
+      state.ships = state.ships.filter(s => !s._isFlatShip);
+    }
     const gameInProgressMsg = document.getElementById('game-in-progress-msg');
     if (gameInProgressMsg) {
       gameInProgressMsg.style.display = state.isRunning ? 'block' : 'none';
@@ -6106,6 +6149,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const owner = state.players[flat[i + 4]];
         const isMarine = flat[i + 17] === 1;
         state.ships.push({
+          _isFlatShip: true,
           id: flat[i],
           x: flat[i + 1],
           y: flat[i + 2],
@@ -6143,6 +6187,34 @@ function getPlanetTradeIncomePerMin(planet) {
 
     serverState = state;
     rebuildServerStateMaps();
+    lastNetworkUpdateMs = performance.now();
+    // Snapshot authoritative ship poses for dead reckoning between network packets
+    if (state.ships) {
+      for (let i = 0; i < state.ships.length; i++) {
+        const s = state.ships[i];
+        if (!s || !s.active) continue;
+        let vis = visualShips.get(s.id);
+        if (!vis) {
+          vis = {
+            x: s.x,
+            y: s.y,
+            angle: s.angle || 0,
+            serverX: s.x,
+            serverY: s.y,
+            serverAngle: s.angle || 0,
+            serverSpeed: s.currentSpeed || 0,
+            netTime: lastNetworkUpdateMs
+          };
+          visualShips.set(s.id, vis);
+        } else {
+          vis.serverX = s.x;
+          vis.serverY = s.y;
+          vis.serverAngle = s.angle || 0;
+          vis.serverSpeed = s.currentSpeed || 0;
+          vis.netTime = lastNetworkUpdateMs;
+        }
+      }
+    }
 
     if (state.storms) {
       for (const storm of state.storms) {
@@ -6349,6 +6421,19 @@ function getPlanetTradeIncomePerMin(planet) {
     updateBoardingOverlay(state);
     updateUI();
     updateAudioState();
+  }
+
+  socket.on('gameStateUpdate', (state) => {
+    processGameState(state);
+  });
+
+  socket.on('gameStateDelta', (delta) => {
+    if (serverState) {
+      applyDelta(serverState, delta);
+      processGameState(serverState);
+    }
+    // If we wiped state on start/restart, deltas are useless until a full snapshot arrives.
+    // Server should send needsFullState immediately; this is a safety net only.
   });
 
   function ensureBoardingCombatWindowExists() {
@@ -12777,13 +12862,18 @@ function getPlanetTradeIncomePerMin(planet) {
       ctx.scale(finalScale, finalScale);
       ctx.translate(-centerServerX, -centerServerY);
 
-      // Draw starfield
-      if (starfieldEnabled) for (const star of stars) {
-        if (star.x < viewMinX || star.x > viewMaxX || star.y < viewMinY || star.y > viewMaxY) continue;
-        ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
-        ctx.beginPath();
-        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
-        ctx.fill();
+      // Draw starfield (fillRect is far cheaper than arc+beginPath per star)
+      if (starfieldEnabled) {
+        const prevAlpha = ctx.globalAlpha;
+        ctx.fillStyle = '#ffffff';
+        for (let si = 0; si < stars.length; si++) {
+          const star = stars[si];
+          if (star.x < viewMinX || star.x > viewMaxX || star.y < viewMinY || star.y > viewMaxY) continue;
+          ctx.globalAlpha = star.alpha;
+          const sz = star.size;
+          ctx.fillRect(star.x, star.y, sz, sz);
+        }
+        ctx.globalAlpha = prevAlpha;
       }
 
       // Draw unexplored cells in transparent yellow
@@ -12887,8 +12977,8 @@ function getPlanetTradeIncomePerMin(planet) {
               if (!ss.isCruiser) return false;
               const rawShip = findServerShip(ss.id);
               if (!rawShip) return false;
-              const sx = rawShip.rawServerX !== undefined ? rawShip.rawServerX : rawShip.x;
-              const sy = rawShip.rawServerY !== undefined ? rawShip.rawServerY : rawShip.y;
+              const sx = rawShip.x;
+              const sy = rawShip.y;
               const distSqRaw = (sx - f.x) * (sx - f.x) + (sy - f.y) * (sy - f.y);
               const distSqVis = (rawShip.x - f.x) * (rawShip.x - f.x) + (rawShip.y - f.y) * (rawShip.y - f.y);
               return distSqRaw < 225 || distSqVis < 225; // within 15 pixels
@@ -16180,28 +16270,88 @@ function getPlanetTradeIncomePerMin(planet) {
         return { lx, ly };
       }
 
+      // Time-based smoothing + dead reckoning (network is ~10 Hz; render is 60 Hz)
+      const smoothNow = performance.now();
+      const smoothDt = Math.min(0.05, Math.max(0, (smoothNow - (lastShipSmoothMs || smoothNow)) / 1000));
+      lastShipSmoothMs = smoothNow;
+      // Higher = snappier catch-up to predicted pose; ~14 keeps motion silky without rubber-banding
+      const smoothAlpha = 1 - Math.exp(-14 * smoothDt);
+      const playersById = new Map();
+      if (serverState.players) {
+        for (let pi = 0; pi < serverState.players.length; pi++) {
+          const pl = serverState.players[pi];
+          playersById.set(pl.id, pl);
+        }
+      }
+      const selectedShipIds = new Set(selectedShips.map(ss => ss.id));
+
       for (const s of serverState.ships) {
         if (!s.active) continue;
 
-        if (s.rawServerX === undefined) s.rawServerX = s.x;
-        if (s.rawServerY === undefined) s.rawServerY = s.y;
-        if (s.rawServerAngle === undefined) s.rawServerAngle = s.angle;
-
         let vis = visualShips.get(s.id);
         if (!vis) {
-          vis = { x: s.rawServerX, y: s.rawServerY, angle: s.rawServerAngle };
+          vis = {
+            x: s.x,
+            y: s.y,
+            angle: s.angle || 0,
+            serverX: s.x,
+            serverY: s.y,
+            serverAngle: s.angle || 0,
+            serverSpeed: s.currentSpeed || 0,
+            netTime: smoothNow
+          };
           visualShips.set(s.id, vis);
         } else {
-          // smooth lerp
-          const lerpFactor = 0.25; // Adjust for smoothness/latency balance
-          vis.x += (s.rawServerX - vis.x) * lerpFactor;
-          vis.y += (s.rawServerY - vis.y) * lerpFactor;
-          
-          let diff = s.rawServerAngle - vis.angle;
-          while (diff < -Math.PI) diff += Math.PI * 2;
-          while (diff > Math.PI) diff -= Math.PI * 2;
-          vis.angle += diff * lerpFactor;
+          // Dead-reckon from last network snapshot so ships keep moving between packets
+          const age = Math.min(0.25, Math.max(0, (smoothNow - (vis.netTime || smoothNow)) / 1000));
+          let predX = vis.serverX !== undefined ? vis.serverX : s.x;
+          let predY = vis.serverY !== undefined ? vis.serverY : s.y;
+          const spd = (vis.serverSpeed !== undefined ? vis.serverSpeed : (s.currentSpeed || 0));
+          const ang = (vis.serverAngle !== undefined ? vis.serverAngle : (s.angle || 0));
+          if (spd > 0.5 && age > 0) {
+            predX += Math.cos(ang) * spd * age;
+            predY += Math.sin(ang) * spd * age;
+            // Don't coast past the ship's destination waypoint
+            if (s.targetX != null && s.targetY != null) {
+              const baseX = vis.serverX !== undefined ? vis.serverX : s.x;
+              const baseY = vis.serverY !== undefined ? vis.serverY : s.y;
+              const tdx = s.targetX - baseX;
+              const tdy = s.targetY - baseY;
+              const tdistSq = tdx * tdx + tdy * tdy;
+              if (tdistSq > 1) {
+                const pdx = predX - baseX;
+                const pdy = predY - baseY;
+                if (pdx * pdx + pdy * pdy > tdistSq) {
+                  predX = s.targetX;
+                  predY = s.targetY;
+                }
+              }
+            }
+          } else {
+            predX = s.x;
+            predY = s.y;
+          }
+
+          // Snap on teleports / fog re-entry so ships don't slide across the map
+          const errX = predX - vis.x;
+          const errY = predY - vis.y;
+          if (errX * errX + errY * errY > 40000) {
+            vis.x = predX;
+            vis.y = predY;
+            vis.angle = ang;
+          } else {
+            vis.x += errX * smoothAlpha;
+            vis.y += errY * smoothAlpha;
+            let diff = ang - vis.angle;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            vis.angle += diff * smoothAlpha;
+          }
         }
+
+        const trueServerX = s.x;
+        const trueServerY = s.y;
+        const trueServerAngle = s.angle;
 
         // Apply visual coordinates to the ship object so that all drawing, selection, and laser logic
         // automatically use the smoothly interpolated coordinates!
@@ -16210,14 +16360,18 @@ function getPlanetTradeIncomePerMin(planet) {
         s.angle = vis.angle;
 
         // Frustum culling: skip drawing if ship is way off-screen
-        const isSelected = selectedShips.some(ss => ss.id === s.id);
+        const isSelected = selectedShipIds.has(s.id);
         const buffer = 150; // generous buffer to account for spread and range circles
         const isOffscreen = s.x < viewMinX - buffer || s.x > viewMaxX + buffer || s.y < viewMinY - buffer || s.y > viewMaxY + buffer;
         if (isOffscreen && !isSelected) {
+          // Restore authoritative coords before skipping so state stays clean
+          s.x = trueServerX;
+          s.y = trueServerY;
+          s.angle = trueServerAngle;
           continue;
         }
 
-        const owner = serverState.players.find(pl => pl.id === s.ownerId);
+        const owner = playersById.get(s.ownerId);
 
         if (s.isBoardingFleet) {
           ctx.save();
@@ -17522,6 +17676,10 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.arc(s.x, s.y, 1.5, 0, Math.PI * 2);
         }
         ctx.fill();
+
+        s.x = trueServerX;
+        s.y = trueServerY;
+        s.angle = trueServerAngle;
       }
 
       if (serverState.lasers) {
@@ -18329,14 +18487,19 @@ function getPlanetTradeIncomePerMin(planet) {
   // Continuous render loop — keeps the visual state in sync with the camera
   // so that click hit-testing always matches what is on screen.
   let renderFrameCount = 0;
+  let lastUiHudMs = 0;
   function renderLoop() {
     const startTime = performance.now();
     try {
       updateSelectionTimes();
       draw();
-      updateInfoPanelContent();
-      updateSelectionTiles();
-      checkMusicRotation();
+      // HUD DOM/canvas tiles do not need 60 Hz — throttle to keep frames silky
+      if (startTime - lastUiHudMs >= 66) { // ~15 Hz
+        lastUiHudMs = startTime;
+        updateInfoPanelContent();
+        updateSelectionTiles();
+        checkMusicRotation();
+      }
     } catch (e) {
       console.error('[PlanetWars] draw() error:', e);
     }

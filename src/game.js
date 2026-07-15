@@ -1578,6 +1578,9 @@ export class Game {
     }
     
     const average = totalDeposits / 7;
+    // Preserve previous rarities so we can keep base prices in sync with rarity
+    // until the market has moved a resource off its rarity base price.
+    const previousRarities = this.resourceRarities || {};
     this.resourceRarities = {};
     const rarityToPrice = {
       'common': 4,
@@ -1601,8 +1604,21 @@ export class Game {
           this.resourceRarities[r] = 'normal';
         }
       }
-      if (this.marketPrices && !this.isRunning) {
-        this.marketPrices[r] = rarityToPrice[this.resourceRarities[r]];
+      // Base prices should track rarity (common=4, normal=8, rare=12, exotic=16).
+      // On a live multiplayer server isRunning is true as soon as the map boots, while
+      // homeworlds (and thus rarities) keep changing as players join — so we cannot
+      // gate this on !isRunning. Instead, update a resource's base price whenever it
+      // is still at the previous rarity's base (or has no prior rarity). Once trades
+      // move the price off that base, leave market-driven prices alone.
+      if (this.marketPrices) {
+        const newRarity = this.resourceRarities[r];
+        const oldRarity = previousRarities[r];
+        const newBase = rarityToPrice[newRarity];
+        const oldBase = oldRarity ? rarityToPrice[oldRarity] : undefined;
+        const current = this.marketPrices[r];
+        if (current === undefined || oldBase === undefined || current === oldBase) {
+          this.marketPrices[r] = newBase;
+        }
       }
     }
     console.log(`[Rarities] Recalculated. Average: ${average.toFixed(2)}, Counts:`, counts, `Rarities:`, this.resourceRarities);
@@ -7265,11 +7281,14 @@ export class Game {
               const secs = durationSecs % 60;
               const durationStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
               
+              // Only notify human participants — never global chat (leaks FoW / remote battles)
               this.pendingChatMessages = this.pendingChatMessages || [];
-              this.pendingChatMessages.push({
-                playerId: 'all',
-                text: `A new battle recording (${battleName}, ${durationStr}) is available for review.`
-              });
+              for (const pId of humanParticipants) {
+                this.pendingChatMessages.push({
+                  playerId: pId,
+                  text: `A new battle recording (${battleName}, ${durationStr}) is available for review.`
+                });
+              }
             }
           }
           this.ongoingBattles.splice(i, 1);
