@@ -1020,6 +1020,9 @@ export class Ship {
         }
         this.health = this.maxHealth;
         this.isMaterializing = false;
+        if (this.sourcePlanet && this.sourcePlanet.materializingShipId === this.id) {
+          this.sourcePlanet.materializingShipId = null;
+        }
 
         // Apply configuration upgrades if present
         if (this.configUpgrades) {

@@ -7,6 +7,24 @@ export class AIController {
     this.lastOverpopulatedTime = 0;
   }
 
+  _rebuildBullseyeCache() {
+    const activePlayers = this.game.allPlayers.filter(p => p.isAlive);
+    const sortedPlayers = [...activePlayers].sort((a, b) => (b.totalCapacity || 0) - (a.totalCapacity || 0));
+    const techSorted = [...activePlayers].sort((a, b) => (b.techScore || 0) - (a.techScore || 0));
+    
+    const techLead = techSorted.length > 1 ? ((techSorted[0].techScore || 0) - (techSorted[1].techScore || 0)) : (techSorted[0] ? (techSorted[0].techScore || 0) : 0);
+    const techLeadingId = techLead >= 200 ? techSorted[0].id : null;
+    const capLeadingId = sortedPlayers.length > 1 && (sortedPlayers[0].totalCapacity || 0) > 2 * (sortedPlayers[1].totalCapacity || 0) ? sortedPlayers[0].id : null;
+
+    const bullseyeIds = new Set();
+    if (techLeadingId) bullseyeIds.add(techLeadingId);
+    if (capLeadingId) bullseyeIds.add(capLeadingId);
+    for (const p of activePlayers) {
+      if ((p.totalCapacity || 0) > 4500) bullseyeIds.add(p.id);
+    }
+    this._bullseyeIds = bullseyeIds;
+  }
+
   getTargetScore(sourcePlanet, target) {
     const dx = target.x - sourcePlanet.x;
     const dy = target.y - sourcePlanet.y;
@@ -34,23 +52,9 @@ export class AIController {
       score -= 15; // Slightly prefer human players
     }
     
-    // Check dominant leaders
-    const activePlayers = this.game.allPlayers.filter(p => p.isAlive);
-    const sortedPlayers = [...activePlayers].sort((a, b) => (b.totalCapacity || 0) - (a.totalCapacity || 0));
-    const techSorted = [...activePlayers].sort((a, b) => (b.techScore || 0) - (a.techScore || 0));
-    
-    const techLead = techSorted.length > 1 ? ((techSorted[0].techScore || 0) - (techSorted[1].techScore || 0)) : (techSorted[0] ? (techSorted[0].techScore || 0) : 0);
-    const techLeadingId = techLead >= 200 ? techSorted[0].id : null;
-    const capLeadingId = sortedPlayers.length > 1 && (sortedPlayers[0].totalCapacity || 0) > 2 * (sortedPlayers[1].totalCapacity || 0) ? sortedPlayers[0].id : null;
-
-    const bullseyeIds = new Set();
-    if (techLeadingId) bullseyeIds.add(techLeadingId);
-    if (capLeadingId) bullseyeIds.add(capLeadingId);
-    activePlayers.forEach(p => {
-      if ((p.totalCapacity || 0) > 4500) bullseyeIds.add(p.id);
-    });
-
-    if (target.owner && bullseyeIds.has(target.owner.id)) {
+    // Dominant leaders — cached once per AI update (was re-sorted on every score call)
+    const bullseyeIds = this._bullseyeIds;
+    if (bullseyeIds && target.owner && bullseyeIds.has(target.owner.id)) {
       score -= 200; // Strongly favor attacking the dominant leader(s)
     }
     
@@ -77,6 +81,7 @@ export class AIController {
     
     const aiPlanets = this.game.planets.filter(p => p.owner === this.aiPlayer);
     if (!this.aiPlayer.isAI || aiPlanets.length === 0) return;
+    this._rebuildBullseyeCache();
 
     // Overpopulated planets (> 160 ships) 10% chance every 10 seconds
     if (this.lastOverpopulatedTime >= 10000) {

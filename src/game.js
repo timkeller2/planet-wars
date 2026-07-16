@@ -161,7 +161,7 @@ class PlanetGrid {
   populate(planets) {
     this.grid.clear();
     for (const p of planets) {
-      if (p.isDeepSpaceAnomaly) continue;
+      // Include deep-space anomalies so ship sensor/sympathy queries stay spatial
       const col = Math.floor(p.x / this.cellSize);
       const row = Math.floor(p.y / this.cellSize);
       const key = (col << 16) | (row & 0xFFFF);
@@ -175,7 +175,6 @@ class PlanetGrid {
   }
 
   add(p) {
-    if (p.isDeepSpaceAnomaly) return;
     const col = Math.floor(p.x / this.cellSize);
     const row = Math.floor(p.y / this.cellSize);
     const key = (col << 16) | (row & 0xFFFF);
@@ -3241,9 +3240,13 @@ export class Game {
     if (!cfg) return;
 
     // Limit the number of cruisers a single planet may be building at a time to 1
-    const isAlreadyBuilding = this.ships.some(s => s.active && s.isMaterializing && s.sourcePlanet === source);
-    if (isAlreadyBuilding) {
-      return;
+    // O(1) via planet flag — scanning all ships was slow on huge maps
+    if (source.materializingShipId != null) {
+      const existing = this.shipsById ? this.shipsById.get(source.materializingShipId) : null;
+      if (existing && existing.active && existing.isMaterializing) {
+        return;
+      }
+      source.materializingShipId = null;
     }
 
     if (source.owner) {
@@ -3387,6 +3390,8 @@ export class Game {
 
         this.assignRandomShipName(ship);
         this.ships.push(ship);
+        if (this.shipsById) this.shipsById.set(ship.id, ship);
+        source.materializingShipId = ship.id;
         console.log(`[Capital Ship Build Started] Spawning ${cfg.name} (HP: ${finalMaxHealth}) from Planet ${source.id} for Player ${source.owner.id}. Deducting ${remainingCostShips} ships and ${creditsPaid} credits over ${ship.materializeDuration}s`);
       }
     }
@@ -3398,9 +3403,12 @@ export class Game {
     if (!cfg) return;
 
     // Limit the number of cruisers a single planet may be building at a time to 1
-    const isAlreadyBuilding = this.ships.some(s => s.active && s.isMaterializing && s.sourcePlanet === source);
-    if (isAlreadyBuilding) {
-      return;
+    if (source.materializingShipId != null) {
+      const existing = this.shipsById ? this.shipsById.get(source.materializingShipId) : null;
+      if (existing && existing.active && existing.isMaterializing) {
+        return;
+      }
+      source.materializingShipId = null;
     }
 
     const owner = source.owner;
@@ -3664,20 +3672,24 @@ export class Game {
 
         this.assignRandomShipName(ship);
         this.ships.push(ship);
+        if (this.shipsById) this.shipsById.set(ship.id, ship);
+        source.materializingShipId = ship.id;
         console.log(`[Config Build Started] Spawning config ${configName || classType} (HP: ${finalMaxHealth}) from Planet ${source.id} for Player ${source.owner.id}. Deducting ${remainingCostShips} ships and ${creditsPaid} credits over ${ship.materializeDuration}s`);
       }
     }
   }
 
   moveShipsToSpace(player, shipIds, targetX, targetY, isWarp = false, speedModifier = null, isShift = false) {
-    const shipMap = new Map();
-    for (let i = 0; i < this.ships.length; i++) {
-      const s = this.ships[i];
-      if (s && s.active) {
-        shipMap.set(s.id, s);
+    // Prefer per-tick shipsById; fall back to a one-shot map if called mid-bootstrap
+    let shipMap = this.shipsById;
+    if (!shipMap || shipMap.size === 0) {
+      shipMap = new Map();
+      for (let i = 0; i < this.ships.length; i++) {
+        const s = this.ships[i];
+        if (s && s.active) shipMap.set(s.id, s);
       }
     }
-    const validShips = shipIds.map(id => shipMap.get(id)).filter(s => s && s.owner && s.owner.id === player.id && !s.isUpgrading);
+    const validShips = shipIds.map(id => shipMap.get(id)).filter(s => s && s.active && s.owner && s.owner.id === player.id && !s.isUpgrading);
     const cruisers = validShips.filter(s => s.isCruiser);
     const numCruisers = cruisers.length;
 
@@ -3855,14 +3867,15 @@ export class Game {
   }
 
   moveShipsToPlanet(player, shipIds, targetPlanet, isWarp = false, speedModifier = null, isShift = false) {
-    const shipMap = new Map();
-    for (let i = 0; i < this.ships.length; i++) {
-      const s = this.ships[i];
-      if (s && s.active) {
-        shipMap.set(s.id, s);
+    let shipMap = this.shipsById;
+    if (!shipMap || shipMap.size === 0) {
+      shipMap = new Map();
+      for (let i = 0; i < this.ships.length; i++) {
+        const s = this.ships[i];
+        if (s && s.active) shipMap.set(s.id, s);
       }
     }
-    const validShips = shipIds.map(id => shipMap.get(id)).filter(s => s && s.owner && s.owner.id === player.id && !s.isUpgrading);
+    const validShips = shipIds.map(id => shipMap.get(id)).filter(s => s && s.active && s.owner && s.owner.id === player.id && !s.isUpgrading);
     const cruisers = validShips.filter(s => s.isCruiser);
     const numCruisers = cruisers.length;
 
@@ -4397,14 +4410,39 @@ export class Game {
       this.planetGridPopulated = true;
     }
 
+    // O(1) ship/planet lookup for command handlers / combat (kept hot each tick)
+    if (!this.shipsById) this.shipsById = new Map();
+    if (!this.planetsById) this.planetsById = new Map();
+    this.shipsById.clear();
+    this.planetsById.clear();
+
+    let maxGravityRadius = 0;
     for (const p of this.planets) {
+       this.planetsById.set(p.id, p);
        p._tickExtraSympathy = new Map();
        p._tickShipSensorVisible = new Set();
        p._tickShipExtendedSensorVisible = new Set();
        p._tickEffectiveSympathy = new Map();
+       // Cache gravity once per tick — getGravityRadius is non-trivial and was hit per-ship before
+       const gr = (typeof p.getGravityRadius === 'function') ? p.getGravityRadius() : 0;
+       p._tickGravityRadius = gr;
+       if (gr > maxGravityRadius) maxGravityRadius = gr;
     }
     
+    // Ship→planet sensor/sympathy. Cap per-ship spatial query radius so a single
+    // mega gravity well (maxGravityRadius can be thousands on huge maps) doesn't
+    // force every ship to scan half the map. Large wells are checked separately.
+    const usePlanetGrid = this.planetGridPopulated && this.planetGrid;
+    const largeWells = [];
+    for (let pi = 0; pi < this.planets.length; pi++) {
+      const p = this.planets[pi];
+      if ((p._tickGravityRadius || 0) > 350 && !p.isDeepSpaceAnomaly) largeWells.push(p);
+    }
+    const LOCAL_QUERY_CAP = 400; // sensor + typical wells; large wells handled below
+
     for (const s of this.ships) {
+      if (!s) continue;
+      this.shipsById.set(s.id, s);
       if (!s.active || !s.owner) continue;
       
       const pId = s.owner.id;
@@ -4414,25 +4452,44 @@ export class Game {
       }
       
       const shipHp = (s.isCruiser || s.maxHealth > 0) ? (5 + s.maxHealth * 0.5) : ((s.count || 1) * 0.5);
-      
-      for (const p of this.planets) {
+      const extendedRadar = radarRange * 1.5;
+      const queryR = Math.max(extendedRadar, LOCAL_QUERY_CAP);
+      const queryRSq = queryR * queryR;
+      const radarRSq = radarRange * radarRange;
+      const extendedRSq = extendedRadar * extendedRadar;
+
+      const nearbyPlanets = usePlanetGrid
+        ? this.planetGrid.getPlanetsInRadiusSq(s.x, s.y, queryRSq)
+        : this.planets;
+
+      for (let pi = 0; pi < nearbyPlanets.length; pi++) {
+         const p = nearbyPlanets[pi];
          const dx = s.x - p.x;
          const dy = s.y - p.y;
          const distSq = dx * dx + dy * dy;
          
-         if (distSq <= radarRange * radarRange) {
+         if (distSq <= radarRSq) {
              p._tickShipSensorVisible.add(pId);
          }
          
-         const extendedRadarSq = (radarRange * 1.5) * (radarRange * 1.5);
-         if (distSq <= extendedRadarSq) {
+         if (distSq <= extendedRSq) {
              p._tickShipExtendedSensorVisible.add(pId);
          }
          
-         const gr = p.getGravityRadius(); 
-         if (distSq <= gr * gr) {
+         const gr = p._tickGravityRadius || 0;
+         if (gr > 0 && gr <= LOCAL_QUERY_CAP && distSq <= gr * gr) {
              p._tickExtraSympathy.set(pId, (p._tickExtraSympathy.get(pId) || 0) + shipHp);
          }
+      }
+      // Sparse mega-wells only (homeworlds etc.) — typically a handful
+      for (let wi = 0; wi < largeWells.length; wi++) {
+        const p = largeWells[wi];
+        const gr = p._tickGravityRadius;
+        const dx = s.x - p.x;
+        const dy = s.y - p.y;
+        if (dx * dx + dy * dy <= gr * gr) {
+          p._tickExtraSympathy.set(pId, (p._tickExtraSympathy.get(pId) || 0) + shipHp);
+        }
       }
     }
     
@@ -4485,9 +4542,15 @@ export class Game {
           if (!p.overlappingPlanets || p._lastPlanetCount !== this.planets.length) {
               p.overlappingPlanets = [];
               p._lastPlanetCount = this.planets.length;
-              for (const otherPl of this.planets) {
-                  if (otherPl.id === p.id) continue;
-                  const gr = otherPl.getGravityRadius();
+              // Spatial rebuild — O(nearby) not O(planets²)
+              const selfGr = p._tickGravityRadius || ((typeof p.getGravityRadius === 'function') ? p.getGravityRadius() : 0);
+              const searchR = Math.max(selfGr, maxGravityRadius);
+              const candidates = (this.planetGridPopulated && this.planetGrid)
+                ? this.planetGrid.getPlanetsInRadiusSq(p.x, p.y, searchR * searchR)
+                : this.planets;
+              for (const otherPl of candidates) {
+                  if (otherPl.id === p.id || otherPl.isDeepSpaceAnomaly) continue;
+                  const gr = otherPl._tickGravityRadius || ((typeof otherPl.getGravityRadius === 'function') ? otherPl.getGravityRadius() : 0);
                   const dx = otherPl.x - p.x;
                   const dy = otherPl.y - p.y;
                   if (dx * dx + dy * dy <= gr * gr) {

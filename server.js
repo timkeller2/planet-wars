@@ -20,18 +20,40 @@ let genAI = null;
 let aiModel = null;
 let gameCodeContext = '';
 
+/** Core rules sources the in-game AI may use when answering player questions. */
+const AI_RULES_FILES = [
+  'src/game.js',
+  'src/entities/Ship.js',
+  'src/entities/Planet.js',
+  'src/entities/Player.js',
+  'server.js'
+];
+
+function loadAiRulesContext() {
+  const parts = [];
+  const loaded = [];
+  for (const rel of AI_RULES_FILES) {
+    const full = path.join(__dirname, rel);
+    try {
+      if (fs.existsSync(full)) {
+        parts.push(`\n\n=== FILE: ${rel} ===\n${fs.readFileSync(full, 'utf8')}`);
+        loaded.push(rel);
+      } else {
+        console.warn(`[AI Chatbot] Rules file not found: ${rel}`);
+      }
+    } catch (e) {
+      console.error(`[AI Chatbot] Could not load ${rel} for AI context`, e);
+    }
+  }
+  return { text: parts.join(''), loaded };
+}
+
 if (process.env.GEMINI_API_KEY) {
   genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   aiModel = genAI.getGenerativeModel({ model: "gemini-flash-latest" }); // Using flash for speed, 1.5 has large context
-  try {
-    const gameJsPath = path.join(__dirname, 'src', 'game.js');
-    if (fs.existsSync(gameJsPath)) {
-      gameCodeContext = fs.readFileSync(gameJsPath, 'utf8');
-    }
-  } catch(e) {
-    console.error('Could not load game.js for AI context', e);
-  }
-  console.log('[AI Chatbot] Gemini initialized.');
+  const { text, loaded } = loadAiRulesContext();
+  gameCodeContext = text;
+  console.log(`[AI Chatbot] Gemini initialized. Rules context: ${loaded.join(', ')} (${gameCodeContext.length.toLocaleString()} chars).`);
 } else {
   console.warn('[AI Chatbot] GEMINI_API_KEY not found in .env file. AI Chatbot is disabled.');
 }
@@ -49,7 +71,7 @@ function getOrCreateChatSession(playerId, playerName) {
 The player "${playerName}" is asking you questions about the game mechanics.
 Provide concise, factual answers without any sci-fi roleplay or flavor text.
 Answer their questions as simply as possible.
-Here is the source code of the game's core logic (game.js) to understand the rules and mechanics. Do not mention that you are reading the source code, just answer their question based on the rules defined in it. Do not invent rules that are not in the code.
+Here is the authoritative game source code (core simulation, ships, planets, players, and multiplayer server handlers) that defines the rules and mechanics. Prefer game.js / entities when they define behavior; use server.js for multiplayer market, upgrades, and command validation. Do not mention that you are reading the source code, just answer their question based on the rules defined in it. Do not invent rules that are not in the code.
 
 === SOURCE CODE ===
 ${gameCodeContext}` }]
@@ -214,6 +236,13 @@ async function bootstrap() {
         sock.needsFullState = true;
       }
     }
+  }
+
+  /** Priority state sync after player commands so builds/moves appear without waiting for the next rate-limited emit. */
+  function markSocketNeedsState(socket) {
+    if (!socket) return;
+    socket.needsFullState = true;
+    socket.priorityState = true;
   }
 
   function getSocketIdForPlayer(playerId) {
@@ -679,10 +708,12 @@ async function bootstrap() {
         player.isAI = false;
       }
 
-      const p = game.planets.find(pl => pl.id === data.planetId);
+      const p = (game.planetsById && game.planetsById.get(data.planetId))
+        || game.planets.find(pl => pl.id === data.planetId);
       if (p && p.owner && p.owner.id === player.id) {
         if (p.inRevolt) return;
         game.buildCapitalShip(p, data.classType);
+        markSocketNeedsState(socket);
       }
     });
 
@@ -697,10 +728,12 @@ async function bootstrap() {
         player.isAI = false;
       }
 
-      const p = game.planets.find(pl => pl.id === data.planetId);
+      const p = (game.planetsById && game.planetsById.get(data.planetId))
+        || game.planets.find(pl => pl.id === data.planetId);
       if (p && p.owner && p.owner.id === player.id) {
         if (p.inRevolt) return;
         game.buildCapitalShipConfig(p, data.classType, data.upgrades, data.configName);
+        markSocketNeedsState(socket);
       }
     });
 
@@ -1053,6 +1086,7 @@ async function bootstrap() {
       }
 
       game.moveShipsToSpace(player, data.shipIds, data.targetX, data.targetY, data.isWarp, data.speedModifier, data.isShift);
+      markSocketNeedsState(socket);
     });
 
     socket.on('chatMessage', (text) => {
@@ -1273,10 +1307,12 @@ async function bootstrap() {
       }
       game.tryAssignPlanet(player);
 
-      const targetPlanet = game.planets.find(p => p.id === data.targetId);
+      const targetPlanet = (game.planetsById && game.planetsById.get(data.targetId))
+        || game.planets.find(p => p.id === data.targetId);
       if (!targetPlanet) return;
 
       game.moveShipsToPlanet(player, data.shipIds, targetPlanet, data.isWarp, data.speedModifier, data.isShift);
+      markSocketNeedsState(socket);
     });
 
     socket.on('setCruiserTarget', (data) => {
@@ -1287,8 +1323,10 @@ async function bootstrap() {
       const { shipIds, targetType, targetId, clickX, clickY, isShift } = data;
       if (!shipIds || !targetType || targetId === undefined) return;
 
+      const shipIndex = game.shipsById;
+      const planetIndex = game.planetsById;
       for (const id of shipIds) {
-        const ship = game.ships.find(s => s.id === id);
+        const ship = shipIndex ? shipIndex.get(id) : game.ships.find(s => s.id === id);
         if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
           ship.groupSpeedLimit = null;
           if (isShift) {
@@ -1317,7 +1355,10 @@ async function bootstrap() {
               ship.executeNextOrder(game.planets, game.ships, game);
             }
           } else {
-            const targetPlanet = targetType === 'planet' ? game.planets.find(p => p.id === targetId) : null;
+            let targetPlanet = null;
+            if (targetType === 'planet') {
+              targetPlanet = planetIndex ? planetIndex.get(targetId) : game.planets.find(p => p.id === targetId);
+            }
             const tx = (clickX !== undefined && clickX !== null) ? clickX : (targetPlanet ? targetPlanet.x : ship.x);
             const ty = (clickY !== undefined && clickY !== null) ? clickY : (targetPlanet ? targetPlanet.y : ship.y);
             ship.handlePlayerMoveOrder({ planet: targetPlanet, x: tx, y: ty }, game);
@@ -1343,6 +1384,7 @@ async function bootstrap() {
           }
         }
       }
+      markSocketNeedsState(socket);
     });
 
 
@@ -2157,6 +2199,7 @@ async function bootstrap() {
 
   let perfStats = { ticks: 0, tickTime: 0, updateTime: 0, payloadTime: 0, maxTick: 0, maxUpdate: 0, maxPayload: 0 };
   let globalShowPerfMessages = false;
+  let emitBusy = false;
 
   setInterval(() => {
     const currentTime = Date.now();
@@ -2293,18 +2336,37 @@ async function bootstrap() {
       // Pause logic is not needed for AFK since AFK is removed
     }
 
+    updateEndPerf = performance.now();
+
+    // Yield so socket handlers (build corvette, move orders, etc.) can run before
+    // the expensive serialize/emit phase — otherwise large-map ticks block clicks ~250ms+.
+    if (emitBusy) {
+      // Previous emit still running; sim keeps ticking, skip this broadcast
+      const tickDur = updateEndPerf - tickStartPerf;
+      perfStats.ticks++;
+      perfStats.tickTime += tickDur;
+      perfStats.updateTime += tickDur;
+      if (tickDur > perfStats.maxTick) perfStats.maxTick = tickDur;
+      if (tickDur > perfStats.maxUpdate) perfStats.maxUpdate = tickDur;
+      return;
+    }
+
+    emitBusy = true;
+    setImmediate(() => {
+    try {
     tickCount++;
 
     // Decide who needs a packet this tick BEFORE building the expensive full payload.
     // Healthy clients receive ~10 FPS; congested sockets are rate-limited further.
     // Client-side dead reckoning + smoothing fills in the frames between packets.
-    // needsFullState always sends immediately so post-start / post-load maps aren't blank.
+    // needsFullState / priorityState always sends immediately so commands feel instant.
     const recipients = [];
     for (const [socketId, player] of connectedClients.entries()) {
       const sock = io.sockets.sockets.get(socketId);
       let shouldSend = false;
-      if (sock && sock.needsFullState) {
+      if (sock && (sock.needsFullState || sock.priorityState)) {
         shouldSend = true;
+        sock.priorityState = false;
       } else if (sock && sock.conn && sock.conn.writeBuffer) {
         const bufferLen = sock.conn.writeBuffer.length;
         if (bufferLen > 8) {
@@ -2348,10 +2410,25 @@ async function bootstrap() {
     }
 
     // Compute planet visual state
+    // Deep-space anomalies: cheap stub (hundreds on large maps; full mapping wasted most of the payload time)
     const allPlanetsMapped = game.planets.map(p => {
+        if (p.isDeepSpaceAnomaly) {
+          return {
+            id: p.id, name: p.name, x: p.x, y: p.y, radius: 0, ships: 0, maxShips: 0,
+            ownerId: null, dead: false, isDeepSpaceAnomaly: true,
+            anomaly: p.anomaly ? {
+              id: p.anomaly.id, x: p.anomaly.x, y: p.anomaly.y, difficulty: p.anomaly.difficulty,
+              progress: p.anomaly.progress, researched: p.anomaly.researched,
+              beingResearched: p.anomaly.beingResearched || false, rewardType: p.anomaly.rewardType,
+              completing: p.anomaly.completing || false, completingTimeLeft: p.anomaly.completingTimeLeft || 0,
+              completingShipId: p.anomaly.completingShipId || null, completingPlayerId: p.anomaly.completingPlayerId || null,
+              researchingShipId: p.anomaly.researchingShipId || null, researchingShipIds: p.anomaly.researchingShipIds || []
+            } : null
+          };
+        }
         const incomingShips = [];
-        // Deep-space anomalies / dead worlds never show attacker odds — skip spatial query
-        if (!p.isDeepSpaceAnomaly && !p.dead) {
+        // Dead worlds never show attacker odds — skip spatial query
+        if (!p.dead) {
           const searchShips = game.spatialGrid ? game.getShipsInRadiusSq(p.x, p.y, 22500) : game.ships;
           for (const s of searchShips) {
             if (s.active && s.targetPlanet === p && s.owner !== p.owner) {
@@ -3207,14 +3284,22 @@ async function bootstrap() {
         return (targetPlanet.owner && targetPlanet.owner.id === player.id) || isVisible(targetPlanet.x, targetPlanet.y) || hasSympathy;
       });
 
-      const playerExploredCells = {};
-      if (game.exploredGrid) {
-        const prefix = `${player.id}_`;
-        for (const [key, value] of Object.entries(game.exploredGrid)) {
-          if (key.startsWith(prefix) && value > 0) {
-            playerExploredCells[key.substring(prefix.length)] = value;
+      // Explored-grid full scan is O(all cells) — on 50k maps that dominates emit time.
+      // Rebuild at most every 10 ticks (~0.5s) or when the player has no cache yet.
+      let playerExploredCells = player._exploredCellsCache;
+      if (!playerExploredCells || (tickCount - (player._exploredCellsCacheTick || 0)) >= 10) {
+        playerExploredCells = {};
+        if (game.exploredGrid) {
+          const prefix = `${player.id}_`;
+          const plen = prefix.length;
+          for (const key in game.exploredGrid) {
+            if (key.startsWith(prefix) && game.exploredGrid[key] > 0) {
+              playerExploredCells[key.substring(plen)] = game.exploredGrid[key];
+            }
           }
         }
+        player._exploredCellsCache = playerExploredCells;
+        player._exploredCellsCacheTick = tickCount;
       }
 
       // Wreckage visibility filtering
@@ -3379,6 +3464,11 @@ async function bootstrap() {
     game.accuracyEvents = [];
     game.happinessEvents = [];
     game.pendingHabClassChanges = [];
+    
+    } finally {
+      emitBusy = false;
+    }
+    }); // setImmediate — after sim, so player commands can run before serialize
     
   }, TICK_RATE);
 
