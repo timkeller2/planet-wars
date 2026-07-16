@@ -327,7 +327,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let eff = pl.ships || 0;
         if (pl.focusMode === 'commerce') {
           const isFull = (pl.ships || 0) >= (pl.maxShips || 0);
-          eff = isFull ? eff * 4 : eff * 2;
+          eff = isFull ? eff * 2 : eff * 1.5;
         }
         playerEffectiveShips += eff;
       }
@@ -360,7 +360,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let eff = baseShips;
         if (pl.focusMode === 'commerce') {
           const isFull = (pl.ships || 0) >= (pl.maxShips || 0);
-          eff = isFull ? baseShips * 4 : baseShips * 2;
+          eff = isFull ? baseShips * 2 : baseShips * 1.5;
         }
         otherEffectiveShips += eff;
       }
@@ -391,7 +391,7 @@ function getPlanetTradeIncomePerMin(planet) {
     let eff = planet.ships || 0;
     if (planet.focusMode === 'commerce') {
       const isFull = (planet.ships || 0) >= (planet.maxShips || 0);
-      eff = isFull ? eff * 4 : eff * 2;
+      eff = isFull ? eff * 2 : eff * 1.5;
     }
     return eff / 25;
   } else if (isNotAtWar) {
@@ -403,7 +403,7 @@ function getPlanetTradeIncomePerMin(planet) {
     let eff = baseShips;
     if (planet.focusMode === 'commerce') {
       const isFull = (planet.ships || 0) >= (planet.maxShips || 0);
-      eff = isFull ? baseShips * 4 : baseShips * 2;
+      eff = isFull ? baseShips * 2 : baseShips * 1.5;
     }
     return (eff * scale) / 25;
   }

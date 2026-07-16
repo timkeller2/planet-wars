@@ -6077,7 +6077,7 @@ export class Game {
       let effShips = planet.ships;
       if (planet.focusMode === 'commerce') {
         const isFull = planet.ships >= planet.maxShips;
-        effShips = isFull ? planet.ships * 4 : planet.ships * 2;
+        effShips = isFull ? planet.ships * 2 : planet.ships * 1.5;
         if (planet.minerals && planet.minerals > 4) {
           effShips *= (planet.minerals / 4);
         }
@@ -6161,7 +6161,7 @@ export class Game {
           let eff = planet.ships;
           if (planet.focusMode === 'commerce') {
             const isFull = planet.ships >= planet.maxShips;
-            eff = isFull ? planet.ships * 4 : planet.ships * 2;
+            eff = isFull ? planet.ships * 2 : planet.ships * 1.5;
             if (planet.minerals && planet.minerals > 4) {
               eff *= (planet.minerals / 4);
             }
@@ -6311,7 +6311,7 @@ export class Game {
               let eff = baseShips;
               if (planet.focusMode === 'commerce') {
                 const isFull = planet.ships >= planet.maxShips;
-                eff = isFull ? baseShips * 4 : baseShips * 2;
+                eff = isFull ? baseShips * 2 : baseShips * 1.5;
                 if (planet.minerals && planet.minerals > 4) {
                   eff *= (planet.minerals / 4);
                 }
