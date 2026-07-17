@@ -9230,9 +9230,6 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
       let baseCostShips = baseCfg.costShips * costMult;
-      if (selectedPlanetBuild && !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
-        baseCostShips *= 2;
-      }
 
       const totalUpgradeCost = getConfigurationUpgradeCost(cfg.classType, cfg.upgrades, myPlayer);
       const finalCost = Math.round(baseCostShips + totalUpgradeCost);
@@ -9243,11 +9240,14 @@ function getPlanetTradeIncomePerMin(planet) {
       const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
       
       const useCredits = myPlayer && myPlayer.useCredits !== false;
+      const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
+      const creditsTowardCost = Math.min(spendableCredits, finalCost);
+      const shipsStillNeeded = finalCost - creditsTowardCost;
       let canAfford = false;
-      if (useCredits && creditsAvailable >= finalCost && effectiveShips >= baseCostShips) {
-        canAfford = true;
-      } else if (effectiveShips >= finalCost) {
-        canAfford = true;
+      if (shipsStillNeeded <= 0) {
+        canAfford = selectedPlanetBuild.ships > 0;
+      } else {
+        canAfford = effectiveShips >= shipsStillNeeded;
       }
       if (!isUnlocked || (selectedPlanetBuild.maxShips - baseCfg.costCap) < 5) canAfford = false;
 
@@ -10287,7 +10287,7 @@ function getPlanetTradeIncomePerMin(planet) {
     } else {
       cameraZoom /= zoomFactor;
     }
-    cameraZoom = Math.max(0.2, Math.min(cameraZoom, 200.0));
+    cameraZoom = Math.max(0.2, Math.min(cameraZoom, 250.0));
 
     const newServerPos = getMouseServerPos(mouseX, mouseY);
     cameraPanX += (newServerPos.x - oldServerPos.x);
@@ -10658,7 +10658,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const targetZoom = initialPinchZoom * zoomFactor;
 
       const oldServerPos = getMouseServerPos(mid.x, mid.y);
-      cameraZoom = Math.max(0.2, Math.min(targetZoom, 200.0));
+      cameraZoom = Math.max(0.2, Math.min(targetZoom, 250.0));
 
       const newServerPos = getMouseServerPos(mid.x, mid.y);
       cameraPanX += (newServerPos.x - oldServerPos.x);
@@ -11585,7 +11585,7 @@ function getPlanetTradeIncomePerMin(planet) {
       } else {
         cameraZoom /= zoomFactor;
       }
-      cameraZoom = Math.max(0.2, Math.min(cameraZoom, 200.0));
+      cameraZoom = Math.max(0.2, Math.min(cameraZoom, 250.0));
 
       const newServerPos = getMouseServerPos(mouseX, mouseY);
       cameraPanX += (newServerPos.x - oldServerPos.x);
@@ -11674,20 +11674,20 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
           let costShips = cfg.costShips * costMult;
-          if (!(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
-            costShips *= 2;
-          }
 
           const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
           const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
           const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
           
           const useCredits = myPlayer && myPlayer.useCredits !== false;
+          const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
+          const creditsTowardCost = Math.min(spendableCredits, costShips);
+          const shipsStillNeeded = costShips - creditsTowardCost;
           let canAfford = false;
-          if (useCredits && creditsAvailable >= costShips && effectiveShips >= costShips) {
-            canAfford = true;
-          } else if (effectiveShips >= costShips) {
-            canAfford = true;
+          if (shipsStillNeeded <= 0) {
+            canAfford = selectedPlanetBuild.ships > 0;
+          } else {
+            canAfford = effectiveShips >= shipsStillNeeded;
           }
           if ((selectedPlanetBuild.maxShips - cfg.costCap) < 5) canAfford = false;
           if (canAfford) {
@@ -11741,20 +11741,20 @@ function getPlanetTradeIncomePerMin(planet) {
               }
             }
             let costShips = cfg.costShips * costMult;
-            if (!(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
-              costShips *= 2;
-            }
 
             const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
             const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
             const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
             
             const useCredits = myPlayer && myPlayer.useCredits !== false;
+            const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
+            const creditsTowardCost = Math.min(spendableCredits, costShips);
+            const shipsStillNeeded = costShips - creditsTowardCost;
             let canAfford = false;
-            if (useCredits && creditsAvailable >= costShips && effectiveShips >= costShips) {
-              canAfford = true;
-            } else if (effectiveShips >= costShips) {
-              canAfford = true;
+            if (shipsStillNeeded <= 0) {
+              canAfford = selectedPlanetBuild.ships > 0;
+            } else {
+              canAfford = effectiveShips >= shipsStillNeeded;
             }
             if ((selectedPlanetBuild.maxShips - cfg.costCap) < 5) canAfford = false;
             if (canAfford) {
@@ -12358,6 +12358,394 @@ function getPlanetTradeIncomePerMin(planet) {
     if (setupNewGameBtn) setupNewGameBtn.style.display = 'block';
   });
 
+  // Extreme close-up map overlays: show when entity fills enough of the viewport.
+  // Font size is a fraction of the related on-map label (cruiser name / planet ships label).
+  const CLOSEUP_BASE_VIEWPORT_FRAC = 0.25;
+  const CLOSEUP_PLANET_ZOOM_FACTOR = 1 / 3;
+  const CLOSEUP_CRUISER_ZOOM_FACTOR = 1 / 5;
+  // Appear 10% later when zooming in (need entity slightly larger on screen)
+  const CLOSEUP_APPEAR_LATER = 1.10;
+  const CLOSEUP_PLANET_VIEWPORT_FRAC = CLOSEUP_BASE_VIEWPORT_FRAC * CLOSEUP_PLANET_ZOOM_FACTOR * CLOSEUP_APPEAR_LATER;
+  const CLOSEUP_CRUISER_VIEWPORT_FRAC = CLOSEUP_BASE_VIEWPORT_FRAC * CLOSEUP_CRUISER_ZOOM_FACTOR * CLOSEUP_APPEAR_LATER;
+  const CLOSEUP_EXTREME_BASE_FRAC = 0.10;
+  const CLOSEUP_EXTREME_BASE_ZOOM = 100;
+  const CLOSEUP_PLANET_EXTREME_FRAC = CLOSEUP_EXTREME_BASE_FRAC * CLOSEUP_PLANET_ZOOM_FACTOR * CLOSEUP_APPEAR_LATER;
+  const CLOSEUP_CRUISER_EXTREME_FRAC = CLOSEUP_EXTREME_BASE_FRAC * CLOSEUP_CRUISER_ZOOM_FACTOR * CLOSEUP_APPEAR_LATER;
+  const CLOSEUP_PLANET_EXTREME_ZOOM = CLOSEUP_EXTREME_BASE_ZOOM * CLOSEUP_PLANET_ZOOM_FACTOR * CLOSEUP_APPEAR_LATER;
+  const CLOSEUP_CRUISER_EXTREME_ZOOM = CLOSEUP_EXTREME_BASE_ZOOM * CLOSEUP_CRUISER_ZOOM_FACTOR * CLOSEUP_APPEAR_LATER;
+  // Must match the label fonts used when drawing those labels
+  const CRUISER_NAME_FONT_PX = 6;       // ctx.font for s.name under cruiser
+  const PLANET_NAME_FONT_PX = 11;       // graphical mode name / ships-max label above planet
+  const PLANET_PILL_FONT_PX = 12;       // non-graphical ships/max pill
+  // Was 1/4 of label; third that size → 1/12 of the related label
+  const CLOSEUP_LABEL_FONT_FRAC = 0.25 / 3;
+  const CRUISER_CLOSEUP_AFT_FRAC = 0.15; // 15% of hull size behind center toward stern
+
+  function entityFillsCloseupViewport(worldDiameter, finalScale, canvasW, canvasH, zoomLevel, kind) {
+    if (!finalScale || finalScale <= 0 || !worldDiameter) return false;
+    const isCruiser = kind === 'cruiser';
+    const viewportFrac = isCruiser ? CLOSEUP_CRUISER_VIEWPORT_FRAC : CLOSEUP_PLANET_VIEWPORT_FRAC;
+    const extremeFrac = isCruiser ? CLOSEUP_CRUISER_EXTREME_FRAC : CLOSEUP_PLANET_EXTREME_FRAC;
+    const extremeZoom = isCruiser ? CLOSEUP_CRUISER_EXTREME_ZOOM : CLOSEUP_PLANET_EXTREME_ZOOM;
+    const screenD = worldDiameter * finalScale;
+    const minEdge = Math.min(canvasW || 1, canvasH || 1);
+    if (screenD >= minEdge * viewportFrac) return true;
+    if ((zoomLevel || 0) >= extremeZoom && screenD >= minEdge * extremeFrac) return true;
+    return false;
+  }
+
+  function drawCloseupStatLines(ctx, x, startY, lines, fontWorld) {
+    if (!lines || lines.length === 0 || !fontWorld || fontWorld <= 0) return startY;
+    const lineH = fontWorld * 1.28;
+    ctx.save();
+    ctx.font = `bold ${fontWorld}px Orbitron, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.lineWidth = Math.max(0.15, fontWorld * 0.12);
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = Math.max(0.4, fontWorld * 0.2);
+    let y = startY;
+    for (const line of lines) {
+      const text = line.text;
+      if (!text) continue;
+      ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = line.color || '#ccc';
+      ctx.fillText(text, x, y);
+      y += lineH;
+    }
+    ctx.restore();
+    return y;
+  }
+
+  function getPlanetCloseupStatLines(p, isLastKnown) {
+    if (!p || !serverState) return [];
+    const lines = [];
+    const myPlayer = (serverState.players && localPlayer)
+      ? (serverState.players.find(pl => pl.id === localPlayer.id) || localPlayer)
+      : localPlayer;
+    const owner = p.ownerId ? serverState.players.find(pl => pl.id === p.ownerId) : null;
+    const sizeClassText = p.sizeClass < 70 ? 'Tiny' : p.sizeClass < 90 ? 'Small' : p.sizeClass < 110 ? 'Standard' : p.sizeClass < 140 ? 'Large' : p.sizeClass < 180 ? 'Huge' : 'Super';
+    const mineralsName = getMineralsName(p.minerals);
+    const habName = getHabName(p.habitability);
+    const raceName = p.racialAffinity || '';
+    const focusName = p.focusMode === 'rootoutspies' ? 'Root Spies' : (p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy');
+    const racePart = raceName ? `${raceName} ` : '';
+    lines.push({
+      text: `${sizeClassText} ${mineralsName} ${habName} ${racePart}${focusName}${isLastKnown ? ' (Last Known)' : ''}`,
+      color: owner ? owner.color : '#aaa'
+    });
+
+    const hpOwner = owner || { techScore: 0, expScore: 0, id: 'neutral' };
+    const techBonusVal = Math.sqrt(hpOwner.techScore || 0);
+    const softCap = Math.round(p.sizeClass * ((p.habitability + techBonusVal) / 100));
+    const techBonusInt = Math.floor(techBonusVal);
+    const settings = serverState.settings || null;
+    const isUnlimited = !settings || !settings.timedGameLimit || settings.timedGameLimit === 'unlimited';
+    const timedLimitSecs = !isUnlimited ? parseFloat(settings.timedGameLimit) : null;
+    const durationInMinutes = timedLimitSecs ? (timedLimitSecs / 60) : null;
+    const multiplier = (durationInMinutes && durationInMinutes > 0) ? (600 / durationInMinutes) : 5;
+    const maxTerraformedVal = Math.round(multiplier * techBonusInt);
+    const improvementRateText = owner ? `${p.habitability}/${maxTerraformedVal}` : `${p.habitability}`;
+    lines.push({ text: `Improve ${improvementRateText}  Pot ${softCap}`, color: '#ffb74d' });
+
+    const resourceEmojis = {
+      dilithium: '💎', merculite: '☄️', duranium: '🔲', tritanium: '🔩',
+      antimatter: '🌀', deuterium: '💧', latinum: '🏺'
+    };
+    const upgradeEmojis = {
+      sensorarrays: '📡', labs: '🔬', armor: '⛨', shields: '🛡️', engine: '🚀',
+      munitions: '💣', targeting: '🎯', damagecontrol: '🔧', supply_ship: '📦',
+      extended_fuel: '⛽', diplomat: '🤝', marines: '🪖', command: '👑'
+    };
+    let upgradeIcons = '';
+    for (const [prop, emoji] of Object.entries(upgradeEmojis)) {
+      const val = p[prop] || 0;
+      if (val > 0) upgradeIcons += ` ${emoji}${val > 1 ? val : ''}`;
+    }
+    const producedIcons = (p.resources ? p.resources.map(r => resourceEmojis[r] || '').filter(Boolean).join(' ') : '') +
+      (upgradeIcons ? ' ' + upgradeIcons : '');
+    let prefBonusStr = '';
+    if (p.preferredResource && owner && owner.resources) {
+      const qty = owner.resources[p.preferredResource] || 0;
+      if (qty > 0) {
+        let mult = 1;
+        if (p.maxShips >= 150) mult = 4;
+        else if (p.maxShips >= 120) mult = 3;
+        else if (p.maxShips >= 100) mult = 2;
+        const bonusVal = Math.round(Math.sqrt(qty) * mult);
+        if (bonusVal > 0) prefBonusStr = ` (+${bonusVal}%)`;
+      }
+    }
+    const wantedResourceName = p.preferredResource ? p.preferredResource.charAt(0).toUpperCase() + p.preferredResource.slice(1) : 'Nothing';
+    const wantedStr = p.preferredResource ? `${resourceEmojis[p.preferredResource] || ''} ${wantedResourceName}${prefBonusStr}` : 'Nothing';
+    if (producedIcons.trim()) {
+      lines.push({ text: `Out: ${producedIcons.trim()}`, color: '#fff' });
+    }
+    lines.push({ text: `Wants: ${wantedStr}`, color: '#ddd' });
+
+    if (myPlayer && (!p.ownerId || p.ownerId !== myPlayer.id) && !isLastKnown) {
+      const currentSym = getEffectiveSympathyClient(p, myPlayer.id);
+      const expBonus = Math.sqrt(myPlayer.expScore || 0);
+      const selectedCruiser = getSelectedCruiser();
+      const shipExpBonus = selectedCruiser ? (Math.sqrt(selectedCruiser.expScore || 0) + (selectedCruiser.commandPoints || 0)) : 0;
+      const bonusSum = expBonus + shipExpBonus;
+      const disposition = p.disposition?.[myPlayer.id] ?? 0;
+      let racialBonus = 0;
+      if (selectedCruiser) {
+        const shipOwner = serverState.players.find(pl => pl.id === selectedCruiser.ownerId);
+        if (p.racialAffinity && (selectedCruiser.cruiserStyle === p.racialAffinity || (shipOwner && shipOwner.cruiserStyle === p.racialAffinity))) {
+          racialBonus = 20;
+        }
+      }
+      const basePercent = Math.max(0, Math.round(30 + disposition + currentSym + bonusSum + racialBonus));
+      const prefPercent = Math.max(0, Math.round(30 + disposition + currentSym + (bonusSum * 3) + 10 + racialBonus));
+      if (p.preferredResource) {
+        const prefEmoji = resourceEmojis[p.preferredResource] || '💎';
+        lines.push({ text: `Diplo ${basePercent}%  w/ ${prefEmoji} ${prefPercent}%`, color: '#4caf50' });
+      } else {
+        lines.push({ text: `Diplo ${basePercent}%`, color: '#4caf50' });
+      }
+    }
+
+    // Condensed disposition/sympathy (cap rows to keep overlay readable)
+    if (!isLastKnown) {
+      const assocPlayers = new Set();
+      if (p.sympathy) for (const pId of Object.keys(p.sympathy)) assocPlayers.add(pId);
+      if (p.disposition) for (const pId of Object.keys(p.disposition)) assocPlayers.add(pId);
+      if (!p.ownerId && serverState.players) {
+        for (const pl of serverState.players) {
+          if (pl.id !== 'monsters' && getEffectiveSympathyClient(p, pl.id) > 0) assocPlayers.add(pl.id);
+        }
+      }
+      let dispRows = 0;
+      for (const pId of assocPlayers) {
+        if (dispRows >= 4) break;
+        const targetPlayer = serverState.players.find(pl => pl.id === pId);
+        const pName = targetPlayer ? targetPlayer.name : pId;
+        const pColor = targetPlayer ? targetPlayer.color : '#e040fb';
+        const dispVal = p.disposition?.[pId];
+        const symVal = getEffectiveSympathyClient(p, pId);
+        if (dispVal === undefined && symVal === 0) continue;
+        const dVal = dispVal !== undefined ? Math.round(dispVal) : null;
+        const baseSym = p.sympathy?.[pId] || 0;
+        const dPart = dVal !== null ? `D${dVal}` : 'D?';
+        lines.push({ text: `${pName}: ${dPart} Sym ${Math.round(baseSym)}/${Math.round(symVal)}`, color: pColor });
+        dispRows++;
+      }
+    }
+
+    const planetTradeRatePerMin = getPlanetTradeIncomePerMin(p);
+    if (planetTradeRatePerMin > 0) {
+      const effShips = Number((planetTradeRatePerMin * 25).toFixed(1)).toString();
+      lines.push({ text: `Trade ships ${effShips}  +${planetTradeRatePerMin.toFixed(2)}/m`, color: '#ffd54f' });
+    }
+
+    let capacityMultiplier = 1.0;
+    if (p.isMilitary) capacityMultiplier = 0.8;
+    if (p.focusMode === 'garrison') capacityMultiplier = 2.0;
+    const maxPop = owner ? Math.round(p.maxShips * capacityMultiplier) : Math.round(p.maxShips);
+    lines.push({ text: `Garrison ${Math.floor(p.ships)} / ${maxPop}`, color: '#fff' });
+
+    const displaySuppliesVal = p.supplies || 0;
+    const displayMaxShipsVal = p.maxShips || 1;
+    lines.push({
+      text: `Supplies ${Math.floor(Math.min(displayMaxShipsVal, displaySuppliesVal))} / ${Math.round(displayMaxShipsVal)}`,
+      color: '#a855f7'
+    });
+
+    // Compact total defense (mirrors tooltip core)
+    let totalDefense = 0;
+    const getGravityRadiusClient = (pl) => {
+      let baseRadius = pl.maxShips * 1.5;
+      if (pl.isMilitary && pl.ships >= pl.maxShips) baseRadius *= 1.5;
+      const plOwner = pl.ownerId ? serverState.players.find(o => o.id === pl.ownerId) : null;
+      const isHuman = plOwner && !plOwner.isAI;
+      if (isHuman && pl.focusMode === 'garrison' && pl.ships >= pl.maxShips) baseRadius += (pl.ships / 2);
+      const tb = 0.01 * Math.sqrt(plOwner ? (plOwner.techScore || 0) : 0);
+      const eb = 0.01 * Math.sqrt(plOwner ? (plOwner.expScore || 0) : 0);
+      let r = baseRadius * (1 + tb + eb);
+      if (!plOwner) r *= 0.5;
+      return r;
+    };
+    if (p.ownerId) {
+      for (const planet of serverState.planets) {
+        if (planet.id !== p.id && planet.ownerId === p.ownerId) {
+          const pdx = planet.x - p.x;
+          const pdy = planet.y - p.y;
+          const gr = getGravityRadiusClient(planet);
+          if (pdx * pdx + pdy * pdy < gr * gr) {
+            let mult = 0.002;
+            if (planet.isMilitary || planet.focusMode === 'garrison') {
+              if (planet.ships >= planet.maxShips * 2 - 10) mult = 0.0045;
+              else if (planet.ships >= planet.maxShips) mult = 0.003;
+            }
+            totalDefense += mult * Math.floor(planet.ships / 10) * 100;
+          }
+        }
+      }
+    }
+    if (p.inRevolt) totalDefense *= 0.5;
+    let garrisonBonus = Math.floor(p.ships / 5);
+    if (p.inRevolt) garrisonBonus *= 0.5;
+    totalDefense += garrisonBonus;
+    let techBonus = Math.round(Math.sqrt(hpOwner.techScore || 0));
+    let expBonus = Math.round(Math.sqrt(hpOwner.expScore || 0));
+    let planetExpBonus = Math.round(Math.sqrt(p.expScore || 0));
+    if (p.inRevolt) {
+      techBonus = Math.round(techBonus * 0.5);
+      expBonus = Math.round(expBonus * 0.5);
+      planetExpBonus *= 0.5;
+    }
+    totalDefense += techBonus + expBonus + planetExpBonus;
+    if (p.isMilitary) totalDefense += p.inRevolt ? 7.5 : 15;
+    const hasEnvDefense = (p.preferredResource === 'deuterium' || p.preferredResource === 'antimatter' || p.preferredResource === 'latinum');
+    if (hasEnvDefense) totalDefense += p.inRevolt ? 7.5 : 15;
+    if (owner && hpOwner.id === p.homeworldOf) totalDefense += p.inRevolt ? 7.5 : 15;
+    if (owner && hpOwner.planetCount === 1) totalDefense += p.inRevolt ? 7.5 : 15;
+    lines.push({
+      text: `Defense ${Math.round(totalDefense)}%${p.inRevolt ? ' (revolt)' : ''}`,
+      color: p.inRevolt ? '#ff3333' : '#fff'
+    });
+    if (owner) {
+      lines.push({
+        text: `Owner Tech +${Math.round(Math.sqrt(owner.techScore || 0))}  Exp +${Math.round(Math.sqrt(owner.expScore || 0))}`,
+        color: '#00e5ff'
+      });
+    }
+    return lines;
+  }
+
+  function getCruiserCloseupStatLines(hs) {
+    if (!hs || !serverState) return [];
+    const lines = [];
+    const hsOwner = hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
+    let shipClass = 'Mammoth';
+    if (hs.classType && SHIP_CLASSES[hs.classType]) {
+      shipClass = SHIP_CLASSES[hs.classType].name;
+    } else if (hs.maxHealth <= 19) shipClass = 'Corvette';
+    else if (hs.maxHealth <= 24) shipClass = 'Frigate';
+    else if (hs.maxHealth <= 29) shipClass = 'Destroyer';
+    else if (hs.maxHealth <= 34) shipClass = 'Cruiser';
+    else if (hs.maxHealth <= 39) shipClass = 'Battlecruiser';
+    else if (hs.maxHealth <= 44) shipClass = 'Battleship';
+    else if (hs.maxHealth <= 49) shipClass = 'Titan';
+    const raceStyle = hs.cruiserStyle || (hsOwner ? hsOwner.cruiserStyle : null);
+    const raceStr = raceStyle ? `${raceStyle} ` : '';
+    lines.push({
+      text: `${raceStr}${shipClass}${hs.name ? ' ' + hs.name : ''}`,
+      color: hsOwner ? hsOwner.color : '#0ff'
+    });
+    lines.push({ text: `Hull ${Math.floor(hs.health)} / ${hs.maxHealth}`, color: '#fff' });
+
+    const totalUpgrades = (hs.sensorarrays || 0) + (hs.labs || 0) + (hs.armor || 0) + (hs.shields || 0) +
+      (hs.engine || 0) + (hs.munitions || 0) + (hs.targeting || 0) + (hs.damagecontrol || 0) +
+      (hs.supply_ship || 0) + (hs.extended_fuel || 0) + (hs.diplomat || 0) + (hs.marines || 0) + (hs.command || 0);
+    const maxTotalUpgrades = Math.floor((hs.maxHealth || 0) / 5);
+    const upgradesRemaining = maxTotalUpgrades - totalUpgrades;
+    if (upgradesRemaining > 0 || (hs.upgradeTokens || 0) > 0) {
+      let upLine = upgradesRemaining > 0 ? `Upgrades left ${upgradesRemaining}` : '';
+      if ((hs.upgradeTokens || 0) > 0) upLine += (upLine ? '  ' : '') + `Tokens ${hs.upgradeTokens}`;
+      lines.push({ text: upLine, color: '#00e5ff' });
+    }
+
+    const fuelVal = `${Math.floor(hs.fuel || 0)}/${Math.floor(getMaxFuel(hs))}`;
+    const speedVal = `${(hs.currentSpeed || 0).toFixed(1)}/${(hs.speed || 30).toFixed(1)}`;
+    lines.push({ text: `Speed ${speedVal}  Fuel ${fuelVal}`, color: (hs.fuel <= 0 ? '#f00' : '#ffa500') });
+
+    if (hs.maxsupplies > 0) {
+      lines.push({ text: `Supplies ${Math.floor(hs.supplies || 0)} / ${hs.maxsupplies}`, color: '#ffcc80' });
+    }
+    if (hs.maxArmor && hs.maxArmor > 0) {
+      lines.push({ text: `Armor ${Math.floor(hs.armorPoints)} / ${Math.floor(hs.maxArmor)} (${hs.armor || 0})`, color: '#b0bec5' });
+    }
+    if (hs.shields && hs.shields > 0) {
+      lines.push({ text: `Shields ${Math.floor(hs.shieldPoints)} / ${Math.floor(getMaxShields(hs))} (${hs.shields})`, color: '#ffff00' });
+    }
+
+    let crewVal = `Crew ${Math.floor(hs.crew || 0)}/${Math.floor(hs.maxHealth + hs.health)}`;
+    if (hs.marines > 0) {
+      crewVal += `  Mar ${Math.floor(hs.marineCount || 0)}/${Math.ceil((hs.marines * hs.maxHealth) / 2) + 5}`;
+    }
+    lines.push({ text: crewVal, color: '#81d4fa' });
+    if (hs.commandPoints > 0) {
+      lines.push({ text: `Command +${(hs.commandPoints).toFixed(2)}`, color: '#ffeb3b' });
+    }
+
+    const rawTech = hsOwner ? (hsOwner.techScore || 0) : 0;
+    const rawExp = hsOwner ? (hsOwner.expScore || 0) : 0;
+    const shipExp = hs.expScore || 0;
+    const techBonus = Math.sqrt(rawTech);
+    const expBonus = Math.sqrt(rawExp);
+    const shipExpBonus = Math.sqrt(shipExp) + (hs.commandPoints || 0);
+    let shrugChance = Math.floor(hs.maxHealth + (techBonus + expBonus + shipExpBonus));
+    if ((hs.bombs || 0) < 1) shrugChance = Math.floor(shrugChance / 2);
+    if (hs.specialduranium && hs.specialduranium > 0) shrugChance += 10;
+    shrugChance = Math.min(90, shrugChance);
+    const maxBombs = getMaxBombs(hs);
+    lines.push({
+      text: `Muni ${(hs.bombs || 0).toFixed(1)}/${maxBombs.toFixed(1)}  Defl ${shrugChance}%`,
+      color: '#ffa'
+    });
+
+    const laserTechBonus = Math.floor(techBonus) * 0.01;
+    const xpRangeBonus = (expBonus + shipExpBonus) * 0.01;
+    const baseDogfightRange = 40 * (1 + laserTechBonus + xpRangeBonus);
+    const targetingBonus = (hs.targeting || 0) * 5;
+    const targetingRangeBonus = (hs.targeting || 0) * 0.05;
+    let effectiveRange = baseDogfightRange * 1.10;
+    if (hs.bombs > 0) effectiveRange += baseDogfightRange * 0.10;
+    effectiveRange = Math.floor(effectiveRange * (1 + targetingRangeBonus));
+    if (hs.supply_ship && hs.supply_ship > 0) effectiveRange = Math.max(5, effectiveRange - hs.supply_ship * 5);
+    if (hs.specialbombs && hs.specialbombs > 0) effectiveRange += 10;
+    if (hs.package === 'brute') effectiveRange *= 0.5;
+    else if (hs.package === 'sniper') effectiveRange *= 1.5;
+    effectiveRange = Math.floor(effectiveRange);
+
+    let bombAccuracyBonus = 0;
+    if (hs.bombs > 0) {
+      bombAccuracyBonus = 10;
+      let effTactics = hs.tactics;
+      if (!effTactics) {
+        if (hs.cruiserStyle === 'Tholian' || hs.cruiserStyle === 'Lyran') effTactics = 'patient';
+        else if (hs.cruiserStyle === 'Romulan') effTactics = 'frenzied';
+        else effTactics = 'normal';
+      }
+      if (effTactics === 'patient') bombAccuracyBonus = 7;
+      else if (effTactics === 'frenzied') bombAccuracyBonus = 20;
+    }
+    let hitChanceValue = 10 + targetingBonus + bombAccuracyBonus + techBonus + expBonus + shipExpBonus;
+    if (hs.supply_ship && hs.supply_ship > 0) hitChanceValue -= hs.supply_ship * 5;
+    if (hs.specialbombs && hs.specialbombs > 0) hitChanceValue += 10;
+    const hitChance = Math.round(Math.max(10.0, hitChanceValue));
+    let volleySizeVal = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
+    const cap = Math.floor(hs.health - 2);
+    if (volleySizeVal > cap) volleySizeVal = cap;
+    if (hs.supply_ship && hs.supply_ship > 0) volleySizeVal = Math.max(1, volleySizeVal - 2 * hs.supply_ship);
+    if (hs.health <= 2) volleySizeVal = 0;
+    lines.push({ text: `Acc ${hitChance}%  Range ${effectiveRange}px  Volley ${volleySizeVal}`, color: '#f88' });
+    lines.push({ text: `XP +${Math.round(shipExpBonus)} (${Math.round(shipExp)})`, color: '#00d5ff' });
+
+    const upBits = [];
+    if (hs.sensorarrays > 0) upBits.push(`📡${hs.sensorarrays}`);
+    if (hs.labs > 0) upBits.push(`🔬${hs.labs}`);
+    if (hs.damagecontrol > 0) upBits.push(`🔧${hs.damagecontrol}`);
+    if (hs.supply_ship > 0) upBits.push(`📦${hs.supply_ship}`);
+    if (hs.extended_fuel > 0) upBits.push(`⛽${hs.extended_fuel}`);
+    if (hs.diplomat > 0) upBits.push(`🤝${hs.diplomat}`);
+    if (hs.command > 0) upBits.push(`👑${hs.command}`);
+    if (upBits.length) lines.push({ text: upBits.join(' '), color: '#b0bec5' });
+
+    let modeBits = [];
+    if (hs.isPatrolling) modeBits.push('Patrol');
+    if (hs.isScouting) modeBits.push('Scout');
+    if (hs.isResearching) modeBits.push('Research');
+    if (hs.isDiplomacy) modeBits.push('Diplomacy');
+    if (modeBits.length) lines.push({ text: modeBits.join(' · '), color: '#0ff' });
+
+    return lines;
+  }
+
   function draw() {
     // Don't thrash the main thread with button DOM + map render under the lobby
     if (startScreen && !startScreen.classList.contains('hidden')) return;
@@ -12718,9 +13106,6 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
           let costShips = cfg.costShips * costMult;
-          if (selectedPlanetBuild && !(selectedPlanetBuild.isMilitary || selectedPlanetBuild.homeworldOf)) {
-            costShips *= 2;
-          }
 
           if (costMult > 1) {
             el.style.borderColor = '#ffeb3b';
@@ -12735,7 +13120,18 @@ function getPlanetTradeIncomePerMin(planet) {
           const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
           const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
           const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
-          const canAfford = isUnlocked && creditsAvailable >= costShips && effectiveShips >= costShips && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
+          const useCredits = myPlayer && myPlayer.useCredits !== false;
+          // Spendable credits go down to debt floor; remainder must be paid in ships
+          const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
+          const creditsTowardCost = Math.min(spendableCredits, costShips);
+          const shipsStillNeeded = costShips - creditsTowardCost;
+          let canAffordParts = false;
+          if (shipsStillNeeded <= 0) {
+            canAffordParts = selectedPlanetBuild.ships > 0;
+          } else {
+            canAffordParts = effectiveShips >= shipsStillNeeded;
+          }
+          const canAfford = isUnlocked && canAffordParts && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
 
           if (!canAfford) {
             el.style.opacity = '0.5';
@@ -12752,7 +13148,12 @@ function getPlanetTradeIncomePerMin(planet) {
           const baseName = cfg.name;
           const shortcutKey = cfg.key.toUpperCase();
           let titleStr = '';
-          const reqStr = selectedPlanetBuild.isMilitary ? `Req: ${Math.ceil(costShips / 2)} ships` : `Req: ${costShips} ships`;
+          const shipReq = selectedPlanetBuild.isMilitary ? Math.ceil(shipsStillNeeded / 2) : shipsStillNeeded;
+          const reqStr = creditsTowardCost > 0
+            ? (shipsStillNeeded > 0
+              ? `Req: ¢${Math.floor(creditsTowardCost)} + ${shipReq} ships (to debt limit)`
+              : `Req: ¢${Math.floor(creditsTowardCost)} (to debt limit)`)
+            : (selectedPlanetBuild.isMilitary ? `Req: ${Math.ceil(costShips / 2)} ships` : `Req: ${costShips} ships`);
           if (!isUnlocked) {
             titleStr = `Build ${baseName} (LOCKED - ${lockReason})`;
           } else if (activeConfigClassType === classType) {
@@ -14791,6 +15192,14 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(displayName, p.x, nameY);
+
+          // Extreme close-up in graphical mode: stats under ships/max name label, 1/4 that label's font
+          if (graphicalMode && !galacticView && !strategicView && entityFillsCloseupViewport((p.radius || 10) * 2, finalScale, canvas.width, canvas.height, cameraZoom, 'planet')) {
+            const planetForStats = isLastKnown ? (lastKnownPlanets[p.id] || p) : p;
+            const closeupLines = getPlanetCloseupStatLines(planetForStats, !!isLastKnown);
+            const fontWorld = PLANET_NAME_FONT_PX * CLOSEUP_LABEL_FONT_FRAC;
+            drawCloseupStatLines(ctx, p.x, nameY + fontWorld * 1.15, closeupLines, fontWorld);
+          }
  
           if (!isLastKnown && p.finalRateExceedsOne) {
             const nameWidth = ctx.measureText(displayName).width;
@@ -15105,6 +15514,14 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.textBaseline = 'middle';
             ctx.font = `bold 12px Orbitron`;
             ctx.fillText(text, p.x, pillY);
+
+            // Extreme close-up: under ships/maxships pill, 1/4 that pill label's font
+            if (!galacticView && !strategicView && entityFillsCloseupViewport((p.radius || 10) * 2, finalScale, canvas.width, canvas.height, cameraZoom, 'planet')) {
+              const planetForStats = isLastKnown ? (lastKnownPlanets[p.id] || p) : p;
+              const closeupLines = getPlanetCloseupStatLines(planetForStats, !!isLastKnown);
+              const fontWorld = PLANET_PILL_FONT_PX * CLOSEUP_LABEL_FONT_FRAC;
+              drawCloseupStatLines(ctx, p.x, pillY + pillHeight / 2 + fontWorld * 0.35, closeupLines, fontWorld);
+            }
           } else {
             // In graphical mode, draw focus mode badge directly to the right of the planet graphic
             if (isHuman) {
@@ -15189,6 +15606,7 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.restore();
             }
           }
+
           let defenderPlanetPenalty = 0;
           let defenderTechPenalty = 0;
           let defenderExpPenalty = 0;
@@ -17914,6 +18332,18 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.textBaseline = 'top';
             ctx.fillText(s.name, s.x, s.y + size + 4 + reactorHeight + upgradesHeight);
             ctx.restore();
+          }
+
+          // Extreme close-up: stats on hull, 15% aft of center; font = 1/4 of cruiser name font
+          if (!galacticView && !strategicView && entityFillsCloseupViewport(size * 2, finalScale, canvas.width, canvas.height, cameraZoom, 'cruiser')) {
+            const closeupLines = getCruiserCloseupStatLines(s);
+            const fontWorld = CRUISER_NAME_FONT_PX * CLOSEUP_LABEL_FONT_FRAC;
+            const lineH = fontWorld * 1.28;
+            const blockH = closeupLines.length * lineH;
+            const aftOffset = size * CRUISER_CLOSEUP_AFT_FRAC;
+            const statsX = s.x - Math.cos(angle) * aftOffset;
+            const statsY = s.y - Math.sin(angle) * aftOffset - blockH / 2;
+            drawCloseupStatLines(ctx, statsX, statsY, closeupLines, fontWorld);
           }
 
           if (s.isDismantling) {

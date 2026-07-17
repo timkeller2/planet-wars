@@ -3290,9 +3290,6 @@ export class Game {
         }
       }
       let costShips = cfg.costShips * costMult;
-      if (!(source.isMilitary || source.homeworldOf)) {
-        costShips *= 2;
-      }
       const costCap = cfg.costCap;
       const maxHealth = cfg.hp;
 
@@ -3305,22 +3302,21 @@ export class Game {
       }
 
       const useCredits = owner && owner.useCredits !== false;
+      // How far credits can fall: down to debt floor (minAllowedCredits). Spendable = credits - floor.
       const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
+      // Military yards count garrison 2× toward ship-paid portion only
       const shipsFactor = source.isMilitary ? 2 : 1;
       const effectiveShips = source.ships * shipsFactor;
 
+      // Pay as much as debt limit allows with credits; remainder from garrison ships
+      const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
+      let creditsPaid = Math.min(spendableCredits, costShips);
+      let remainingCostShips = costShips - creditsPaid;
       let canAfford = false;
-      let creditsPaid = 0;
-      let remainingCostShips = costShips;
-
-      if (useCredits && creditsAvailable >= costShips && effectiveShips >= costShips) {
-        canAfford = true;
-        creditsPaid = costShips;
-        remainingCostShips = 0;
-      } else if (effectiveShips >= costShips) {
-        canAfford = true;
-        creditsPaid = 0;
-        remainingCostShips = costShips;
+      if (remainingCostShips <= 0) {
+        canAfford = source.ships > 0; // full credit pay: need a live garrison only
+      } else {
+        canAfford = effectiveShips >= remainingCostShips;
       }
 
       if (canAfford && (source.maxShips - costCap) >= 5) {
@@ -3452,9 +3448,6 @@ export class Game {
         }
       }
       let baseCostShips = cfg.costShips * costMult;
-      if (!(source.isMilitary || source.homeworldOf)) {
-        baseCostShips *= 2;
-      }
       const costCap = cfg.costCap;
       const maxHealth = cfg.hp;
 
@@ -3546,22 +3539,19 @@ export class Game {
       }
 
       const useCredits = owner && owner.useCredits !== false;
+      // Spendable credits = how far balance may fall before the debt floor
       const creditsAvailable = owner ? (owner.credits - minAllowedCredits) : 0;
       const shipsFactor = source.isMilitary ? 2 : 1;
       const effectiveShips = source.ships * shipsFactor;
 
+      const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
+      let creditsPaid = Math.min(spendableCredits, finalCost);
+      let remainingCostShips = finalCost - creditsPaid;
       let canAfford = false;
-      let creditsPaid = 0;
-      let remainingCostShips = finalCost;
-
-      if (useCredits && creditsAvailable >= finalCost && effectiveShips >= baseCostShips) {
-        canAfford = true;
-        creditsPaid = finalCost;
-        remainingCostShips = 0;
-      } else if (effectiveShips >= finalCost) {
-        canAfford = true;
-        creditsPaid = 0;
-        remainingCostShips = finalCost;
+      if (remainingCostShips <= 0) {
+        canAfford = source.ships > 0;
+      } else {
+        canAfford = effectiveShips >= remainingCostShips;
       }
 
       if (canAfford && (source.maxShips - costCap) >= 5) {
