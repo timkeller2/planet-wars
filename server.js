@@ -1788,6 +1788,20 @@ async function bootstrap() {
         const hasHomeworld = game.planets.some(p => p.homeworldOf === player.id);
         if (hasHomeworld) return;
       }
+      if (data.focusMode === 'rootoutspies') {
+        // Only allow when enemy (non-owner) sympathy exists on the planet
+        let hasEnemySympathy = false;
+        if (planet.sympathy) {
+          for (const playerId of Object.keys(planet.sympathy)) {
+            if (playerId === player.id || playerId === 'monsters' || playerId === 'monster') continue;
+            if ((planet.sympathy[playerId] || 0) > 0) {
+              hasEnemySympathy = true;
+              break;
+            }
+          }
+        }
+        if (!hasEnemySympathy) return;
+      }
 
       if (planet.focusTransition) return; // Prevent concurrent focus shifts on same planet
       const cost = Math.floor(planet.maxShips / 2);
@@ -3176,6 +3190,7 @@ async function bootstrap() {
                  progress: (p.anomaly.progress && typeof p.anomaly.progress === 'object') ? (p.anomaly.progress[player.id] || 0) : 0,
                  researched: p.anomaly.researched,
                  beingResearched: p.anomaly.beingResearched || false,
+                 rewardType: p.anomaly.rewardType,
                  completing: p.anomaly.completing || false,
                  completingTimeLeft: p.anomaly.completingTimeLeft || 0,
                  completingShipId: p.anomaly.completingShipId || null,

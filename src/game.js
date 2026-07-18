@@ -3308,16 +3308,17 @@ export class Game {
       const shipsFactor = source.isMilitary ? 2 : 1;
       const effectiveShips = source.ships * shipsFactor;
 
+      // Hard presence rule: planet must have ships >= hull cost, regardless of payment method
+      const hasHullPresence = source.ships >= costShips;
+
       // Pay as much as debt limit allows with credits; remainder from garrison ships
       const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
       let creditsPaid = Math.min(spendableCredits, costShips);
       let remainingCostShips = costShips - creditsPaid;
-      let canAfford = false;
-      if (remainingCostShips <= 0) {
-        canAfford = source.ships > 0; // full credit pay: need a live garrison only
-      } else {
-        canAfford = effectiveShips >= remainingCostShips;
-      }
+      let canPay = remainingCostShips <= 0
+        ? true
+        : (effectiveShips >= remainingCostShips);
+      let canAfford = hasHullPresence && canPay;
 
       if (canAfford && (source.maxShips - costCap) >= 5) {
         const extraShips = source.ships;
@@ -3385,6 +3386,7 @@ export class Game {
         ship.buildCostCreditsRemaining = creditsPaid;
 
         this.assignRandomShipName(ship);
+        this.applyBankedUpgradeTokens(owner, ship);
         this.ships.push(ship);
         if (this.shipsById) this.shipsById.set(ship.id, ship);
         source.materializingShipId = ship.id;
@@ -3544,15 +3546,16 @@ export class Game {
       const shipsFactor = source.isMilitary ? 2 : 1;
       const effectiveShips = source.ships * shipsFactor;
 
+      // Presence uses base hull cost only (not upgrade surcharge on the config)
+      const hasHullPresence = source.ships >= baseCostShips;
+
       const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
       let creditsPaid = Math.min(spendableCredits, finalCost);
       let remainingCostShips = finalCost - creditsPaid;
-      let canAfford = false;
-      if (remainingCostShips <= 0) {
-        canAfford = source.ships > 0;
-      } else {
-        canAfford = effectiveShips >= remainingCostShips;
-      }
+      let canPay = remainingCostShips <= 0
+        ? true
+        : (effectiveShips >= remainingCostShips);
+      let canAfford = hasHullPresence && canPay;
 
       if (canAfford && (source.maxShips - costCap) >= 5) {
         const extraShips = source.ships;
@@ -3661,6 +3664,7 @@ export class Game {
         ship.configUpgrades = upgrades;
 
         this.assignRandomShipName(ship);
+        this.applyBankedUpgradeTokens(owner, ship);
         this.ships.push(ship);
         if (this.shipsById) this.shipsById.set(ship.id, ship);
         source.materializingShipId = ship.id;
@@ -6260,7 +6264,7 @@ export class Game {
             
             let totalGain = this.bundleValue || 200;
             player.credits = (player.credits || 0) + totalGain;
-            this.bundleValue = (this.bundleValue || 200) + 20;
+            this.bundleValue = (this.bundleValue || 200) + 10;
             
             player.tradeOptions -= 5;
             
@@ -7579,14 +7583,26 @@ export class Game {
     });
   }
 
+  /** Apply any upgrade tokens banked from anomaly rewards when no cruiser was available. */
+  applyBankedUpgradeTokens(player, ship) {
+    if (!player || !ship || !ship.isCruiser) return;
+    const banked = player.bankedUpgradeTokens || 0;
+    if (banked <= 0) return;
+    ship.upgradeTokens = (ship.upgradeTokens || 0) + banked;
+    player.bankedUpgradeTokens = 0;
+  }
+
   triggerAnomalyCompletion(planet, player) {
     const difficulty = planet.anomaly ? planet.anomaly.difficulty : 0;
     
-    // Choose a random reward with 64% chance for credits and 6% chance for others:
-    let rewardType = (planet.anomaly && planet.anomaly.rewardType) ? planet.anomaly.rewardType : null;
-    if (!rewardType) {
-      rewardType = Game.getRandomAnomalyRewardType();
+    // Always grant the type shown on the tooltip (fixed at anomaly creation).
+    // If missing (legacy/save), assign once and store so it cannot change.
+    if (planet.anomaly && !planet.anomaly.rewardType) {
+      planet.anomaly.rewardType = Game.getRandomAnomalyRewardType();
     }
+    const rewardType = (planet.anomaly && planet.anomaly.rewardType)
+      ? planet.anomaly.rewardType
+      : 'credits';
     
     let text = '';
     let floatText = '';
@@ -7727,10 +7743,10 @@ export class Game {
       const numTokens = 1 + Math.floor(creditsValueEquivalent / 40);
       const completingShipId = planet.anomaly ? planet.anomaly.completingShipId : null;
       let targetShip = this.ships.find(s => s.id === completingShipId);
-      if (!targetShip) {
+      if (!targetShip || !targetShip.isCruiser) {
         let minDistSq = Infinity;
         for (const s of this.ships) {
-          if (s.active && s.isCruiser && s.ownerId === player.id) {
+          if (s.active && s.isCruiser && s.owner === player) {
             const dx = s.x - planet.x;
             const dy = s.y - planet.y;
             const distSq = dx * dx + dy * dy;
@@ -7741,15 +7757,15 @@ export class Game {
           }
         }
       }
-      if (targetShip) {
+      // Never substitute a different reward type — bank tokens if no cruiser is available
+      if (targetShip && targetShip.isCruiser) {
         targetShip.upgradeTokens = (targetShip.upgradeTokens || 0) + numTokens;
         text = `ANOMALY RESOLVED ${preposition} ${locationName}: Cruiser ${targetShip.name || ''} received +${numTokens} Upgrade Tokens!`;
         floatText = `+${numTokens} Tokens`;
       } else {
-        const creditsReward = Math.round(creditsValueEquivalent);
-        player.credits = (player.credits || 0) + creditsReward;
-        text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received +${creditsReward} Credits!`;
-        floatText = `+${creditsReward} 💲`;
+        player.bankedUpgradeTokens = (player.bankedUpgradeTokens || 0) + numTokens;
+        text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received +${numTokens} Upgrade Tokens (banked for your next cruiser)!`;
+        floatText = `+${numTokens} Tokens (banked)`;
       }
     }
     

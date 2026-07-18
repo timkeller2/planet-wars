@@ -3163,7 +3163,7 @@ function getPlanetTradeIncomePerMin(planet) {
       lines.push({ label: 'Research Progress', value: `${p.anomaly.progress || 0} / ${p.anomaly.difficulty}`, color: '#ffb74d' });
       lines.push({ label: 'Difficulty', value: `${p.anomaly.difficulty}`, color: anomalyColor });
       
-      const trueType = p.anomaly.rewardType || 'credits';
+      const trueType = p.anomaly.rewardType || null;
       const rewardLabels = {
         discount: 'Upgrade Discount',
         credits: 'Credits Reward',
@@ -3173,8 +3173,8 @@ function getPlanetTradeIncomePerMin(planet) {
         rare_resource_cache: 'Rare Resource Cache',
         upgrade_token: 'Upgrade Tokens'
       };
-      
-      const displayLabel = rewardLabels[trueType] || 'Unknown';
+      // Never invent a type the server did not send — matches completion grants
+      const displayLabel = trueType ? (rewardLabels[trueType] || trueType) : 'Scanning…';
       lines.push({ label: 'Reward', value: displayLabel, color: '#00e5ff' });
 
       for (const line of lines) {
@@ -9243,12 +9243,10 @@ function getPlanetTradeIncomePerMin(planet) {
       const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
       const creditsTowardCost = Math.min(spendableCredits, finalCost);
       const shipsStillNeeded = finalCost - creditsTowardCost;
-      let canAfford = false;
-      if (shipsStillNeeded <= 0) {
-        canAfford = selectedPlanetBuild.ships > 0;
-      } else {
-        canAfford = effectiveShips >= shipsStillNeeded;
-      }
+      // Presence: ships >= base hull cost (not full config total)
+      const hasHullPresence = selectedPlanetBuild.ships >= baseCostShips;
+      let canPay = shipsStillNeeded <= 0 ? true : (effectiveShips >= shipsStillNeeded);
+      let canAfford = hasHullPresence && canPay;
       if (!isUnlocked || (selectedPlanetBuild.maxShips - baseCfg.costCap) < 5) canAfford = false;
 
       if (costMult > 1) {
@@ -9553,6 +9551,17 @@ function getPlanetTradeIncomePerMin(planet) {
     const planet = findServerPlanet(selectedPlanets[0].id);
     if (!planet || planet.ownerId !== localPlayer.id) return null;
     return planet;
+  }
+
+  /** True if any non-owner player has sympathy > 0 on this planet (matches Root Out Spies docs / sim). */
+  function planetHasEnemySympathy(planet) {
+    if (!planet || !planet.sympathy) return false;
+    const ownerId = planet.ownerId || (planet.owner && planet.owner.id) || null;
+    for (const playerId of Object.keys(planet.sympathy)) {
+      if (playerId === ownerId || playerId === 'monsters' || playerId === 'monster') continue;
+      if ((planet.sympathy[playerId] || 0) > 0) return true;
+    }
+    return false;
   }
 
   function getSelectedPlanetFocusQualifiers() {
@@ -11104,7 +11113,7 @@ function getPlanetTradeIncomePerMin(planet) {
           focusModeActive = false;
           return;
         }
-        if (key === 's' && planet.focusMode !== 'rootoutspies') {
+        if (key === 's' && planet.focusMode !== 'rootoutspies' && planetHasEnemySympathy(planet)) {
           event.preventDefault();
           socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'rootoutspies' });
           focusModeActive = false;
@@ -11683,12 +11692,10 @@ function getPlanetTradeIncomePerMin(planet) {
           const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
           const creditsTowardCost = Math.min(spendableCredits, costShips);
           const shipsStillNeeded = costShips - creditsTowardCost;
-          let canAfford = false;
-          if (shipsStillNeeded <= 0) {
-            canAfford = selectedPlanetBuild.ships > 0;
-          } else {
-            canAfford = effectiveShips >= shipsStillNeeded;
-          }
+          // Presence: ships on planet must be >= hull cost (payment method independent)
+          const hasHullPresence = selectedPlanetBuild.ships >= costShips;
+          let canPay = shipsStillNeeded <= 0 ? true : (effectiveShips >= shipsStillNeeded);
+          let canAfford = hasHullPresence && canPay;
           if ((selectedPlanetBuild.maxShips - cfg.costCap) < 5) canAfford = false;
           if (canAfford) {
             socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
@@ -11750,12 +11757,9 @@ function getPlanetTradeIncomePerMin(planet) {
             const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
             const creditsTowardCost = Math.min(spendableCredits, costShips);
             const shipsStillNeeded = costShips - creditsTowardCost;
-            let canAfford = false;
-            if (shipsStillNeeded <= 0) {
-              canAfford = selectedPlanetBuild.ships > 0;
-            } else {
-              canAfford = effectiveShips >= shipsStillNeeded;
-            }
+            const hasHullPresence = selectedPlanetBuild.ships >= costShips;
+            let canPay = shipsStillNeeded <= 0 ? true : (effectiveShips >= shipsStillNeeded);
+            let canAfford = hasHullPresence && canPay;
             if ((selectedPlanetBuild.maxShips - cfg.costCap) < 5) canAfford = false;
             if (canAfford) {
               socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
@@ -12000,10 +12004,10 @@ function getPlanetTradeIncomePerMin(planet) {
   const registerFocusBtn = (id, mode) => {
     bindActionClick(id, () => {
       const planet = getSelectedPlanetFocusQualifiers();
-      if (planet) {
-        socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: mode });
-        focusModeActive = false;
-      }
+      if (!planet) return;
+      if (mode === 'rootoutspies' && !planetHasEnemySympathy(planet)) return;
+      socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: mode });
+      focusModeActive = false;
     });
   };
 
@@ -12865,6 +12869,12 @@ function getPlanetTradeIncomePerMin(planet) {
               shouldShow = false;
             }
           }
+          if (mode === 'rootoutspies') {
+            // Docs: only available when enemy sympathy exists on the planet
+            if (!planetHasEnemySympathy(selectedPlanetFocus)) {
+              shouldShow = false;
+            }
+          }
           el.style.display = shouldShow ? 'inline-flex' : 'none';
           if (el.style.display === 'inline-flex') {
             const costSpan = el.querySelector('.btn-cost');
@@ -13121,17 +13131,14 @@ function getPlanetTradeIncomePerMin(planet) {
           const shipsFactor = selectedPlanetBuild.isMilitary ? 2 : 1;
           const effectiveShips = selectedPlanetBuild.ships * shipsFactor;
           const useCredits = myPlayer && myPlayer.useCredits !== false;
-          // Spendable credits go down to debt floor; remainder must be paid in ships
+          // Spendable credits go down to debt floor; remainder paid in ships
           const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
           const creditsTowardCost = Math.min(spendableCredits, costShips);
           const shipsStillNeeded = costShips - creditsTowardCost;
-          let canAffordParts = false;
-          if (shipsStillNeeded <= 0) {
-            canAffordParts = selectedPlanetBuild.ships > 0;
-          } else {
-            canAffordParts = effectiveShips >= shipsStillNeeded;
-          }
-          const canAfford = isUnlocked && canAffordParts && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
+          // Presence: ships on planet must be >= hull cost no matter how you pay
+          const hasHullPresence = selectedPlanetBuild.ships >= costShips;
+          const canPay = shipsStillNeeded <= 0 ? true : (effectiveShips >= shipsStillNeeded);
+          const canAfford = isUnlocked && hasHullPresence && canPay && (selectedPlanetBuild.maxShips - cfg.costCap) >= 5;
 
           if (!canAfford) {
             el.style.opacity = '0.5';
@@ -13148,12 +13155,13 @@ function getPlanetTradeIncomePerMin(planet) {
           const baseName = cfg.name;
           const shortcutKey = cfg.key.toUpperCase();
           let titleStr = '';
-          const shipReq = selectedPlanetBuild.isMilitary ? Math.ceil(shipsStillNeeded / 2) : shipsStillNeeded;
-          const reqStr = creditsTowardCost > 0
-            ? (shipsStillNeeded > 0
-              ? `Req: ¢${Math.floor(creditsTowardCost)} + ${shipReq} ships (to debt limit)`
-              : `Req: ¢${Math.floor(creditsTowardCost)} (to debt limit)`)
-            : (selectedPlanetBuild.isMilitary ? `Req: ${Math.ceil(costShips / 2)} ships` : `Req: ${costShips} ships`);
+          const payShipReq = selectedPlanetBuild.isMilitary ? Math.ceil(shipsStillNeeded / 2) : shipsStillNeeded;
+          const reqStr = `Req: ≥${costShips} ships on planet`
+            + (creditsTowardCost > 0
+              ? (shipsStillNeeded > 0
+                ? `; pay ¢${Math.floor(creditsTowardCost)} + ${payShipReq} ships`
+                : `; pay ¢${Math.floor(creditsTowardCost)}`)
+              : `; pay ${selectedPlanetBuild.isMilitary ? Math.ceil(costShips / 2) : costShips} ships`);
           if (!isUnlocked) {
             titleStr = `Build ${baseName} (LOCKED - ${lockReason})`;
           } else if (activeConfigClassType === classType) {

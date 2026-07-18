@@ -1601,7 +1601,8 @@ export class Ship {
               } else if (allShips) {
                 const candidateMarines = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(other.x, other.y, 500 * 500) : allShips;
                 for (const s of candidateMarines) {
-                  if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marineCount || 0) > 0 && s.scoutAttackEnabled === true) {
+                  // Marine capacity + Scout Attack (no need for marines already loaded)
+                  if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marines || 0) > 0 && s.scoutAttackEnabled === true) {
                     const dx = s.x - other.x;
                     const dy = s.y - other.y;
                     if (dx * dx + dy * dy <= 500 * 500) {
@@ -2135,7 +2136,8 @@ export class Ship {
             if (allShips) {
               const candidateMarines = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(enemyShip.x, enemyShip.y, 500 * 500) : allShips;
               for (const other of candidateMarines) {
-                if (other.active && other.isCruiser && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner) && (other.marineCount || 0) > 0 && other.scoutAttackEnabled === true) {
+                // Marine capacity + Scout Attack (loaded marine count not required)
+                if (other.active && other.isCruiser && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner) && (other.marines || 0) > 0 && other.scoutAttackEnabled === true) {
                   const dx = other.x - enemyShip.x;
                   const dy = other.y - enemyShip.y;
                   if (dx * dx + dy * dy <= 500 * 500) {
@@ -3167,7 +3169,8 @@ export class Ship {
                   if (!isBoardingCandidate && allShips) {
                     const candidateMarines = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(other.x, other.y, 500 * 500) : allShips;
                     for (const s of candidateMarines) {
-                      if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marineCount || 0) > 0 && s.scoutAttackEnabled === true) {
+                      // Marine capacity + Scout Attack (loaded marine count not required)
+                      if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marines || 0) > 0 && s.scoutAttackEnabled === true) {
                         const dx = s.x - other.x;
                         const dy = s.y - other.y;
                         if (dx * dx + dy * dy <= 500 * 500) {
