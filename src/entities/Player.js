@@ -7,6 +7,8 @@ export class Player {
     this.expScore = 0;
     this.expProgress = 0;
     this.happinessScore = 0;
+    // Once true, conquering this player again yields loot but no elim XP
+    this.eliminationXpAwarded = false;
     this.cruiserStyle = null;
     this.credits = 0;
     this.hasOwnedPlanet = false;

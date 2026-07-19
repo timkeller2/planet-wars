@@ -2,3 +2,4 @@
 
 - DO NOT use the browser tool or browser subagent for testing. 
 - All UI, gameplay, and manual testing must be left to the user.
+- When changes require a server restart to test (server.js, src/game.js, entities, systems, or other Node-loaded modules), restart the game server yourself (kill port 5173, then `npm start` in background). Do not wait for the user to ask. See AGENTS.md.

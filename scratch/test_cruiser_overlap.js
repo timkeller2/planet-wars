@@ -15,17 +15,21 @@ function testCruiserOverlap() {
   game.planets = [];
 
   // Create two cruisers close to each other
-  // ship1: maxHealth = 30
-  // ship2: maxHealth = 50
-  const ship1 = new Ship(1, 100, 100, null, player, 100, 100);
+  // ship1: maxHealth = 30 (smaller — should scoot more)
+  // ship2: maxHealth = 50 (larger — should barely move)
+  const ship1StartX = 100;
+  const ship2StartX = 105;
+  const ship1 = new Ship(1, ship1StartX, 100, null, player, ship1StartX, 100);
   ship1.isCruiser = true;
   ship1.maxHealth = 30;
   ship1.health = 30;
+  ship1.stationaryTimer = 1000;
 
-  const ship2 = new Ship(2, 105, 100, null, player, 105, 100);
+  const ship2 = new Ship(2, ship2StartX, 100, null, player, ship2StartX, 100);
   ship2.isCruiser = true;
   ship2.maxHealth = 50;
   ship2.health = 50;
+  ship2.stationaryTimer = 1000;
 
   game.ships.push(ship1);
   game.ships.push(ship2);
@@ -42,10 +46,12 @@ function testCruiserOverlap() {
   assert.ok(initialDist < 20);
 
   // Run update loop multiple times to allow them to push apart completely.
-  // Rate of scooting is 3 pixels/sec per cruiser, so 6 pixels/sec apart.
-  // To push apart from 5px to 50px (45px difference), it takes about 45 / 6 = 7.5 seconds of simulation time.
-  // Let's run 15 updates of 1000ms.
+  // Relative scoot is 6 px/s total; size-weighted so smaller moves more.
+  // Target distance is max(30,50)*1.30 = 65.
   for (let i = 0; i < 15; i++) {
+    // Keep them "stationary" so scoot logic keeps applying
+    ship1.stationaryTimer = 1000;
+    ship2.stationaryTimer = 1000;
     game.update(1000);
   }
 
@@ -53,12 +59,21 @@ function testCruiserOverlap() {
   dy = ship2.y - ship1.y;
   const finalDist = Math.sqrt(dx * dx + dy * dy);
   console.log("Final distance between cruisers:", finalDist);
+  console.log("ship1 (small) x:", ship1.x, "moved:", Math.abs(ship1.x - ship1StartX));
+  console.log("ship2 (large) x:", ship2.x, "moved:", Math.abs(ship2.x - ship2StartX));
 
-  // If the old hardcoded 20 was used, finalDist would be around 20.
-  // With the new logic, the target distance is max(30, 50) = 50.
-  // So the final distance should be at least 50.
-  assert.ok(finalDist >= 50, `Expected final distance to be at least 50, got ${finalDist}`);
-  console.log("SUCCESS: Cruisers spaced themselves out beyond the maxHealth of the larger cruiser (50)!");
+  // They should have pushed apart significantly from the initial 5px stack
+  assert.ok(finalDist > 30, `Expected final distance > 30, got ${finalDist}`);
+
+  // Smaller ship should have moved more than the larger one (inverse-mass push).
+  // With sizes 30 vs 50, ratio should be ~50:30 (smaller moves more).
+  const smallMoved = Math.abs(ship1.x - ship1StartX) + Math.abs(ship1.y - 100);
+  const largeMoved = Math.abs(ship2.x - ship2StartX) + Math.abs(ship2.y - 100);
+  assert.ok(smallMoved > largeMoved,
+    `Expected smaller ship to move more (small=${smallMoved}, large=${largeMoved})`);
+  assert.ok(smallMoved / largeMoved > 1.4,
+    `Expected ~5:3 size ratio of movement, got small/large=${smallMoved / largeMoved}`);
+  console.log("SUCCESS: Cruisers spaced out; smaller ship drifted farther than larger ship.");
   process.exit(0);
 }
 

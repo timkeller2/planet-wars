@@ -320,7 +320,10 @@ async function bootstrap() {
   }
 
   function executeCommand(cmdStr, player, socket, io, game) {
-    const hasCheats = true;
+    // All slash-commands are cheats — require the lobby "Enable Cheats" setting.
+    if (!game || !game.settings || !game.settings.enableCheats) {
+      return 'Cheats are disabled. Enable cheats in the lobby settings to use / commands.';
+    }
 
     const cleanCmd = cmdStr.trim().replace(/^\//, '');
     const parts = cleanCmd.split(/\s+/);
@@ -334,7 +337,7 @@ async function bootstrap() {
 
     switch (cmd) {
       case 'help':
-        return `Available Commands:
+        return `Available Commands (cheats enabled):
 /ships <number> - Set ships on all owned planets.
 /credits <number> - Set credits.
 /tech <number> - Set technology level.
@@ -750,9 +753,23 @@ async function bootstrap() {
 
       console.log(`[Server Received Planet Upgrade] Player: ${player.name}, planetId: ${data.planetId}, type: ${data.type}`);
       const planet = game.planets.find(p => p.id === data.planetId);
+      const rejectPlanetUpgrade = (reason) => {
+        console.log(`[Server Planet Upgrade Rejected] ${reason}`);
+        socket.emit('chatMessage', {
+          sender: 'System',
+          color: '#ff6666',
+          text: `Planet upgrade failed: ${reason}`
+        });
+      };
       if (planet && planet.owner && planet.owner.id === player.id) {
-        if (planet.inRevolt) return;
-        if (planet.upgradeTransition) return; // Prevent concurrent upgrades
+        if (planet.inRevolt) {
+          rejectPlanetUpgrade('planet is in revolt.');
+          return;
+        }
+        if (planet.upgradeTransition) {
+          rejectPlanetUpgrade('an upgrade is already in progress on this planet.');
+          return;
+        }
         const typesMap = {
           sensorarray: 'sensorarrays',
           lab: 'labs',
@@ -790,11 +807,11 @@ async function bootstrap() {
           const nextLevel = currentVal + 1;
 
           if (totalUpgrades >= maxTotalUpgrades) {
-            console.log(`[Server Planet Upgrade Rejected] Max upgrades reached.`);
+            rejectPlanetUpgrade('this planet already has its maximum of 1 upgrade.');
             return;
           }
 
-          // Enforce that the total upgrades of this type across all players does not exceed 1/5 the number of human players (rounded up)
+          // Enforce that the total upgrades of this type across all owned planets does not exceed 1/5 the number of human players (rounded up)
           const humanPlayers = game.allPlayers.filter(pl => pl && !pl.isAI && pl.id !== 'monsters');
           const numHumanPlayers = Math.max(1, humanPlayers.length);
           const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 5);
@@ -807,7 +824,7 @@ async function bootstrap() {
           }
 
           if (totalUpgradesOfCertainType >= maxUpgradesOfCertainType) {
-            console.log(`[Server Planet Upgrade Rejected] Max upgrades of type ${prop} across all players (${maxUpgradesOfCertainType}) reached.`);
+            rejectPlanetUpgrade(`galaxy limit for this upgrade type reached (${maxUpgradesOfCertainType} max for ${numHumanPlayers} human player(s)).`);
             return;
           }
 
@@ -819,7 +836,11 @@ async function bootstrap() {
             minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
           }
 
-          const creditsAvailable = player.useCredits !== false ? ((player.credits || 0) - minAllowedCredits) : 0;
+          if (player.useCredits === false) {
+            rejectPlanetUpgrade('credits payment is disabled (toggle Use Credits).');
+            return;
+          }
+          const creditsAvailable = (player.credits || 0) - minAllowedCredits;
           if (creditsAvailable >= cost) {
             // Start the 30-second transition instead of applying immediately
             planet.upgradeTransition = {
@@ -832,9 +853,19 @@ async function bootstrap() {
               playerId: player.id
             };
             console.log(`[Server Planet Upgrade Started] Planet ${planet.id} starting upgrade ${prop} to ${nextLevel}. Cost: ${cost}`);
+            markSocketNeedsState(socket);
+            socket.emit('chatMessage', {
+              sender: 'System',
+              color: '#00e5ff',
+              text: `Upgrading ${planet.name}: ${prop} (30s, cost ${cost} credits).`
+            });
           } else {
-            console.log(`[Server Planet Upgrade Rejected] Insufficient credits for ${prop}. Cost: ${cost}, Available: ${creditsAvailable}`);
+            rejectPlanetUpgrade(`need ${cost} credits (available ${Math.floor(creditsAvailable)} including debt limit).`);
           }
+        } else if (!prop) {
+          rejectPlanetUpgrade('unknown upgrade type.');
+        } else {
+          rejectPlanetUpgrade('this upgrade is already at max level on this planet.');
         }
       }
     });
@@ -1219,13 +1250,18 @@ async function bootstrap() {
         }
 
         if (cleanText.startsWith('/')) {
+          const cheatsOn = !!(game && game.settings && game.settings.enableCheats);
           const feedback = executeCommand(cleanText, player, socket, io, game);
           socket.emit('chatMessage', {
             sender: 'System',
-            color: '#00e5ff',
+            color: cheatsOn ? '#00e5ff' : '#ff3333',
             text: feedback
           });
-          console.log(`[Cheat Command] Player ${player.name} (${player.id}) ran command: ${cleanText}`);
+          if (cheatsOn) {
+            console.log(`[Cheat Command] Player ${player.name} (${player.id}) ran command: ${cleanText}`);
+          } else {
+            console.log(`[Cheat Command Rejected] Player ${player.name} (${player.id}) tried: ${cleanText} (cheats disabled)`);
+          }
           return;
         }
         const cleanTextToBroadcast = cleanText.substring(0, 100);
@@ -1722,6 +1758,7 @@ async function bootstrap() {
         
         // Adjust global price
         game.marketPrices[resource]++;
+        markSocketNeedsState(socket);
       }
     });
 
@@ -1749,6 +1786,7 @@ async function bootstrap() {
         
         // Adjust global price (min 1)
         game.marketPrices[resource] = Math.max(1, game.marketPrices[resource] - 1);
+        markSocketNeedsState(socket);
       }
     });
 
@@ -2892,6 +2930,17 @@ async function bootstrap() {
           break;
         }
       }
+
+      // Match alive rule: >10 sympathy on any planet counts as still in the game
+      // (do not full-reveal fog while the player still has a sympathy foothold).
+      if (!hasEntities) {
+        for (const p of game.planets) {
+          if (p.sympathy && (p.sympathy[player.id] || 0) > 10) {
+            hasEntities = true;
+            break;
+          }
+        }
+      }
       
       if (!hasEntities && game.settings?.fogOfWar && !player.isAI) {
          // console.log(`GETSTATE: ${player.id} has NO entities! (Planets: ${game.planets.filter(p=>p.owner).map(p=>p.owner.id).join(',')})`);
@@ -3211,6 +3260,14 @@ async function bootstrap() {
             visibleShips.push(allShipsMapped[i]);
           } else {
             const ownerIdx = s.owner ? game.allPlayers.indexOf(s.owner) : -1;
+            // Encode no-target as current position (not 0,0) so client DR does not
+            // invent a flight toward the map origin between packets.
+            const hasSpaceTarget = s.targetX != null && s.targetY != null;
+            const destX = s.targetPlanet ? s.targetPlanet.x : (hasSpaceTarget ? s.targetX : s.x);
+            const destY = s.targetPlanet ? s.targetPlanet.y : (hasSpaceTarget ? s.targetY : s.y);
+            const maxSp = typeof s.getMaxSpeed === 'function'
+              ? s.getMaxSpeed()
+              : (s.isMarineFleet ? 35 : 15);
             visibleFlatShips.push(
               s.id,
               Math.round(s.x * 10) / 10,
@@ -3223,14 +3280,18 @@ async function bootstrap() {
               s.isBoardingFleet ? 1 : 0,
               s.isReturnPod ? 1 : 0,
               Math.round(s.angle * 100) / 100,
-              Math.round((s.targetPlanet ? s.targetPlanet.x : (s.targetX || 0)) * 10) / 10,
-              Math.round((s.targetPlanet ? s.targetPlanet.y : (s.targetY || 0)) * 10) / 10,
+              Math.round(destX * 10) / 10,
+              Math.round(destY * 10) / 10,
               Math.round((s.health || 0) * 10) / 10,
               Math.round((s.expScore || 0) * 10) / 10,
               Math.round((s.flightTime || 0) * 10) / 10,
               Math.round((s.currentSpeed || 0) * 10) / 10,
               s.isMarineFleet ? 1 : 0,
-              Math.round((s.commandPoints || 0) * 100) / 100
+              Math.round((s.commandPoints || 0) * 100) / 100,
+              // Stride 20: max speed for client invent-cruise / optimistic DR
+              Math.round(maxSp * 10) / 10,
+              // Stride 21: 1 = has real destination, 0 = idle (dest is self)
+              (s.targetPlanet || hasSpaceTarget) ? 1 : 0
             );
           }
         }
@@ -3360,9 +3421,20 @@ async function bootstrap() {
         storms: visibleStorms,
         wreckages: visibleWreckages,
         chunks: visibleChunks,
+        // Snapshot nested mutable fields — shallow Object.assign shares refs with live
+        // player objects, so resource/stockpile mutations never appear in deltas
+        // (tradeOptions is a primitive and updates fine; resources lagged until full resync).
         players: game.allPlayers.map(p => {
           const pObj = Object.assign({}, p);
           pObj.discoveredPlanetsArray = p.discoveredPlanets ? Array.from(p.discoveredPlanets) : [];
+          pObj.resources = p.resources ? { ...p.resources } : {};
+          pObj.upgradeModifiers = p.upgradeModifiers ? { ...p.upgradeModifiers } : {};
+          pObj.targetStockpile = p.targetStockpile ? { ...p.targetStockpile } : {};
+          pObj.offerPrice = p.offerPrice ? { ...p.offerPrice } : {};
+          pObj.buyPrice = p.buyPrice ? { ...p.buyPrice } : {};
+          pObj.builtClasses = p.builtClasses ? { ...p.builtClasses } : {};
+          pObj.buildCounts = p.buildCounts ? { ...p.buildCounts } : {};
+          pObj.atWarWith = p.atWarWith ? { ...p.atWarWith } : {};
           if (p.id === player.id) {
             pObj.lastKnownPlanets = p.lastKnownPlanets || {};
           } else {
@@ -3370,14 +3442,14 @@ async function bootstrap() {
           }
           return pObj;
         }),
-        globalUpgradeModifiers: game.globalUpgradeModifiers,
+        globalUpgradeModifiers: game.globalUpgradeModifiers ? { ...game.globalUpgradeModifiers } : {},
         upgradeEnhanceEvents: visibleUpgradeEnhanceEvents,
         accuracyEvents: visibleAccuracyEvents,
         happinessEvents: visibleHappinessEvents,
         galacticCapacity: game.galacticCapacity,
-        marketPrices: game.marketPrices || {},
+        marketPrices: game.marketPrices ? { ...game.marketPrices } : {},
         bundleValue: game.bundleValue || 200,
-        resourceRarities: game.resourceRarities || {},
+        resourceRarities: game.resourceRarities ? { ...game.resourceRarities } : {},
         isPaused: game.isPaused,
         isRunning: game.isRunning,
         gameOverMessage: game.gameOverMessage,

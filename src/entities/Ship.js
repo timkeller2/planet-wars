@@ -1581,57 +1581,76 @@ export class Ship {
         this.cruiserTargetType = null;
         this.cruiserTargetId = null;
       } else {
-        // Engage enemy fleets and cruisers in sensor range
-        const sensorRange = this.cruiserRadarRange();
-        const rangeSq = sensorRange * sensorRange;
+        // Hunt nearest enemy cruiser map-wide; re-evaluate at least every 15s
+        // (and immediately if the current target is lost/invalid).
+        this.pirateRetargetTimer = (this.pirateRetargetTimer || 0) + deltaTime;
 
-        let nearestEnemy = null;
-        let nearestDistSq = rangeSq;
-
-        if (allShips) {
-          const candidateThreats = (typeof allShips.getShipsInRadiusSq === 'function')
-            ? allShips.getShipsInRadiusSq(this.x, this.y, rangeSq)
-            : allShips;
-
-          for (const other of candidateThreats) {
-            let isBoardingCandidate = false;
-            if (other.isCruiser && other.health < 2) {
-              if (other.isUnderBoarding) {
-                isBoardingCandidate = true;
-              } else if (allShips) {
-                const candidateMarines = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(other.x, other.y, 500 * 500) : allShips;
-                for (const s of candidateMarines) {
-                  // Marine capacity + Scout Attack (no need for marines already loaded)
-                  if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marines || 0) > 0 && s.scoutAttackEnabled === true) {
-                    const dx = s.x - other.x;
-                    const dy = s.y - other.y;
-                    if (dx * dx + dy * dy <= 500 * 500) {
-                      isBoardingCandidate = true;
-                      break;
-                    }
-                  }
-                }
-              }
-            }
-            if (other.active && other.owner && other.owner !== this.owner && !other.isAmoeba && !other.isReturnPod && !other.isBoardingFleet && !other.isMaterializing && !isBoardingCandidate) {
-              const dx = other.x - this.x;
-              const dy = other.y - this.y;
-              const distSq = dx * dx + dy * dy;
-              if (distSq < nearestDistSq) {
-                nearestDistSq = distSq;
-                nearestEnemy = other;
-              }
+        let currentTarget = null;
+        if (this.cruiserTargetType === 'ship' && this.cruiserTargetId != null && allShips) {
+          for (const other of allShips) {
+            if (other.id === this.cruiserTargetId) {
+              currentTarget = other;
+              break;
             }
           }
         }
 
-        if (nearestEnemy) {
-          this.cruiserTargetType = 'ship';
-          this.cruiserTargetId = nearestEnemy.id;
-          this.targetX = nearestEnemy.x;
-          this.targetY = nearestEnemy.y;
+        const targetStillValid = currentTarget
+          && currentTarget.active
+          && currentTarget.isCruiser
+          && !currentTarget.isAmoeba
+          && !currentTarget.isReturnPod
+          && !currentTarget.isBoardingFleet
+          && !currentTarget.isMaterializing
+          && currentTarget.owner
+          && currentTarget.owner !== this.owner
+          && currentTarget.owner.id !== 'monsters';
+
+        const needRetarget = this.pirateRetargetTimer >= 15000 || !targetStillValid;
+
+        if (needRetarget && allShips) {
+          this.pirateRetargetTimer = 0;
+          let nearestCruiser = null;
+          let nearestDistSq = Infinity;
+
+          for (const other of allShips) {
+            if (!other.active || !other.isCruiser || other.isAmoeba) continue;
+            if (!other.owner || other.owner === this.owner || other.owner.id === 'monsters') continue;
+            if (other.isReturnPod || other.isBoardingFleet || other.isMaterializing) continue;
+            // Skip crippled ships that friendly marines are already boarding
+            if (other.health < 2 && other.isUnderBoarding) continue;
+
+            const dx = other.x - this.x;
+            const dy = other.y - this.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq < nearestDistSq) {
+              nearestDistSq = distSq;
+              nearestCruiser = other;
+            }
+          }
+
+          if (nearestCruiser) {
+            this.cruiserTargetType = 'ship';
+            this.cruiserTargetId = nearestCruiser.id;
+            currentTarget = nearestCruiser;
+          } else {
+            this.cruiserTargetType = null;
+            this.cruiserTargetId = null;
+            currentTarget = null;
+          }
+        } else if (!targetStillValid) {
+          currentTarget = null;
+        }
+
+        if (currentTarget && currentTarget.active) {
+          // Keep pursuit updated toward the target's live position
+          this.targetX = currentTarget.x;
+          this.targetY = currentTarget.y;
           this.targetPlanet = null;
+          this.cruiserTargetType = 'ship';
+          this.cruiserTargetId = currentTarget.id;
         } else {
+          // No enemy cruisers — wander randomly
           const reachedDest = !this.targetX || (Math.sqrt((this.targetX - this.x) * (this.targetX - this.x) + (this.targetY - this.y) * (this.targetY - this.y)) < 15);
           if (reachedDest) {
             const mapW = mapWidth || 1920;
@@ -5252,12 +5271,18 @@ export class Ship {
               this.targetPlanet.rampageBoost = false;
               this.targetPlanet.rampageEvent = false;
 
-              // Check if previous owner was eliminated
+              // Check if previous owner lost their last planet
               if (previousOwner && previousOwner !== this.owner && allPlanets) {
                 const hasRemaining = allPlanets.some(p => p !== this.targetPlanet && p.owner === previousOwner);
                 if (!hasRemaining) {
                   this.targetPlanet.defeatEvent = { name: previousOwner.name, color: previousOwner.color };
-                  this.owner.expScore = (this.owner.expScore || 0) + 100;
+                  // One-time player-conquer XP (shared flag with eliminatePlayer)
+                  if (game && typeof game.tryAwardPlayerConquerXp === 'function') {
+                    game.tryAwardPlayerConquerXp(previousOwner, this.owner, 100);
+                  } else if (!previousOwner.eliminationXpAwarded) {
+                    previousOwner.eliminationXpAwarded = true;
+                    this.owner.expScore = (this.owner.expScore || 0) + 100;
+                  }
                 }
               }
 

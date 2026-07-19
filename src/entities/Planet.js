@@ -228,7 +228,8 @@ export class Planet {
       if (this.supplies === undefined) {
         this.supplies = Math.random() * this.maxShips;
       }
-      const baseRate = this.owner ? 3 : 0.75;
+      // baseRate is supplies/min at maxShips=100, minerals=4 (50% of original 3 / 0.75)
+      const baseRate = this.owner ? 1.5 : 0.375;
       const regenRatePerMs = (baseRate * (this.maxShips / 100) * ((this.minerals || 4) / 4)) / 60000;
       this.supplies = Math.min(this.maxShips, this.supplies + regenRatePerMs * deltaTime);
     }
@@ -418,6 +419,16 @@ export class Planet {
           
           if (highestEnemyId) {
             this.sympathy[highestEnemyId] = Math.max(0, this.sympathy[highestEnemyId] - cycles);
+            // Attribute pressure so if this drops their last foothold (>10 sympathy
+            // with no planets/ships/pioneers), eliminatePlayer can credit the conqueror.
+            if (this.owner && this.owner.id !== highestEnemyId) {
+              const victim = game && game.allPlayers
+                ? game.allPlayers.find(p => p.id === highestEnemyId)
+                : null;
+              if (victim) {
+                victim.lastAttackerPlayerId = this.owner.id;
+              }
+            }
             if (this.owner) {
               this.owner.spyRootedEvents = this.owner.spyRootedEvents || new Set();
               this.owner.spyRootedEvents.add(this.id);

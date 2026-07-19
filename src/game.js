@@ -940,14 +940,22 @@ export class Game {
 
     let targetPlanet = null;
 
-    // Helper to calculate total economy (maxShips) within 400px of a coordinate
-    const getEconomyWithin400 = (x, y) => {
+    // Map-relative homeworld separation: prefer 1/5 of the shorter map edge
+    const mapDim = Math.min(this.width || 1920, this.height || 1920);
+    const preferredHwSeparation = mapDim / 5;
+    const RICHNESS_RADIUS = 750;
+    const RICHNESS_RADIUS_SQ = RICHNESS_RADIUS * RICHNESS_RADIUS;
+    const SUPER_PLANET_AVOID = 500;
+    const isHumanPlayer = !player.isAI && player.id !== 'monsters';
+
+    // Helper to calculate total economy (maxShips) within richness radius of a coordinate
+    const getLocalEconomy = (x, y) => {
       let sum = 0;
       for (const p of this.planets) {
         if (!p.homeworldOf) {
           const dx = p.x - x;
           const dy = p.y - y;
-          if (dx * dx + dy * dy <= 400 * 400) {
+          if (dx * dx + dy * dy <= RICHNESS_RADIUS_SQ) {
             sum += (p.maxShips || 0);
           }
         }
@@ -955,13 +963,53 @@ export class Game {
       return sum;
     };
 
-    // Calculate average economy within 400px of all non-homeworld planets
+    const getMinDistToHomeworlds = (x, y) => {
+      let minD = Infinity;
+      for (const p of this.planets) {
+        if (!p.homeworldOf || p.homeworldOf === player.id) continue;
+        const dx = p.x - x;
+        const dy = p.y - y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < minD) minD = d;
+      }
+      return minD;
+    };
+
+    const getMinDistToSuperPlanets = (x, y) => {
+      let minD = Infinity;
+      for (const p of this.planets) {
+        if (!p.isSuperPlanet) continue;
+        const dx = p.x - x;
+        const dy = p.y - y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < minD) minD = d;
+      }
+      return minD;
+    };
+
+    /** Prefer candidates far enough from super planets (humans only); relax if needed. */
+    const filterAwayFromSuperPlanets = (list, getXY) => {
+      if (!isHumanPlayer || list.length === 0) return list;
+      const withDist = list.map(c => {
+        const { x, y } = getXY(c);
+        return { item: c, superDist: getMinDistToSuperPlanets(x, y) };
+      });
+      let ok = withDist.filter(e => e.superDist >= SUPER_PLANET_AVOID);
+      if (ok.length === 0) {
+        // Fallback: keep the half farthest from super planets
+        withDist.sort((a, b) => b.superDist - a.superDist);
+        ok = withDist.slice(0, Math.max(1, Math.floor(withDist.length / 2)));
+      }
+      return ok.map(e => e.item);
+    };
+
+    // Calculate average local economy of all non-homeworld planets
     const nonHwPlanets = this.planets.filter(p => !p.homeworldOf);
     let avgEconomy = 0;
     if (nonHwPlanets.length > 0) {
       let totalEconomySum = 0;
       for (const p of nonHwPlanets) {
-        totalEconomySum += getEconomyWithin400(p.x, p.y);
+        totalEconomySum += getLocalEconomy(p.x, p.y);
       }
       avgEconomy = totalEconomySum / nonHwPlanets.length;
     }
@@ -988,8 +1036,14 @@ export class Game {
     if ((hwSizeSetting === 'pioneers' || hwSizeSetting === 'pioneers-corvettes') && !player.isAI) {
       let bestPos = null;
       
-      // Spacing options to gradually relax if we cannot find a suitable spot
-      const playerSpacingOptions = [600, 400, 200, 0];
+      // Spacing options: prefer map/5 from other players/homeworlds, then relax
+      const playerSpacingOptions = [
+        preferredHwSeparation,
+        preferredHwSeparation * 0.66,
+        preferredHwSeparation * 0.4,
+        preferredHwSeparation * 0.2,
+        0
+      ];
       const planetSpacingOptions = [300, 200, 100, 50];
       
       // Get starting positions of already spawned human players' cruisers, pending spawns, or homeworlds
@@ -1015,6 +1069,8 @@ export class Game {
       let found = false;
       for (const playerSpacing of playerSpacingOptions) {
         for (const planetSpacing of planetSpacingOptions) {
+          // Try first requiring super-planet clearance, then relax
+          for (const requireSuperClear of [true, false]) {
           const candidates = [];
           for (let attempt = 0; attempt < 500; attempt++) {
             // Pick a point near the map edge: between 50px and 300px from any border
@@ -1051,7 +1107,7 @@ export class Game {
             }
             if (tooCloseToPlanet) continue;
 
-            // Check distance from other human players' cruisers
+            // Check distance from other human players' cruisers / homeworlds
             if (playerSpacing > 0 && otherHumanCruiserPositions.length > 0) {
               let tooCloseToPlayer = false;
               for (const pos of otherHumanCruiserPositions) {
@@ -1064,6 +1120,11 @@ export class Game {
                 }
               }
               if (tooCloseToPlayer) continue;
+            }
+
+            // Prefer staying away from super planets (humans / pioneers)
+            if (requireSuperClear && getMinDistToSuperPlanets(x, y) < SUPER_PLANET_AVOID) {
+              continue;
             }
 
             // Check hazard (must not be inside any hazard)
@@ -1086,7 +1147,7 @@ export class Game {
           if (candidates.length > 0) {
             // Score candidates based on closeness to avgEconomy
             const candidatesWithInfo = candidates.map(c => {
-              const localEco = getEconomyWithin400(c.x, c.y);
+              const localEco = getLocalEconomy(c.x, c.y);
               const ecoDiff = Math.abs(localEco - avgEconomy);
               return {
                 x: c.x,
@@ -1101,6 +1162,8 @@ export class Game {
             found = true;
             break;
           }
+          } // requireSuperClear
+          if (found) break;
         }
         if (found) break;
       }
@@ -1308,21 +1371,25 @@ export class Game {
               x: c.x,
               y: c.y,
               groupDist: c.groupDist,
-              economy: getEconomyWithin400(c.x, c.y),
-              minHwDist: minDist
+              economy: getLocalEconomy(c.x, c.y),
+              minHwDist: minDist,
+              superDist: getMinDistToSuperPlanets(c.x, c.y)
             };
           });
 
-          // Filter for "not near another player" (distance >= 250px)
+          // Prefer map/5 separation from other homeworlds; relax if the map is crowded
           let notNear = candidatesWithInfo;
           if (existingHomeworlds.length > 0) {
-            notNear = candidatesWithInfo.filter(c => c.minHwDist >= 250);
+            notNear = candidatesWithInfo.filter(c => c.minHwDist >= preferredHwSeparation);
             if (notNear.length === 0) {
               // Fallback: keep top 50% furthest from other homeworlds
               candidatesWithInfo.sort((a, b) => b.minHwDist - a.minHwDist);
               notNear = candidatesWithInfo.slice(0, Math.max(1, Math.floor(candidatesWithInfo.length / 2)));
             }
           }
+
+          // Humans: prefer ≥500px from super planets
+          notNear = filterAwayFromSuperPlanets(notNear, c => ({ x: c.x, y: c.y }));
 
           // Filter for economy <= maxAllowedEconomy
           let economyFiltered = notNear.filter(c => c.economy <= maxAllowedEconomy);
@@ -1386,28 +1453,41 @@ export class Game {
         }
 
         const candidatesWithInfo = neutralPlanets.map(p => {
-          const minDist = avoidancePositions.length > 0 ? Math.min(...avoidancePositions.map(op => {
+          const minOccupiedDist = avoidancePositions.length > 0 ? Math.min(...avoidancePositions.map(op => {
             const dx = op.x - p.x;
             const dy = op.y - p.y;
             return Math.sqrt(dx * dx + dy * dy);
           })) : Infinity;
           return {
             planet: p,
-            economy: getEconomyWithin400(p.x, p.y),
-            minOccupiedDist: minDist
+            economy: getLocalEconomy(p.x, p.y),
+            minOccupiedDist,
+            minHwDist: getMinDistToHomeworlds(p.x, p.y),
+            superDist: getMinDistToSuperPlanets(p.x, p.y)
           };
         });
 
-        // Filter for "not near another player" (distance >= 250px)
+        // Prefer map/5 from other homeworlds; also stay clear of occupied starts
         let notNear = candidatesWithInfo;
-        if (avoidancePositions.length > 0) {
-          notNear = candidatesWithInfo.filter(c => c.minOccupiedDist >= 250);
+        const hasOtherHomeworlds = this.planets.some(p => p.homeworldOf && p.homeworldOf !== player.id);
+        if (hasOtherHomeworlds) {
+          notNear = candidatesWithInfo.filter(c => c.minHwDist >= preferredHwSeparation);
           if (notNear.length === 0) {
-            // Fallback: keep top 50% furthest from other players
+            candidatesWithInfo.sort((a, b) => b.minHwDist - a.minHwDist);
+            notNear = candidatesWithInfo.slice(0, Math.max(1, Math.floor(candidatesWithInfo.length / 2)));
+          }
+        } else if (avoidancePositions.length > 0) {
+          // No homeworlds yet — keep a modest buffer from any occupied position
+          const softSep = Math.min(250, preferredHwSeparation);
+          notNear = candidatesWithInfo.filter(c => c.minOccupiedDist >= softSep);
+          if (notNear.length === 0) {
             candidatesWithInfo.sort((a, b) => b.minOccupiedDist - a.minOccupiedDist);
             notNear = candidatesWithInfo.slice(0, Math.max(1, Math.floor(candidatesWithInfo.length / 2)));
           }
         }
+
+        // Humans: prefer ≥500px from super planets
+        notNear = filterAwayFromSuperPlanets(notNear, c => ({ x: c.planet.x, y: c.planet.y }));
 
         // Filter for economy <= maxAllowedEconomy
         let economyFiltered = notNear.filter(c => c.economy <= maxAllowedEconomy);
@@ -1674,6 +1754,8 @@ export class Game {
         expScore: p.expScore,
         expProgress: p.expProgress,
         happinessScore: p.happinessScore,
+        eliminationXpAwarded: !!p.eliminationXpAwarded,
+        isEliminated: !!p.isEliminated,
         credits: p.credits,
         tradingBonus: p.tradingBonus,
         useCredits: p.useCredits,
@@ -1858,6 +1940,8 @@ export class Game {
       p.expScore = pData.expScore;
       p.expProgress = pData.expProgress;
       p.happinessScore = pData.happinessScore !== undefined ? pData.happinessScore : 0;
+      p.eliminationXpAwarded = !!pData.eliminationXpAwarded;
+      p.isEliminated = !!pData.isEliminated;
       p.credits = pData.credits;
       p.tradingBonus = pData.tradingBonus;
       p.useCredits = pData.useCredits;
@@ -2131,6 +2215,7 @@ export class Game {
       player.isAlive = false;
       player.wasAlive = false;
       player.isEliminated = false;
+      player.eliminationXpAwarded = false;
       player.lastAttackerPlayerId = null;
       player.hasOwnedPlanet = false;
       player.discoveredPlanets = new Set();
@@ -2273,60 +2358,79 @@ export class Game {
     if (countTiny < 0) { countSmall += countTiny; countTiny = 0; }
     if (countSmall < 0) { countMedium += countSmall; countSmall = 0; }
 
+    // Build size-class queues, then interleave so we don't place all supers (etc.) first.
+    // Mega-super and super share one queue for turn-taking; megas are still generated first within that queue.
+    const pushSpec = (queue, generatedMaxShips, isSuperPlanet) => {
+      queue.push({
+        maxShips: generatedMaxShips,
+        radius: generatedMaxShips / 4,
+        isSuperPlanet: !!isSuperPlanet
+      });
+    };
+    const queues = { super: [], large: [], medium: [], small: [], tiny: [] };
+    for (let i = 0; i < countMegaSuper; i++) {
+      pushSpec(queues.super, 260, true);
+    }
+    for (let i = 0; i < countSuper; i++) {
+      const generatedMaxShips = width < 1600
+        ? (160 + Math.floor(Math.random() * 21))
+        : 210;
+      pushSpec(queues.super, generatedMaxShips, true);
+    }
+    for (let i = 0; i < countLarge; i++) {
+      pushSpec(queues.large, 110 + Math.floor(Math.random() * 31), false);
+    }
+    for (let i = 0; i < countMedium; i++) {
+      pushSpec(queues.medium, 80 + Math.floor(Math.random() * 31), false);
+    }
+    for (let i = 0; i < countSmall; i++) {
+      pushSpec(queues.small, 35 + Math.floor(Math.random() * 41), false);
+    }
+    for (let i = 0; i < countTiny; i++) {
+      pushSpec(queues.tiny, 13 + Math.floor(Math.random() * 22), false);
+    }
+
+    const classOrder = ['super', 'large', 'medium', 'small', 'tiny'];
+    const planetSpecs = [];
+    let nextId = 0;
+    while (classOrder.some(cls => queues[cls].length > 0)) {
+      for (const cls of classOrder) {
+        if (queues[cls].length === 0) continue;
+        const spec = queues[cls].shift();
+        spec.id = nextId++;
+        planetSpecs.push(spec);
+      }
+    }
+
+    const createPlanetFromSpec = (spec, px, py) => {
+      const maxShips = spec.maxShips;
+      const expectedPercentage = maxShips / 100;
+      let expectedShips = maxShips * expectedPercentage;
+      let variance = maxShips * 0.4;
+
+      if (maxShips > 150) {
+        expectedShips *= 2;
+        variance = expectedShips * 0.15;
+      }
+
+      let initialShips = Math.floor(expectedShips + (Math.random() * 2 - 1) * variance);
+      initialShips = Math.max(1, initialShips);
+      const newPlanet = new Planet(spec.id, px, py, spec.radius, null, initialShips, this.width, this.height);
+      if (spec.isSuperPlanet) {
+        newPlanet.isSuperPlanet = true;
+        newPlanet.sizeClass = 200;
+        newPlanet.habitability = 150;
+        newPlanet.maxShips = spec.maxShips;
+        newPlanet.supplies = Math.random() * newPlanet.maxShips;
+        newPlanet.radius = newPlanet.sizeClass / 4;
+      }
+      return newPlanet;
+    };
+
     const isClustersOff = !this.settings || !this.settings.clusters || this.settings.clusters === 0;
 
     if (isClustersOff) {
-      // Pre-generate specifications for all planets to ensure sizes match the counts
-      const planetSpecs = [];
-      for (let i = 0; i < numPlanets; i++) {
-        let generatedMaxShips;
-        if (i < countMegaSuper) {
-          generatedMaxShips = 260;
-        } else if (i < countMegaSuper + countSuper) {
-          if (width < 1600) {
-            generatedMaxShips = 160 + Math.floor(Math.random() * 21);
-          } else {
-            generatedMaxShips = 210;
-          }
-        } else if (i < countMegaSuper + countSuper + countLarge) {
-          generatedMaxShips = 110 + Math.floor(Math.random() * 31);
-        } else if (i < countMegaSuper + countSuper + countLarge + countMedium) {
-          generatedMaxShips = 80 + Math.floor(Math.random() * 31);
-        } else if (i < countMegaSuper + countSuper + countLarge + countMedium + countSmall) {
-          generatedMaxShips = 35 + Math.floor(Math.random() * 41);
-        } else {
-          generatedMaxShips = 13 + Math.floor(Math.random() * 22);
-        }
-        const radius = generatedMaxShips / 4;
-        const isSuperPlanet = (i < countMegaSuper + countSuper);
-        planetSpecs.push({ id: i, radius, maxShips: generatedMaxShips, isSuperPlanet });
-      }
-
-      const createPlanetFromSpec = (spec, px, py) => {
-        const maxShips = spec.maxShips;
-        const expectedPercentage = maxShips / 100;
-        let expectedShips = maxShips * expectedPercentage;
-        let variance = maxShips * 0.4;
-        
-        if (maxShips > 150) {
-          expectedShips *= 2;
-          variance = expectedShips * 0.15;
-        }
-
-        let initialShips = Math.floor(expectedShips + (Math.random() * 2 - 1) * variance);
-        initialShips = Math.max(1, initialShips);
-        const newPlanet = new Planet(spec.id, px, py, spec.radius, null, initialShips, this.width, this.height);
-        if (spec.isSuperPlanet) {
-          newPlanet.isSuperPlanet = true;
-          newPlanet.sizeClass = 200;
-          newPlanet.habitability = 150;
-          newPlanet.maxShips = spec.maxShips;
-          newPlanet.supplies = Math.random() * newPlanet.maxShips;
-          newPlanet.radius = newPlanet.sizeClass / 4;
-        }
-        return newPlanet;
-      };
-
+      // Specs already interleaved by size class (super/large/medium/small/tiny).
       let currentIndex = 0;
       while (currentIndex < planetSpecs.length) {
         const spec = planetSpecs[currentIndex];
@@ -2475,75 +2579,32 @@ export class Game {
         }
       }
     } else {
-      // Original planet placement logic when clusters setting is ON
-      for (let i = 0; i < numPlanets; i++) {
-        let x, y, radius;
+      // Clusters ON: independent random placement, but still use interleaved size-class order
+      for (let i = 0; i < planetSpecs.length; i++) {
+        const spec = planetSpecs[i];
+        let x, y;
         let valid = false;
         let attempts = 0;
-        
-        while (!valid && attempts < 100) {
-          let generatedMaxShips;
-          if (i < countMegaSuper) {
-            generatedMaxShips = 260;
-          } else if (i < countMegaSuper + countSuper) {
-            if (width < 1600) {
-              generatedMaxShips = 160 + Math.floor(Math.random() * 21);
-            } else {
-              generatedMaxShips = 210;
-            }
-          } else if (i < countMegaSuper + countSuper + countLarge) {
-            generatedMaxShips = 110 + Math.floor(Math.random() * 31);
-          } else if (i < countMegaSuper + countSuper + countLarge + countMedium) {
-            generatedMaxShips = 80 + Math.floor(Math.random() * 31);
-          } else if (i < countMegaSuper + countSuper + countLarge + countMedium + countSmall) {
-            generatedMaxShips = 35 + Math.floor(Math.random() * 41);
-          } else {
-            generatedMaxShips = 13 + Math.floor(Math.random() * 22);
-          }
-          radius = generatedMaxShips / 4;
-          x = radius + Math.random() * (width - radius * 2);
-          y = radius + Math.random() * (height - radius * 2);
-          
-          valid = true;
 
-          if (valid) {
-            const minDistPadding = 50;
-            for (const p of this.planets) {
-              const dx = p.x - x;
-              const dy = p.y - y;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-              if (dist < p.radius + radius + minDistPadding) {
-                valid = false;
-                break;
-              }
+        while (!valid && attempts < 100) {
+          x = spec.radius + Math.random() * (width - spec.radius * 2);
+          y = spec.radius + Math.random() * (height - spec.radius * 2);
+          valid = true;
+          const minDistPadding = 50;
+          for (const p of this.planets) {
+            const dx = p.x - x;
+            const dy = p.y - y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < p.radius + spec.radius + minDistPadding) {
+              valid = false;
+              break;
             }
           }
           attempts++;
         }
-        
-        if (valid) {
-          const maxShips = radius * 4;
-          const expectedPercentage = maxShips / 100;
-          let expectedShips = maxShips * expectedPercentage;
-          let variance = maxShips * 0.4;
-          
-          if (maxShips > 150) {
-            expectedShips *= 2;
-            variance = expectedShips * 0.15;
-          }
 
-          let initialShips = Math.floor(expectedShips + (Math.random() * 2 - 1) * variance);
-          initialShips = Math.max(1, initialShips);
-           const newPlanet = new Planet(i, x, y, radius, null, initialShips, this.width, this.height);
-          if (i < countMegaSuper + countSuper) {
-            newPlanet.isSuperPlanet = true;
-            newPlanet.sizeClass = 200;
-            newPlanet.habitability = 150;
-            newPlanet.maxShips = radius * 4;
-            newPlanet.supplies = Math.random() * newPlanet.maxShips;
-            newPlanet.radius = newPlanet.sizeClass / 4;
-          }
-          this.addPlanet(newPlanet);
+        if (valid) {
+          this.addPlanet(createPlanetFromSpec(spec, x, y));
         }
       }
     }
@@ -3308,8 +3369,8 @@ export class Game {
       const shipsFactor = source.isMilitary ? 2 : 1;
       const effectiveShips = source.ships * shipsFactor;
 
-      // Hard presence rule: planet must have ships >= hull cost, regardless of payment method
-      const hasHullPresence = source.ships >= costShips;
+      // Hard presence rule: effective ships >= hull cost (military counts garrison 2×)
+      const hasHullPresence = effectiveShips >= costShips;
 
       // Pay as much as debt limit allows with credits; remainder from garrison ships
       const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
@@ -3546,8 +3607,8 @@ export class Game {
       const shipsFactor = source.isMilitary ? 2 : 1;
       const effectiveShips = source.ships * shipsFactor;
 
-      // Presence uses base hull cost only (not upgrade surcharge on the config)
-      const hasHullPresence = source.ships >= baseCostShips;
+      // Presence uses base hull cost only (not upgrade surcharge); military counts 2×
+      const hasHullPresence = effectiveShips >= baseCostShips;
 
       const spendableCredits = useCredits ? Math.max(0, creditsAvailable) : 0;
       let creditsPaid = Math.min(spendableCredits, finalCost);
@@ -6029,7 +6090,24 @@ export class Game {
       }
     }
 
+    // Residual foothold: >10 sympathy on any planet keeps the player alive
+    // (e.g. after losing last planet/ship but still have a claim via sympathy).
+    for (const planet of this.planets) {
+      if (!planet.sympathy) continue;
+      for (const player of this.allPlayers) {
+        if (player.isAlive || player.id === 'monsters') continue;
+        const sym = planet.sympathy[player.id] || 0;
+        if (sym > 10) {
+          player.isAlive = true;
+        }
+      }
+    }
+
     for (const player of this.allPlayers) {
+      // Comeback (sympathy / reassigned homeworld / new ships): allow re-elimination loot later
+      if (player.isAlive && player.isEliminated) {
+        player.isEliminated = false;
+      }
       player.cruiserCount = this.ships.filter(s => s.active && s.owner && s.owner.id === player.id && s.isCruiser).length;
       player.commandCount = this.ships
         .filter(s => s.active && s.owner && s.owner.id === player.id && s.isCruiser)
@@ -6605,12 +6683,20 @@ export class Game {
                 pushY = dy / dist;
               }
               
-              const scootAmount = 3 * (deltaTime / 1000); // adjust gradually at speed 3
+              // Size-weighted drift: smaller ships scoot more, larger ships barely move
+              // (larger ships effectively push smaller ones out of the way).
+              // Equal sizes still each move 3 px/s (total relative 6 px/s, unchanged).
+              const sizeA = Math.max(1, shipA.maxHealth || 1);
+              const sizeB = Math.max(1, shipB.maxHealth || 1);
+              const totalSize = sizeA + sizeB;
+              const weightA = sizeB / totalSize; // inverse mass: smaller A → larger weight
+              const weightB = sizeA / totalSize;
+              const totalScoot = 6 * (deltaTime / 1000);
               
-              shipA.x -= pushX * scootAmount;
-              shipA.y -= pushY * scootAmount;
-              shipB.x += pushX * scootAmount;
-              shipB.y += pushY * scootAmount;
+              shipA.x -= pushX * totalScoot * weightA;
+              shipA.y -= pushY * totalScoot * weightA;
+              shipB.x += pushX * totalScoot * weightB;
+              shipB.y += pushY * totalScoot * weightB;
               
               // Keep within map boundaries
               shipA.x = Math.max(20, Math.min(this.width - 20, shipA.x));
@@ -6783,12 +6869,12 @@ export class Game {
                     targetPlanet.rampageBoost = false;
                     targetPlanet.rampageEvent = false;
                     
-                    // Check previous owner elimination
+                    // Check previous owner elimination (last planet taken)
                     if (previousOwner && previousOwner.id !== sourceShip.owner.id) {
                       const hasRemaining = this.planets.some(pl => pl !== targetPlanet && pl.owner && pl.owner.id === previousOwner.id);
                       if (!hasRemaining) {
                         targetPlanet.defeatEvent = { name: previousOwner.name, color: previousOwner.color };
-                        sourceShip.owner.expScore = (sourceShip.owner.expScore || 0) + 100;
+                        this.tryAwardPlayerConquerXp(previousOwner, sourceShip.owner, 100);
                       }
                     }
                   }
@@ -7363,9 +7449,22 @@ export class Game {
     this.ships.length = activeIndex;
    }
 
+   /**
+    * Award player-conquer XP at most once per victim per game.
+    * Returns XP actually granted (0 if already claimed).
+    */
+   tryAwardPlayerConquerXp(victim, conqueror, amount = 100) {
+     if (!victim || victim.id === 'monsters' || !conqueror) return 0;
+     if (victim.eliminationXpAwarded) return 0;
+     victim.eliminationXpAwarded = true;
+     conqueror.expScore = (conqueror.expScore || 0) + amount;
+     return amount;
+   }
+
    eliminatePlayer(eliminatedPlayer, conqueror) {
      if (!eliminatedPlayer || eliminatedPlayer.id === 'monsters') return;
 
+     // Skip only while already processed for this death (cleared when they become alive again)
      if (eliminatedPlayer.isEliminated) return;
      eliminatedPlayer.isEliminated = true;
 
@@ -7390,11 +7489,16 @@ export class Game {
        conqueror.credits = (conqueror.credits || 0) + stolenCredits;
      }
 
-     // Only award XP and send chat messages if the conquering player is human
+     // XP only on first elimination of this player in the game (loot always pillaged above)
+     let xpGained = 0;
      if (conqueror && !conqueror.isAI) {
-       const xpGained = 100;
-       conqueror.expScore = (conqueror.expScore || 0) + xpGained;
+       xpGained = this.tryAwardPlayerConquerXp(eliminatedPlayer, conqueror, 100);
+     } else if (conqueror && conqueror.isAI) {
+       // AI can claim the one-time flag without the human-only message path
+       this.tryAwardPlayerConquerXp(eliminatedPlayer, conqueror, 100);
+     }
 
+     if (conqueror && !conqueror.isAI) {
        // Build resource string for chat message
        const resParts = [];
        if (stolenCredits > 0) {
@@ -7416,7 +7520,8 @@ export class Game {
        }
        const resString = resParts.length > 0 ? resParts.join(', ') : 'no assets';
 
-       const messageText = `🏆 ${conqueror.name || conqueror.id} has eliminated ${eliminatedPlayer.name || eliminatedPlayer.id}! Captured ${resString} and gained ${xpGained} XP!`;
+       const xpText = xpGained > 0 ? ` and gained ${xpGained} XP!` : ' (no XP — already conquered once).';
+       const messageText = `🏆 ${conqueror.name || conqueror.id} has eliminated ${eliminatedPlayer.name || eliminatedPlayer.id}! Captured ${resString}${xpText}`;
 
        if (!this.pendingChatMessages) this.pendingChatMessages = [];
        this.pendingChatMessages.push({
