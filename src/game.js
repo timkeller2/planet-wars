@@ -8074,17 +8074,18 @@ export class Game {
       let invasionLaunched = false;
       const maxMarinesCapacity = (ship.marines || 0) > 0 ? Math.ceil(((ship.marines || 0) * (ship.maxHealth || 0)) / 2) + 5 : 0;
       
-      // 3a. Unload Mode Invasion (Enemy planet gravity well)
-      if (ship.unloadMode === true && (ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
+      // 3a. Standard marine invasion: Scout Attack On + over/near enemy planet
+      // Must be within 15px of the planet's perimeter (dist <= radius + 15).
+      if (ship.scoutAttackEnabled === true && (ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
         const hasEnoughMarines = maxMarinesCapacity > 0 && ship.marineCount > 0.5 * maxMarinesCapacity;
         if (hasEnoughMarines) {
           for (const p of this.planets) {
             if (!p.dead && (!p.owner || p.owner.id !== ship.owner.id)) {
               const dx = p.x - ship.x;
               const dy = p.y - ship.y;
-              const distSq = dx * dx + dy * dy;
-              const gr = p.getGravityRadius();
-              if (distSq < gr * gr) {
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              const invasionRange = (p.radius || 0) + 15;
+              if (dist <= invasionRange) {
                 const count = Math.floor(ship.marineCount);
                 if (count > 0) {
                   this.queueMarineLaunch(ship, {
@@ -8105,7 +8106,11 @@ export class Game {
       }
 
       // 3b. Revolt Reaction Invasion (Enemy planet gravity well)
-      if (!invasionLaunched && ship.loadMode !== true && (ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
+      // Requires Scout Attack not Peace; cap total inbound marines at maxShips+ships.
+      if (!invasionLaunched
+          && ship.scoutAttackEnabled !== 'peace'
+          && (ship.marineCount || 0) > 0
+          && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
         for (const p of this.planets) {
           if (!p.dead && p.inRevolt && (!p.owner || p.owner.id !== ship.owner.id)) {
             const dx = p.x - ship.x;
@@ -8113,7 +8118,14 @@ export class Game {
             const distSq = dx * dx + dy * dy;
             const gr = p.getGravityRadius();
             if (distSq < gr * gr) {
-              const count = Math.floor(ship.marineCount);
+              const planetCap = (p.maxShips || 0) + (p.ships || 0);
+              const inbound = this.countMarinesInboundToPlanet(p.id, ship.owner ? ship.owner.id : null, ship.id);
+              // Do not launch if others already cover the full planet budget
+              if (inbound >= planetCap) continue;
+
+              const room = planetCap - inbound;
+              const onBoard = Math.floor(ship.marineCount);
+              const count = Math.min(onBoard, room);
               if (count > 0) {
                 this.queueMarineLaunch(ship, {
                   targetType: 'planet',
@@ -8121,7 +8133,7 @@ export class Game {
                   isBoardingFleet: false,
                   count: count
                 });
-                ship.marineCount = 0;
+                ship.marineCount = Math.max(0, (ship.marineCount || 0) - count);
                 ship.marineLaunchCooldown = 15.0;
                 invasionLaunched = true;
                 break;
@@ -8131,10 +8143,35 @@ export class Game {
         }
       }
 
-      // 3c. Load / Deposit Marines
+      // 3c. Load / Deposit Marines (driven by Scout Attack mode, not Load/Unload toggles)
+      // - Not Peace (On or Off): load from friendly wells
+      // - Peace (Hold Fire): deposit back to friendly planets
       if (!invasionLaunched && ship.inFriendlyWell && (ship.marines || 0) > 0) {
-        if (ship.loadMode === true) {
-          // "load marines up to capacity from planets with > 50% ships at cost of 1 ship from nearby planet for each marine"
+        if (ship.scoutAttackEnabled === 'peace') {
+          // Deposit marines up to the planet's capacity if inside a friendly planet's gravity well
+          for (const p of this.planets) {
+            if ((ship.marineCount || 0) <= 0) break;
+            if (p.owner && p.owner.id === ship.owner.id) {
+              const pdx = p.x - ship.x;
+              const pdy = p.y - ship.y;
+              const distSq = pdx * pdx + pdy * pdy;
+              const gr = p.getGravityRadius();
+              if (distSq < gr * gr) {
+                const spaceAvailable = Math.max(0, p.maxShips - p.ships);
+                if (spaceAvailable > 0) {
+                  // Deposit continuously at a rate of 1 per second
+                  const toUnload = Math.min(ship.marineCount, spaceAvailable, 1 * dt);
+                  if (toUnload > 0) {
+                    ship.marineCount = Math.max(0, ship.marineCount - toUnload);
+                    p.ships += toUnload;
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          // Load marines when Scout Attack is On or Off (not Hold Fire / peace)
+          // "from planets with > 50% ships at cost of 1 ship from nearby planet for each marine"
           const capacity = Math.ceil((ship.marines * ship.maxHealth) / 2) + 5;
           for (const p of this.planets) {
             if (ship.marineCount >= capacity) break;
@@ -8160,28 +8197,6 @@ export class Game {
                   if (toLoad > 0) {
                     ship.marineCount += toLoad;
                     p.ships = Math.max(0, p.ships - toLoad);
-                  }
-                }
-              }
-            }
-          }
-        } else if (ship.unloadMode === true) {
-          // Deposit marines up to the planet's capacity if inside a friendly planet's gravity well
-          for (const p of this.planets) {
-            if ((ship.marineCount || 0) <= 0) break;
-            if (p.owner && p.owner.id === ship.owner.id) {
-              const pdx = p.x - ship.x;
-              const pdy = p.y - ship.y;
-              const distSq = pdx * pdx + pdy * pdy;
-              const gr = p.getGravityRadius();
-              if (distSq < gr * gr) {
-                const spaceAvailable = Math.max(0, p.maxShips - p.ships);
-                if (spaceAvailable > 0) {
-                  // Deposit continuously at a rate of 1 per second
-                  const toUnload = Math.min(ship.marineCount, spaceAvailable, 1 * dt);
-                  if (toUnload > 0) {
-                    ship.marineCount = Math.max(0, ship.marineCount - toUnload);
-                    p.ships += toUnload;
                   }
                 }
               }
@@ -8549,6 +8564,14 @@ export class Game {
             ship.boardingMarines = 0;
             ship.marineCount = survivorMarines;
             ship.crew = survivorCrew;
+            ship.boardingResultEvent = {
+              success: false,
+              text: 'BOARDING REPELLED!',
+              color: (ship.owner && ship.owner.color) ? ship.owner.color : '#ffffff',
+              shipName: ship.name || ship.configName || `Cruiser ${ship.id}`,
+              attackerName: ship.boardingPlayer ? (ship.boardingPlayer.name || ship.boardingPlayer.id) : 'Attacker',
+              defenderName: ship.owner ? (ship.owner.name || ship.owner.id) : 'Defender'
+            };
             console.log(`[BOARDING RESOLVED] Defenders survived boarding action on Cruiser ${ship.id}.`);
           } else {
             // Attackers win!
@@ -8558,6 +8581,8 @@ export class Game {
 
             // Change ownership
             const wasMonsterShip = ship.owner && (ship.owner.id === 'monsters' || ship.owner.isMonster);
+            const attackerName = ship.boardingPlayer ? (ship.boardingPlayer.name || ship.boardingPlayer.id) : 'Attacker';
+            const prevDefenderName = ship.owner ? (ship.owner.name || ship.owner.id) : 'Defender';
             ship.owner = this.allPlayers.find(p => p.id === ship.boardingPlayer.id);
             if (wasMonsterShip) {
               ship.speed = (ship.speed || 0) + 10;
@@ -8568,6 +8593,15 @@ export class Game {
             const crewRetained = Math.min(M_atk, 2);
             ship.crew = crewRetained;
             ship.marineCount = 0;
+
+            ship.boardingResultEvent = {
+              success: true,
+              text: 'BOARDING SUCCESS!',
+              color: (ship.owner && ship.owner.color) ? ship.owner.color : '#ffd740',
+              shipName: ship.name || ship.configName || `Cruiser ${ship.id}`,
+              attackerName,
+              defenderName: prevDefenderName
+            };
 
             console.log(`[BOARDING SUCCESS] Cruiser ${ship.id} captured by player ${ship.owner.name}. Crew assigned: ${crewRetained}/${ship.maxHealth}.`);
 
@@ -8612,6 +8646,40 @@ export class Game {
       }
     }
     this.updateBattlecam();
+  }
+
+  /**
+   * Marines already en route or queued at a planet (same owner).
+   * excludeShipId: skip that cruiser's pending queues ("from other cruisers").
+   */
+  countMarinesInboundToPlanet(planetId, ownerId, excludeShipId = null) {
+    let total = 0;
+    if (planetId == null) return 0;
+    for (const s of this.ships) {
+      if (!s.active) continue;
+      if (ownerId != null && (!s.owner || s.owner.id !== ownerId)) continue;
+
+      // Marine fleets already flying at the planet
+      if (s.isMarineFleet) {
+        const tid = s.targetPlanet
+          ? s.targetPlanet.id
+          : (s.targetPlanetId != null ? s.targetPlanetId : null);
+        if (tid === planetId) {
+          total += s.count || 0;
+        }
+      }
+
+      // Pending batch launches still on other cruisers (not this one)
+      if (s.pendingMarineLaunches && s.pendingMarineLaunches.length > 0) {
+        if (excludeShipId != null && s.id === excludeShipId) continue;
+        for (const launch of s.pendingMarineLaunches) {
+          if (launch && launch.targetType === 'planet' && launch.targetId === planetId && !launch.isBoardingFleet) {
+            total += launch.count || 0;
+          }
+        }
+      }
+    }
+    return total;
   }
 
   executeQueuedLaunch(ship, launch, batchSize) {

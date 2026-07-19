@@ -5,6 +5,36 @@ export class AIController {
     this.lastActionTime = 0;
     this.actionInterval = 2000; // Act every 2 seconds
     this.lastOverpopulatedTime = 0;
+    /** Min ms before the same source planet can re-attack the same target (spreads rampage fire) */
+    this.targetCooldownMs = 20000;
+  }
+
+  _targetKey(target) {
+    if (!target) return null;
+    if (target.isCruiser) return `ship:${target.id}`;
+    return `planet:${target.id}`;
+  }
+
+  /** True if this AI planet may launch against target (not hit within last 20s). */
+  canAttackTarget(sourcePlanet, target) {
+    if (!sourcePlanet || !target) return false;
+    const key = this._targetKey(target);
+    if (!key) return false;
+    const map = sourcePlanet.lastAiAttackByTarget;
+    if (!map || !(map instanceof Map)) return true;
+    const last = map.get(key);
+    if (last == null) return true;
+    return (Date.now() - last) >= this.targetCooldownMs;
+  }
+
+  markAttackTarget(sourcePlanet, target) {
+    if (!sourcePlanet || !target) return;
+    const key = this._targetKey(target);
+    if (!key) return;
+    if (!sourcePlanet.lastAiAttackByTarget || !(sourcePlanet.lastAiAttackByTarget instanceof Map)) {
+      sourcePlanet.lastAiAttackByTarget = new Map();
+    }
+    sourcePlanet.lastAiAttackByTarget.set(key, Date.now());
   }
 
   _rebuildBullseyeCache() {
@@ -97,12 +127,14 @@ export class AIController {
       });
       for (const sourcePlanet of overpopulated) {
         if (Math.random() < 0.10) {
-          const enemies = this.game.planets.filter(p => p.owner !== this.aiPlayer && p.owner !== null);
+          const enemies = this.game.planets.filter(p =>
+            p.owner !== this.aiPlayer && p.owner !== null && this.canAttackTarget(sourcePlanet, p)
+          );
           const enemyCruisers = this.game.ships.filter(s => s.active && s.isCruiser && s.owner && s.owner !== this.aiPlayer);
           for (const ec of enemyCruisers) {
             const dx = ec.x - sourcePlanet.x;
             const dy = ec.y - sourcePlanet.y;
-            if (dx * dx + dy * dy <= 400 * 400) {
+            if (dx * dx + dy * dy <= 400 * 400 && this.canAttackTarget(sourcePlanet, ec)) {
               enemies.push(ec);
             }
           }
@@ -110,8 +142,10 @@ export class AIController {
             enemies.sort((a, b) => this.getTargetScore(sourcePlanet, a) - this.getTargetScore(sourcePlanet, b));
             const aiTechBonus = Math.floor(Math.sqrt(this.aiPlayer.techScore || 0));
             const aiSpeedMod = aiTechBonus >= 7 ? 1.0 : 0.5;
-            this.game.sendShips(sourcePlanet, enemies[0], false, aiSpeedMod);
+            const chosen = enemies[0];
+            this.game.sendShips(sourcePlanet, chosen, false, aiSpeedMod);
             sourcePlanet.lastAiLaunchTime = Date.now();
+            this.markAttackTarget(sourcePlanet, chosen);
           }
         }
       }
@@ -180,13 +214,15 @@ export class AIController {
     if (validSources.length === 0) return;
     const sourcePlanet = validSources[Math.floor(Math.random() * validSources.length)];
 
-    // Find targets (neutral or enemy planets)
-    const targets = this.game.planets.filter(p => p.owner !== this.aiPlayer && !p.isDeepSpaceAnomaly);
+    // Find targets (neutral or enemy planets), excluding same-target spam (20s cooldown)
+    const targets = this.game.planets.filter(p =>
+      p.owner !== this.aiPlayer && !p.isDeepSpaceAnomaly && this.canAttackTarget(sourcePlanet, p)
+    );
     const enemyCruisers = this.game.ships.filter(s => s.active && s.isCruiser && s.owner && s.owner !== this.aiPlayer);
     for (const ec of enemyCruisers) {
       const dx = ec.x - sourcePlanet.x;
       const dy = ec.y - sourcePlanet.y;
-      if (dx * dx + dy * dy <= 400 * 400) {
+      if (dx * dx + dy * dy <= 400 * 400 && this.canAttackTarget(sourcePlanet, ec)) {
         targets.push(ec);
       }
     }
@@ -194,7 +230,7 @@ export class AIController {
 
     targets.sort((a, b) => this.getTargetScore(sourcePlanet, a) - this.getTargetScore(sourcePlanet, b));
     
-    // Pick from top 3 weakest targets to add some randomness
+    // Pick from top 3 weakest *eligible* targets to add some randomness
     const numTargets = Math.min(3, targets.length);
     const topTargets = targets.slice(0, numTargets);
     
@@ -223,6 +259,7 @@ export class AIController {
       const aiSpeedMod = aiTechBonus >= 7 ? 1.0 : 0.5;
       this.game.sendShips(sourcePlanet, targetPlanet, false, aiSpeedMod);
       sourcePlanet.lastAiLaunchTime = Date.now();
+      this.markAttackTarget(sourcePlanet, targetPlanet);
     }
   }
 }

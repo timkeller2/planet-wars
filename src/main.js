@@ -6290,6 +6290,43 @@ function getPlanetTradeIncomePerMin(planet) {
             duration: 2.0
           });
         }
+        if (s.boardingResultEvent) {
+          const br = s.boardingResultEvent;
+          const success = !!br.success;
+          floatingAnimations.push({
+            x: s.x,
+            y: s.y - 28,
+            shipId: s.id,
+            text: br.text || (success ? 'BOARDING SUCCESS!' : 'BOARDING REPELLED!'),
+            type: success ? 'boarding_success' : 'boarding_failure',
+            color: br.color || (success ? '#ffd740' : '#ff5252'),
+            subText: br.shipName
+              ? (success
+                ? `${br.attackerName || 'Attacker'} captures ${br.shipName}!`
+                : `${br.defenderName || 'Defender'} holds ${br.shipName}!`)
+              : null,
+            age: 0,
+            duration: 4.0
+          });
+          // Extra icon burst for readability
+          floatingAnimations.push({
+            x: s.x,
+            y: s.y - 10,
+            shipId: s.id,
+            text: success ? '🪖' : '🛡️',
+            type: success ? 'boarding_success_icon' : 'boarding_failure_icon',
+            color: br.color || (success ? '#ffd740' : '#ff5252'),
+            age: 0,
+            duration: 2.5
+          });
+          if (success) {
+            playSound('trumpet');
+            setTimeout(() => playSound('chaching'), 180);
+          } else {
+            playSound('explosion');
+            setTimeout(() => playSound('laser'), 120);
+          }
+        }
         if (s.diplomatSuccessEvent && s.diplomatSuccessEvent > 0) {
           let targetX = s.x;
           let targetY = s.y - 12;
@@ -11499,34 +11536,6 @@ function getPlanetTradeIncomePerMin(planet) {
         return;
       }
     }
-    if (event.key.toLowerCase() === 'l') {
-      const selectedCruisers = getSelectedCruisers();
-      if (selectedCruisers.length > 0) {
-        event.preventDefault();
-        const anyNotLoading = selectedCruisers.some(c => !c.loadMode);
-        const nextState = anyNotLoading;
-        for (const ship of selectedCruisers) {
-          ship.loadMode = nextState;
-          if (nextState) ship.unloadMode = false;
-          socket.emit('toggleCruiserLoadMode', { shipId: ship.id, enabled: nextState });
-        }
-        return;
-      }
-    }
-    if (event.key.toLowerCase() === 'u') {
-      const selectedCruisers = getSelectedCruisers();
-      if (selectedCruisers.length > 0) {
-        event.preventDefault();
-        const anyNotUnloading = selectedCruisers.some(c => !c.unloadMode);
-        const nextState = anyNotUnloading;
-        for (const ship of selectedCruisers) {
-          ship.unloadMode = nextState;
-          if (nextState) ship.loadMode = false;
-          socket.emit('toggleCruiserUnloadMode', { shipId: ship.id, enabled: nextState });
-        }
-        return;
-      }
-    }
     if (event.key.toLowerCase() === 'o') {
       const planet = getSelectedPlanetForFocus();
       if (planet) {
@@ -11977,32 +11986,6 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     });
   }
-
-  bindActionClick('btn-cruiser-load', () => {
-    const selectedCruisers = getSelectedCruisers();
-    if (selectedCruisers.length > 0) {
-      const anyNotLoading = selectedCruisers.some(c => !c.loadMode);
-      const nextState = anyNotLoading;
-      for (const ship of selectedCruisers) {
-        ship.loadMode = nextState;
-        if (nextState) ship.unloadMode = false;
-        socket.emit('toggleCruiserLoadMode', { shipId: ship.id, enabled: nextState });
-      }
-    }
-  });
-
-  bindActionClick('btn-cruiser-unload', () => {
-    const selectedCruisers = getSelectedCruisers();
-    if (selectedCruisers.length > 0) {
-      const anyNotUnloading = selectedCruisers.some(c => !c.unloadMode);
-      const nextState = anyNotUnloading;
-      for (const ship of selectedCruisers) {
-        ship.unloadMode = nextState;
-        if (nextState) ship.loadMode = false;
-        socket.emit('toggleCruiserUnloadMode', { shipId: ship.id, enabled: nextState });
-      }
-    }
-  });
 
   bindActionClick('btn-cruiser-use-resources', () => {
     const selectedCruisers = getSelectedCruisers();
@@ -13516,32 +13499,6 @@ function getPlanetTradeIncomePerMin(planet) {
         } else if (selectedPlanets.length > 0) {
           const anyUseRes = selectedPlanets.some(p => p.useResources);
           btnCruiserUseResources.classList.toggle('action-btn-active', anyUseRes);
-        }
-      }
-
-      const btnCruiserLoad = document.getElementById('btn-cruiser-load');
-      if (btnCruiserLoad) {
-        let showLoad = false;
-        if (selectedCruisers.length > 0) {
-          showLoad = selectedCruisers.some(c => (c.marines || 0) > 0);
-        }
-        btnCruiserLoad.style.display = showLoad ? 'inline-flex' : 'none';
-        if (showLoad) {
-          const anyLoading = selectedCruisers.some(c => c.loadMode);
-          btnCruiserLoad.classList.toggle('action-btn-active', anyLoading);
-        }
-      }
-
-      const btnCruiserUnload = document.getElementById('btn-cruiser-unload');
-      if (btnCruiserUnload) {
-        let showUnload = false;
-        if (selectedCruisers.length > 0) {
-          showUnload = selectedCruisers.some(c => (c.marines || 0) > 0);
-        }
-        btnCruiserUnload.style.display = showUnload ? 'inline-flex' : 'none';
-        if (showUnload) {
-          const anyUnloading = selectedCruisers.some(c => c.unloadMode);
-          btnCruiserUnload.classList.toggle('action-btn-active', anyUnloading);
         }
       }
 
@@ -19398,6 +19355,10 @@ function getPlanetTradeIncomePerMin(planet) {
           yOffset = progress * 100; // shoots up
         } else if (anim.type === 'defeat') {
           yOffset = progress * 80; // drifts up dramatically
+        } else if (anim.type === 'boarding_success' || anim.type === 'boarding_failure') {
+          yOffset = progress * 70;
+        } else if (anim.type === 'boarding_success_icon' || anim.type === 'boarding_failure_icon') {
+          yOffset = progress * 40;
         } else if (anim.type === 'lastStand') {
           yOffset = 0; // stationary
         } else if (anim.type === 'homeworldAnim') {
@@ -19433,6 +19394,10 @@ function getPlanetTradeIncomePerMin(planet) {
           fontsize = 20 + (progress * 40); // grows huge
         } else if (anim.type === 'defeat') {
           fontsize = 16 + (progress * 30); // grows large
+        } else if (anim.type === 'boarding_success' || anim.type === 'boarding_failure') {
+          fontsize = 14 + (progress * 18); // grows large over the ship
+        } else if (anim.type === 'boarding_success_icon' || anim.type === 'boarding_failure_icon') {
+          fontsize = 18 + (progress * 14);
         } else if (anim.type === 'lastStand' || anim.type === 'homeworldAnim') {
           fontsize = 7; // constant size
         } else if (anim.type === 'enhance') {
@@ -19500,6 +19465,21 @@ function getPlanetTradeIncomePerMin(planet) {
           const c = anim.color || '#fff';
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
           ctx.shadowColor = c;
+        } else if (anim.type === 'boarding_success') {
+          xOffset = (Math.random() - 0.5) * 4;
+          ctx.fillStyle = `rgba(255, 236, 120, ${alpha})`;
+          ctx.shadowColor = anim.color || `rgba(255, 215, 0, ${alpha})`;
+          ctx.shadowBlur = 12;
+        } else if (anim.type === 'boarding_failure') {
+          xOffset = (Math.random() - 0.5) * 4;
+          ctx.fillStyle = `rgba(255, 180, 180, ${alpha})`;
+          ctx.shadowColor = anim.color || `rgba(255, 50, 50, ${alpha})`;
+          ctx.shadowBlur = 12;
+        } else if (anim.type === 'boarding_success_icon' || anim.type === 'boarding_failure_icon') {
+          xOffset = Math.sin(progress * Math.PI * 4) * 6;
+          ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+          ctx.shadowColor = anim.color || '#fff';
+          ctx.shadowBlur = 10;
         } else if (anim.type === 'lastStand') {
           xOffset = 0; // stationary
           ctx.fillStyle = anim.color || '#fff';
@@ -19580,6 +19560,11 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.restore();
         } else {
           ctx.fillText(anim.text, drawX + xOffset, drawY - yOffset);
+          if ((anim.type === 'boarding_success' || anim.type === 'boarding_failure') && anim.subText) {
+            ctx.font = `bold ${Math.max(8, fontsize * 0.45)}px Orbitron`;
+            ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.9})`;
+            ctx.fillText(anim.subText, drawX + xOffset, drawY - yOffset + fontsize * 0.75);
+          }
         }
         ctx.shadowBlur = 0;
       }

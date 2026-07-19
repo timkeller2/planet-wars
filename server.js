@@ -1574,40 +1574,6 @@ async function bootstrap() {
       }
     });
 
-    socket.on('toggleCruiserLoadMode', (data) => {
-      if (!game.isRunning || game.isPaused) return;
-      const player = connectedClients.get(socket.id);
-      if (!player) return;
-
-      const { shipId, enabled } = data;
-      if (shipId === undefined || enabled === undefined) return;
-
-      const ship = game.ships.find(s => s.id === shipId);
-      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
-        ship.loadMode = !!enabled;
-        if (ship.loadMode) {
-          ship.unloadMode = false;
-        }
-      }
-    });
-
-    socket.on('toggleCruiserUnloadMode', (data) => {
-      if (!game.isRunning || game.isPaused) return;
-      const player = connectedClients.get(socket.id);
-      if (!player) return;
-
-      const { shipId, enabled } = data;
-      if (shipId === undefined || enabled === undefined) return;
-
-      const ship = game.ships.find(s => s.id === shipId);
-      if (ship && ship.isCruiser && ship.owner && ship.owner.id === player.id) {
-        ship.unloadMode = !!enabled;
-        if (ship.unloadMode) {
-          ship.loadMode = false;
-        }
-      }
-    });
-
     socket.on('togglePlanetUseResources', (data) => {
       if (!game.isRunning || game.isPaused) return;
       const player = connectedClients.get(socket.id);
@@ -2755,6 +2721,8 @@ async function bootstrap() {
       s.diplomatFailureChance = 0;
       const dipPrefResource = s.diplomatPrefResourceEvent || 0;
       s.diplomatPrefResourceEvent = 0;
+      const boardingResult = s.boardingResultEvent || null;
+      s.boardingResultEvent = null;
 
       const consumeEvents = s.resourceConsumeEvents ? { ...s.resourceConsumeEvents } : null;
       if (s.resourceConsumeEvents) {
@@ -2863,6 +2831,7 @@ async function bootstrap() {
           diplomatFailureEvent: dipFailure,
           diplomatFailureChance: dipFailureChance,
           diplomatPrefResourceEvent: dipPrefResource,
+          boardingResultEvent: boardingResult,
           cruiserTargetType: s.cruiserTargetType || null,
           cruiserTargetId: s.cruiserTargetId || null,
           cruiserTargetClickX: s.cruiserTargetClickX !== undefined ? s.cruiserTargetClickX : null,
@@ -2889,8 +2858,6 @@ async function bootstrap() {
           accumulatedTech: s.accumulatedTech || 0,
           isDiplomacy: s.isDiplomacy || false,
           scoutAttackEnabled: s.scoutAttackEnabled || false,
-          loadMode: s.loadMode || false,
-          unloadMode: s.unloadMode || false,
           useResources: s.useResources || false,
           isMaterializing: s.isMaterializing || false,
           materializeProgress: s.materializeProgress !== undefined ? s.materializeProgress : 1.0,

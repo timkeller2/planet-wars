@@ -275,8 +275,6 @@
             <button id="btn-patrol" class="cyber-btn action-btn-icon" style="display: none;" title="Patrol Mode (P)"><span class="btn-icon">⚔️</span>P</button>
             <button id="btn-cruiser-scout" class="cyber-btn action-btn-icon" style="display: none;" title="Scout Mode (S)"><span class="btn-icon">🔭</span>S</button>
             <button id="btn-cruiser-attack" class="cyber-btn action-btn-icon" style="display: none;" title="Scout Attack (A)"><span class="btn-icon">🎯</span>A</button>
-            <button id="btn-cruiser-load" class="cyber-btn action-btn-icon" style="display: none;" title="Load Marines (L)"><span class="btn-icon">📥</span>L</button>
-            <button id="btn-cruiser-unload" class="cyber-btn action-btn-icon" style="display: none;" title="Unload Marines (U)"><span class="btn-icon">📤</span>U</button>
             <button id="btn-cruiser-use-resources" class="cyber-btn action-btn-icon" style="display: none;" title="Use Resources (R)"><span class="btn-icon">📦</span>R</button>
             <button id="btn-warp" class="cyber-btn action-btn-icon" style="display: none;" title="Warp (W)"><span class="btn-icon">⚡</span>W</button>
             <button id="btn-dismantle" class="cyber-btn action-btn-icon" style="display: none;" title="Dismantle Cruiser (D)"><span class="btn-icon">♻️</span>D</button>
@@ -467,16 +465,13 @@
               <li><strong>B — Bomb Mode / Eco:</strong> When a planet is selected, toggles Eco bombers for the next launch. When cruiser(s) are selected, toggles auto-planet-bombardment.</li>
               <li><strong>Q — Ship Bombers:</strong> Toggles ship bombers for the next launch (requires 🚀 Military planet).</li>
               <li><strong>S — Scout / Scout Mode / Root Out Spies:</strong> When a planet is selected, toggles launching a 10% scouting fleet (requires Tech ≥ 100). When cruiser(s) are selected, toggles autonomous Scout mode. If the <strong>Focus Mode (O)</strong> menu is open, it switches the planet to <strong>Root Out Spies</strong> mode.</li>
-              <li><strong>A — Attack:</strong> Toggles autonomous Attack/Engage mode for selected cruiser(s).</li>
-              <li><strong>R — Research:</strong> Toggles autonomous Research/Lab mode for selected cruiser(s) with Laboratories.</li>
+              <li><strong>A — Scout Attack:</strong> Toggles Off ↔ On (left-click / A); right-click sets Hold Fire. Also drives marines: load when not Hold Fire, deposit on Hold Fire, invade when On and over the target.</li>
+              <li><strong>R — Research / Use Resources:</strong> Research mode for lab cruisers; also toggles resource consumption for selected cruiser(s) and planets.</li>
               <li><strong>D — Dismantle:</strong> Dismantles selected cruiser if inside a friendly gravity well (cruisers with the Diplomat upgrade automatically perform diplomacy).</li>
               <li><strong>P — Patrol:</strong> Toggles autonomous Patrol mode for selected cruiser(s). Target-locking a planet automatically deactivates patrol.</li>
               <li><strong>C — Cruiser Build:</strong> Opens the cruiser construction menu (requires 🚀 Military planet, ⚡ Speed planet, or Homeworld).</li>
               <li><strong>O — Focus Mode:</strong> Opens the focus mode selector for a selected owned planet.</li>
               <li><strong>G — Upgrade Mode:</strong> Opens the cruiser upgrade menu (cruiser must be near a friendly planet).</li>
-              <li><strong>R — Use Resources:</strong> Toggles resource consumption mode for selected cruiser(s) and planets.</li>
-              <li><strong>L — Load Marines:</strong> Toggles marine loading mode for selected cruiser(s).</li>
-              <li><strong>U — Unload Marines:</strong> Toggles marine unloading mode for selected cruiser(s).</li>
             </ul>
           </div>
 
@@ -620,7 +615,7 @@
                   <li><strong>📦 Supply Ship (Y):</strong> <strong>+12 max supplies per level</strong>, and <strong>+(50 + level*10)% supply cost discount</strong> per level. Penalties per level: -3 speed, -5% weapon accuracy, -5 weapon range, -20 sensor range (min 25), and -2 weapon volleys (min 1). If a cruiser is moving and runs out of fuel but has supplies, it automatically stops moving until it converts at least 1 supply to fuel.</li>
                   <li><strong>⛽ Extended Fuel (F):</strong> Increases the cruiser's maximum fuel capacity by the base amount per level at no penalty. Cruisers with this upgrade passively regenerate <strong>1 fuel per level every 3 minutes</strong> outside friendly wells. Inside friendly wells, dilithium can be consumed to charge a reactor (max 10 points per level), which automatically replenishes fuel when it drops below 50%.</li>
                   <li><strong>🤝 Diplomat (I):</strong> <strong>+1 diplomatic attempt per 60/level seconds</strong>. Generates sympathy on neutral and enemy planets in sensor range, potentially flipping them via revolt. Also reduces enemy sympathy on your own planets. Earns Exp on success. See 🤝 Diplomacy topic.</li>
-                  <li><strong>🪖 Marines (R):</strong> <strong>Marine capacity = level × maxHealth / 2 (rounded up) + 5</strong>. When <em>Scout Attack</em> mode is enabled, the cruiser automatically loads marines (1/sec) from nearby friendly planets (&gt;50% garrison); it avoids loading from garrisoned worlds (Military/Garrison planets at double capacity) unless within 25px. When <em>Scout Attack</em> is disabled, it automatically deposits marines (1/sec) back to under-capacity friendly planets within its gravity well. Marines launch fleet assaults on enemy planets when they outnumber defenders 3:1. Can board enemy cruisers in Scout Attack mode when marines exceed 2× enemy crew. Consumes Tritanium (if available) to grant <strong>+400</strong> starting Exp and a flat speed of <strong>35</strong> to launched fleets.</li>
+                  <li><strong>🪖 Marines (R):</strong> <strong>Marine capacity = level × maxHealth / 2 (rounded up) + 5</strong>. <em>Scout Attack</em> controls marines: <strong>not Hold Fire</strong> loads from friendly wells (1/sec, planets &gt;50% garrison; double-garrison worlds only if within 25px); <strong>Hold Fire</strong> deposits to under-capacity friendly planets; <strong>On</strong> + over an enemy planet (within radius+15) invades if more than half capacity is loaded. Revolt dumps use not-Hold-Fire + inbound marine caps. Can board enemy cruisers in Scout Attack On when marines exceed 2× enemy crew. Tritanium (if available) grants launched marine fleets <strong>+400</strong> starting Exp and speed <strong>35</strong>.</li>
                 </ul>
               </li>
               <li><strong>Cancel:</strong> Press <strong>C</strong>, <strong>G</strong>, <strong>Escape</strong>, or click ❌ Cancel to exit Upgrade Mode. The cruiser stays selected.</li>
@@ -639,13 +634,13 @@
               <li><strong>Counter-Espionage:</strong> If no enemy/neutral planets are in range, diplomats will target friendly planets that have enemy sympathy, <strong>reducing</strong> the highest enemy sympathy by 1 per attempt.</li>
               <li><strong>Revolts:</strong> When a non-owner's sympathy exceeds <strong>1/3 of the planet's garrison</strong>, a revolt can trigger. Factions enter a competitive roll with win odds computed via real-time Monte Carlo simulations. The highest roll wins, consuming sympathy equal to 1/3 of the garrison. <strong>Successful revolts retain 100% of the planet's ship garrison (the garrison is no longer halved/reduced)</strong>, trigger a 60-second global cooldown (restricting other successful revolts), and grant the planet 180 seconds of immunity. Failed revolts apply a dynamic cooldown to that planet: <code>60 + (Owner Roll - Highest Challenger Roll) * 3</code> seconds.</li>
               <li><strong>Spy Rooted Out 👁️:</strong> When your ships are cleared from an enemy planet you attacked, a 👁️ icon appears, indicating your espionage attempt has been discovered.</li>
-              <li><strong>Marine Loading &amp; Depositing:</strong> Cruisers with Marines can automatically load and deposit marines based on the <em>Scout Attack</em> mode:
+              <li><strong>Marine Loading &amp; Depositing:</strong> Driven by <em>Scout Attack</em> (no separate Load/Unload buttons):
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
-                  <li><strong>Scout Attack Enabled:</strong> Loads marines (1/sec) from friendly planets with &gt;50% garrison. It avoids loading from garrisoned planets at double capacity unless the cruiser sits within 25px.</li>
-                  <li><strong>Scout Attack Disabled:</strong> Deposits marines (1/sec) to friendly planets with available capacity in the gravity well.</li>
+                  <li><strong>Not Hold Fire (Off or On):</strong> Loads marines (1/sec) from friendly planets with &gt;50% garrison. Avoids double-capacity garrison worlds unless within 25px.</li>
+                  <li><strong>Hold Fire (Peace):</strong> Deposits marines (1/sec) to friendly planets with free capacity.</li>
                 </ul>
               </li>
-              <li><strong>Marine Boarding &amp; Assaults:</strong> Cruisers can board enemy cruisers in Scout Attack mode when marines exceed 2× enemy crew, initiating a 9-second combat replay. Firing marines to assault enemy planets occurs when marines exceed 3× target garrison.</li>
+              <li><strong>Marine Boarding &amp; Assaults:</strong> Board enemy cruisers with Scout Attack <strong>On</strong> when marines exceed ~2× enemy crew. Invade planets with Scout Attack <strong>On</strong> while over the target (radius+15) and more than half marine capacity loaded. Revolt-reaction dumps use not-Hold-Fire and cap inbound marines at maxShips+ships.</li>
             </ul>
           </div>
 
