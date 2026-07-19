@@ -74,9 +74,12 @@ export class Ship {
     this.diplomacyFuelRetreatTargetPlanetId = null;
     this.diplomacyFleeing = false;
     this.diplomacyFleeTargetPlanetId = null;
-    this.stationedX = targetPlanet ? null : targetX;
-    this.stationedY = targetPlanet ? null : targetY;
-    this.stationedPlanetId = targetPlanet ? targetPlanet.id : null;
+    // Only real planets are station points. Cruisers/fleets can be passed as
+    // targetPlanet for pursuit (AI sendShips), but must not lock station id.
+    const isPlanetDestination = !!(targetPlanet && targetPlanet.maxShips !== undefined);
+    this.stationedX = isPlanetDestination ? null : targetX;
+    this.stationedY = isPlanetDestination ? null : targetY;
+    this.stationedPlanetId = isPlanetDestination ? targetPlanet.id : null;
     this.stationedOffsetX = 0;
     this.stationedOffsetY = 0;
     this.fireSideLeft = false;
@@ -750,7 +753,7 @@ export class Ship {
     const baseShipValue = SHIP_CLASSES[this.classType] ? SHIP_CLASSES[this.classType].costShips : 150;
     const totalUpgradeCost = game.getCruiserTotalUpgradeCost(this);
     
-    this.dismantleCreditsTotal = (baseShipValue + totalUpgradeCost) * 0.70 * damageFactor;
+    this.dismantleCreditsTotal = (baseShipValue + totalUpgradeCost) * 0.50 * damageFactor;
     this.dismantleCreditsReturned = 0;
     
     this.dismantleResourcesTotal = {
@@ -1919,6 +1922,12 @@ export class Ship {
               console.log(`[Defensive Fleet] Target destroyed. Retargeted nearest planet ${nearestPlanet.id} of original attacking player.`);
             }
           }
+        } else if (this.owner && this.owner.isAI && !this.isCruiser && !this.isAmoeba) {
+          // Clear stale waypoint so the AI fleet retarget block can reassign immediately
+          this.targetPlanet = null;
+          this.targetX = null;
+          this.targetY = null;
+          this.timeSinceLastMoved = 2.0;
         }
       }
     }
@@ -5814,63 +5823,158 @@ export class Ship {
       this.timeSinceLastMoved = (this.timeSinceLastMoved || 0) + (deltaTime / 1000);
     }
 
-    // AI Fleet Idle behavior (non-cruisers)
-    if (!this.isCruiser && this.owner && this.owner.isAI && this.timeSinceLastMoved >= 2.0 && game && !this.targetPlanet && this.targetX === null && this.targetY === null && !this.stationedPlanetId) {
-      this.timeSinceLastMoved = 0; // Reset timer so it doesn't spam every frame
-      
-      let bestScore = Infinity;
-      let bestCandidate = null;
-      
-      const getTargetScore = (target) => {
-        const dx = target.x - this.x;
-        const dy = target.y - this.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        let targetShips = target.isCruiser ? (target.health || 10) : target.ships;
-        if (target.owner && target.owner.id === this.owner.id) {
-           return (targetShips * -0.5) + (dist * 0.1) - 500; // friendly (highly prefer to reinforce if nearby)
+    // AI Fleet retarget: when a ship/fleet/amoeba target dies or the fleet sits idle in deep
+    // space, pick a new job — prefer friendly planets to reinforce, else nearby enemies.
+    if (!this.isCruiser && !this.isAmoeba && !this.isMarineFleet && !this.isBoardingFleet
+        && this.owner && this.owner.isAI && game
+        && !this.isScoutDefenseFleet) {
+      const tp = this.targetPlanet;
+      // Ship entities are sometimes stored in targetPlanet (e.g. AI sendShips at a cruiser)
+      const targetIsShipLike = !!(tp && typeof tp.active === 'boolean' && tp.maxShips === undefined);
+      let targetDestroyed = false;
+      if (targetIsShipLike) {
+        if (!tp.active) {
+          targetDestroyed = true;
+        } else if ((tp.isCruiser || tp.isAmoeba || (tp.maxHealth || 0) > 0) && (tp.health || 0) <= 0) {
+          targetDestroyed = true;
+        } else if ((tp.count || 0) <= 0 && !(tp.maxHealth > 0)) {
+          targetDestroyed = true;
         }
-        return targetShips + (dist * 0.1); // enemy
-      };
+      } else if (tp && tp.dead) {
+        targetDestroyed = true;
+      } else if (this.pursueTarget && !this.pursueTarget.active) {
+        targetDestroyed = true;
+      }
 
-      const searchRadius = 1500;
-      
-      if (allPlanets) {
-        for (const p of allPlanets) {
-          if (p.isDeepSpaceAnomaly) continue;
-          const dx = p.x - this.x;
-          const dy = p.y - this.y;
-          if (dx * dx + dy * dy <= searchRadius * searchRadius) {
-            if (p.owner && p.owner.id === this.owner.id && p.ships < p.maxShips * 0.5) {
-              const score = getTargetScore(p);
-              if (score < bestScore) { bestScore = score; bestCandidate = p; }
-            } else if (!p.owner || p.owner.id !== this.owner.id) {
-              const score = getTargetScore(p);
-              if (score < bestScore) { bestScore = score; bestCandidate = p; }
+      const recentlyInCombat = (this.combatCooldown && this.combatCooldown > 0)
+        || (this.lastTimeAttacking && (Date.now() - this.lastTimeAttacking) < 2000);
+      const idleLongEnough = (this.timeSinceLastMoved || 0) >= 2.0;
+      // Arrived near ordered space coords (endOffset can keep currentSpeed > 0, so
+      // timeSinceLastMoved alone is unreliable for "sitting on the kill").
+      let arrivedAtSpaceWaypoint = false;
+      if (!tp && this.targetX !== null && this.targetY !== null) {
+        const adx = this.x - this.targetX;
+        const ady = this.y - this.targetY;
+        arrivedAtSpaceWaypoint = (adx * adx + ady * ady) <= 30 * 30;
+      }
+      // Deep-space loiter (no planet order) after combat ends — not while sieging a planet
+      const idleInSpace = !recentlyInCombat && !tp && (idleLongEnough || arrivedAtSpaceWaypoint);
+
+      if (targetDestroyed || idleInSpace) {
+        this.timeSinceLastMoved = 0;
+        this.targetPlanet = null;
+        this.targetX = null;
+        this.targetY = null;
+        this.pursueTarget = null;
+
+        let bestScore = Infinity;
+        let bestCandidate = null;
+        let bestKind = null; // 'planet' | 'ship'
+
+        const scoreCandidate = (target, kind, friendly) => {
+          const dx = target.x - this.x;
+          const dy = target.y - this.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (friendly) {
+            // Strongly prefer nearby friendlies that still have room
+            const cap = (target.focusMode === 'garrison') ? (target.maxShips || 0) * 2 : (target.maxShips || 0);
+            const room = Math.max(0, cap - (target.ships || 0));
+            if (room < 1) return Infinity;
+            return dist * 0.08 - room * 0.35 - 1000;
+          }
+          let strength;
+          if (kind === 'ship') {
+            if (target.isAmoeba) {
+              strength = (target.health || 10) * 2;
+            } else if (target.isCruiser || (target.maxHealth || 0) > 0) {
+              strength = (target.health || 10) + (target.armorPoints || 0);
+            } else {
+              strength = target.count || 1;
+            }
+            // Prefer local dogfights / mop-up over long planet marches
+            return strength + dist * 0.12 - 40;
+          }
+          strength = target.ships || 0;
+          // Prefer weaker, nearer enemies
+          return strength + dist * 0.12;
+        };
+
+        const searchRadius = 1500;
+        const searchRadiusSq = searchRadius * searchRadius;
+
+        if (allPlanets) {
+          for (const p of allPlanets) {
+            if (!p || p.dead || p.isDeepSpaceAnomaly) continue;
+            const dx = p.x - this.x;
+            const dy = p.y - this.y;
+            if (dx * dx + dy * dy > searchRadiusSq) continue;
+
+            if (p.owner && p.owner.id === this.owner.id) {
+              const score = scoreCandidate(p, 'planet', true);
+              if (score < bestScore) {
+                bestScore = score;
+                bestCandidate = p;
+                bestKind = 'planet';
+              }
+            } else {
+              // Enemy or neutral planet
+              const score = scoreCandidate(p, 'planet', false);
+              if (score < bestScore) {
+                bestScore = score;
+                bestCandidate = p;
+                bestKind = 'planet';
+              }
             }
           }
         }
-      }
-      
-      const shipsArray = allShips || (game && game.ships);
-      if (shipsArray) {
-        for (const s of shipsArray) {
-          if (s.active && s.isCruiser && s.owner && s.owner.id !== this.owner.id && !s.isAmoeba) {
+
+        const shipsArray = allShips || (game && game.ships);
+        if (shipsArray) {
+          const candidates = (typeof shipsArray.getShipsInRadiusSq === 'function')
+            ? shipsArray.getShipsInRadiusSq(this.x, this.y, searchRadiusSq)
+            : shipsArray;
+          for (const s of candidates) {
+            if (!s || !s.active || s.id === this.id) continue;
+            if (s.isMarineFleet || s.isBoardingFleet) continue;
+            if (s.owner && this.owner && s.owner.id === this.owner.id) continue;
+            // Enemy fleets, cruisers, and amoebas
+            const isEnemyUnit = s.isAmoeba
+              || s.isCruiser
+              || ((s.maxHealth || 0) > 0)
+              || ((s.count || 0) > 0 && !(s.maxHealth > 0));
+            if (!isEnemyUnit) continue;
+            if (s.owner && this.owner && s.owner.id === this.owner.id) continue;
+            // Neutral fleets without owner are rare; skip unless amoeba
+            if (!s.isAmoeba && !s.owner) continue;
+
             const dx = s.x - this.x;
             const dy = s.y - this.y;
-            if (dx * dx + dy * dy <= searchRadius * searchRadius) {
-              const score = getTargetScore(s);
-              if (score < bestScore) { bestScore = score; bestCandidate = s; }
+            if (dx * dx + dy * dy > searchRadiusSq) continue;
+
+            const score = scoreCandidate(s, 'ship', false);
+            if (score < bestScore) {
+              bestScore = score;
+              bestCandidate = s;
+              bestKind = 'ship';
             }
           }
         }
-      }
-      
-      if (bestCandidate) {
-        if (bestCandidate.isCruiser || (bestCandidate.maxHealth !== undefined && !bestCandidate.isAmoeba)) {
-          this.targetX = bestCandidate.x;
-          this.targetY = bestCandidate.y;
-        } else {
-          this.targetPlanet = bestCandidate;
+
+        if (bestCandidate) {
+          this.startX = this.x;
+          this.startY = this.y;
+          if (bestKind === 'ship') {
+            // Track the unit as it moves
+            this.pursueTarget = bestCandidate;
+            this.targetPlanet = null;
+            this.targetX = bestCandidate.x;
+            this.targetY = bestCandidate.y;
+          } else {
+            this.pursueTarget = null;
+            this.targetPlanet = bestCandidate;
+            this.targetX = null;
+            this.targetY = null;
+          }
         }
       }
     }

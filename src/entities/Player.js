@@ -7,6 +7,10 @@ export class Player {
     this.expScore = 0;
     this.expProgress = 0;
     this.happinessScore = 0;
+    // Leaderboard victory-bonus milestones (floor(sqrt(score)/3)) last announced
+    this.lastTechMilestoneTier = 0;
+    this.lastExpMilestoneTier = 0;
+    this.lastHappinessMilestoneTier = 0;
     // Once true, conquering this player again yields loot but no elim XP
     this.eliminationXpAwarded = false;
     this.cruiserStyle = null;
@@ -109,6 +113,9 @@ export class Player {
     this.lastKnownPlanets = {};
     this.spyRootedEvents = new Set();
     this.lastBundleSaleTime = null;
+    // AI phantom upgrade economy: ships launched bank → spent 30 per buy every 7–12s
+    this.aiPhantomShipBank = 0;
+    this.aiPhantomBuyTimer = 0;
   }
 
   addExperience(kills) {

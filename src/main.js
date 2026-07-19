@@ -2129,9 +2129,11 @@ function getPlanetTradeIncomePerMin(planet) {
         } else if (s.isCruiser) {
           ctxTile.save();
           if (s.isMaterializing && s.materializeProgress !== undefined) {
-            ctxTile.globalAlpha = s.materializeProgress;
+            ctxTile.globalAlpha = Math.max(0.35, Math.min(1.0, s.materializeProgress || 0));
           } else if (s.isDismantling && s.dismantleTimer !== undefined && s.dismantleDuration) {
-            ctxTile.globalAlpha = Math.max(0, Math.min(1.0, s.dismantleTimer / s.dismantleDuration));
+            ctxTile.globalAlpha = Math.max(0.2, Math.min(1.0, s.dismantleTimer / s.dismantleDuration));
+          } else {
+            ctxTile.globalAlpha = 1.0;
           }
           let angle = s.angle || 0;
           let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
@@ -2152,8 +2154,26 @@ function getPlanetTradeIncomePerMin(planet) {
             cohort = 'mammoth_group';
           }
 
-          let drawnShipImage = false;
-          if (graphicalMode && transparentShipsCanvas && !(style === 'Romulan' && s.classType === 'corvette')) {
+          const tileOwner = serverState && serverState.players
+            ? serverState.players.find(p => p.id === s.ownerId)
+            : null;
+          const tileHullColor = tileOwner ? (tileOwner.color || '#ffffff') : '#ffffff';
+
+          // Vector underlay always (selection tiles)
+          ctxTile.save();
+          ctxTile.translate(s.x, s.y);
+          ctxTile.rotate(angle + Math.PI / 2);
+          ctxTile.beginPath();
+          drawRacialShipHull(ctxTile, style, cohort, size);
+          ctxTile.closePath();
+          ctxTile.fillStyle = tileHullColor;
+          ctxTile.fill();
+          ctxTile.strokeStyle = '#000';
+          ctxTile.lineWidth = 1;
+          ctxTile.stroke();
+          ctxTile.restore();
+
+          if (graphicalMode && transparentShipsCanvas && !(style === 'Romulan' && s.classType === 'corvette') && !(s.maxsupplies > 0)) {
             let normalizedStyle = style;
             if (normalizedStyle) {
               normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
@@ -2182,22 +2202,7 @@ function getPlanetTradeIncomePerMin(planet) {
                 -drawnW / 2, -drawnH / 2, drawnW, drawnH
               );
               ctxTile.restore();
-              drawnShipImage = true;
             }
-          }
-
-          if (!drawnShipImage) {
-            ctxTile.save();
-            ctxTile.translate(s.x, s.y);
-            ctxTile.rotate(angle + Math.PI / 2);
-            ctxTile.beginPath();
-            drawRacialShipHull(ctxTile, style, cohort, size);
-            ctxTile.closePath();
-            ctxTile.fill();
-            ctxTile.strokeStyle = '#000';
-            ctxTile.lineWidth = 1;
-            ctxTile.stroke();
-            ctxTile.restore();
           }
 
           if (s.isActivelyResearching && s.accumulatedTech !== undefined) {
@@ -8962,6 +8967,27 @@ function getPlanetTradeIncomePerMin(planet) {
     return cruisers;
   }
 
+  /** Planet upgrades require totalMaxShips/200 > owned planetary upgrade count (incl. in-progress). */
+  function playerMeetsPlanetUpgradeCapacity(playerId) {
+    if (!serverState || !serverState.planets || !playerId) return false;
+    const props = [
+      'sensorarrays', 'labs', 'armor', 'shields', 'engine', 'munitions',
+      'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel',
+      'diplomat', 'marines', 'command'
+    ];
+    let ownedUpgrades = 0;
+    let totalMaxShips = 0;
+    for (const p of serverState.planets) {
+      if (p.ownerId !== playerId) continue;
+      totalMaxShips += (p.maxShips || 0);
+      for (const prop of props) {
+        ownedUpgrades += (p[prop] || 0);
+      }
+      if (p.upgradeTransition) ownedUpgrades += 1;
+    }
+    return totalMaxShips / 200 > ownedUpgrades;
+  }
+
   function getUpgradeCostForShip(ship, type) {
     if (!serverState) return 0;
     const totalUpgrades = (ship.sensorarrays || 0) +
@@ -11339,6 +11365,9 @@ function getPlanetTradeIncomePerMin(planet) {
               return false;
             }
             if (entity.upgradeTransition) return false;
+            if (!playerMeetsPlanetUpgradeCapacity(localPlayer && localPlayer.id)) {
+              return false;
+            }
           }
           if (!isPlanet && entity.upgradeTokens > 0) {
             return (currentVal < 5) && (nextLevel <= Math.min(5, maxIndividualLevel)) && shieldCheck;
@@ -12306,6 +12335,9 @@ function getPlanetTradeIncomePerMin(planet) {
             typeCapCheck = false;
           }
           if (entity.upgradeTransition) typeCapCheck = false;
+          if (!playerMeetsPlanetUpgradeCapacity(localPlayer && localPlayer.id)) {
+            typeCapCheck = false;
+          }
         }
 
         const uCostClick = isPlanet ? getUpgradeCostForShip(entity, type) * 3 : getUpgradeCostForShip(entity, type);
@@ -13068,6 +13100,9 @@ function getPlanetTradeIncomePerMin(planet) {
             if (totalUpgradesOfCertainType >= maxUpgradesOfCertainType) {
               displayUpgrade = false;
             }
+            if (!playerMeetsPlanetUpgradeCapacity(localPlayer && localPlayer.id)) {
+              displayUpgrade = false;
+            }
           } else {
             const tokenAllowed = hasTokens && (nextLevel <= Math.min(5, maxIndividualLevel));
             displayUpgrade = currentVal < 5 && !entity.isUpgrading && shieldCheck && (tokenAllowed || (levelAllowed && totalAllowed));
@@ -13674,6 +13709,43 @@ function getPlanetTradeIncomePerMin(planet) {
               if (!serverState.exploredCells[key]) {
                 ctx.fillRect(cx * cellSize, cy * cellSize, cellSize, cellSize);
               }
+            }
+          }
+        }
+      }
+
+      // Slight red tint on the void outside map bounds (0..mapWidth × 0..mapHeight)
+      {
+        const vx = viewMinX;
+        const vy = viewMinY;
+        const vw = viewMaxX - viewMinX;
+        const vh = viewMaxY - viewMinY;
+        if (vw > 0 && vh > 0) {
+          ctx.fillStyle = 'rgba(110, 22, 28, 0.28)';
+          // Top strip (y < 0)
+          if (vy < 0) {
+            ctx.fillRect(vx, vy, vw, Math.min(0, viewMaxY) - vy);
+          }
+          // Bottom strip (y > mapHeight)
+          if (viewMaxY > mapHeight) {
+            const y0 = Math.max(mapHeight, vy);
+            ctx.fillRect(vx, y0, vw, viewMaxY - y0);
+          }
+          // Left strip (x < 0), only within map Y so corners aren't double-tinted
+          if (vx < 0) {
+            const y0 = Math.max(vy, 0);
+            const y1 = Math.min(viewMaxY, mapHeight);
+            if (y1 > y0) {
+              ctx.fillRect(vx, y0, Math.min(0, viewMaxX) - vx, y1 - y0);
+            }
+          }
+          // Right strip (x > mapWidth)
+          if (viewMaxX > mapWidth) {
+            const x0 = Math.max(mapWidth, vx);
+            const y0 = Math.max(vy, 0);
+            const y1 = Math.min(viewMaxY, mapHeight);
+            if (y1 > y0) {
+              ctx.fillRect(x0, y0, viewMaxX - x0, y1 - y0);
             }
           }
         }
@@ -18170,10 +18242,15 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.beginPath();
         } else if (s.isCruiser) {
           ctx.save();
+          // Never fully hide a materializing/dismantling cruiser — sensor rings stay
+          // fully opaque, so alpha 0 made ships look like "ring only" for a long time
+          // (esp. slow materialize on low-pop yards).
           if (s.isMaterializing && s.materializeProgress !== undefined) {
-            ctx.globalAlpha = s.materializeProgress;
+            ctx.globalAlpha = Math.max(0.35, Math.min(1.0, s.materializeProgress || 0));
           } else if (s.isDismantling && s.dismantleTimer !== undefined && s.dismantleDuration) {
-            ctx.globalAlpha = Math.max(0, Math.min(1.0, s.dismantleTimer / s.dismantleDuration));
+            ctx.globalAlpha = Math.max(0.2, Math.min(1.0, s.dismantleTimer / s.dismantleDuration));
+          } else {
+            ctx.globalAlpha = 1.0;
           }
           let angle = s.angle || 0;
           let ownerPlayer = serverState.players.find(p => p.id === s.ownerId);
@@ -18182,6 +18259,10 @@ function getPlanetTradeIncomePerMin(planet) {
           if (style === 'Romulan' && s.classType === 'corvette') {
             size *= 1.35;
           }
+          // Always set owner fill — vector hull used fillStyle left by prior drawing,
+          // which could be nearly invisible on the map background.
+          const hullColor = ownerPlayer ? (ownerPlayer.color || '#ffffff') : '#ffffff';
+          ctx.fillStyle = hullColor;
 
           let cohort = 'scout_group';
           if (s.classType === 'destroyer') {
@@ -18194,8 +18275,23 @@ function getPlanetTradeIncomePerMin(planet) {
             cohort = 'mammoth_group';
           }
 
-          let drawnShipImage = false;
-          if (graphicalMode && transparentShipsCanvas && !(style === 'Romulan' && s.classType === 'corvette') && !(s.isCruiser && s.maxsupplies > 0)) {
+          // Always draw vector hull first so a bad/transparent spritesheet crop never
+          // leaves only the selection sensor ring with no ship body.
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.rotate(angle + Math.PI / 2);
+          ctx.beginPath();
+          drawRacialShipHull(ctx, style, cohort, size, s.maxsupplies > 0);
+          ctx.closePath();
+          ctx.fillStyle = hullColor;
+          ctx.fill();
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.restore();
+
+          // Optional graphical sprite overlay (skip supply hulls / Romulan corvette vector-only)
+          if (graphicalMode && transparentShipsCanvas && !(style === 'Romulan' && s.classType === 'corvette') && !(s.maxsupplies > 0)) {
             let normalizedStyle = style;
             if (normalizedStyle) {
               normalizedStyle = normalizedStyle.charAt(0).toUpperCase() + normalizedStyle.slice(1).toLowerCase();
@@ -18225,24 +18321,7 @@ function getPlanetTradeIncomePerMin(planet) {
                 -drawnW / 2, -drawnH / 2, drawnW, drawnH
               );
               ctx.restore();
-              drawnShipImage = true;
             }
-          }
-
-          if (!drawnShipImage) {
-            ctx.save();
-            ctx.translate(s.x, s.y);
-            ctx.rotate(angle + Math.PI / 2);
-            ctx.beginPath();
-
-            drawRacialShipHull(ctx, style, cohort, size, s.maxsupplies > 0);
-            
-            ctx.closePath();
-            ctx.fill();
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 1;
-            ctx.stroke();
-            ctx.restore();
           }
 
           // Draw special resources indicators (bombs: red, fuel: yellow, duranium: gray)

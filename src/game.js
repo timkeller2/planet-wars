@@ -440,11 +440,14 @@ export class Game {
     this.aiMarketTimer = 0;
     this.usedShipNames = new Set();
     this.marketSalesHistory = [];
+    // Base market prices track rarity: common=4, normal=8, rare=12, exotic=16
     this.marketPrices = {
-      dilithium: 5, duranium: 5,
-      merculite: 10, tritanium: 10,
-      antimatter: 15, deuterium: 15,
-      latinum: 20
+      dilithium: 8, merculite: 8, duranium: 8, tritanium: 8,
+      antimatter: 8, deuterium: 8, latinum: 8
+    };
+    this.resourceRarities = {
+      dilithium: 'normal', merculite: 'normal', duranium: 'normal', tritanium: 'normal',
+      antimatter: 'normal', deuterium: 'normal', latinum: 'normal'
     };
     this.bundleValue = 200;
     this.marketFluctuationTimer = 0;
@@ -948,7 +951,8 @@ export class Game {
     const SUPER_PLANET_AVOID = 500;
     const isHumanPlayer = !player.isAI && player.id !== 'monsters';
 
-    // Helper to calculate total economy (maxShips) within richness radius of a coordinate
+    // Local richness within radius: maxShips * (minerals/4) * ((habitability+50)/150)
+    // (excludes existing homeworlds). minerals=4 & habitability=100 ⇒ weight 1.0.
     const getLocalEconomy = (x, y) => {
       let sum = 0;
       for (const p of this.planets) {
@@ -956,7 +960,9 @@ export class Game {
           const dx = p.x - x;
           const dy = p.y - y;
           if (dx * dx + dy * dy <= RICHNESS_RADIUS_SQ) {
-            sum += (p.maxShips || 0);
+            const minerals = (p.minerals != null) ? p.minerals : 4;
+            const habitability = (p.habitability != null) ? p.habitability : 100;
+            sum += (p.maxShips || 0) * (minerals / 4) * ((habitability + 50) / 150);
           }
         }
       }
@@ -1635,7 +1641,8 @@ export class Game {
     return false;
   }
 
-  recalculateResourceRarities() {
+  recalculateResourceRarities(options = {}) {
+    const forceBasePrices = !!(options && options.forceBasePrices);
     const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
     const counts = {};
     for (const r of resourcesList) {
@@ -1667,6 +1674,9 @@ export class Game {
       'rare': 12,
       'exotic': 16
     };
+    const rarityBases = new Set([4, 8, 12, 16]);
+    // Legacy constructor defaults that never matched rarity bases
+    const legacyDefaults = new Set([5, 10, 15, 20]);
     for (const r of resourcesList) {
       if (average === 0) {
         this.resourceRarities[r] = 'normal';
@@ -1695,7 +1705,9 @@ export class Game {
         const newBase = rarityToPrice[newRarity];
         const oldBase = oldRarity ? rarityToPrice[oldRarity] : undefined;
         const current = this.marketPrices[r];
-        if (current === undefined || oldBase === undefined || current === oldBase) {
+        const stillAtTrackedBase = (current === oldBase)
+          || (oldBase === undefined && (current === undefined || rarityBases.has(current) || legacyDefaults.has(current)));
+        if (forceBasePrices || current === undefined || stillAtTrackedBase) {
           this.marketPrices[r] = newBase;
         }
       }
@@ -1754,6 +1766,9 @@ export class Game {
         expScore: p.expScore,
         expProgress: p.expProgress,
         happinessScore: p.happinessScore,
+        lastTechMilestoneTier: p.lastTechMilestoneTier || 0,
+        lastExpMilestoneTier: p.lastExpMilestoneTier || 0,
+        lastHappinessMilestoneTier: p.lastHappinessMilestoneTier || 0,
         eliminationXpAwarded: !!p.eliminationXpAwarded,
         isEliminated: !!p.isEliminated,
         credits: p.credits,
@@ -1912,14 +1927,16 @@ export class Game {
     this.settings = state.settings;
     this.globalUpgradeModifiers = state.globalUpgradeModifiers;
     this.marketPrices = state.marketPrices || {
-      dilithium: 5, duranium: 5,
-      merculite: 10, tritanium: 10,
-      antimatter: 15, deuterium: 15,
-      latinum: 20
+      dilithium: 8, merculite: 8, duranium: 8, tritanium: 8,
+      antimatter: 8, deuterium: 8, latinum: 8
     };
     this.bundleValue = state.bundleValue || 200;
     this.marketFluctuationTimer = state.marketFluctuationTimer || 0;
-    this.resourceRarities = state.resourceRarities;
+    this.resourceRarities = state.resourceRarities || {
+      dilithium: 'normal', merculite: 'normal', duranium: 'normal', tritanium: 'normal',
+      antimatter: 'normal', deuterium: 'normal', latinum: 'normal'
+    };
+    this._needsMarketRarityResync = !state.resourceRarities;
     this.exploredGrid = state.exploredGrid;
     this.baseGameSpeed = state.baseGameSpeed !== undefined ? state.baseGameSpeed : (state.gameSpeed !== undefined ? state.gameSpeed : 1.0);
     this.gameSpeed = state.gameSpeed !== undefined ? state.gameSpeed : 1.0;
@@ -1940,6 +1957,16 @@ export class Game {
       p.expScore = pData.expScore;
       p.expProgress = pData.expProgress;
       p.happinessScore = pData.happinessScore !== undefined ? pData.happinessScore : 0;
+      // Don't re-announce milestones already earned before the load
+      p.lastTechMilestoneTier = pData.lastTechMilestoneTier !== undefined
+        ? pData.lastTechMilestoneTier
+        : Math.floor(Math.sqrt(p.techScore || 0) / 3);
+      p.lastExpMilestoneTier = pData.lastExpMilestoneTier !== undefined
+        ? pData.lastExpMilestoneTier
+        : Math.floor(Math.sqrt(p.expScore || 0) / 3);
+      p.lastHappinessMilestoneTier = pData.lastHappinessMilestoneTier !== undefined
+        ? pData.lastHappinessMilestoneTier
+        : Math.floor(Math.sqrt(p.happinessScore || 0) / 3);
       p.eliminationXpAwarded = !!pData.eliminationXpAwarded;
       p.isEliminated = !!pData.isEliminated;
       p.credits = pData.credits;
@@ -2154,6 +2181,12 @@ export class Game {
       }
     }
     this.chunks = [];
+
+    // Old saves without resourceRarities: recompute and force base prices to match
+    if (this._needsMarketRarityResync) {
+      this._needsMarketRarityResync = false;
+      this.recalculateResourceRarities({ forceBasePrices: true });
+    }
   }
 
   initMap() {
@@ -2172,6 +2205,15 @@ export class Game {
     this.pendingPioneerSpawns = [];
     if (this.usedShipNames) this.usedShipNames.clear();
     this.marketSalesHistory = [];
+    // Fresh map = fresh market. Without this, restart keeps traded prices from the
+    // previous game while rarities recompute, so prices no longer match rarities.
+    this.resourceRarities = {};
+    this.marketPrices = {
+      dilithium: 8, merculite: 8, duranium: 8, tritanium: 8,
+      antimatter: 8, deuterium: 8, latinum: 8
+    };
+    this.bundleValue = 200;
+    this.marketFluctuationTimer = 0;
     this.highestSpeedMilestoneTriggered = 0;
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
@@ -2218,6 +2260,8 @@ export class Game {
       player.eliminationXpAwarded = false;
       player.lastAttackerPlayerId = null;
       player.hasOwnedPlanet = false;
+      player.aiPhantomShipBank = 0;
+      player.aiPhantomBuyTimer = 0;
       player.discoveredPlanets = new Set();
       player.attackedPlanets = new Map();
       player.spyRootedEvents = new Set();
@@ -2227,6 +2271,9 @@ export class Game {
       player.expScore = 0;
       player.expProgress = 0;
       player.happinessScore = 0;
+      player.lastTechMilestoneTier = 0;
+      player.lastExpMilestoneTier = 0;
+      player.lastHappinessMilestoneTier = 0;
       player.cruiserStyle = null;
       player.prevTechBonus = 0;
       player.tradeLimitToggle = true;
@@ -2768,7 +2815,8 @@ export class Game {
       this.addPlanet(deepSpacePlanet);
     }
 
-    this.recalculateResourceRarities();
+    // Always pin base prices to the new map's rarities (fresh market)
+    this.recalculateResourceRarities({ forceBasePrices: true });
   }
 
   start() {
@@ -3012,19 +3060,63 @@ export class Game {
     }
     if (source.owner && source.owner.isAI) {
       ship.expScore += 200;
-      if (ship.count > 50) {
-        const upgrades = ['sensorarray', 'lab', 'armor', 'shield', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supplyship', 'extendedfuel', 'diplomat', 'marines', 'command'];
-        const chosen = upgrades[Math.floor(Math.random() * upgrades.length)];
-        const cost = this.getUpgradeCost(ship, chosen);
-        if (!this.aiUpgradePurchases) this.aiUpgradePurchases = [];
-        this.aiUpgradePurchases.push({ player: source.owner, type: chosen, cost: cost });
-      }
+      this.recordAiPhantomShips(source.owner, ship.count || finalShipsToSend || 0);
     }
 
     this.ships.push(ship);
   }
 
+  /** Bank launched AI ships toward timed phantom upgrade purchases (30 ships → 1 buy). */
+  recordAiPhantomShips(owner, count) {
+    if (!owner || !owner.isAI || owner.id === 'monsters') return;
+    const n = Math.floor(count || 0);
+    if (n <= 0) return;
+    owner.aiPhantomShipBank = (owner.aiPhantomShipBank || 0) + n;
+    // Start a 7–12s cooldown when the bank first becomes spendable
+    if ((owner.aiPhantomShipBank || 0) >= 30 && (!(owner.aiPhantomBuyTimer > 0))) {
+      owner.aiPhantomBuyTimer = (7 + Math.random() * 5) * 1000;
+    }
+  }
 
+  /** Spend banked AI launches: every 7–12s consume 30 ships and phantom-buy one upgrade type. */
+  processAiPhantomUpgradeBuys(deltaTime) {
+    const upgradeTypes = [
+      'sensorarray', 'lab', 'armor', 'shield', 'engine', 'munitions', 'targeting',
+      'damagecontrol', 'supplyship', 'extendedfuel', 'diplomat', 'marines', 'command'
+    ];
+    for (const player of this.allPlayers) {
+      if (!player || !player.isAI || player.id === 'monsters') continue;
+      const bank = player.aiPhantomShipBank || 0;
+      if (bank < 30) {
+        player.aiPhantomBuyTimer = 0;
+        continue;
+      }
+      if (!(player.aiPhantomBuyTimer > 0)) {
+        player.aiPhantomBuyTimer = (7 + Math.random() * 5) * 1000;
+      }
+      player.aiPhantomBuyTimer -= deltaTime;
+      while (player.aiPhantomBuyTimer <= 0 && (player.aiPhantomShipBank || 0) >= 30) {
+        player.aiPhantomShipBank -= 30;
+        const chosen = upgradeTypes[Math.floor(Math.random() * upgradeTypes.length)];
+        // Representative mid-size hull for pricing royalties
+        const dummyShip = {
+          maxHealth: 35,
+          owner: player,
+          sensorarrays: 0, labs: 0, armor: 0, shields: 0, engine: 0,
+          munitions: 0, targeting: 0, damagecontrol: 0, supply_ship: 0,
+          extended_fuel: 0, diplomat: 0, marines: 0, command: 0
+        };
+        const cost = this.getUpgradeCost(dummyShip, chosen);
+        if (!this.aiUpgradePurchases) this.aiUpgradePurchases = [];
+        this.aiUpgradePurchases.push({ player, type: chosen, cost });
+        if ((player.aiPhantomShipBank || 0) >= 30) {
+          player.aiPhantomBuyTimer += (7 + Math.random() * 5) * 1000;
+        } else {
+          player.aiPhantomBuyTimer = 0;
+        }
+      }
+    }
+  }
 
   applyWarpToShip(ship, player) {
     if (ship.maxHealth > 0) {
@@ -3291,6 +3383,10 @@ export class Game {
       if (this.applyWarpToShip(ship, source.owner)) {
          return; // Exploded!
       }
+    }
+    if (source.owner && source.owner.isAI) {
+      ship.expScore = (ship.expScore || 0) + 200;
+      this.recordAiPhantomShips(source.owner, ship.count || finalShipsToSend || 0);
     }
     this.ships.push(ship);
   }
@@ -4640,6 +4736,7 @@ export class Game {
     for (const player of this.allPlayers) {
       player.wasAlive = player.isAlive !== false;
     }
+    this.processAiPhantomUpgradeBuys(deltaTime);
     perfPoints.push({ name: 'pre-players', time: performance.now() });
 
     if (this.gameStartTime && Date.now() - this.gameStartTime > 5000) {
@@ -6958,7 +7055,7 @@ export class Game {
           const killer = killerShip.owner;
           killer.techScore = (killer.techScore || 0) + 50;
           killer.expScore = (killer.expScore || 0) + 50;
-          killer.happiness = (killer.happiness || 0) + 50;
+          killer.happinessScore = (killer.happinessScore || 0) + 50;
           killer.credits = (killer.credits || 0) + 500;
           
           if (this.events) {
@@ -7228,6 +7325,8 @@ export class Game {
       }
     }
 
+    this.announceVictoryStatMilestones();
+
      if (this.onScoreUpdate) {
        const pCount = this.planets.filter(p => p.owner && p.owner.id === this.humanPlayer.id).length;
        const aiCount = this.planets.filter(p => p.owner && p.owner.id !== this.humanPlayer.id).length;
@@ -7448,6 +7547,38 @@ export class Game {
     }
     this.ships.length = activeIndex;
    }
+
+  /**
+   * Chat when a player's leaderboard victory bonus (√score) crosses a 3-point milestone
+   * (3, 6, 9, … tech / experience / happiness).
+   */
+  announceVictoryStatMilestones() {
+    if (!this.pendingChatMessages) this.pendingChatMessages = [];
+    for (const player of this.allPlayers) {
+      if (!player || player.id === 'monsters' || player.id === 'monster') continue;
+      if (player.isAlive === false) continue;
+
+      const name = player.name || player.id;
+      const checks = [
+        { bonus: Math.sqrt(player.techScore || 0), field: 'lastTechMilestoneTier', label: 'tech' },
+        { bonus: Math.sqrt(player.expScore || 0), field: 'lastExpMilestoneTier', label: 'experience' },
+        { bonus: Math.sqrt(player.happinessScore || 0), field: 'lastHappinessMilestoneTier', label: 'happiness' }
+      ];
+
+      for (const { bonus, field, label } of checks) {
+        const tier = Math.floor(bonus / 3); // 0 below 3, 1 at [3,6), 2 at [6,9), ...
+        const last = player[field] || 0;
+        if (tier <= last) continue;
+        for (let t = last + 1; t <= tier; t++) {
+          this.pendingChatMessages.push({
+            playerId: 'all',
+            text: `${name}'s empire is increasing in ${label}!`
+          });
+        }
+        player[field] = tier;
+      }
+    }
+  }
 
    /**
     * Award player-conquer XP at most once per victim per game.
@@ -8020,12 +8151,21 @@ export class Game {
         ship.boardingCooldown = Math.max(0, ship.boardingCooldown - dt);
       }
 
-      // 0. Process queued marine launches
+      // 0. Process queued marine launches (re-check range every batch so leaving a well cancels)
       if (ship.pendingMarineLaunches && ship.pendingMarineLaunches.length > 0) {
         for (let i = 0; i < ship.pendingMarineLaunches.length; i++) {
           const launch = ship.pendingMarineLaunches[i];
           launch.timer -= dt;
           if (launch.timer <= 0) {
+            // Abort planet assaults/revolts if the cruiser is no longer in valid range
+            if (launch.targetType === 'planet' && !launch.isBoardingFleet) {
+              if (!this.isCruiserInMarineLaunchRange(ship, launch.targetId, launch.launchMode)) {
+                ship.marineCount = (ship.marineCount || 0) + (launch.count || 0);
+                ship.pendingMarineLaunches.splice(i, 1);
+                i--;
+                continue;
+              }
+            }
             let success = false;
             const batchSize = Math.min(launch.count, 20);
             if (batchSize > 0) {
@@ -8035,6 +8175,9 @@ export class Game {
               }
             }
             if (launch.count <= 0 || !success) {
+              if (!success && launch.count > 0) {
+                ship.marineCount = (ship.marineCount || 0) + (launch.count || 0);
+              }
               ship.pendingMarineLaunches.splice(i, 1);
               i--;
             } else {
@@ -8080,64 +8223,59 @@ export class Game {
         const hasEnoughMarines = maxMarinesCapacity > 0 && ship.marineCount > 0.5 * maxMarinesCapacity;
         if (hasEnoughMarines) {
           for (const p of this.planets) {
+            if (p.isDeepSpaceAnomaly) continue;
             if (!p.dead && (!p.owner || p.owner.id !== ship.owner.id)) {
-              const dx = p.x - ship.x;
-              const dy = p.y - ship.y;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-              const invasionRange = (p.radius || 0) + 15;
-              if (dist <= invasionRange) {
-                const count = Math.floor(ship.marineCount);
-                if (count > 0) {
-                  this.queueMarineLaunch(ship, {
-                    targetType: 'planet',
-                    targetId: p.id,
-                    isBoardingFleet: false,
-                    count: count
-                  });
-                  ship.marineCount = 0;
-                  ship.marineLaunchCooldown = 15.0;
-                  invasionLaunched = true;
-                  break;
-                }
+              if (!this.isCruiserInMarineLaunchRange(ship, p.id, 'assault')) continue;
+              const count = Math.floor(ship.marineCount);
+              if (count > 0) {
+                ship.marineCount = Math.max(0, (ship.marineCount || 0) - count);
+                this.queueMarineLaunch(ship, {
+                  targetType: 'planet',
+                  targetId: p.id,
+                  isBoardingFleet: false,
+                  launchMode: 'assault',
+                  count: count
+                });
+                ship.marineLaunchCooldown = 15.0;
+                invasionLaunched = true;
+                break;
               }
             }
           }
         }
       }
 
-      // 3b. Revolt Reaction Invasion (Enemy planet gravity well)
+      // 3b. Revolt Reaction Invasion — ONLY while cruiser is inside that planet's gravity well
       // Requires Scout Attack not Peace; cap total inbound marines at maxShips+ships.
       if (!invasionLaunched
           && ship.scoutAttackEnabled !== 'peace'
           && (ship.marineCount || 0) > 0
           && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
         for (const p of this.planets) {
+          if (p.isDeepSpaceAnomaly) continue;
           if (!p.dead && p.inRevolt && (!p.owner || p.owner.id !== ship.owner.id)) {
-            const dx = p.x - ship.x;
-            const dy = p.y - ship.y;
-            const distSq = dx * dx + dy * dy;
-            const gr = p.getGravityRadius();
-            if (distSq < gr * gr) {
-              const planetCap = (p.maxShips || 0) + (p.ships || 0);
-              const inbound = this.countMarinesInboundToPlanet(p.id, ship.owner ? ship.owner.id : null, ship.id);
-              // Do not launch if others already cover the full planet budget
-              if (inbound >= planetCap) continue;
+            if (!this.isCruiserInMarineLaunchRange(ship, p.id, 'revolt')) continue;
 
-              const room = planetCap - inbound;
-              const onBoard = Math.floor(ship.marineCount);
-              const count = Math.min(onBoard, room);
-              if (count > 0) {
-                this.queueMarineLaunch(ship, {
-                  targetType: 'planet',
-                  targetId: p.id,
-                  isBoardingFleet: false,
-                  count: count
-                });
-                ship.marineCount = Math.max(0, (ship.marineCount || 0) - count);
-                ship.marineLaunchCooldown = 15.0;
-                invasionLaunched = true;
-                break;
-              }
+            const planetCap = (p.maxShips || 0) + (p.ships || 0);
+            const inbound = this.countMarinesInboundToPlanet(p.id, ship.owner ? ship.owner.id : null, ship.id);
+            // Do not launch if others already cover the full planet budget
+            if (inbound >= planetCap) continue;
+
+            const room = planetCap - inbound;
+            const onBoard = Math.floor(ship.marineCount);
+            const count = Math.min(onBoard, room);
+            if (count > 0) {
+              this.queueMarineLaunch(ship, {
+                targetType: 'planet',
+                targetId: p.id,
+                isBoardingFleet: false,
+                launchMode: 'revolt',
+                count: count
+              });
+              ship.marineCount = Math.max(0, (ship.marineCount || 0) - count);
+              ship.marineLaunchCooldown = 15.0;
+              invasionLaunched = true;
+              break;
             }
           }
         }
@@ -8649,6 +8787,36 @@ export class Game {
   }
 
   /**
+   * Whether a cruiser is currently allowed to dump marines at a planet.
+   * assault: Scout Attack On + within planet.radius + 15
+   * revolt:  Scout Attack not Peace + inside that planet's gravity well only
+   */
+  isCruiserInMarineLaunchRange(ship, planetId, launchMode = 'assault') {
+    if (!ship || planetId == null) return false;
+    const p = this.planets.find(pl => pl.id === planetId);
+    if (!p || p.dead || p.isDeepSpaceAnomaly) return false;
+    if (p.owner && ship.owner && p.owner.id === ship.owner.id) return false;
+
+    const dx = p.x - ship.x;
+    const dy = p.y - ship.y;
+    const distSq = dx * dx + dy * dy;
+
+    if (launchMode === 'revolt') {
+      if (ship.scoutAttackEnabled === 'peace') return false;
+      if (!p.inRevolt) return false;
+      const gr = p.getGravityRadius();
+      // Strict well membership (use <= and require finite positive radius)
+      if (!(gr > 0) || !Number.isFinite(gr)) return false;
+      return distSq <= gr * gr;
+    }
+
+    // Default / assault: must be Scout Attack On and nearly on top of the planet
+    if (ship.scoutAttackEnabled !== true) return false;
+    const maxDist = (p.radius || 0) + 15;
+    return distSq <= maxDist * maxDist;
+  }
+
+  /**
    * Marines already en route or queued at a planet (same owner).
    * excludeShipId: skip that cruiser's pending queues ("from other cruisers").
    */
@@ -8702,6 +8870,14 @@ export class Game {
       let targetShip = null;
       if (launch.targetType === 'planet') {
         targetPlanet = this.planets.find(p => p.id === launch.targetId);
+        // Never land marines on deep-space anomalies
+        if (targetPlanet && targetPlanet.isDeepSpaceAnomaly) {
+          return false;
+        }
+        // Re-check range so multi-batch dumps cannot fire across the map after leaving the well
+        if (!this.isCruiserInMarineLaunchRange(ship, launch.targetId, launch.launchMode || 'assault')) {
+          return false;
+        }
       } else if (launch.targetType === 'ship') {
         targetShip = this.ships.find(s => s.id === launch.targetId && s.active);
       }
@@ -8741,11 +8917,23 @@ export class Game {
   queueMarineLaunch(ship, launchInfo) {
     const totalCount = launchInfo.count;
     if (totalCount <= 0) return;
+
+    // Planet dumps must still be in valid range at queue time
+    if (launchInfo.targetType === 'planet' && !launchInfo.isBoardingFleet) {
+      if (!this.isCruiserInMarineLaunchRange(ship, launchInfo.targetId, launchInfo.launchMode || 'assault')) {
+        return;
+      }
+    }
     
     // Launch first batch immediately
     const firstBatch = Math.min(totalCount, 20);
     const immediateLaunchInfo = { ...launchInfo, count: firstBatch };
-    this.executeQueuedLaunch(ship, immediateLaunchInfo, firstBatch);
+    const firstOk = this.executeQueuedLaunch(ship, immediateLaunchInfo, firstBatch);
+    if (!firstOk) {
+      // Caller already deducted marines — refund full amount
+      ship.marineCount = (ship.marineCount || 0) + totalCount;
+      return;
+    }
     
     // Queue the rest if any
     const remaining = totalCount - firstBatch;
@@ -8755,6 +8943,7 @@ export class Game {
         targetType: launchInfo.targetType,
         targetId: launchInfo.targetId,
         isBoardingFleet: launchInfo.isBoardingFleet,
+        launchMode: launchInfo.launchMode || 'assault',
         count: remaining,
         timer: 2.0
       });

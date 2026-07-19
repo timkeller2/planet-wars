@@ -828,6 +828,33 @@ async function bootstrap() {
             return;
           }
 
+          // Empire capacity: sum(maxShips)/200 must exceed current planetary upgrade count
+          // (including any upgrade still building) before buying another.
+          const planetUpgradeProps = [
+            'sensorarrays', 'labs', 'armor', 'shields', 'engine', 'munitions',
+            'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel',
+            'diplomat', 'marines', 'command'
+          ];
+          let ownedPlanetUpgrades = 0;
+          let totalMaxShips = 0;
+          for (const p of game.planets) {
+            if (!p.owner || p.owner.id !== player.id || p.dead) continue;
+            totalMaxShips += (p.maxShips || 0);
+            for (const up of planetUpgradeProps) {
+              ownedPlanetUpgrades += (p[up] || 0);
+            }
+            if (p.upgradeTransition) {
+              ownedPlanetUpgrades += 1;
+            }
+          }
+          if (!(totalMaxShips / 200 > ownedPlanetUpgrades)) {
+            rejectPlanetUpgrade(
+              `need more empire capacity (total maxShips/200 must exceed planetary upgrades; ` +
+              `have ${totalMaxShips} maxShips → ${(totalMaxShips / 200).toFixed(2)}, upgrades ${ownedPlanetUpgrades}).`
+            );
+            return;
+          }
+
           const cost = game.getUpgradeCost(planet, data.type) * 3;
 
           let minAllowedCredits = 0;
@@ -1698,9 +1725,10 @@ async function bootstrap() {
         const basePrice = game.marketPrices ? game.marketPrices[resource] : null;
         if (!basePrice) return;
         
-        // Trade options check
+        // Trade options check: can go negative up to -tradeCapacity (not below)
         const myTradeOptions = player.tradeOptions || 0;
-        if (myTradeOptions < -9) return;
+        const tradeCap = Math.max(0, player.tradeCapacity || 0);
+        if (myTradeOptions < -tradeCap) return;
         
         const penalty = myTradeOptions < 0 ? Math.abs(myTradeOptions) : 0;
         const currentPrice = basePrice + penalty + 1;
@@ -1735,9 +1763,10 @@ async function bootstrap() {
         const basePrice = game.marketPrices ? game.marketPrices[resource] : null;
         if (!basePrice) return;
         
-        // Trade options check
+        // Trade options check: can go negative up to -tradeCapacity (not below)
         const myTradeOptions = player.tradeOptions || 0;
-        if (myTradeOptions < -9) return;
+        const tradeCap = Math.max(0, player.tradeCapacity || 0);
+        if (myTradeOptions < -tradeCap) return;
         
         const penalty = myTradeOptions < 0 ? Math.abs(myTradeOptions) : 0;
         const currentPrice = Math.max(1, basePrice - penalty - 1);
