@@ -4046,16 +4046,29 @@ export class Ship {
           }
 
           if (dist < 15) {
-            if (!target.boardingCooldown || target.boardingCooldown <= 0) {
+            const fleetMarines = Math.max(0, Math.floor(this.count || 0));
+            if (fleetMarines > 0 && (!target.boardingCooldown || target.boardingCooldown <= 0 || target.isUnderBoarding)) {
               // Trigger boarding on target ship!
               target.isUnderBoarding = true;
               target.boardingPlayer = this.owner;
-              target.boardingMarines = (target.boardingMarines || 0) + this.count;
+              target.boardingMarines = (target.boardingMarines || 0) + fleetMarines;
               target.boardingSourceId = this.sourceShipId;
-              target.boardingCooldown = 60.0;
-              console.log(`[MARINE FLEET BOARDING IMPACT] Marine fleet collided with target ship ${target.id}, boarding with ${this.count} marines.`);
+              if (target.boardingTimer == null || target.boardingTimer <= 0) {
+                target.boardingTimer = 5.0;
+              }
+              if (!target.boardingCooldown || target.boardingCooldown <= 0) {
+                target.boardingCooldown = 60.0;
+              }
+              if (!target.boardingSourceContributions) {
+                target.boardingSourceContributions = [];
+              }
+              if (this.sourceShipId != null) {
+                target.boardingSourceContributions.push({ shipId: this.sourceShipId, contributed: fleetMarines });
+                target.boardingStartMarines = (target.boardingStartMarines || 0) + fleetMarines;
+              }
+              console.log(`[MARINE FLEET BOARDING IMPACT] Marine fleet collided with target ship ${target.id}, boarding with ${fleetMarines} marines.`);
             } else {
-              console.log(`[MARINE FLEET BOARDING REJECTED] Marine fleet collided with target ship ${target.id}, but target is on boarding cooldown.`);
+              console.log(`[MARINE FLEET BOARDING REJECTED] Marine fleet collided with target ship ${target.id}, but target is on boarding cooldown or marines empty.`);
             }
             this.active = false; // consume marine fleet
             

@@ -8034,6 +8034,29 @@ export class Game {
   updateCustomCruiserSystems(dt) {
     if (!this.isRunning || this.isPaused) return;
 
+    // If a target dies mid-boarding, clear the ray and refund attackers' marines
+    for (const s of this.ships) {
+      if (!s || !s.isUnderBoarding) continue;
+      if (s.active && (s.health || 0) > 0) continue;
+      const refund = Math.max(0, Math.floor(s.boardingMarines || 0));
+      if (refund > 0 && s.boardingSourceContributions) {
+        const totalStart = s.boardingStartMarines || refund || 1;
+        for (const contrib of s.boardingSourceContributions) {
+          const launcher = this.ships.find(x => x.id === contrib.shipId && x.active);
+          if (!launcher) continue;
+          const share = Math.floor(refund * ((contrib.contributed || 0) / totalStart));
+          if (share > 0) launcher.marineCount = (launcher.marineCount || 0) + share;
+        }
+      }
+      s.isUnderBoarding = false;
+      s.boardingMarines = 0;
+      s.boardingTimer = 0;
+      s.boardingSourceContributions = null;
+      s.boardingSourceId = null;
+      s.boardingPlayer = null;
+      console.log(`[BOARDING ABORT] Target cruiser ${s.id} destroyed during boarding; marines refunded.`);
+    }
+
     const cruisers = this.ships.filter(s => s.active && s.isCruiser);
     const pods = this.ships.filter(s => s.active && (s.isBoardingFleet || s.isReturnPod));
 
@@ -8132,10 +8155,27 @@ export class Game {
       if (dist <= 5) {
         pod.active = false;
         if (pod.isBoardingFleet) {
-          target.isUnderBoarding = true;
-          target.boardingPlayer = pod.owner;
-          target.boardingMarines = (target.boardingMarines || 0) + pod.marineCount;
-          target.boardingSourceId = pod.sourceShipId;
+          const podMarines = Math.max(0, Math.floor(pod.marineCount || 0));
+          if (podMarines > 0 && (!target.boardingCooldown || target.boardingCooldown <= 0 || target.isUnderBoarding)) {
+            target.isUnderBoarding = true;
+            target.boardingPlayer = pod.owner;
+            target.boardingMarines = (target.boardingMarines || 0) + podMarines;
+            target.boardingSourceId = pod.sourceShipId;
+            // Ensure resolution timer exists so the boarding ray can finish
+            if (target.boardingTimer == null || target.boardingTimer <= 0) {
+              target.boardingTimer = 5.0;
+            }
+            if (!target.boardingCooldown || target.boardingCooldown <= 0) {
+              target.boardingCooldown = 60.0;
+            }
+            if (!target.boardingSourceContributions) {
+              target.boardingSourceContributions = [];
+            }
+            if (pod.sourceShipId != null) {
+              target.boardingSourceContributions.push({ shipId: pod.sourceShipId, contributed: podMarines });
+              target.boardingStartMarines = (target.boardingStartMarines || 0) + podMarines;
+            }
+          }
         } else if (pod.isReturnPod) {
           const maxCapacity = (target.marines || 0) > 0 ? Math.ceil(((target.marines || 0) * target.maxHealth) / 2) + 5 : 0;
           target.marineCount = Math.min(maxCapacity, (target.marineCount || 0) + pod.marineCount);
@@ -8158,8 +8198,11 @@ export class Game {
           launch.timer -= dt;
           if (launch.timer <= 0) {
             // Abort planet assaults/revolts if the cruiser is no longer in valid range
+            // (assault also requires still holding still with empty bombs)
             if (launch.targetType === 'planet' && !launch.isBoardingFleet) {
-              if (!this.isCruiserInMarineLaunchRange(ship, launch.targetId, launch.launchMode)) {
+              const mode = launch.launchMode || 'assault';
+              if (!this.isCruiserInMarineLaunchRange(ship, launch.targetId, mode)
+                  || (mode === 'assault' && !this.isCruiserReadyForStandardInvasion(ship))) {
                 ship.marineCount = (ship.marineCount || 0) + (launch.count || 0);
                 ship.pendingMarineLaunches.splice(i, 1);
                 i--;
@@ -8219,9 +8262,10 @@ export class Game {
       
       // 3a. Standard marine invasion: Scout Attack On + over/near enemy planet
       // Must be within 15px of the planet's perimeter (dist <= radius + 15).
+      // Also: hold still 3s and empty bombs first so the cruiser bombards before dumping marines.
       if (ship.scoutAttackEnabled === true && (ship.marineCount || 0) > 0 && (!ship.marineLaunchCooldown || ship.marineLaunchCooldown <= 0)) {
         const hasEnoughMarines = maxMarinesCapacity > 0 && ship.marineCount > 0.5 * maxMarinesCapacity;
-        if (hasEnoughMarines) {
+        if (hasEnoughMarines && this.isCruiserReadyForStandardInvasion(ship)) {
           for (const p of this.planets) {
             if (p.isDeepSpaceAnomaly) continue;
             if (!p.dead && (!p.owner || p.owner.id !== ship.owner.id)) {
@@ -8472,6 +8516,8 @@ export class Game {
 
 
       // 5. Boarding Trigger Checks (New: Direct Boarding if disabled & isolated)
+      // Require whole marines only — fractional marineCount from continuous load must not
+      // start a boarding action with 0 transferred marines (stuck ray forever).
       if (ship.health < 2 && ship.health > 0 && !ship.isUnderBoarding && !ship.isMaterializing && (!ship.boardingCooldown || ship.boardingCooldown <= 0)) {
         const sensorRange = ship.cruiserRadarRange();
         const friendlyNearby = cruisers.some(other => 
@@ -8489,7 +8535,7 @@ export class Game {
             ship.owner && 
             other.owner.id !== ship.owner.id && 
             !other.isAmoeba &&
-            other.marineCount > 0 && 
+            Math.floor(other.marineCount || 0) > 0 && 
             !other.isMaterializing && 
             other.scoutAttackEnabled === true &&
             Math.hypot(other.x - ship.x, other.y - ship.y) <= other.cruiserRadarRange()
@@ -8499,7 +8545,8 @@ export class Game {
             const playerMarineCounts = new Map();
             for (const ec of enemiesInRange) {
               const pId = ec.owner.id;
-              playerMarineCounts.set(pId, (playerMarineCounts.get(pId) || 0) + ec.marineCount);
+              const whole = Math.floor(ec.marineCount || 0);
+              playerMarineCounts.set(pId, (playerMarineCounts.get(pId) || 0) + whole);
             }
 
             let bestPlayerId = null;
@@ -8515,35 +8562,49 @@ export class Game {
               const bestPlayer = this.allPlayers.find(p => p.id === bestPlayerId);
               const attackingCruisers = enemiesInRange.filter(ec => ec.owner.id === bestPlayerId);
 
-              ship.isUnderBoarding = true;
-              ship.boardingPlayer = bestPlayer;
-              ship.boardingTimer = 5.0;
-              ship.boardingCooldown = 60.0;
-
               const contributions = [];
               let totalAttackingMarines = 0;
               for (const ac of attackingCruisers) {
                 const mCount = Math.floor(ac.marineCount || 0);
                 if (mCount > 0) {
                   contributions.push({ shipId: ac.id, contributed: mCount });
-                  ac.marineCount -= mCount;
+                  ac.marineCount = Math.max(0, (ac.marineCount || 0) - mCount);
                   totalAttackingMarines += mCount;
                 }
               }
-              ship.boardingSourceContributions = contributions;
-              ship.boardingStartMarines = totalAttackingMarines;
-              ship.boardingMarines = totalAttackingMarines;
-              ship.boardingSourceId = attackingCruisers[0] ? attackingCruisers[0].id : null;
 
-              console.log(`[BOARDING STARTED] Cruiser ${ship.id} is being boarded by player ${bestPlayer.name} with ${totalAttackingMarines} marines.`);
+              // Only commit boarding once we actually transferred marines
+              if (totalAttackingMarines > 0 && bestPlayer) {
+                ship.isUnderBoarding = true;
+                ship.boardingPlayer = bestPlayer;
+                ship.boardingTimer = 5.0;
+                ship.boardingCooldown = 60.0;
+                ship.boardingSourceContributions = contributions;
+                ship.boardingStartMarines = totalAttackingMarines;
+                ship.boardingMarines = totalAttackingMarines;
+                ship.boardingSourceId = contributions[0] ? contributions[0].shipId : null;
+
+                console.log(`[BOARDING STARTED] Cruiser ${ship.id} is being boarded by player ${bestPlayer.name} with ${totalAttackingMarines} marines.`);
+              }
             }
           }
         }
       }
 
+      // Stuck boarding cleanup: ray on with 0 marines never resolves
+      if (ship.isUnderBoarding && !(ship.boardingMarines > 0)) {
+        ship.isUnderBoarding = false;
+        ship.boardingTimer = 0;
+        ship.boardingMarines = 0;
+        ship.boardingSourceContributions = null;
+        ship.boardingSourceId = null;
+        ship.boardingPlayer = null;
+        console.log(`[BOARDING ABORT] Cleared empty boarding state on Cruiser ${ship.id}.`);
+      }
+
       // 6. Boarding Battle Combat resolution
       if (ship.isUnderBoarding && ship.boardingMarines > 0) {
-        if (ship.boardingTimer === undefined) {
+        if (ship.boardingTimer == null || ship.boardingTimer === undefined) {
           ship.boardingTimer = 5.0;
         }
 
@@ -8579,9 +8640,9 @@ export class Game {
             }
           }
 
-          let M_atk = ship.boardingMarines;
-          let M_def = ship.marineCount || 0;
-          let C_def = ship.crew || 0;
+          let M_atk = Math.max(0, Math.floor(ship.boardingMarines || 0));
+          let M_def = Math.max(0, Math.floor(ship.marineCount || 0));
+          let C_def = Math.max(0, Math.floor(ship.crew || 0));
 
           // Calculate tech/XP bonuses
           const defenderPlayer = ship.owner || { id: 'monsters', techScore: 0, expScore: 0 };
@@ -8589,7 +8650,7 @@ export class Game {
 
           const defTech = Math.sqrt(defenderPlayer.techScore || 0);
           const defXp = Math.sqrt(ship.expScore || 0);
-          const defHitChance = 10 + defTech + defXp;
+          const defHitChance = Math.max(1, 10 + defTech + defXp);
 
           let atkXp = 0;
           if (ship.boardingSourceContributions && ship.boardingSourceContributions.length > 0) {
@@ -8599,7 +8660,7 @@ export class Game {
             }
           }
           const atkTech = Math.sqrt(attackerPlayer.techScore || 0);
-          const atkHitChance = 10 + atkTech + atkXp;
+          const atkHitChance = Math.max(1, 10 + atkTech + atkXp);
 
           const leftUnits = [];
           for (let i = 0; i < M_def; i++) {
@@ -8616,8 +8677,12 @@ export class Game {
 
           let currentTime = 0;
           const events = [];
+          // Cap rounds so a bad RNG / zero-hit edge case cannot freeze the sim
+          const maxBoardingRounds = 200;
+          let boardingRounds = 0;
 
-          while (leftUnits.some(u => u.alive) && rightUnits.some(u => u.alive)) {
+          while (leftUnits.some(u => u.alive) && rightUnits.some(u => u.alive) && boardingRounds < maxBoardingRounds) {
+            boardingRounds++;
             const roundShots = [];
             
             leftUnits.forEach(u => {
@@ -8654,6 +8719,17 @@ export class Game {
             }
 
             currentTime += 3.0;
+          }
+
+          // If capped out, force a winner by remaining unit counts
+          if (leftUnits.some(u => u.alive) && rightUnits.some(u => u.alive)) {
+            const lCount = leftUnits.filter(u => u.alive).length;
+            const rCount = rightUnits.filter(u => u.alive).length;
+            if (rCount >= lCount) {
+              leftUnits.forEach(u => { u.alive = false; });
+            } else {
+              rightUnits.forEach(u => { u.alive = false; });
+            }
           }
 
           const leftSurvivors = leftUnits.filter(u => u.alive);
@@ -8700,6 +8776,7 @@ export class Game {
             // Defenders win!
             ship.isUnderBoarding = false;
             ship.boardingMarines = 0;
+            ship.boardingTimer = 0;
             ship.marineCount = survivorMarines;
             ship.crew = survivorCrew;
             ship.boardingResultEvent = {
@@ -8716,12 +8793,21 @@ export class Game {
             M_atk = rightSurvivors.length;
             ship.isUnderBoarding = false;
             ship.boardingMarines = 0;
+            ship.boardingTimer = 0;
 
             // Change ownership
             const wasMonsterShip = ship.owner && (ship.owner.id === 'monsters' || ship.owner.isMonster);
             const attackerName = ship.boardingPlayer ? (ship.boardingPlayer.name || ship.boardingPlayer.id) : 'Attacker';
             const prevDefenderName = ship.owner ? (ship.owner.name || ship.owner.id) : 'Defender';
-            ship.owner = this.allPlayers.find(p => p.id === ship.boardingPlayer.id);
+            const newOwnerId = ship.boardingPlayer
+              ? (ship.boardingPlayer.id != null ? ship.boardingPlayer.id : ship.boardingPlayer)
+              : null;
+            const newOwner = newOwnerId != null
+              ? this.allPlayers.find(p => p.id === newOwnerId)
+              : null;
+            if (newOwner) {
+              ship.owner = newOwner;
+            }
             if (wasMonsterShip) {
               ship.speed = (ship.speed || 0) + 10;
               ship.isRefueling = false;
@@ -8741,7 +8827,7 @@ export class Game {
               defenderName: prevDefenderName
             };
 
-            console.log(`[BOARDING SUCCESS] Cruiser ${ship.id} captured by player ${ship.owner.name}. Crew assigned: ${crewRetained}/${ship.maxHealth}.`);
+            console.log(`[BOARDING SUCCESS] Cruiser ${ship.id} captured by player ${(ship.owner && ship.owner.name) || attackerName}. Crew assigned: ${crewRetained}/${ship.maxHealth}.`);
 
             // Return prorated remaining survivors directly to the attacking cruisers
             const M_return = M_atk - crewRetained;
@@ -8784,6 +8870,18 @@ export class Game {
       }
     }
     this.updateBattlecam();
+  }
+
+  /**
+   * Standard invasion (Scout Attack On) must wait until the cruiser has been
+   * stationary ~3s and has no bombs left — so it bombards the planet first.
+   * stationaryTimer is ms (same as planet-bombard gating).
+   */
+  isCruiserReadyForStandardInvasion(ship) {
+    if (!ship) return false;
+    const stillLongEnough = (ship.stationaryTimer || 0) >= 3000;
+    const bombsEmpty = !(ship.bombs > 0);
+    return stillLongEnough && bombsEmpty;
   }
 
   /**
@@ -8875,7 +8973,11 @@ export class Game {
           return false;
         }
         // Re-check range so multi-batch dumps cannot fire across the map after leaving the well
-        if (!this.isCruiserInMarineLaunchRange(ship, launch.targetId, launch.launchMode || 'assault')) {
+        const mode = launch.launchMode || 'assault';
+        if (!this.isCruiserInMarineLaunchRange(ship, launch.targetId, mode)) {
+          return false;
+        }
+        if (mode === 'assault' && !this.isCruiserReadyForStandardInvasion(ship)) {
           return false;
         }
       } else if (launch.targetType === 'ship') {
@@ -8920,7 +9022,11 @@ export class Game {
 
     // Planet dumps must still be in valid range at queue time
     if (launchInfo.targetType === 'planet' && !launchInfo.isBoardingFleet) {
-      if (!this.isCruiserInMarineLaunchRange(ship, launchInfo.targetId, launchInfo.launchMode || 'assault')) {
+      const mode = launchInfo.launchMode || 'assault';
+      if (!this.isCruiserInMarineLaunchRange(ship, launchInfo.targetId, mode)) {
+        return;
+      }
+      if (mode === 'assault' && !this.isCruiserReadyForStandardInvasion(ship)) {
         return;
       }
     }
