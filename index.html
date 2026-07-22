@@ -744,7 +744,7 @@
             <p>Planetary anomalies have a chance of appearing the first time a player discovers a neutral planet. Cruisers with Laboratories can research them when in sensor range.</p>
             <ul>
               <li><strong>Spawn Probability:</strong> <code>30% + 10% * maxLabs</code> of the discovering ship. If another player has already discovered the planet, this chance is reduced by 25%.</li>
-              <li><strong>Research Process:</strong> Cruisers with labs progress research at an experience-boosted rate. Each completed research cycle has a chance: <code>(local ship xp bonus * 3 + player xp bonus - player tech bonus)%</code> to reward the player with 🧪 tech points.</li>
+              <li><strong>Research Process:</strong> Cruisers with labs progress research at an experience-boosted rate. Each completed research cycle has a chance: <code>(local ship xp bonus * 3 + player xp bonus - player tech bonus)%</code> to reward the player with 🧪 tech points. A floating beaker is shown only when tech is actually earned, not on every progress cycle.</li>
               <li><strong>Cruiser XP:</strong> Completing a research cycle awards +1 local XP to the cruiser.</li>
               <li><strong>Instant Resolution:</strong> Anomalies with a difficulty of 0 or negative can be resolved instantly by any cruiser in range.</li>
               <li><strong>Completion Rewards:</strong> Fully researching an anomaly yields one of 7 random rewards <strong>(64% chance for Credits, and 6% chance each for the other options; rewards are clamped to a minimum base value of 15 and credit value equivalent of 30 to prevent zero/negative rewards in long games)</strong>:

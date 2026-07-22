@@ -4495,7 +4495,6 @@ export class Game {
       if (ship.accumulatedTech >= 1.0) {
         const completions = Math.floor(ship.accumulatedTech);
         ship.accumulatedTech -= completions;
-        ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + completions;
         
         if (p.anomaly.progress && typeof p.anomaly.progress === 'object') {
           p.anomaly.progress[ship.owner.id] = (p.anomaly.progress[ship.owner.id] || 0) + completions;
@@ -4525,6 +4524,8 @@ export class Game {
         }
         if (techGained > 0) {
           ship.owner.techScore = (ship.owner.techScore || 0) + techGained;
+          // Beaker VFX only when tech was actually earned (not every research cycle)
+          ship.beakerIncreaseEvent = (ship.beakerIncreaseEvent || 0) + techGained;
         }
         
         if (currentProgress >= p.anomaly.difficulty) {

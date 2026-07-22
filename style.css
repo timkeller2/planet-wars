@@ -28,6 +28,25 @@ canvas {
   top: 0;
   left: 0;
   z-index: 1;
+  touch-action: none;
+}
+
+/* HUD controls: allow taps, block browser pan/zoom that can fight the map */
+#action-buttons,
+#resources-hud,
+#market-panel,
+#top-left-hud,
+#top-right-hud,
+#selection-tiles-container,
+#config-build-buttons,
+.cyber-btn,
+.action-btn-icon,
+.cruiser-build-btn,
+[id^="res-card-"],
+#player-credits-display,
+#player-trade-options-display,
+#game-timer {
+  touch-action: manipulation;
 }
 
 #ui-layer {

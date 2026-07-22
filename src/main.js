@@ -520,9 +520,23 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastSelectedCruiserId = null;
   let selectedPlanets = [];
   let selectedShips = [];
+  // Authoritative selection ids — survive in-place delta mutations of ship objects
+  // (e.g. when an amoeba enters visibility and array-index deltas rewrite ships[i]).
+  let selectedShipIds = [];
   // Empty-space left click: defer deselect until mouseup so camera pan keeps selection
   let pendingEmptyDeselect = false;
   let recentAudioEvents = [];
+
+  function syncSelectedShipIdsFromShips() {
+    selectedShipIds = selectedShips
+      .map(s => (s && s.id != null ? s.id : null))
+      .filter(id => id != null);
+  }
+
+  function assignSelectedShips(ships) {
+    selectedShips = Array.isArray(ships) ? ships.filter(Boolean) : [];
+    syncSelectedShipIdsFromShips();
+  }
 
   function groupIntoFocusAreas(points, maxDistance = 300) {
     const groups = [];
@@ -571,7 +585,7 @@ function getPlanetTradeIncomePerMin(planet) {
   window.getLocalPlayer = () => localPlayer;
   window.getServerState = () => serverState;
   window.getSelectedShips = () => selectedShips;
-  window.setSelectedShips = (val) => { selectedShips = val; };
+  window.setSelectedShips = (val) => { assignSelectedShips(val); };
   window.getSelectedPlanets = () => selectedPlanets;
   window.setSelectedPlanets = (val) => { selectedPlanets = val; };
   window.getCameraZoom = () => cameraZoom;
@@ -589,7 +603,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
   function resetClientModeFlags() {
     selectedPlanets = [];
-    selectedShips = [];
+    assignSelectedShips([]);
     pendingEmptyDeselect = false;
     warpOrderNext = false;
     bombOrderNext = false;
@@ -2800,14 +2814,82 @@ function getPlanetTradeIncomePerMin(planet) {
     return Math.abs(hash % 100);
   }
 
+  /** True if touch/click hit interactive game HUD (not the map canvas). */
+  function isInteractiveUiTarget(el) {
+    if (!el || !el.closest) return false;
+    // Nested icon canvases inside build buttons are UI, not the map canvas
+    if (el === canvas || el.id === 'gameCanvas') return false;
+    return !!el.closest(
+      'button, a, input, textarea, select, .cyber-btn, .action-btn-icon, ' +
+      '#action-buttons, #resources-hud, #market-panel, #top-left-hud, #top-right-hud, ' +
+      '#selection-tiles-container, #score-board, #chat-container, #player-names-container, ' +
+      '#credits-tooltip-panel, #touch-context-menu, #info-panel-modal, #info-panel-container, ' +
+      '#help-modal, #recordings-modal, #ai-chat-modal, #boarding-combat-overlay, ' +
+      '[id^="res-card-"], #player-credits-display, #player-trade-options-display, ' +
+      '#game-timer, #config-build-buttons, .cruiser-build-btn, .selection-tile'
+    );
+  }
+
+  // Only pan/select from touches that began on the map canvas — not HUD buttons.
+  let touchStartedOnCanvas = false;
+  let touchStartedOnHud = false;
+  let lastHudTouchTime = 0;
+
+  function cancelCameraDragFromUi() {
+    // Stop any in-progress map pan so HUD presses cannot move the viewport
+    isDraggingCamera = false;
+    touchStartedOnCanvas = false;
+    touchStartedOnHud = true;
+    lastHudTouchTime = Date.now();
+  }
+
+  function recentlyTouchedHud(ms = 400) {
+    return touchStartedOnHud || (Date.now() - lastHudTouchTime < ms);
+  }
+
+  document.addEventListener('touchstart', (e) => {
+    const t = e.target;
+    // Game map canvas only (ignore nested icon canvases inside HUD buttons)
+    if (t === canvas || (t && t.id === 'gameCanvas')) {
+      touchStartedOnCanvas = true;
+      touchStartedOnHud = false;
+      return;
+    }
+    if (isInteractiveUiTarget(t)) {
+      // Cancel map pan only — do not preventDefault here (would kill synthetic click on
+      // click-only controls like saved config build buttons). bindActionClick / res-cards
+      // call preventDefault themselves where needed.
+      cancelCameraDragFromUi();
+    } else {
+      // Touch elsewhere (e.g. empty overlay): do not treat as map pan
+      touchStartedOnCanvas = false;
+    }
+  }, { capture: true, passive: true });
+
+  document.addEventListener('touchend', () => {
+    // End camera drag on any finger-up (touchend previously left isDraggingCamera stuck true)
+    isDraggingCamera = false;
+    // Keep HUD flag briefly so ghost mouse events after touch do not pan
+    setTimeout(() => {
+      touchStartedOnHud = false;
+      touchStartedOnCanvas = false;
+    }, 50);
+  }, { capture: true });
+  document.addEventListener('touchcancel', () => {
+    touchStartedOnCanvas = false;
+    touchStartedOnHud = false;
+    isDraggingCamera = false;
+  }, { capture: true });
+
   function bindActionClick(elementOrId, callback) {
     const el = typeof elementOrId === 'string' ? document.getElementById(elementOrId) : elementOrId;
     if (!el) return;
 
     const handler = (e) => {
-      if (e.type === 'touchstart') {
-        e.preventDefault();
+      if (e.type === 'touchstart' || e.type === 'touchend') {
+        if (e.cancelable) e.preventDefault();
         e.stopPropagation();
+        cancelCameraDragFromUi();
       }
       callback(e);
     };
@@ -5422,12 +5504,23 @@ function getPlanetTradeIncomePerMin(planet) {
 
   /** Cap how far into the future we extrapolate last auth pose (seconds). */
   function getAuthExtrapAgeCapSec() {
-    return 0.055 + 1.2 * predictionStrength;
+    // Keep auth look-ahead close to local DR so they don't fight (was 0.055 when healthy,
+    // which pulled ships backward every frame and felt like micro-stutter).
+    return 0.14 + 0.55 * predictionStrength;
   }
 
-  /** Soft-correction rate multiplier: healthier → pull harder to server. */
+  /** Soft-correction settle multiplier: healthier → settle a bit faster, never harsh. */
   function getSoftCorrectionBoost() {
-    return 1.0 + 1.4 * (1 - predictionStrength);
+    return 1.0 + 0.55 * (1 - predictionStrength);
+  }
+
+  /** Mean recent packet interval (ms) for jitter-aware smoothing. */
+  function getMeanPacketIntervalMs() {
+    const n = predPacketIntervals.length;
+    if (n < 2) return PRED_EXPECTED_INTERVAL_MS;
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += predPacketIntervals[i];
+    return sum / n;
   }
 
   window.getPredictionStrength = () => predictionStrength;
@@ -6005,6 +6098,16 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (typeof state !== 'object' || state === null || Array.isArray(state)) {
       state = {};
+    } else if (
+      // Identity change (common when visibleShips order shifts as amoebas/fleets
+      // enter FoW): do NOT mutate the existing object in place. Selection and
+      // other UI hold refs to ship objects — merging a new unit into the old
+      // object made "my cruiser" turn into the amoeba and selection vanish.
+      state.id !== undefined &&
+      delta.id !== undefined &&
+      state.id !== delta.id
+    ) {
+      state = Object.assign({}, state);
     }
     
     for (const key in delta) {
@@ -6834,23 +6937,56 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
 
-    // Rebind selection to live objects by id. Never drop a selection just because
-    // a one-tick map miss (e.g. ships array mid-delta). Only drop if the live
-    // ship is known inactive/missing after lookup, or planet gone.
+    // Rebind selection by stable ids (not object refs). Index-based network deltas
+    // can rewrite ships[i] in place when an amoeba enters vision; object refs may
+    // briefly point at the wrong unit, but selectedShipIds stay correct.
     if (state.ships) {
-      selectedShips = selectedShips.map(sel => {
-        if (!sel || sel.id == null) return null;
-        const live = findServerShip(sel.id);
-        if (live) {
-          // Drop destroyed units
-          if (live.active === false) return null;
-          return live;
+      // Click handlers may assign selectedShips directly. If the set of ids on
+      // those objects differs from selectedShipIds, treat selectedShips as the
+      // user's new selection (ids on live objects are trustworthy pre-corruption;
+      // post-corruption we rely on selectedShipIds + applyDelta id-clone fix).
+      const idsFromObjects = selectedShips
+        .map(s => (s && s.id != null ? s.id : null))
+        .filter(id => id != null);
+      if (idsFromObjects.length > 0) {
+        const same = idsFromObjects.length === selectedShipIds.length
+          && idsFromObjects.every((id, i) => id === selectedShipIds[i]);
+        if (!same) {
+          // Prefer objects when each id still maps to a live active ship (fresh click)
+          const objectsLookLive = selectedShips.every(s => {
+            if (!s || s.id == null) return false;
+            const live = findServerShip(s.id);
+            return live && live.active !== false && live === s;
+          });
+          if (objectsLookLive || selectedShipIds.length === 0) {
+            selectedShipIds = idsFromObjects.slice();
+          }
         }
-        // Sticky keep: preserve prior handle if ship not in this packet
-        // (own units can briefly vanish during bad deltas). Clear if we know it died.
-        if (sel.active === false) return null;
-        return sel;
-      }).filter(Boolean);
+      } else if (selectedShips.length === 0 && selectedShipIds.length > 0) {
+        // Explicit clear via selectedShips = []
+        selectedShipIds = [];
+      }
+
+      const nextSelected = [];
+      const nextIds = [];
+      for (const id of selectedShipIds) {
+        const live = findServerShip(id);
+        if (live) {
+          // Only drop when the live record for THIS id is inactive
+          if (live.active === false) continue;
+          nextSelected.push(live);
+          nextIds.push(id);
+          continue;
+        }
+        // Sticky: keep prior handle matching this id if present
+        const sticky = selectedShips.find(s => s && s.id === id);
+        if (sticky && sticky.active !== false) {
+          nextSelected.push(sticky);
+          nextIds.push(id);
+        }
+      }
+      selectedShips = nextSelected;
+      selectedShipIds = nextIds;
     }
     if (state.planets) {
       selectedPlanets = selectedPlanets.map(sel => {
@@ -8898,6 +9034,9 @@ function getPlanetTradeIncomePerMin(planet) {
 
             card.addEventListener('touchstart', (e) => {
               if (e.touches.length > 1) return;
+              cancelCameraDragFromUi();
+              if (e.cancelable) e.preventDefault();
+              e.stopPropagation();
               card._touchActive = true;
               hasTriggeredLongPress = false;
               touchStartX = e.touches[0].clientX;
@@ -8909,7 +9048,7 @@ function getPlanetTradeIncomePerMin(planet) {
                 socket.emit('sellResource', { resource: res });
                 if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback for sell
               }, 500);
-            }, { passive: true });
+            }, { passive: false });
 
             card.addEventListener('touchmove', (e) => {
               if (!pressTimer) return;
@@ -8922,6 +9061,9 @@ function getPlanetTradeIncomePerMin(planet) {
             }, { passive: true });
 
             card.addEventListener('touchend', (e) => {
+              if (e.cancelable) e.preventDefault();
+              e.stopPropagation();
+              cancelCameraDragFromUi();
               if (pressTimer) {
                 clearTimeout(pressTimer);
                 pressTimer = null;
@@ -8931,11 +9073,12 @@ function getPlanetTradeIncomePerMin(planet) {
                 socket.emit('buyResource', { resource: res });
               }
               setTimeout(() => { card._touchActive = false; }, 300);
-            });
+            }, { passive: false });
 
             card.addEventListener('touchcancel', () => {
               if (pressTimer) clearTimeout(pressTimer);
               pressTimer = null;
+              cancelCameraDragFromUi();
               setTimeout(() => { card._touchActive = false; }, 300);
             });
           }
@@ -9573,6 +9716,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let pressTimer = null;
         const startPress = (e) => {
           if (e.button !== undefined && e.button !== 0) return;
+          cancelCameraDragFromUi();
           pressTimer = setTimeout(() => {
             deleteConfig(idx);
           }, 500);
@@ -9585,7 +9729,7 @@ function getPlanetTradeIncomePerMin(planet) {
         };
 
         btn.addEventListener('mousedown', startPress);
-        btn.addEventListener('touchstart', startPress);
+        btn.addEventListener('touchstart', startPress, { passive: true });
         btn.addEventListener('mouseup', endPress);
         btn.addEventListener('touchend', endPress);
         btn.addEventListener('mouseleave', endPress);
@@ -10662,6 +10806,11 @@ function getPlanetTradeIncomePerMin(planet) {
 
   canvas.addEventListener('mousedown', (event) => {
     console.log('[DIAG] mousedown', { button: event.button, shift: event.shiftKey, hasServerState: !!serverState, hasLocalPlayer: !!localPlayer });
+    // Ignore synthetic mouse events that follow a HUD touch (would pan the map)
+    if (recentlyTouchedHud()) {
+      isDraggingCamera = false;
+      return;
+    }
     const cPos = getCanvasPos(event.clientX, event.clientY);
     const posX = cPos.x;
     const posY = cPos.y;
@@ -10759,7 +10908,10 @@ function getPlanetTradeIncomePerMin(planet) {
     const cssToCanvasX = canvas.width / rect.width;
     const cssToCanvasY = canvas.height / rect.height;
 
-    if (isDraggingCamera) {
+    // Never pan from mouse-compat events that follow a HUD touch
+    if (recentlyTouchedHud()) {
+      isDraggingCamera = false;
+    } else if (isDraggingCamera) {
       const dx = event.clientX - lastCameraDragX;
       const dy = event.clientY - lastCameraDragY;
       lastCameraDragX = event.clientX;
@@ -10974,6 +11126,13 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastTapY = 0;
 
   canvas.addEventListener('touchstart', (event) => {
+    // HUD buttons sit above the canvas; if a touch was classified as HUD, ignore canvas pan/select
+    if (touchStartedOnHud || recentlyTouchedHud(100) || isInteractiveUiTarget(event.target)) {
+      isDraggingCamera = false;
+      touchStartActive = false;
+      return;
+    }
+    touchStartedOnCanvas = true;
     event.preventDefault(); // Prevent double-firing with simulated mouse events
     const rect = canvas.getBoundingClientRect();
     if (event.touches.length === 2) {
@@ -11092,6 +11251,11 @@ function getPlanetTradeIncomePerMin(planet) {
   });
 
   canvas.addEventListener('touchmove', (event) => {
+    // Only pan/pinch if this gesture began on the map canvas
+    if (!touchStartedOnCanvas || touchStartedOnHud || recentlyTouchedHud(100)) {
+      isDraggingCamera = false;
+      return;
+    }
     event.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const cssToCanvasX = canvas.width / rect.width;
@@ -11310,6 +11474,8 @@ function getPlanetTradeIncomePerMin(planet) {
 
     touchStartActive = false;
     touchLongPressed = false;
+    isDraggingCamera = false;
+    touchStartedOnCanvas = false;
 
     if (event.touches.length < 2) {
       initialPinchDistance = null;
@@ -11328,6 +11494,8 @@ function getPlanetTradeIncomePerMin(planet) {
     }
     touchStartActive = false;
     touchLongPressed = false;
+    isDraggingCamera = false;
+    touchStartedOnCanvas = false;
     initialPinchDistance = null;
     if (lasso.active) {
       handlePointerUp();
@@ -13956,85 +14124,127 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.globalAlpha = prevAlpha;
       }
 
-      // Fog of war: unexplored yellow tint
+      // Fog of war: unexplored yellow tint — strictly inside map bounds (never off-map)
       // Old path iterated every 100px cell on the map (250k on 50k maps) — unusable zoomed out.
-      // Instead: wash the viewport with fog, then punch out only EXPLOREd cells (usually few).
+      // Instead: wash the on-map viewport with fog, then punch out only EXPLOREd cells.
       if (serverState.exploredCells) {
         const cellSize = 100;
         const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         const fillOpacity = isTouch ? 0.12 : 0.04;
         const fogColor = `rgba(255, 255, 0, ${fillOpacity})`;
 
-        const minCX = Math.max(0, Math.floor(viewMinX / cellSize));
-        const maxCX = Math.ceil(viewMaxX / cellSize);
-        const minCY = Math.max(0, Math.floor(viewMinY / cellSize));
-        const maxCY = Math.ceil(viewMaxY / cellSize);
-        const cellsInView = Math.max(0, maxCX - minCX) * Math.max(0, maxCY - minCY);
+        // Clamp fog region to map rectangle ∩ view frustum
+        const fogX0 = Math.max(viewMinX, 0);
+        const fogY0 = Math.max(viewMinY, 0);
+        const fogX1 = Math.min(viewMaxX, mapWidth);
+        const fogY1 = Math.min(viewMaxY, mapHeight);
+        const maxCellX = Math.max(0, Math.ceil(mapWidth / cellSize) - 1);
+        const maxCellY = Math.max(0, Math.ceil(mapHeight / cellSize) - 1);
+        const minCX = Math.max(0, Math.floor(fogX0 / cellSize));
+        const maxCX = Math.min(maxCellX, Math.floor((fogX1 - 1e-6) / cellSize));
+        const minCY = Math.max(0, Math.floor(fogY0 / cellSize));
+        const maxCY = Math.min(maxCellY, Math.floor((fogY1 - 1e-6) / cellSize));
+        const cellsInView = (fogX1 > fogX0 && fogY1 > fogY0)
+          ? Math.max(0, maxCX - minCX + 1) * Math.max(0, maxCY - minCY + 1)
+          : 0;
 
-        if (cellsInView > 2500 || galacticView || strategicView) {
-          // Fast path: full fog wash + clear explored pockets
-          ctx.fillStyle = fogColor;
-          ctx.fillRect(viewMinX, viewMinY, viewMaxX - viewMinX, viewMaxY - viewMinY);
-          // Map background is near-black; punch holes for explored cells
-          ctx.fillStyle = '#050510';
-          const explored = serverState.exploredCells;
-          for (const key in explored) {
-            if (!explored[key]) continue;
-            const us = key.indexOf('_');
-            if (us < 0) continue;
-            const cx = parseInt(key.substring(0, us), 10);
-            const cy = parseInt(key.substring(us + 1), 10);
-            if (cx < minCX || cx > maxCX || cy < minCY || cy > maxCY) continue;
-            ctx.fillRect(cx * cellSize, cy * cellSize, cellSize, cellSize);
-          }
-        } else {
-          // Near zoom: only cells in the frustum
-          ctx.fillStyle = fogColor;
-          for (let cx = minCX; cx <= maxCX; cx++) {
-            for (let cy = minCY; cy <= maxCY; cy++) {
-              const key = `${cx}_${cy}`;
-              if (!serverState.exploredCells[key]) {
-                ctx.fillRect(cx * cellSize, cy * cellSize, cellSize, cellSize);
+        if (fogX1 > fogX0 && fogY1 > fogY0) {
+          if (cellsInView > 2500 || galacticView || strategicView) {
+            // Fast path: on-map fog wash + clear explored pockets (clipped to map)
+            ctx.fillStyle = fogColor;
+            ctx.fillRect(fogX0, fogY0, fogX1 - fogX0, fogY1 - fogY0);
+            ctx.fillStyle = '#050510';
+            const explored = serverState.exploredCells;
+            for (const key in explored) {
+              if (!explored[key]) continue;
+              const us = key.indexOf('_');
+              if (us < 0) continue;
+              const cx = parseInt(key.substring(0, us), 10);
+              const cy = parseInt(key.substring(us + 1), 10);
+              if (cx < 0 || cy < 0 || cx > maxCellX || cy > maxCellY) continue;
+              if (cx < minCX || cx > maxCX || cy < minCY || cy > maxCY) continue;
+              const rx = cx * cellSize;
+              const ry = cy * cellSize;
+              const rw = Math.min(cellSize, mapWidth - rx);
+              const rh = Math.min(cellSize, mapHeight - ry);
+              if (rw > 0 && rh > 0) ctx.fillRect(rx, ry, rw, rh);
+            }
+          } else {
+            // Near zoom: only on-map cells in the frustum
+            ctx.fillStyle = fogColor;
+            for (let cx = minCX; cx <= maxCX; cx++) {
+              for (let cy = minCY; cy <= maxCY; cy++) {
+                const key = `${cx}_${cy}`;
+                if (!serverState.exploredCells[key]) {
+                  const rx = cx * cellSize;
+                  const ry = cy * cellSize;
+                  const rw = Math.min(cellSize, mapWidth - rx);
+                  const rh = Math.min(cellSize, mapHeight - ry);
+                  if (rw > 0 && rh > 0) ctx.fillRect(rx, ry, rw, rh);
+                }
               }
             }
           }
         }
       }
 
-      // Slight red tint on the void outside map bounds (0..mapWidth × 0..mapHeight)
+      // Foggy red barrier just outside map bounds — 200px thick, all off-map
       {
-        const vx = viewMinX;
-        const vy = viewMinY;
-        const vw = viewMaxX - viewMinX;
-        const vh = viewMaxY - viewMinY;
-        if (vw > 0 && vh > 0) {
-          ctx.fillStyle = 'rgba(110, 22, 28, 0.28)';
-          // Top strip (y < 0)
-          if (vy < 0) {
-            ctx.fillRect(vx, vy, vw, Math.min(0, viewMaxY) - vy);
-          }
-          // Bottom strip (y > mapHeight)
-          if (viewMaxY > mapHeight) {
-            const y0 = Math.max(mapHeight, vy);
-            ctx.fillRect(vx, y0, vw, viewMaxY - y0);
-          }
-          // Left strip (x < 0), only within map Y so corners aren't double-tinted
-          if (vx < 0) {
-            const y0 = Math.max(vy, 0);
-            const y1 = Math.min(viewMaxY, mapHeight);
-            if (y1 > y0) {
-              ctx.fillRect(vx, y0, Math.min(0, viewMaxX) - vx, y1 - y0);
-            }
-          }
-          // Right strip (x > mapWidth)
-          if (viewMaxX > mapWidth) {
-            const x0 = Math.max(mapWidth, vx);
-            const y0 = Math.max(vy, 0);
-            const y1 = Math.min(viewMaxY, mapHeight);
-            if (y1 > y0) {
-              ctx.fillRect(x0, y0, viewMaxX - x0, y1 - y0);
-            }
-          }
+        const BARRIER = 200;
+        const fogInner = 'rgba(160, 30, 40, 0.0)';   // at map edge
+        const fogMid = 'rgba(140, 20, 30, 0.42)';
+        const fogOuter = 'rgba(90, 10, 18, 0.72)';    // 200px out
+        const edgeGlow = 'rgba(255, 60, 70, 0.22)';
+
+        // Horizontal span covers barrier corners (left/right overhang)
+        const x0 = -BARRIER;
+        const x1 = mapWidth + BARRIER;
+        const y0 = -BARRIER;
+        const y1 = mapHeight + BARRIER;
+
+        // Top barrier (y: -BARRIER .. 0)
+        if (viewMaxY > y0 && viewMinY < 0) {
+          const g = ctx.createLinearGradient(0, 0, 0, -BARRIER);
+          g.addColorStop(0, fogInner);
+          g.addColorStop(0.35, fogMid);
+          g.addColorStop(1, fogOuter);
+          ctx.fillStyle = g;
+          ctx.fillRect(x0, -BARRIER, x1 - x0, BARRIER);
+          ctx.fillStyle = edgeGlow;
+          ctx.fillRect(x0, -3, x1 - x0, 3);
+        }
+        // Bottom barrier (y: mapHeight .. mapHeight+BARRIER)
+        if (viewMinY < y1 && viewMaxY > mapHeight) {
+          const g = ctx.createLinearGradient(0, mapHeight, 0, mapHeight + BARRIER);
+          g.addColorStop(0, fogInner);
+          g.addColorStop(0.35, fogMid);
+          g.addColorStop(1, fogOuter);
+          ctx.fillStyle = g;
+          ctx.fillRect(x0, mapHeight, x1 - x0, BARRIER);
+          ctx.fillStyle = edgeGlow;
+          ctx.fillRect(x0, mapHeight, x1 - x0, 3);
+        }
+        // Left barrier (x: -BARRIER .. 0), map Y only (corners already in top/bottom)
+        if (viewMaxX > x0 && viewMinX < 0) {
+          const g = ctx.createLinearGradient(0, 0, -BARRIER, 0);
+          g.addColorStop(0, fogInner);
+          g.addColorStop(0.35, fogMid);
+          g.addColorStop(1, fogOuter);
+          ctx.fillStyle = g;
+          ctx.fillRect(-BARRIER, 0, BARRIER, mapHeight);
+          ctx.fillStyle = edgeGlow;
+          ctx.fillRect(-3, 0, 3, mapHeight);
+        }
+        // Right barrier (x: mapWidth .. mapWidth+BARRIER)
+        if (viewMinX < x1 && viewMaxX > mapWidth) {
+          const g = ctx.createLinearGradient(mapWidth, 0, mapWidth + BARRIER, 0);
+          g.addColorStop(0, fogInner);
+          g.addColorStop(0.35, fogMid);
+          g.addColorStop(1, fogOuter);
+          ctx.fillStyle = g;
+          ctx.fillRect(mapWidth, 0, BARRIER, mapHeight);
+          ctx.fillStyle = edgeGlow;
+          ctx.fillRect(mapWidth, 0, 3, mapHeight);
         }
       }
 
@@ -17599,75 +17809,119 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       /**
-       * Adaptive soft-correction toward the server-predicted pose.
-       * Tight when nearly synced, softer under lag, capped per-frame so fleets
-       * don't rubber-band when packets bunch up.
-       * combatMode: pull harder toward server (dogfights invent false motion).
+       * Silk soft-correction toward the server-predicted pose.
+       * - Deadzone ignores sub-pixel / tick noise
+       * - Along-track vs lateral split (less sideways rubber-band)
+       * - Exponential settle with per-frame travel cap — almost never hard-snaps
+       * combatMode: settle faster (dogfights invent false motion).
        */
       function applySoftCorrection(vis, serverPred, destX, destY, cruiseSpd, combatMode = false) {
-        const errX = serverPred.x - vis.x;
-        const errY = serverPred.y - vis.y;
-        const err = Math.hypot(errX, errY);
-        const corrBoost = getSoftCorrectionBoost(); // higher when traffic healthy
-        if (err < 0.05) {
-          // Still gently blend angle when already position-synced
-        } else if (err > (combatMode ? 120 : 280)) {
-          // Extreme desync — hard snap (lower threshold in combat)
-          vis.x = serverPred.x;
-          vis.y = serverPred.y;
-          vis.angle = serverPred.angle;
-          return;
-        } else {
-          // Error-dependent blend rate (higher k when close); healthy net → stronger pull
-          let k;
-          if (err < 6) k = 14;
-          else if (err < 25) k = 7;
-          else if (err < 80) k = 3.5;
-          else k = 1.8;
-          if (combatMode) k *= 2.8;
-          k *= corrBoost;
-          let alpha = 1 - Math.exp(-k * smoothDt);
+        let errX = serverPred.x - vis.x;
+        let errY = serverPred.y - vis.y;
+        let err = Math.hypot(errX, errY);
+        const corrBoost = getSoftCorrectionBoost();
 
-          // Cap correction travel so lag bursts can't yank fleets sideways
-          // Combat: allow more correction so ships don't slide through dogfights
-          const maxCorr = Math.max(cruiseSpd, 12) * smoothDt * (combatMode ? 5.5 : 2.5) + (combatMode ? 4 : 1.5);
-          const corrDist = err * alpha;
-          if (corrDist > maxCorr) {
-            alpha = maxCorr / err;
-          }
-          vis.x += errX * alpha;
-          vis.y += errY * alpha;
-
-          // Heading correction: only if server is as close (or closer) to the
-          // desired course as we are. Otherwise we get "turn away then toward"
-          // when packets lag on large maps.
-          let applyAngleCorr = true;
-          if (!combatMode && destX != null && destY != null) {
-            const desired = Math.atan2(destY - vis.y, destX - vis.x);
-            const localErr = angleDiffAbs(vis.angle, desired);
-            const serverErr = angleDiffAbs(serverPred.angle, desired);
-            // Still mid-turn locally — trust local turn rate, not lagging server nose
-            if (localErr > 12 * Math.PI / 180 && localErr < serverErr - 0.02) {
-              applyAngleCorr = false;
-            }
-          }
-          if (applyAngleCorr) {
-            let adiff = serverPred.angle - vis.angle;
-            while (adiff < -Math.PI) adiff += Math.PI * 2;
-            while (adiff > Math.PI) adiff -= Math.PI * 2;
-            // Combat: trust server heading more (nose-wiggle less important than accuracy)
-            const angAlpha = Math.min(1, alpha * (combatMode ? 0.9 : 0.55));
-            vis.angle += adiff * angAlpha;
-          }
+        // Deadzone: do not chase packet noise (major silk win)
+        const deadzone = combatMode ? 0.4 : 1.35;
+        if (err <= deadzone) {
+          // Stopped ships: freeze heading. Soft-correcting angle to each server
+          // packet after combat caused continuous nose-wiggle.
+          if (vis.idleHoldHeading) return;
+          let adiff = serverPred.angle - vis.angle;
+          while (adiff < -Math.PI) adiff += Math.PI * 2;
+          while (adiff > Math.PI) adiff -= Math.PI * 2;
+          if (Math.abs(adiff) < 3 * Math.PI / 180) return;
+          const angAlpha = 1 - Math.exp(-(combatMode ? 10 : 5) * smoothDt);
+          vis.angle += adiff * angAlpha * (combatMode ? 0.75 : 0.4);
           return;
         }
 
-        // Position nearly synced — still ease angle
-        let adiff = serverPred.angle - vis.angle;
-        while (adiff < -Math.PI) adiff += Math.PI * 2;
-        while (adiff > Math.PI) adiff -= Math.PI * 2;
-        const angAlpha = 1 - Math.exp(-(combatMode ? 12 : 6) * smoothDt);
-        vis.angle += adiff * angAlpha * (combatMode ? 0.85 : 0.5);
+        // Shrink error by deadzone so we ease into it instead of oscillating
+        const shrink = (err - deadzone) / err;
+        let pullX = errX * shrink;
+        let pullY = errY * shrink;
+
+        // Anisotropic correction: prefer along-track, damp lateral yank
+        if (!combatMode && destX != null && destY != null) {
+          const tdx = destX - vis.x;
+          const tdy = destY - vis.y;
+          const tlen = Math.hypot(tdx, tdy);
+          if (tlen > 8) {
+            const ux = tdx / tlen;
+            const uy = tdy / tlen;
+            const along = pullX * ux + pullY * uy;
+            const latX = pullX - along * ux;
+            const latY = pullY - along * uy;
+            const latScale = 0.42;
+            pullX = along * ux + latX * latScale;
+            pullY = along * uy + latY * latScale;
+          }
+        } else if (!combatMode && (cruiseSpd > 2 || (vis.smoothSpeed || 0) > 2)) {
+          // Moving but no dest: damp correction perpendicular to nose
+          const ux = Math.cos(vis.angle || 0);
+          const uy = Math.sin(vis.angle || 0);
+          const along = pullX * ux + pullY * uy;
+          const latX = pullX - along * ux;
+          const latY = pullY - along * uy;
+          pullX = along * ux + latX * 0.5;
+          pullY = along * uy + latY * 0.5;
+        }
+
+        err = Math.hypot(pullX, pullY);
+        if (err < 0.01) return;
+
+        // Time-constant settle (seconds): larger error → gentler, then catch up
+        let tau;
+        if (combatMode) {
+          tau = err < 25 ? 0.07 : 0.12;
+        } else if (err < 10) {
+          tau = 0.11;
+        } else if (err < 45) {
+          tau = 0.2;
+        } else if (err < 140) {
+          tau = 0.32;
+        } else {
+          tau = 0.45;
+        }
+        tau = Math.max(0.055, tau / corrBoost);
+        let alpha = 1 - Math.exp(-smoothDt / tau);
+
+        // Per-frame travel cap — silk: no teleports mid-frame
+        const maxCorr = Math.max(cruiseSpd, 10) * smoothDt * (combatMode ? 3.8 : 2.15)
+          + (combatMode ? 2.5 : 1.75);
+        if (err * alpha > maxCorr) alpha = maxCorr / err;
+
+        // Catastrophic only (FoW re-entry / long gap) — soft 100% settle, not a hard pop
+        if (err > (combatMode ? 220 : 480)) {
+          vis.x = serverPred.x;
+          vis.y = serverPred.y;
+          vis.angle = serverPred.angle;
+          if (vis.smoothSpeed != null) vis.smoothSpeed = cruiseSpd;
+          return;
+        }
+
+        vis.x += pullX * alpha;
+        vis.y += pullY * alpha;
+
+        // Heading: trust local turn when mid-course; otherwise ease toward server
+        let applyAngleCorr = true;
+        if (!combatMode && destX != null && destY != null) {
+          const desired = Math.atan2(destY - vis.y, destX - vis.x);
+          const localErr = angleDiffAbs(vis.angle, desired);
+          const serverErr = angleDiffAbs(serverPred.angle, desired);
+          if (localErr > 12 * Math.PI / 180 && localErr < serverErr - 0.02) {
+            applyAngleCorr = false;
+          }
+        }
+        if (applyAngleCorr && !vis.idleHoldHeading) {
+          let adiff = serverPred.angle - vis.angle;
+          while (adiff < -Math.PI) adiff += Math.PI * 2;
+          while (adiff > Math.PI) adiff -= Math.PI * 2;
+          if (Math.abs(adiff) >= 2.5 * Math.PI / 180) {
+            const angAlpha = Math.min(1, alpha * (combatMode ? 0.85 : 0.48));
+            vis.angle += adiff * angAlpha;
+          }
+        }
       }
 
       // Combat proximity: damp prediction when dogfighting (smooth battles)
@@ -17797,27 +18051,44 @@ function getPlanetTradeIncomePerMin(planet) {
                 }
               }
             }
+            // Fully stopped (common after killing an amoeba): drop residual dest so
+            // we do not invent cruise or chase a dead target heading.
+            if ((s.currentSpeed || 0) < 0.35 && (s.flightTime || 0) < 0.08 && !optLive) {
+              destX = null;
+              destY = null;
+            }
             if (inCombat) {
               // Combat: only trust server-reported speed — no invent-cruise slide
               spd = s.currentSpeed || 0;
               inventCruise = false;
             } else {
-              spd = Math.max(s.currentSpeed || 0, auth ? (auth.speed || 0) : 0);
-              // Prefer live currentSpeed; if zero mid-flight, invent only when laggy
+              // Prefer live server speed; fall back to last auth speed only while still en-route
+              spd = s.currentSpeed || 0;
+              if (spd < 0.5 && auth && (auth.speed || 0) > 0.5 && (s.flightTime || 0) > 0.08) {
+                spd = auth.speed;
+              }
+              // Hard stop: server idle — do not keep coasting on stale auth speed (heading jitter source)
+              if ((s.currentSpeed || 0) < 0.35 && (s.flightTime || 0) < 0.08) {
+                spd = 0;
+              }
               if (auth && auth.turnRateRad) turnRate = auth.turnRateRad;
-              if (spd < 0.5 && destX != null && destY != null && allowInventCruise()) {
+              if (spd < 0.5 && destX != null && destY != null && allowInventCruise()
+                  && ((s.currentSpeed || 0) > 0.2 || (s.flightTime || 0) > 0.08)) {
                 const distToDest = Math.hypot(destX - vis.x, destY - vis.y);
                 const wasMoving = (s.flightTime || 0) > 0.05
                   || (auth && auth.speed > 0.5)
                   || (vis.lastCruiseSpeed || 0) > 0.5
-                  || (s.currentSpeed || 0) > 0.5;
+                  || (s.currentSpeed || 0) > 0.5
+                  || (vis.smoothSpeed || 0) > 0.5;
                 if (distToDest > 20 && wasMoving) {
                   const remembered = Math.max(
                     auth ? (auth.speed || 0) : 0,
-                    vis.lastCruiseSpeed || 0
+                    vis.lastCruiseSpeed || 0,
+                    vis.smoothSpeed || 0
                   );
                   let invented = remembered > 0.5 ? Math.min(remembered, predictedSpd) : predictedSpd;
-                  invented *= (0.35 + 0.65 * predictionStrength);
+                  // Only invent a fraction when mildly stressed — full invent when laggy
+                  invented *= (0.5 + 0.5 * predictionStrength);
                   spd = invented;
                   inventCruise = true;
                 }
@@ -17829,23 +18100,37 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
 
-          // 1) Always integrate from the *visual* pose so motion never freezes between packets
-          //    Arc forward while turning (server-accurate) — do not stop-and-pivot mid-course.
-          //    Combat: scale extrapolation so ships don't slide through dogfights.
-          //    Healthy traffic: still extrap for 60fps smoothness but damp invent-heavy motion.
-          const combatExtrapScale = inCombat ? 0.3 : 1.0;
-          // Own optimistic moves always full; ambient DR scales with predictionStrength
-          const ambientExtrapScale = optLive
-            ? 1.0
-            : (0.45 + 0.55 * predictionStrength);
-          if ((spd > 0.5 || inventCruise || optLive) && !(inCombat && (s.currentSpeed || 0) < 0.5 && !optLive)) {
+          // Silk: smooth speed transitions (invent on/off, packet 0-speed blips)
+          if (vis.smoothSpeed == null || !Number.isFinite(vis.smoothSpeed)) {
+            vis.smoothSpeed = spd;
+          }
+          {
+            // Fast settle when slowing to stop; medium when speeding up / inventing
+            let speedTau = 0.14;
+            if (spd < 0.5 && vis.smoothSpeed > 1.5) speedTau = 0.08;
+            else if (Math.abs(spd - vis.smoothSpeed) > 8) speedTau = 0.18;
+            if (inCombat) speedTau *= 0.65;
+            if (optLive) speedTau = 0.06;
+            const sAlpha = 1 - Math.exp(-smoothDt / Math.max(0.04, speedTau));
+            vis.smoothSpeed += (spd - vis.smoothSpeed) * sAlpha;
+            if (vis.smoothSpeed < 0.05) vis.smoothSpeed = 0;
+          }
+          const useSpd = vis.smoothSpeed;
+
+          // 1) Full-rate local integration every frame (never under-drive ambient DR —
+          //    that was a top source of "chug then snap" when traffic was healthy).
+          //    Combat still damps extrap so furballs don't slide.
+          const combatExtrapScale = inCombat ? 0.35 : 1.0;
+          if ((useSpd > 0.5 || inventCruise || optLive) && !(inCombat && (s.currentSpeed || 0) < 0.5 && !optLive)) {
             const circleState = {
               circling: !!vis.predCircling,
               destX: vis.predCircleDestX,
               destY: vis.predCircleDestY
             };
-            let floorSpd = inventCruise || optLive ? Math.min(predictedSpd, Math.max(spd, 1)) : spd;
-            floorSpd *= combatExtrapScale * ambientExtrapScale;
+            let floorSpd = inventCruise || optLive
+              ? Math.min(predictedSpd, Math.max(useSpd, 1))
+              : useSpd;
+            floorSpd *= combatExtrapScale;
             const pose = extrapolatePose(
               vis.x, vis.y, vis.angle, floorSpd,
               destX, destY, turnRate, smoothDt, inventCruise || (optLive && !inCombat), circleState
@@ -17858,7 +18143,7 @@ function getPlanetTradeIncomePerMin(planet) {
             vis.predCircleDestY = pose.destY;
             if (pose.speed > 0.5 && !inCombat) {
               vis.lastCruiseSpeed = Math.min(pose.speed, predictedSpd);
-            } else if (!inventCruise && !optLive) {
+            } else if (!inventCruise && !optLive && useSpd < 0.5) {
               vis.lastCruiseSpeed = 0;
             }
             if (optLive) {
@@ -17867,29 +18152,44 @@ function getPlanetTradeIncomePerMin(planet) {
               if (Math.hypot(opt.targetX - vis.x, opt.targetY - vis.y) < 3) vis.opt = null;
             }
           } else {
-            if (!inCombat) vis.lastCruiseSpeed = 0;
-            // Combat + stationary on server: park visual on last auth/server pose path via correction
+            if (!inCombat && useSpd < 0.5) vis.lastCruiseSpeed = 0;
+            // Combat + stationary on server: park visual via soft correction only
           }
 
-          // 2) Gentle correction toward server-extrapolated pose (position always;
-          // heading only when it won't yank us away from the turn onto dest)
-          // Combat: always correct (even during brief opt) so furballs stay locked
-          // Healthy traffic: cap auth age so we hug the last packet instead of long DR
+          // Idle after stop/combat: hold visual heading (server angle can tick each packet).
+          vis.idleHoldHeading = !optLive
+            && (s.currentSpeed || 0) < 0.35
+            && (vis.smoothSpeed || 0) < 0.45
+            && !inventCruise
+            && (s.flightTime || 0) < 0.08;
+          if (vis.idleHoldHeading) {
+            vis.lastCruiseSpeed = 0;
+            if (auth) {
+              auth.speed = 0;
+              auth.destX = null;
+              auth.destY = null;
+            }
+          }
+
+          // 2) Soft-correct residual toward server-extrapolated pose (silk blend, not snap)
           if (auth && (!optLive || inCombat)) {
             const age = Math.max(0, (smoothNow - auth.time) / 1000);
-            const ageCap = inCombat ? 0.12 : getAuthExtrapAgeCapSec();
+            // Jitter-aware: allow at least ~1 packet of look-ahead
+            const meanPkt = getMeanPacketIntervalMs() / 1000;
+            const ageCap = inCombat
+              ? 0.12
+              : Math.max(getAuthExtrapAgeCapSec(), meanPkt * 1.15);
             const cappedAge = Math.min(age, ageCap);
             let authSpd = auth.speed || 0;
             if (inCombat) {
-              // Prefer live server speed for combat auth extrapolation
               authSpd = (s.currentSpeed || 0) * 0.35;
             } else {
-              if (authSpd < 0.5 && inventCruise) authSpd = spd;
-              // Cap auth extrapolation to predicted max
+              if (authSpd < 0.5 && inventCruise) authSpd = useSpd;
+              if (authSpd < 0.5 && useSpd > 0.5) authSpd = useSpd;
               if (authSpd > predictedSpd * 1.05) authSpd = predictedSpd;
-              // Healthy: prefer live server speed over invented auth speed
-              if (predictionStrength < 0.4 && (s.currentSpeed || 0) > 0.5) {
-                authSpd = s.currentSpeed;
+              // Match local smooth speed so auth and visual don't diverge
+              if (!inventCruise && useSpd > 0.5) {
+                authSpd = useSpd * 0.35 + authSpd * 0.65;
               }
             }
             const serverPred = extrapolatePose(
@@ -17897,7 +18197,6 @@ function getPlanetTradeIncomePerMin(planet) {
               destX, destY, turnRate, cappedAge,
               inventCruise && !inCombat && predictionStrength >= 0.4, null
             );
-            // In combat with near-zero server motion, pull toward raw auth pose
             if (inCombat && (s.currentSpeed || 0) < 0.5) {
               serverPred.x = auth.x;
               serverPred.y = auth.y;
@@ -17905,7 +18204,7 @@ function getPlanetTradeIncomePerMin(planet) {
             }
             applySoftCorrection(
               vis, serverPred, destX, destY,
-              Math.max(spd, authSpd, inCombat ? 8 : predictedSpd, 8),
+              Math.max(useSpd, authSpd, inCombat ? 8 : predictedSpd, 8),
               inCombat
             );
           }
