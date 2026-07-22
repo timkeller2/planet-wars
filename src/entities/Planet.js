@@ -15,6 +15,46 @@ export function getHabName(habitability) {
   return 'Gaia';
 }
 
+/**
+ * Apply one +1 habitability step with terraforming class skips
+ * (Jungle→Ocean→Terran 100, Desert→Tundra→Arid 90, Ocean→Arid→Terran 100).
+ * Caps at 100 (same as planet Focus terraforming). Returns true if applied.
+ */
+export function applyHabTerraformingStep(planet, game = null) {
+  if (!planet) return false;
+  const oldHab = planet.habitability || 0;
+  if (oldHab >= 100) return false;
+
+  planet.habitability = oldHab + 1;
+
+  const oldName = getHabName(oldHab);
+  const steppedName = getHabName(planet.habitability);
+  if (oldName === 'Jungle' && steppedName === 'Ocean') {
+    planet.habitability = 100; // Terran skip
+  } else if (oldName === 'Desert' && steppedName === 'Tundra') {
+    planet.habitability = 90; // Arid skip
+  } else if (oldName === 'Ocean' && steppedName === 'Arid') {
+    planet.habitability = 100; // Terran skip
+  }
+
+  planet.habitability = Math.min(100, Math.max(0, planet.habitability));
+
+  const newName = getHabName(planet.habitability);
+  if (oldName !== newName && game) {
+    game.pendingHabClassChanges = game.pendingHabClassChanges || [];
+    game.pendingHabClassChanges.push({
+      planetId: planet.id,
+      planetName: planet.name,
+      ownerId: planet.owner ? planet.owner.id : null,
+      oldClass: oldName,
+      newClass: newName,
+      x: planet.x,
+      y: planet.y
+    });
+  }
+  return true;
+}
+
 export function getMineralsName(minerals) {
   switch (minerals) {
     case 1: return 'Destitute';
@@ -230,7 +270,11 @@ export class Planet {
       }
       // baseRate is supplies/min at maxShips=100, minerals=4 (50% of original 3 / 0.75)
       const baseRate = this.owner ? 1.5 : 0.375;
-      const regenRatePerMs = (baseRate * (this.maxShips / 100) * ((this.minerals || 4) / 4)) / 60000;
+      let regenRatePerMs = (baseRate * (this.maxShips / 100) * ((this.minerals || 4) / 4)) / 60000;
+      // Supply Production focus: 4× regen below full, 8× when full of ships
+      if (this.owner && (this.focusMode || 'economy') === 'supply') {
+        regenRatePerMs *= (this.ships >= this.maxShips) ? 8 : 4;
+      }
       this.supplies = Math.min(this.maxShips, this.supplies + regenRatePerMs * deltaTime);
     }
     this.prorateSympathiesIfNeeded();
@@ -275,13 +319,8 @@ export class Planet {
         if (toConsume > 0) {
           let unpaid = toConsume;
           if (this.owner.useCredits !== false) {
-            let minAllowedCredits = 0;
-            if (game && game.planets) {
-              const ownsHw = game.planets.some(p => p.homeworldOf === this.owner.id && p.owner === this.owner);
-              if (ownsHw) {
-                minAllowedCredits = -(1000 + Math.floor(this.owner.totalShips || 0));
-              }
-            }
+            // Debt floor always from trade ships (no homeworld / totalShips floor)
+            const minAllowedCredits = -Math.floor(this.owner.totalTradeShips || 0);
             const currentCreditsAvailable = Math.max(0, (this.owner.credits || 0) - minAllowedCredits);
             if (currentCreditsAvailable > 0) {
               const creditsToUse = Math.min(currentCreditsAvailable, unpaid);
@@ -464,32 +503,7 @@ export class Planet {
               this.productionProgress -= (cycles * 15);
 
               for (let i = 0; i < cycles; i++) {
-                const oldHab = this.habitability;
-                this.habitability += 1;
-                
-                const oldName = getHabName(oldHab);
-                if (oldName === 'Jungle' && getHabName(this.habitability) === 'Ocean') {
-                  this.habitability = 100; // Terran
-                } else if (oldName === 'Desert' && getHabName(this.habitability) === 'Tundra') {
-                  this.habitability = 90; // Arid
-                } else if (oldName === 'Ocean' && getHabName(this.habitability) === 'Arid') {
-                  this.habitability = 100; // Terran
-                }
-
-                const newName = getHabName(this.habitability);
-                if (oldName !== newName && game) {
-                  game.pendingHabClassChanges = game.pendingHabClassChanges || [];
-                  game.pendingHabClassChanges.push({
-                    planetId: this.id,
-                    planetName: this.name,
-                    ownerId: this.owner ? this.owner.id : null,
-                    oldClass: oldName,
-                    newClass: newName,
-                    x: this.x,
-                    y: this.y
-                  });
-                }
-                this.habitability = Math.min(100, Math.max(0, this.habitability));
+                if (!applyHabTerraformingStep(this, game)) break;
               }
             }
           }
@@ -550,31 +564,7 @@ export class Planet {
             if (this.maxShips < 5) this.dead = true;
           } else {
             if (focus === 'terraforming') {
-              const oldHab = this.habitability;
-              this.habitability += 1;
-              
-              const oldName = getHabName(oldHab);
-              if (oldName === 'Jungle' && getHabName(this.habitability) === 'Ocean') {
-                this.habitability = 100; // Terran
-              } else if (oldName === 'Desert' && getHabName(this.habitability) === 'Tundra') {
-                this.habitability = 90; // Arid
-              } else if (oldName === 'Ocean' && getHabName(this.habitability) === 'Arid') {
-                this.habitability = 100; // Terran
-              }
-
-              const newName = getHabName(this.habitability);
-              if (oldName !== newName && game) {
-                game.pendingHabClassChanges = game.pendingHabClassChanges || [];
-                game.pendingHabClassChanges.push({
-                  planetId: this.id,
-                  planetName: this.name,
-                  ownerId: this.owner ? this.owner.id : null,
-                  oldClass: oldName,
-                  newClass: newName,
-                  x: this.x,
-                  y: this.y
-                });
-              }
+              applyHabTerraformingStep(this, game);
             } else {
               const increaseAmount = this.homeworldOf ? 2 : 1;
               this.increaseMaxShips(increaseAmount);

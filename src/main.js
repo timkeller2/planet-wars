@@ -461,21 +461,36 @@ function getPlanetTradeIncomePerMin(planet) {
     if (serverState) {
       if (serverState.ships) {
         for (let i = 0; i < serverState.ships.length; i++) {
-          serverShipsMap.set(serverState.ships[i].id, serverState.ships[i]);
+          const ship = serverState.ships[i];
+          if (!ship || ship.id == null) continue;
+          // Prefer full (non-flat) records if both somehow share an id
+          const existing = serverShipsMap.get(ship.id);
+          if (existing && !existing._isFlatShip && ship._isFlatShip) continue;
+          serverShipsMap.set(ship.id, ship);
         }
       }
       if (serverState.planets) {
         for (let i = 0; i < serverState.planets.length; i++) {
-          serverPlanetsMap.set(serverState.planets[i].id, serverState.planets[i]);
+          const p = serverState.planets[i];
+          if (p && p.id != null) serverPlanetsMap.set(p.id, p);
         }
       }
     }
   }
   function findServerShip(id) {
-    return serverShipsMap.get(id) || null;
+    if (id == null) return null;
+    // Tolerate number/string id mismatches from flat-ship packing / JSON
+    return serverShipsMap.get(id)
+      || serverShipsMap.get(Number(id))
+      || serverShipsMap.get(String(id))
+      || null;
   }
   function findServerPlanet(id) {
-    return serverPlanetsMap.get(id) || null;
+    if (id == null) return null;
+    return serverPlanetsMap.get(id)
+      || serverPlanetsMap.get(Number(id))
+      || serverPlanetsMap.get(String(id))
+      || null;
   }
   let activeBoardingShipId = null;
   let boardingCombatClosed = false;
@@ -505,6 +520,8 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastSelectedCruiserId = null;
   let selectedPlanets = [];
   let selectedShips = [];
+  // Empty-space left click: defer deselect until mouseup so camera pan keeps selection
+  let pendingEmptyDeselect = false;
   let recentAudioEvents = [];
 
   function groupIntoFocusAreas(points, maxDistance = 300) {
@@ -573,6 +590,7 @@ function getPlanetTradeIncomePerMin(planet) {
   function resetClientModeFlags() {
     selectedPlanets = [];
     selectedShips = [];
+    pendingEmptyDeselect = false;
     warpOrderNext = false;
     bombOrderNext = false;
     scoutModeNext = false;
@@ -2724,10 +2742,11 @@ function getPlanetTradeIncomePerMin(planet) {
       if (serverState && serverState.ships) {
         for (const ship of serverState.ships) {
           if (ship.id === activeInfoPanel.id && ship.active) {
+            const dpos = getShipDisplayPos(ship);
             const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
             const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
-            const sdx = ship.x - serverPos.x;
-            const sdy = ship.y - serverPos.y;
+            const sdx = dpos.x - serverPos.x;
+            const sdy = dpos.y - serverPos.y;
             if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
               return true;
             }
@@ -2969,6 +2988,21 @@ function getPlanetTradeIncomePerMin(planet) {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: '.' }));
         }
       });
+      // Touch-only path to new-game setup (desktop can use lobby / set-up button)
+      options.push({
+        text: '🆕 START A NEW GAME',
+        class: 'danger',
+        action: () => {
+          const confirmed = window.confirm(
+            'Leave this game and open Setup New Game options?\n\n' +
+            'You can change settings there and start a new game when ready.'
+          );
+          if (!confirmed) return;
+          if (typeof window.navigateToNewGameSetup === 'function') {
+            window.navigateToNewGameSetup();
+          }
+        }
+      });
     }
 
 
@@ -3015,6 +3049,33 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   }
   window.closeTouchContextMenu = closeTouchContextMenu;
+
+  /**
+   * Show the lobby start screen with Setup New Game options expanded
+   * (START GAME ready). Used by touch deep-space menu after confirmation.
+   */
+  function navigateToNewGameSetup() {
+    const ss = document.getElementById('start-screen');
+    const gu = document.getElementById('game-ui');
+    const es = document.getElementById('end-screen');
+    const setupOpts = document.getElementById('setup-options-container');
+    const setupBtn = document.getElementById('setup-new-game-btn');
+    const sBtn = document.getElementById('start-btn');
+    const fogCheck = document.getElementById('fog-of-war-checkbox');
+    const aiInput = document.getElementById('ai-count-input');
+
+    if (es) es.classList.add('hidden');
+    if (gu) gu.classList.add('hidden');
+    if (ss) ss.classList.remove('hidden');
+
+    if (setupOpts) setupOpts.style.display = 'flex';
+    if (setupBtn) setupBtn.style.display = 'none';
+    if (sBtn) sBtn.textContent = 'START GAME';
+
+    if (fogCheck) fogCheck.disabled = false;
+    if (aiInput) aiInput.disabled = false;
+  }
+  window.navigateToNewGameSetup = navigateToNewGameSetup;
 
   function closeInfoPanel() {
     activeInfoPanel = null;
@@ -3207,7 +3268,7 @@ function getPlanetTradeIncomePerMin(planet) {
       const mineralsName = getMineralsName(p.minerals);
       const habName = getHabName(p.habitability);
       const raceName = p.racialAffinity || '';
-      const focusName = p.focusMode === 'rootoutspies' ? 'Root Out Spies' : (p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy');
+      const focusName = p.focusMode === 'rootoutspies' ? 'Root Out Spies' : (p.focusMode === 'supply' ? 'Supply Production' : (p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy'));
 
       let prefBonusStr = '';
       if (p.preferredResource) {
@@ -3749,6 +3810,9 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           if (hs.upgradeTokens > 0) {
             lines.push({ label: 'Upgrade Tokens', value: `${hs.upgradeTokens}`, color: '#ffd740' });
+          }
+          if ((hs.terraforming || 0) > 0) {
+            lines.push({ label: '🌱 Terraforming', value: `${hs.terraforming}`, color: '#39ff14' });
           }
         }
 
@@ -4735,6 +4799,17 @@ function getPlanetTradeIncomePerMin(planet) {
   const setupOptionsContainer = document.getElementById('setup-options-container');
   let lockedSettings = false;
 
+  // Wire lockedSettings unlock into the touch-menu navigator (defined earlier)
+  const _navigateToNewGameSetupCore = window.navigateToNewGameSetup;
+  window.navigateToNewGameSetup = function navigateToNewGameSetupWithUnlock() {
+    lockedSettings = false;
+    if (typeof _navigateToNewGameSetupCore === 'function') {
+      _navigateToNewGameSetupCore();
+    }
+  };
+  // Keep module-local name in sync if anything closes over the original
+  // (touch menu calls window.navigateToNewGameSetup)
+
   if (setupNewGameBtn && setupOptionsContainer) {
     bindActionClick(setupNewGameBtn, () => {
       setupOptionsContainer.style.display = 'flex';
@@ -5267,10 +5342,176 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastNetworkUpdateMs = 0;
   let lastShipSmoothMs = 0;
 
+  // ── Adaptive client prediction ──────────────────────────────────────────
+  // Server ticks at 20 Hz (~50ms). When packets arrive on time with low jitter,
+  // predictionStrength stays low (mostly server pose + light smoothing).
+  // Under lag/spikes it ramps toward 1.0 (full invent-cruise + long optimistic TTL).
+  const PRED_EXPECTED_INTERVAL_MS = 50;
+  const PRED_INTERVAL_SAMPLES = 28;
+  let predPacketIntervals = [];
+  let predLastPacketMs = 0;
+  /** 0.12 ≈ healthy (minimal invent); 1.0 = full prediction under stress */
+  let predictionStrength = 0.55;
+  /** Smoothed stress 0=healthy … 1=stressed (drives predictionStrength) */
+  let predictionStressSmoothed = 0.45;
+
+  function noteNetworkPacketForPrediction() {
+    const now = performance.now();
+    if (predLastPacketMs > 0) {
+      const interval = now - predLastPacketMs;
+      // Ignore tab-suspend / pause gaps; keep real jitter samples only
+      if (interval >= 8 && interval <= 1500) {
+        predPacketIntervals.push(interval);
+        if (predPacketIntervals.length > PRED_INTERVAL_SAMPLES) {
+          predPacketIntervals.shift();
+        }
+      }
+    }
+    predLastPacketMs = now;
+    updatePredictionStrength();
+  }
+
+  function updatePredictionStrength() {
+    const n = predPacketIntervals.length;
+    if (n < 4) {
+      // Warm-up: moderate prediction until we have a stable sample
+      predictionStrength = 0.55;
+      return;
+    }
+    let sum = 0;
+    let maxI = 0;
+    // Recent-weighted: last third counts double for spike reaction
+    const recentStart = Math.floor(n * 2 / 3);
+    for (let i = 0; i < n; i++) {
+      const iv = predPacketIntervals[i];
+      const w = i >= recentStart ? 2 : 1;
+      sum += iv * w;
+      if (iv > maxI) maxI = iv;
+    }
+    const weightSum = recentStart + (n - recentStart) * 2;
+    const mean = sum / weightSum;
+
+    // mean 50ms → 0 stress; 150ms+ → 1
+    const meanStress = Math.max(0, Math.min(1, (mean - PRED_EXPECTED_INTERVAL_MS) / 100));
+    // single spike 50→0, 250ms+ → 1
+    const spikeStress = Math.max(0, Math.min(1, (maxI - PRED_EXPECTED_INTERVAL_MS) / 200));
+    const rawStress = Math.max(meanStress, spikeStress * 0.9);
+
+    // Asymmetric smooth: ramp up stress fast, decay slowly (don't drop invent mid-spike recovery)
+    const up = 0.35;
+    const down = 0.08;
+    if (rawStress > predictionStressSmoothed) {
+      predictionStressSmoothed += (rawStress - predictionStressSmoothed) * up;
+    } else {
+      predictionStressSmoothed += (rawStress - predictionStressSmoothed) * down;
+    }
+
+    // Floor 0.12 keeps light 60fps bridging even when perfectly healthy
+    predictionStrength = 0.12 + 0.88 * predictionStressSmoothed;
+  }
+
+  /** Optimistic-move TTL (ms): short when healthy so server takes over quickly. */
+  function getOptimisticMoveTtlMs() {
+    return Math.round(850 + 2150 * predictionStrength);
+  }
+
+  /** Whether invent-cruise (guess speed when server reports 0) is allowed. */
+  function allowInventCruise() {
+    return predictionStrength >= 0.32;
+  }
+
+  /** Cap how far into the future we extrapolate last auth pose (seconds). */
+  function getAuthExtrapAgeCapSec() {
+    return 0.055 + 1.2 * predictionStrength;
+  }
+
+  /** Soft-correction rate multiplier: healthier → pull harder to server. */
+  function getSoftCorrectionBoost() {
+    return 1.0 + 1.4 * (1 - predictionStrength);
+  }
+
+  window.getPredictionStrength = () => predictionStrength;
+  window.getPredictionStress = () => predictionStressSmoothed;
+
+  /** Prefer predicted/visual pose for hit-tests so clicks match what the player sees. */
+  function getShipDisplayPos(ship) {
+    if (!ship) return { x: 0, y: 0 };
+    const vis = visualShips.get(ship.id);
+    if (vis) return { x: vis.x, y: vis.y };
+    return { x: ship.x, y: ship.y };
+  }
+
+  /**
+   * Find the ship under a server-space point using display positions.
+   * Prefers cruisers over fleets when both hit.
+   */
+  function findShipAtServerPos(serverX, serverY, opts = {}) {
+    if (!serverState || !serverState.ships) return null;
+    const requireOwned = opts.requireOwned === true;
+    const ownerId = opts.ownerId != null ? opts.ownerId : (localPlayer ? localPlayer.id : null);
+    let best = null;
+    for (const ship of serverState.ships) {
+      if (!ship.active) continue;
+      if (requireOwned && ownerId != null && ship.ownerId !== ownerId) continue;
+      const pos = getShipDisplayPos(ship);
+      const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
+      const hitRadius = opts.hitRadius != null
+        ? opts.hitRadius
+        : (ship.count > 1 ? maxSpread + (opts.fleetPad != null ? opts.fleetPad : 10) : (ship.isCruiser ? (opts.cruiserRadius != null ? opts.cruiserRadius : 32) : (opts.fleetRadius != null ? opts.fleetRadius : 25)));
+      const sdx = pos.x - serverX;
+      const sdy = pos.y - serverY;
+      if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
+        if (!best || (!best.isCruiser && ship.isCruiser)) {
+          best = ship;
+        }
+      }
+    }
+    return best;
+  }
+
   /** Match Ship.js cruiser turn rate: max(15, 60 - maxHealth + engine*3) deg/s */
   function getCruiserTurnRateRad(s) {
     const turnRateDeg = Math.max(15, 60 - (s.maxHealth || 0) + (s.engine || 0) * 3);
     return turnRateDeg * Math.PI / 180;
+  }
+
+  /**
+   * Client estimate of cruise speed for a move order.
+   * Network `s.speed` is server getMaxSpeed() (tech/engine/supply/modifier, no fuel empty).
+   * Effective server speed also multiplies by 0.25 when fuel is empty — match that.
+   * Do NOT use lastCruiseSpeed here: after a stop, that value is often from a prior
+   * warp/high-speed leg and over-predicts the next departure.
+   */
+  function getPredictedCruiseSpeed(s, opts = {}) {
+    if (!s) return 15;
+    const isCruiser = !!(s.isCruiser || ((s.maxHealth || 0) > 0 && !s.isAmoeba));
+    const defaultSpd = isCruiser ? 22 : (s.isMarineFleet ? 35 : 15);
+    // Server serializes getMaxSpeed() into s.speed for cruisers/amoebas
+    let maxSpd = (s.speed > 0.5) ? s.speed : defaultSpd;
+
+    // Order may change fleet speed toggle relative to baked-in speedModifier
+    const shipMod = (s.speedModifier > 0) ? s.speedModifier : 1;
+    if (opts.speedModifier != null && opts.speedModifier > 0 && shipMod > 0
+        && Math.abs(opts.speedModifier - shipMod) > 0.001) {
+      maxSpd = maxSpd * (opts.speedModifier / shipMod);
+    }
+
+    // Warp order while not already warping: getMaxSpeed adds getWarpBonus() ≈ max(10, base)
+    // Base without warp is roughly the non-warp maxSpd (before this add).
+    if (opts.isWarp && !s.isWarp) {
+      // Approximate getWarpBonus: max(10, pre-modifier cruise core). Using maxSpd/shipMod
+      // recovers roughly the pre-modifier speed used in getWarpBonus.
+      const core = shipMod > 0 ? (maxSpd / shipMod) : maxSpd;
+      const warpBonus = Math.max(10, core);
+      maxSpd = maxSpd + warpBonus * (opts.speedModifier > 0 ? opts.speedModifier : shipMod);
+    }
+
+    // Fuel empty: Ship.update multiplies effective speed by 0.25 (not in getMaxSpeed)
+    if (isCruiser && (s.fuel == null || s.fuel <= 0)) {
+      maxSpd *= 0.25;
+    }
+
+    return Math.max(1, maxSpd);
   }
 
   /**
@@ -5296,13 +5537,8 @@ function getPlanetTradeIncomePerMin(planet) {
       const startY = vis ? vis.y : s.y;
       const startAngle = vis ? vis.angle : (s.angle || 0);
       const desiredAngle = Math.atan2(ty - startY, tx - startX);
-      // Prefer last known cruise speed / listed max; never start at 0
-      const defaultSpd = s.isCruiser ? 22 : (s.isMarineFleet ? 35 : 15);
-      const spd = Math.max(
-        8,
-        s.currentSpeed > 0.5 ? s.currentSpeed : (s.speed || defaultSpd),
-        vis && vis.lastCruiseSpeed > 0.5 ? vis.lastCruiseSpeed : 0
-      );
+      // Match server effective cruise for this order — not stale lastCruiseSpeed
+      const spd = getPredictedCruiseSpeed(s, opts);
       const turnRateRad = s.isCruiser ? getCruiserTurnRateRad(s) : (60 * Math.PI / 180);
 
       // Mirror destination fields for target lines / UI — keep current heading
@@ -5373,7 +5609,7 @@ function getPlanetTradeIncomePerMin(planet) {
         desiredAngle,
         turnRateRad,
         startTime: now,
-        expiresAt: now + 3000,
+        expiresAt: now + getOptimisticMoveTtlMs(),
         lastSimTime: now
       };
     }
@@ -6455,17 +6691,15 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
 
-    if (serverState && state.ships && localPlayer) {
-      const newlyBuiltCruiser = state.ships.find(s => s.isCruiser && s.ownerId === localPlayer.id && !serverShipsMap.has(s.id));
-      if (newlyBuiltCruiser) {
-        selectedShips = [newlyBuiltCruiser];
-        selectedPlanets = [];
-      }
-    }
+    // Do NOT auto-select ships that appear in the packet for the first time.
+    // That matched true new builds *and* friendlies re-entering fog/sensor range,
+    // which stole cruiser selection whenever units entered sight.
+    // Selection changes only via click, touch, or cycle (Tab / .).
 
     serverState = state;
     rebuildServerStateMaps();
     lastNetworkUpdateMs = performance.now();
+    noteNetworkPacketForPrediction();
     // Snapshot authoritative ship poses for dead reckoning between network packets.
     // While an optimistic move is held, do NOT clobber DR with a zero-speed stale snapshot —
     // that was causing ~1s freezes and micro-glitches after giving orders.
@@ -6541,21 +6775,26 @@ function getPlanetTradeIncomePerMin(planet) {
         }
 
         let authSpeed = s.currentSpeed || 0;
-        if (authSpeed < 0.5 && destX != null && destY != null) {
+        if (authSpeed < 0.5 && destX != null && destY != null && allowInventCruise()) {
           const distLeft = Math.hypot(destX - s.x, destY - s.y);
           // Sparse packets sometimes report 0 speed for a tick while still mid-flight.
-          // Keep last cruise speed so DR does not stop/start (big source of fleet glitch).
+          // Invent only when adaptive prediction is elevated (laggy traffic).
           if (distLeft > 25 && ((s.flightTime || 0) > 0.05 || (vis.lastCruiseSpeed || 0) > 0.5 || (vis.auth && vis.auth.speed > 0.5))) {
-            authSpeed = Math.max(
+            const pred = getPredictedCruiseSpeed(s);
+            const remembered = Math.max(
               vis.auth ? (vis.auth.speed || 0) : 0,
-              vis.lastCruiseSpeed || 0,
-              s.speed || 0,
-              8
+              vis.lastCruiseSpeed || 0
             );
+            // Prefer remembered if still plausible; else predicted (never invent faster than predicted)
+            let invented = remembered > 0.5 ? Math.min(remembered, pred) : pred;
+            // Scale invent by stress so healthy traffic barely invents
+            invented *= (0.35 + 0.65 * predictionStrength);
+            authSpeed = invented;
           }
         }
         if (authSpeed > 0.5) {
-          vis.lastCruiseSpeed = authSpeed;
+          // Cap stored cruise so a past warp leg cannot inflate future departures
+          vis.lastCruiseSpeed = Math.min(authSpeed, getPredictedCruiseSpeed(s));
         }
 
         vis.auth = {
@@ -6595,11 +6834,29 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
 
+    // Rebind selection to live objects by id. Never drop a selection just because
+    // a one-tick map miss (e.g. ships array mid-delta). Only drop if the live
+    // ship is known inactive/missing after lookup, or planet gone.
     if (state.ships) {
-      selectedShips = selectedShips.map(sel => findServerShip(sel.id)).filter(Boolean);
+      selectedShips = selectedShips.map(sel => {
+        if (!sel || sel.id == null) return null;
+        const live = findServerShip(sel.id);
+        if (live) {
+          // Drop destroyed units
+          if (live.active === false) return null;
+          return live;
+        }
+        // Sticky keep: preserve prior handle if ship not in this packet
+        // (own units can briefly vanish during bad deltas). Clear if we know it died.
+        if (sel.active === false) return null;
+        return sel;
+      }).filter(Boolean);
     }
     if (state.planets) {
-      selectedPlanets = selectedPlanets.map(sel => findServerPlanet(sel.id)).filter(Boolean);
+      selectedPlanets = selectedPlanets.map(sel => {
+        if (!sel || sel.id == null) return null;
+        return findServerPlanet(sel.id) || sel;
+      }).filter(Boolean);
     }
 
     if (state.upgradeEnhanceEvents && state.upgradeEnhanceEvents.length > 0) {
@@ -6801,6 +7058,14 @@ function getPlanetTradeIncomePerMin(planet) {
       return;
     }
     if (serverState) {
+      // CRITICAL: processGameState expands flat fleets into state.ships for rendering.
+      // Server deltas are indexed against full ships only (cruisers/amoebas). Applying
+      // a delta onto an expanded array corrupts ships by index — e.g. when a new amoeba
+      // appears at ships[1], it overwrites a flat fleet and can break ship maps /
+      // selection rebinding. Always strip flat expansions before merging.
+      if (serverState.ships && serverState.ships.length) {
+        serverState.ships = serverState.ships.filter(s => s && !s._isFlatShip);
+      }
       applyDelta(serverState, delta);
       processGameState(serverState);
     }
@@ -8324,25 +8589,14 @@ function getPlanetTradeIncomePerMin(planet) {
           interestText = `${interestRatePerMin.toFixed(2)}`;
         }
 
-        let limitHtml = "";
-        const ownsHw = serverState.planets.some(p => p.homeworldOf === localPlayer.id && p.ownerId === localPlayer.id);
-        if (ownsHw) {
-          const limitVal = Math.floor(myPlayer.totalTradeShips || 0);
-          limitHtml = `
+        const limitVal = Math.floor(myPlayer.totalTradeShips || 0);
+        const limitHtml = `
             <div style="font-size: 0.75rem; color: #ff3333; margin-top: 8px; text-align: center; border-top: 1px dashed rgba(255, 51, 51, 0.2); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
               Debt Limit: -${limitVal} credits (total trade ships)<br>
               Debt incurs ${(currentDebtPenalty * 100).toFixed(1)}%/min interest.<br>
               <span style="color: #4caf50;">Positive balance earns 1%/min interest.</span>
             </div>
           `;
-        } else {
-          limitHtml = `
-            <div style="font-size: 0.75rem; color: #88a; margin-top: 8px; text-align: center; border-top: 1px dashed rgba(255, 255, 255, 0.1); padding-top: 6px; font-family: 'Rajdhani', sans-serif;">
-              Control your Homeworld to access negative credit financing.<br>
-              <span style="color: #4caf50;">Positive balance earns 1%/min interest.</span>
-            </div>
-          `;
-        }
 
         let totalIncomeColor = '#aaa';
         let totalIncomeText = '0.00';
@@ -8988,6 +9242,52 @@ function getPlanetTradeIncomePerMin(planet) {
     return totalMaxShips / 200 > ownedUpgrades;
   }
 
+  /**
+   * Galaxy-wide cap for a planetary upgrade type: ceil(humanPlayers / 5).
+   * Prefer server-authored fields (FoW-safe); fall back to local recount.
+   */
+  function getGalaxyPlanetUpgradeTypeMax() {
+    if (serverState && serverState.galaxyPlanetUpgradeTypeMax != null) {
+      return serverState.galaxyPlanetUpgradeTypeMax;
+    }
+    const humanPlayers = serverState && serverState.players
+      ? serverState.players.filter(pl => pl && !pl.isAI && pl.id !== 'monsters')
+      : [];
+    const numHumanPlayers = Math.max(1, humanPlayers.length);
+    return Math.ceil(numHumanPlayers / 5);
+  }
+
+  function getGalaxyPlanetUpgradeCount(prop) {
+    if (!prop) return 0;
+    if (serverState && serverState.galaxyPlanetUpgradeCounts
+        && serverState.galaxyPlanetUpgradeCounts[prop] != null) {
+      return serverState.galaxyPlanetUpgradeCounts[prop];
+    }
+    // Fallback: count from known planets (may undercount under FoW)
+    let total = 0;
+    if (serverState && serverState.planets) {
+      for (const p of serverState.planets) {
+        if (!p.ownerId) continue;
+        total += (p[prop] || 0);
+        if (p.upgradeTransition && p.upgradeTransition.prop === prop) total += 1;
+      }
+    }
+    return total;
+  }
+
+  function isPlanetUpgradeTypeAtGalaxyCap(prop) {
+    return getGalaxyPlanetUpgradeCount(prop) >= getGalaxyPlanetUpgradeTypeMax();
+  }
+
+  function galaxyPlanetUpgradeCapTitle(prop) {
+    const count = getGalaxyPlanetUpgradeCount(prop);
+    const max = getGalaxyPlanetUpgradeTypeMax();
+    const humans = (serverState && serverState.numHumanPlayers != null)
+      ? serverState.numHumanPlayers
+      : Math.max(1, ((serverState && serverState.players) || []).filter(pl => pl && !pl.isAI && pl.id !== 'monsters').length);
+    return `Galaxy limit reached (${count}/${max} for ${humans} human player${humans === 1 ? '' : 's'})`;
+  }
+
   function getUpgradeCostForShip(ship, type) {
     if (!serverState) return 0;
     const totalUpgrades = (ship.sensorarrays || 0) +
@@ -9163,13 +9463,10 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   function getCreditsAvailableForConfig(myPlayer) {
-    let minAllowedCredits = 0;
-    if (serverState && serverState.planets && myPlayer) {
-      const ownsHomeworld = serverState.planets.some(p => p.homeworldOf === myPlayer.id && p.ownerId === myPlayer.id);
-      if (ownsHomeworld) {
-        minAllowedCredits = -Math.floor(myPlayer.totalTradeShips || 0);
-      }
-    }
+    // Debt floor always from trade ships (no homeworld ownership required)
+    const minAllowedCredits = myPlayer
+      ? -Math.floor(myPlayer.totalTradeShips || 0)
+      : 0;
     return myPlayer ? ((myPlayer.credits || 0) - minAllowedCredits) : 0;
   }
 
@@ -9764,17 +10061,18 @@ function getPlanetTradeIncomePerMin(planet) {
 
     const pos = getMouseServerPos(x, y);
 
-    // Search for friendly ships in click range
+    // Search for friendly ships in click range (use display pose so clicks match drawn ships)
     let clickedFleet = null;
     let clickedCruiser = null;
 
     if (serverState && serverState.ships) {
       for (const ship of serverState.ships) {
         if (!ship.active || ship.ownerId !== localPlayer.id) continue;
+        const dpos = getShipDisplayPos(ship);
         const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
         const hitRadius = ship.count > 1 ? maxSpread + 10 : (ship.isCruiser ? 32 : 25);
-        const sdx = ship.x - pos.x;
-        const sdy = ship.y - pos.y;
+        const sdx = dpos.x - pos.x;
+        const sdy = dpos.y - pos.y;
         if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
           if (ship.isCruiser) {
             clickedCruiser = ship;
@@ -9790,6 +10088,7 @@ function getPlanetTradeIncomePerMin(planet) {
       // 1. Fleets (standard ships) have top priority
       if (clickedFleet) {
         const clickedShip = clickedFleet;
+        pendingEmptyDeselect = false;
         if (isShift) {
           const isAlreadySelected = selectedShips.some(s => s.id === clickedShip.id);
           if (isAlreadySelected) {
@@ -9807,6 +10106,7 @@ function getPlanetTradeIncomePerMin(planet) {
       // 2. Cruisers have second priority
       if (clickedCruiser) {
         const clickedShip = clickedCruiser;
+        pendingEmptyDeselect = false;
         if (isShift) {
           const isAlreadySelected = selectedShips.some(s => s.id === clickedShip.id);
           if (isAlreadySelected) {
@@ -9838,6 +10138,7 @@ function getPlanetTradeIncomePerMin(planet) {
           const dy = p.y - pos.y;
           const hitRadius = badgeRadius + 8;
           if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+            pendingEmptyDeselect = false;
             if (focusModeActive && selectedPlanets.length === 1 && selectedPlanets[0].id === p.id) {
               focusModeActive = false;
             } else {
@@ -9878,6 +10179,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           if (isHit) {
+            pendingEmptyDeselect = false;
             const isCurrentlySelected = selectedPlanets.length === 1 && selectedPlanets[0].id === p.id;
             if (isCurrentlySelected) {
               cruiserBuildModeActive = !cruiserBuildModeActive;
@@ -9894,6 +10196,7 @@ function getPlanetTradeIncomePerMin(planet) {
       // 4. Planet selection check
       const clickedPlanet = getPlanetAt(x, y);
       if (clickedPlanet) {
+        pendingEmptyDeselect = false;
         if (clickedPlanet.ownerId === localPlayer.id) {
           const isAlreadySelected = selectedPlanets.some(p => p.id === clickedPlanet.id);
           if (isAlreadySelected) {
@@ -9915,11 +10218,10 @@ function getPlanetTradeIncomePerMin(planet) {
         return;
       }
 
-      // Clicked empty space
-      if (!isShift) {
-        selectedPlanets = [];
-        selectedShips = [];
-      }
+      // Clicked empty space: do NOT clear selection here.
+      // Left-drag pans the camera; clearing on mousedown made every pan deselect
+      // cruisers. Pure empty clicks deselect on mouseup (pendingEmptyDeselect).
+      pendingEmptyDeselect = !isShift;
       isDraggingCamera = true; // Signals the mousedown handler to start the lasso
       return;
     }
@@ -9934,8 +10236,9 @@ function getPlanetTradeIncomePerMin(planet) {
           if (!ship.active) continue;
           // Reduced targeting radius: 15px for cruisers, 12px for amoebas, 10px for fleets
           const hitRadius = ship.isCruiser ? 20 : (ship.isAmoeba ? 12 : 10);
-          const sdx = ship.x - clickPos.x;
-          const sdy = ship.y - clickPos.y;
+          const dpos = getShipDisplayPos(ship);
+          const sdx = dpos.x - clickPos.x;
+          const sdy = dpos.y - clickPos.y;
           if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
             clickedTargetShip = ship;
             break;
@@ -9985,7 +10288,9 @@ function getPlanetTradeIncomePerMin(planet) {
           if (!isShift) {
             applyOptimisticCruiserMove(cruiserIds, clickedTargetShip.x, clickedTargetShip.y, {
               targetType: 'ship',
-              targetId: clickedTargetShip.id
+              targetId: clickedTargetShip.id,
+              isWarp: warpOrderNext,
+              speedModifier: speedModifierNext
             });
           }
           socket.emit('setCruiserTarget', { shipIds: cruiserIds, targetType: 'ship', targetId: clickedTargetShip.id, isShift });
@@ -9998,7 +10303,10 @@ function getPlanetTradeIncomePerMin(planet) {
             fleetIds = fleetIds.slice(0, scoutCount);
           }
           if (!isShift) {
-            applyOptimisticCruiserMove(fleetIds, clickedTargetShip.x, clickedTargetShip.y);
+            applyOptimisticCruiserMove(fleetIds, clickedTargetShip.x, clickedTargetShip.y, {
+              isWarp: warpOrderNext,
+              speedModifier: speedModifierNext
+            });
           }
           socket.emit('moveShipsToSpace', { shipIds: fleetIds, targetX: clickedTargetShip.x, targetY: clickedTargetShip.y, isWarp: warpOrderNext, speedModifier: speedModifierNext, isShift });
         }
@@ -10011,7 +10319,10 @@ function getPlanetTradeIncomePerMin(planet) {
             if (selectedCruisers.length > 0) {
               const cruiserIds = selectedCruisers.map(c => c.id);
               if (!isShift) {
-                applyOptimisticCruiserMove(cruiserIds, clickPos.x, clickPos.y);
+                applyOptimisticCruiserMove(cruiserIds, clickPos.x, clickPos.y, {
+                  isWarp: warpOrderNext,
+                  speedModifier: speedModifierNext
+                });
               }
               socket.emit('moveShipsToSpace', { 
                 shipIds: cruiserIds, 
@@ -10030,7 +10341,10 @@ function getPlanetTradeIncomePerMin(planet) {
                 fleetIds = fleetIds.slice(0, scoutCount);
               }
               if (!isShift) {
-                applyOptimisticCruiserMove(fleetIds, clickPos.x, clickPos.y);
+                applyOptimisticCruiserMove(fleetIds, clickPos.x, clickPos.y, {
+                  isWarp: warpOrderNext,
+                  speedModifier: speedModifierNext
+                });
               }
               socket.emit('moveShipsToPlanet', { shipIds: fleetIds, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext, isShift });
             }
@@ -10090,7 +10404,10 @@ function getPlanetTradeIncomePerMin(planet) {
             }
             // Cruisers and fleets get instant local response (dead reckoning)
             if (!isShift && shipIds.length > 0) {
-              applyOptimisticCruiserMove(shipIds, targetPos.x, targetPos.y);
+              applyOptimisticCruiserMove(shipIds, targetPos.x, targetPos.y, {
+                isWarp: warpOrderNext,
+                speedModifier: speedModifierNext
+              });
             }
             socket.emit('moveShipsToSpace', { shipIds, targetX: targetPos.x, targetY: targetPos.y, isWarp: warpOrderNext, speedModifier: speedModifierNext, isShift });
           }
@@ -10176,15 +10493,16 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
 
-    // Detect hovered ship (prioritize cruisers)
+    // Detect hovered ship (prioritize cruisers; use display pose)
     hoveredShip = null;
     if (serverState && serverState.ships) {
       for (const ship of serverState.ships) {
         if (!ship.active) continue;
+        const dpos = getShipDisplayPos(ship);
         const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
         const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
-        const sdx = ship.x - serverPos.x;
-        const sdy = ship.y - serverPos.y;
+        const sdx = dpos.x - serverPos.x;
+        const sdy = dpos.y - serverPos.y;
         if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
           if (!hoveredShip || (!hoveredShip.isCruiser && ship.isCruiser)) {
             hoveredShip = ship;
@@ -10246,12 +10564,14 @@ function getPlanetTradeIncomePerMin(planet) {
       return;
     }
 
+    pendingEmptyDeselect = false;
     selectedShips = [];
     if (!serverState || !localPlayer) return;
 
     for (const ship of serverState.ships) {
       if (ship.ownerId === localPlayer.id && ship.active) {
-        if (ship.x >= minX && ship.x <= maxX && ship.y >= minY && ship.y <= maxY) {
+        const dpos = getShipDisplayPos(ship);
+        if (dpos.x >= minX && dpos.x <= maxX && dpos.y >= minY && dpos.y <= maxY) {
           selectedShips.push(ship);
         }
       }
@@ -10276,10 +10596,11 @@ function getPlanetTradeIncomePerMin(planet) {
     if (serverState && serverState.ships) {
       for (const ship of serverState.ships) {
         if (!ship.active) continue;
+        const dpos = getShipDisplayPos(ship);
         const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
         const hitRadius = ship.count > 1 ? maxSpread + 10 : (ship.isCruiser ? 32 : 25);
-        const sdx = ship.x - pos.x;
-        const sdy = ship.y - pos.y;
+        const sdx = dpos.x - pos.x;
+        const sdy = dpos.y - pos.y;
         if (sdx * sdx + sdy * sdy < hitRadius * hitRadius) {
           if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
             clickedShip = ship;
@@ -10293,10 +10614,12 @@ function getPlanetTradeIncomePerMin(planet) {
       if (clickedShip.ownerId === localPlayer.id && clickedShip.isCruiser) {
         selectedShips = [];
         selectedPlanets = [];
+        const origin = getShipDisplayPos(clickedShip);
         for (const ship of serverState.ships) {
           if (ship.active && ship.ownerId === localPlayer.id && ship.isCruiser) {
-            const dx = ship.x - clickedShip.x;
-            const dy = ship.y - clickedShip.y;
+            const dpos = getShipDisplayPos(ship);
+            const dx = dpos.x - origin.x;
+            const dy = dpos.y - origin.y;
             if (dx * dx + dy * dy <= 200 * 200) {
               selectedShips.push(ship);
             }
@@ -10365,22 +10688,12 @@ function getPlanetTradeIncomePerMin(planet) {
     if (event.button === 0) {
       // Check if clicked entity was already selected BEFORE handlePointerDown runs:
       const clickedPlanet = getPlanetAt(posX, posY);
-      let clickedShip = null;
       const serverPos = getMouseServerPos(posX, posY);
-      if (serverState && serverState.ships) {
-        for (const ship of serverState.ships) {
-          if (!ship.active) continue;
-          const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
-          const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
-          const sdx = ship.x - serverPos.x;
-          const sdy = ship.y - serverPos.y;
-          if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
-            if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
-              clickedShip = ship;
-            }
-          }
-        }
-      }
+      const clickedShip = findShipAtServerPos(serverPos.x, serverPos.y, {
+        fleetPad: 5,
+        cruiserRadius: 15,
+        fleetRadius: 15
+      });
       
       wasAlreadySelectedOnMouseDown = false;
       if (clickedShip) {
@@ -10511,25 +10824,25 @@ function getPlanetTradeIncomePerMin(planet) {
       const dy = cPos.y - mouseDownStartY;
       const dragDistance = Math.sqrt(dx * dx + dy * dy);
 
+      if (dragDistance >= 8) {
+        // Pan / drag — keep selection
+        pendingEmptyDeselect = false;
+      } else if (pendingEmptyDeselect) {
+        // Pure empty-space click: deselect now (deferred from mousedown so pan keeps selection)
+        selectedPlanets = [];
+        selectedShips = [];
+        pendingEmptyDeselect = false;
+      }
+
       if (dragDistance < 8) {
         // It's a click! Let's check what was clicked
         const clickedPlanet = getPlanetAt(cPos.x, cPos.y);
-        let clickedShip = null;
         const serverPos = getMouseServerPos(cPos.x, cPos.y);
-        if (serverState && serverState.ships) {
-          for (const ship of serverState.ships) {
-            if (!ship.active) continue;
-            const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
-            const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
-            const sdx = ship.x - serverPos.x;
-            const sdy = ship.y - serverPos.y;
-            if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
-              if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
-                clickedShip = ship;
-              }
-            }
-          }
-        }
+        const clickedShip = findShipAtServerPos(serverPos.x, serverPos.y, {
+          fleetPad: 5,
+          cruiserRadius: 15,
+          fleetRadius: 15
+        });
 
         let clickedAnomaly = null;
         let clickedAnomalyPlanet = null;
@@ -10723,20 +11036,11 @@ function getPlanetTradeIncomePerMin(planet) {
 
         // Check if there is any entity under the long press
         const clickedPlanet = getPlanetAt(cPosHold.x, cPosHold.y);
-        let clickedShip = null;
-        if (serverState && serverState.ships) {
-          for (const ship of serverState.ships) {
-            if (!ship.active) continue;
-            const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
-            const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
-            const sdx = ship.x - serverPos.x;
-            const sdy = ship.y - serverPos.y;
-            if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
-              clickedShip = ship;
-              break;
-            }
-          }
-        }
+        const clickedShip = findShipAtServerPos(serverPos.x, serverPos.y, {
+          fleetPad: 5,
+          cruiserRadius: 15,
+          fleetRadius: 15
+        });
 
         let clickedAnomaly = null;
         if (serverState && serverState.planets) {
@@ -10878,22 +11182,12 @@ function getPlanetTradeIncomePerMin(planet) {
       const cPos = getCanvasPos(touchStartX, touchStartY);
 
       const clickedPlanet = getPlanetAt(cPos.x, cPos.y);
-      let clickedShip = null;
       const serverPos = getMouseServerPos(cPos.x, cPos.y);
-      if (serverState && serverState.ships) {
-        for (const ship of serverState.ships) {
-          if (!ship.active) continue;
-          const maxSpread = Math.min(60, 10 + Math.sqrt(ship.count || 1) * 2.5);
-          const hoverRadius = ship.count > 1 ? maxSpread + 5 : 15;
-          const sdx = ship.x - serverPos.x;
-          const sdy = ship.y - serverPos.y;
-          if (sdx * sdx + sdy * sdy < hoverRadius * hoverRadius) {
-            if (!clickedShip || (!clickedShip.isCruiser && ship.isCruiser)) {
-              clickedShip = ship;
-            }
-          }
-        }
-      }
+      const clickedShip = findShipAtServerPos(serverPos.x, serverPos.y, {
+        fleetPad: 5,
+        cruiserRadius: 15,
+        fleetRadius: 15
+      });
 
       let clickedAnomaly = null;
       let clickedAnomalyPlanet = null;
@@ -11247,7 +11541,13 @@ function getPlanetTradeIncomePerMin(planet) {
           focusModeActive = false;
           return;
         }
-        if (key === 's' && planet.focusMode !== 'rootoutspies' && planetHasEnemySympathy(planet)) {
+        if (key === 's' && planet.focusMode !== 'supply') {
+          event.preventDefault();
+          socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'supply' });
+          focusModeActive = false;
+          return;
+        }
+        if (key === 'p' && planet.focusMode !== 'rootoutspies' && planetHasEnemySympathy(planet)) {
           event.preventDefault();
           socket.emit('changePlanetFocus', { planetId: planet.id, focusMode: 'rootoutspies' });
           focusModeActive = false;
@@ -11349,19 +11649,7 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
           if (isPlanet) {
-            // Match server: ceil(humans/5), count only owned planets
-            const humanPlayers = serverState ? serverState.players.filter(pl => pl && !pl.isAI && pl.id !== 'monsters') : [];
-            const numHumanPlayers = Math.max(1, humanPlayers.length);
-            const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 5);
-
-            let totalUpgradesOfCertainType = 0;
-            if (serverState && serverState.planets) {
-              for (const p of serverState.planets) {
-                if (!p.ownerId) continue;
-                totalUpgradesOfCertainType += (p[propName] || 0);
-              }
-            }
-            if (totalUpgradesOfCertainType >= maxUpgradesOfCertainType) {
+            if (isPlanetUpgradeTypeAtGalaxyCap(propName)) {
               return false;
             }
             if (entity.upgradeTransition) return false;
@@ -12104,6 +12392,7 @@ function getPlanetTradeIncomePerMin(planet) {
   registerFocusBtn('btn-focus-mining', 'mining');
   registerFocusBtn('btn-focus-terraforming', 'terraforming');
   registerFocusBtn('btn-focus-homeworld', 'homeworld');
+  registerFocusBtn('btn-focus-supply', 'supply');
   registerFocusBtn('btn-focus-rootoutspies', 'rootoutspies');
 
   // Bind Sci-Fi Planetary Resources UI window actions & bank sell button
@@ -12319,19 +12608,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
         let typeCapCheck = true;
         if (isPlanet) {
-          // Match server: ceil(humans/5), count only owned planets
-          const humanPlayers = serverState ? serverState.players.filter(pl => pl && !pl.isAI && pl.id !== 'monsters') : [];
-          const numHumanPlayers = Math.max(1, humanPlayers.length);
-          const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 5);
-
-          let totalUpgradesOfCertainType = 0;
-          if (serverState && serverState.planets) {
-            for (const p of serverState.planets) {
-              if (!p.ownerId) continue;
-              totalUpgradesOfCertainType += (p[type] || 0);
-            }
-          }
-          if (totalUpgradesOfCertainType >= maxUpgradesOfCertainType) {
+          if (isPlanetUpgradeTypeAtGalaxyCap(type)) {
             typeCapCheck = false;
           }
           if (entity.upgradeTransition) typeCapCheck = false;
@@ -12534,7 +12811,7 @@ function getPlanetTradeIncomePerMin(planet) {
     const mineralsName = getMineralsName(p.minerals);
     const habName = getHabName(p.habitability);
     const raceName = p.racialAffinity || '';
-    const focusName = p.focusMode === 'rootoutspies' ? 'Root Spies' : (p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy');
+    const focusName = p.focusMode === 'rootoutspies' ? 'Root Spies' : (p.focusMode === 'supply' ? 'Supply' : (p.focusMode ? p.focusMode.charAt(0).toUpperCase() + p.focusMode.slice(1) : 'Economy'));
     const racePart = raceName ? `${raceName} ` : '';
     lines.push({
       text: `${sizeClassText} ${mineralsName} ${habName} ${racePart}${focusName}${isLastKnown ? ' (Last Known)' : ''}`,
@@ -12753,6 +13030,9 @@ function getPlanetTradeIncomePerMin(planet) {
       if ((hs.upgradeTokens || 0) > 0) upLine += (upLine ? '  ' : '') + `Tokens ${hs.upgradeTokens}`;
       lines.push({ text: upLine, color: '#00e5ff' });
     }
+    if ((hs.terraforming || 0) > 0) {
+      lines.push({ text: `Terraforming ${hs.terraforming}`, color: '#39ff14' });
+    }
 
     const fuelVal = `${Math.floor(hs.fuel || 0)}/${Math.floor(getMaxFuel(hs))}`;
     const speedVal = `${(hs.currentSpeed || 0).toFixed(1)}/${(hs.speed || 30).toFixed(1)}`;
@@ -12886,6 +13166,7 @@ function getPlanetTradeIncomePerMin(planet) {
       'btn-focus-mining': 'mining',
       'btn-focus-terraforming': 'terraforming',
       'btn-focus-homeworld': 'homeworld',
+      'btn-focus-supply': 'supply',
       'btn-focus-rootoutspies': 'rootoutspies'
     };
     const selectedPlanetFocus = getSelectedPlanetForFocus();
@@ -13081,27 +13362,20 @@ function getPlanetTradeIncomePerMin(planet) {
           const shieldCheck = (prop !== 'shields' || nextLevel * 0.10 <= 0.80);
           
           let displayUpgrade = currentVal < 5 && shieldCheck && levelAllowed && totalAllowed;
+          let galaxyCapBlocked = false;
+          let capacityBlocked = false;
           if (isPlanet) {
-            // Match server: ceil(humans/5), count only owned planets; block if upgrade in progress
+            // Match server: ceil(humans/5), count owned planets (server-authored counts under FoW)
             if (entity.upgradeTransition) {
               displayUpgrade = false;
             }
-            const humanPlayers = serverState ? serverState.players.filter(pl => pl && !pl.isAI && pl.id !== 'monsters') : [];
-            const numHumanPlayers = Math.max(1, humanPlayers.length);
-            const maxUpgradesOfCertainType = Math.ceil(numHumanPlayers / 5);
-
-            let totalUpgradesOfCertainType = 0;
-            if (serverState && serverState.planets) {
-              for (const p of serverState.planets) {
-                if (!p.ownerId) continue;
-                totalUpgradesOfCertainType += (p[prop] || 0);
-              }
-            }
-            if (totalUpgradesOfCertainType >= maxUpgradesOfCertainType) {
+            if (isPlanetUpgradeTypeAtGalaxyCap(prop)) {
               displayUpgrade = false;
+              galaxyCapBlocked = true;
             }
             if (!playerMeetsPlanetUpgradeCapacity(localPlayer && localPlayer.id)) {
               displayUpgrade = false;
+              capacityBlocked = true;
             }
           } else {
             const tokenAllowed = hasTokens && (nextLevel <= Math.min(5, maxIndividualLevel));
@@ -13112,7 +13386,15 @@ function getPlanetTradeIncomePerMin(planet) {
           const uCost = isPlanet ? getUpgradeCostForShip(entity, prop) * 3 : getUpgradeCostForShip(entity, prop);
           const baseName = namesMap[btnId] || 'Upgrade';
           const desc = descMap[prop] || `Upgrades ${isPlanet ? 'planet' : 'cruiser'} capabilities`;
-          el.setAttribute('title', `${baseName}: ${desc}`);
+          let titleText = `${baseName}: ${desc}`;
+          if (isPlanet && galaxyCapBlocked) {
+            titleText = `${baseName}: ${galaxyPlanetUpgradeCapTitle(prop)}`;
+          } else if (isPlanet && capacityBlocked) {
+            titleText = `${baseName}: Need more empire capacity (total maxShips/200 must exceed planetary upgrades)`;
+          } else if (isPlanet && entity.upgradeTransition) {
+            titleText = `${baseName}: Upgrade already in progress on this planet`;
+          }
+          el.setAttribute('title', titleText);
           const costSpan = el.querySelector('.btn-cost');
           if (costSpan) {
             costSpan.textContent = hasTokens ? '1 Token' : uCost;
@@ -13147,14 +13429,19 @@ function getPlanetTradeIncomePerMin(planet) {
           const entityResourceShips = isPlanet ? entity.ships : (upgradeQual ? upgradeQual.planet.ships : 0);
           const canAfford = hasTokens || (isPlanet ? (creditsForPayment >= uCost) : ((entityResourceShips + creditsForPayment) >= uCost));
           
+          // Gray out unavailable upgrades (galaxy type cap, capacity, cost, etc.)
           if (!canAfford || !displayUpgrade) {
-            el.style.opacity = '0.5';
+            el.style.opacity = '0.45';
             el.style.pointerEvents = 'none';
             el.style.filter = 'grayscale(100%)';
+            el.setAttribute('aria-disabled', 'true');
+            el.classList.add('upgrade-unavailable');
           } else {
             el.style.opacity = '1.0';
             el.style.pointerEvents = 'auto';
             el.style.filter = 'none';
+            el.removeAttribute('aria-disabled');
+            el.classList.remove('upgrade-unavailable');
           }
         }
       }
@@ -14067,9 +14354,47 @@ function getPlanetTradeIncomePerMin(planet) {
         playScanningSound(false);
       }
 
-      // Draw purple resupply rays and orange fuel sharing rays
+      // Draw purple resupply rays, orange fuel sharing rays, and green terraform rays
       if (serverState.ships) {
         for (const ship of serverState.ships) {
+          // Continuous green terraforming beam while parked over a friendly planet
+          if (ship.activeTerraformPlanetId != null && (ship.terraforming || 0) > 0) {
+            const tPlanet = findServerPlanet(ship.activeTerraformPlanetId);
+            if (tPlanet) {
+              const sx = ship.x;
+              const sy = ship.y;
+              const tx = tPlanet.x;
+              const ty = tPlanet.y;
+              const angle = Math.atan2(ty - sy, tx - sx);
+              ctx.save();
+              const shimmer = 0.55 + 0.25 * Math.sin(Date.now() / 70) + 0.15 * Math.random();
+              const alpha = 0.55 * shimmer;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              const coneWidth = 5;
+              const perpAngle = angle + Math.PI / 2;
+              const tx1 = tx - Math.cos(perpAngle) * coneWidth;
+              const ty1 = ty - Math.sin(perpAngle) * coneWidth;
+              const tx2 = tx + Math.cos(perpAngle) * coneWidth;
+              const ty2 = ty + Math.sin(perpAngle) * coneWidth;
+              ctx.lineTo(tx1, ty1);
+              ctx.lineTo(tx2, ty2);
+              ctx.closePath();
+              const grad = ctx.createLinearGradient(sx, sy, tx, ty);
+              grad.addColorStop(0, `rgba(57, 255, 20, ${alpha})`);
+              grad.addColorStop(0.4, `rgba(0, 200, 80, ${alpha * 0.7})`);
+              grad.addColorStop(1, `rgba(0, 120, 40, 0.08)`);
+              ctx.fillStyle = grad;
+              ctx.fill();
+              ctx.strokeStyle = `rgba(180, 255, 160, ${alpha * 0.9})`;
+              ctx.lineWidth = 1.2 + Math.random();
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx, ty);
+              ctx.stroke();
+              ctx.restore();
+            }
+          }
           if (ship.activeSupplySourceId) {
             let sourceX = null;
             let sourceY = null;
@@ -15608,7 +15933,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
             if (isHuman) {
               const focus = p.focusMode || 'economy';
-              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
+              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : (focus === 'supply' ? '📦' : '📈')))))));
               const badgeRadius = pillHeight / 2;
               const badgeX = p.x + textWidth / 2 + 8 + badgeRadius + 2;
 
@@ -15655,7 +15980,7 @@ function getPlanetTradeIncomePerMin(planet) {
             // In graphical mode, draw focus mode badge directly to the right of the planet graphic
             if (isHuman) {
               const focus = p.focusMode || 'economy';
-              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : '📈'))))));
+              const modeIndicator = focus === 'rootoutspies' ? '🕵️' : (focus === 'homeworld' ? '🏠' : (focus === 'research' ? '🔬' : (focus === 'garrison' ? '🛡️' : (focus === 'commerce' ? '💲' : (focus === 'mining' ? '⛏️' : (focus === 'terraforming' ? '🌱' : (focus === 'supply' ? '📦' : '📈')))))));
               const badgeRadius = 10;
               const badgeX = p.x + p.radius + badgeRadius + 4;
               const badgeY = p.y;
@@ -16267,7 +16592,7 @@ function getPlanetTradeIncomePerMin(planet) {
             // Planet Focus Details
             if (!hpOwner.isAI) {
               const focus = hp.focusMode || 'economy';
-              const capitalizedFocus = focus.charAt(0).toUpperCase() + focus.slice(1);
+              const capitalizedFocus = focus === 'rootoutspies' ? 'Root Out Spies' : (focus === 'supply' ? 'Supply Production' : (focus.charAt(0).toUpperCase() + focus.slice(1)));
               const cost = Math.floor(hp.maxShips / 2);
               lines.push({ label: 'Focus Mode', value: `${capitalizedFocus} (Change: ${cost} 🪐)`, color: '#ffd740' });
             }
@@ -16575,6 +16900,9 @@ function getPlanetTradeIncomePerMin(planet) {
               const upgradesRemaining = maxTotalUpgrades - totalUpgrades;
               if (upgradesRemaining > 0) {
                 lines.push({ label: 'Upgrades Remaining', value: '' + upgradesRemaining, color: '#00e5ff' });
+              }
+              if ((hs.terraforming || 0) > 0) {
+                lines.push({ label: '🌱 Terraforming', value: `${hs.terraforming}`, color: '#39ff14' });
               }
             }
 
@@ -17214,7 +17542,8 @@ function getPlanetTradeIncomePerMin(planet) {
         const steps = Math.max(1, Math.min(12, Math.ceil(dtTotal / 0.033)));
         const dt = dtTotal / steps;
         let sp = speed;
-        if (inventCruise && sp < 0.5) sp = Math.max(sp, 8);
+        // inventCruise must still move; use a tiny floor only if caller passed ~0
+        if (inventCruise && sp < 0.5) sp = Math.max(sp, 1);
         let circling = !!(circleState && circleState.circling);
         let circleDestX = circleState ? circleState.destX : null;
         let circleDestY = circleState ? circleState.destY : null;
@@ -17273,30 +17602,35 @@ function getPlanetTradeIncomePerMin(planet) {
        * Adaptive soft-correction toward the server-predicted pose.
        * Tight when nearly synced, softer under lag, capped per-frame so fleets
        * don't rubber-band when packets bunch up.
+       * combatMode: pull harder toward server (dogfights invent false motion).
        */
-      function applySoftCorrection(vis, serverPred, destX, destY, cruiseSpd) {
+      function applySoftCorrection(vis, serverPred, destX, destY, cruiseSpd, combatMode = false) {
         const errX = serverPred.x - vis.x;
         const errY = serverPred.y - vis.y;
         const err = Math.hypot(errX, errY);
+        const corrBoost = getSoftCorrectionBoost(); // higher when traffic healthy
         if (err < 0.05) {
           // Still gently blend angle when already position-synced
-        } else if (err > 280) {
-          // Extreme desync only — hard snap
+        } else if (err > (combatMode ? 120 : 280)) {
+          // Extreme desync — hard snap (lower threshold in combat)
           vis.x = serverPred.x;
           vis.y = serverPred.y;
           vis.angle = serverPred.angle;
           return;
         } else {
-          // Error-dependent blend rate (higher k when close)
+          // Error-dependent blend rate (higher k when close); healthy net → stronger pull
           let k;
           if (err < 6) k = 14;
           else if (err < 25) k = 7;
           else if (err < 80) k = 3.5;
           else k = 1.8;
+          if (combatMode) k *= 2.8;
+          k *= corrBoost;
           let alpha = 1 - Math.exp(-k * smoothDt);
 
           // Cap correction travel so lag bursts can't yank fleets sideways
-          const maxCorr = Math.max(cruiseSpd, 12) * smoothDt * 2.5 + 1.5;
+          // Combat: allow more correction so ships don't slide through dogfights
+          const maxCorr = Math.max(cruiseSpd, 12) * smoothDt * (combatMode ? 5.5 : 2.5) + (combatMode ? 4 : 1.5);
           const corrDist = err * alpha;
           if (corrDist > maxCorr) {
             alpha = maxCorr / err;
@@ -17308,7 +17642,7 @@ function getPlanetTradeIncomePerMin(planet) {
           // desired course as we are. Otherwise we get "turn away then toward"
           // when packets lag on large maps.
           let applyAngleCorr = true;
-          if (destX != null && destY != null) {
+          if (!combatMode && destX != null && destY != null) {
             const desired = Math.atan2(destY - vis.y, destX - vis.x);
             const localErr = angleDiffAbs(vis.angle, desired);
             const serverErr = angleDiffAbs(serverPred.angle, desired);
@@ -17321,8 +17655,8 @@ function getPlanetTradeIncomePerMin(planet) {
             let adiff = serverPred.angle - vis.angle;
             while (adiff < -Math.PI) adiff += Math.PI * 2;
             while (adiff > Math.PI) adiff -= Math.PI * 2;
-            // Even weaker angular pull than position
-            const angAlpha = Math.min(1, alpha * 0.55);
+            // Combat: trust server heading more (nose-wiggle less important than accuracy)
+            const angAlpha = Math.min(1, alpha * (combatMode ? 0.9 : 0.55));
             vis.angle += adiff * angAlpha;
           }
           return;
@@ -17332,8 +17666,41 @@ function getPlanetTradeIncomePerMin(planet) {
         let adiff = serverPred.angle - vis.angle;
         while (adiff < -Math.PI) adiff += Math.PI * 2;
         while (adiff > Math.PI) adiff -= Math.PI * 2;
-        const angAlpha = 1 - Math.exp(-6 * smoothDt);
-        vis.angle += adiff * angAlpha * 0.5;
+        const angAlpha = 1 - Math.exp(-(combatMode ? 12 : 6) * smoothDt);
+        vis.angle += adiff * angAlpha * (combatMode ? 0.85 : 0.5);
+      }
+
+      // Combat proximity: damp prediction when dogfighting (smooth battles)
+      const COMBAT_PRED_RADIUS = 150;
+      const COMBAT_PRED_RADIUS_SQ = COMBAT_PRED_RADIUS * COMBAT_PRED_RADIUS;
+      const COMBAT_OPT_MAX_MS = 250; // allow only a brief optimistic click near enemies
+      const combatEnemyCache = new Map(); // shipId -> bool (this frame)
+
+      function isShipNearEnemy(ship) {
+        if (!ship || !ship.active) return false;
+        if (combatEnemyCache.has(ship.id)) return combatEnemyCache.get(ship.id);
+        const oid = ship.ownerId;
+        const ships = serverState.ships;
+        let near = false;
+        for (let i = 0; i < ships.length; i++) {
+          const o = ships[i];
+          if (!o || !o.active || o.id === ship.id) continue;
+          // Hostiles: amoebas, other owners (incl. monsters), or unowned vs owned
+          let isEnemy = false;
+          if (o.isAmoeba) isEnemy = true;
+          else if (oid && o.ownerId && o.ownerId !== oid) isEnemy = true;
+          else if (oid && !o.ownerId) isEnemy = true;
+          else if (!oid && o.ownerId) isEnemy = true;
+          if (!isEnemy) continue;
+          const dx = o.x - ship.x;
+          const dy = o.y - ship.y;
+          if (dx * dx + dy * dy <= COMBAT_PRED_RADIUS_SQ) {
+            near = true;
+            break;
+          }
+        }
+        combatEnemyCache.set(ship.id, near);
+        return near;
       }
 
       for (const s of serverState.ships) {
@@ -17374,7 +17741,13 @@ function getPlanetTradeIncomePerMin(planet) {
           };
           visualShips.set(s.id, vis);
         } else {
-          const opt = vis.opt;
+          const inCombat = isShipNearEnemy(s);
+          let opt = vis.opt;
+          // Near enemies: only keep optimistic moves for a brief click window
+          if (opt && inCombat && opt.startTime != null && (smoothNow - opt.startTime) > COMBAT_OPT_MAX_MS) {
+            vis.opt = null;
+            opt = null;
+          }
           const optLive = opt && smoothNow < opt.expiresAt;
           const auth = vis.auth;
 
@@ -17383,14 +17756,24 @@ function getPlanetTradeIncomePerMin(planet) {
           let spd = 0;
           let turnRate = (s.isCruiser || s.isAmoeba) ? getCruiserTurnRateRad(s) : (60 * Math.PI / 180);
           let inventCruise = false;
-          const defaultSpd = s.isCruiser ? 22 : (s.isMarineFleet ? 35 : 15);
+          const predictedSpd = getPredictedCruiseSpeed(s);
 
-          if (optLive) {
+          if (optLive && !inCombat) {
             destX = opt.targetX;
             destY = opt.targetY;
-            spd = opt.speed;
+            // Cap optimistic speed so a stale opt cannot outrun server max
+            spd = Math.min(opt.speed || predictedSpd, predictedSpd * 1.05);
             turnRate = opt.turnRateRad || turnRate;
             inventCruise = true;
+            s.targetX = opt.targetX;
+            s.targetY = opt.targetY;
+          } else if (optLive && inCombat) {
+            // Brief optimistic move still allowed, but damped and no invent-cruise stretch
+            destX = opt.targetX;
+            destY = opt.targetY;
+            spd = Math.min(opt.speed || predictedSpd, predictedSpd) * 0.45;
+            turnRate = opt.turnRateRad || turnRate;
+            inventCruise = false;
             s.targetX = opt.targetX;
             s.targetY = opt.targetY;
           } else {
@@ -17414,38 +17797,58 @@ function getPlanetTradeIncomePerMin(planet) {
                 }
               }
             }
-            spd = Math.max(s.currentSpeed || 0, auth ? (auth.speed || 0) : 0);
-            // Prefer live currentSpeed; if zero mid-flight, invent from auth / max
-            if (auth && auth.turnRateRad) turnRate = auth.turnRateRad;
-            if (spd < 0.5 && destX != null && destY != null) {
-              const distToDest = Math.hypot(destX - vis.x, destY - vis.y);
-              const wasMoving = (s.flightTime || 0) > 0.05
-                || (auth && auth.speed > 0.5)
-                || (vis.lastCruiseSpeed || 0) > 0.5
-                || (s.currentSpeed || 0) > 0.5;
-              if (distToDest > 20 && wasMoving) {
-                spd = Math.max(
-                  8,
-                  s.speed || defaultSpd,
-                  auth ? (auth.speed || 0) : 0,
-                  vis.lastCruiseSpeed || 0
-                );
-                inventCruise = true;
+            if (inCombat) {
+              // Combat: only trust server-reported speed — no invent-cruise slide
+              spd = s.currentSpeed || 0;
+              inventCruise = false;
+            } else {
+              spd = Math.max(s.currentSpeed || 0, auth ? (auth.speed || 0) : 0);
+              // Prefer live currentSpeed; if zero mid-flight, invent only when laggy
+              if (auth && auth.turnRateRad) turnRate = auth.turnRateRad;
+              if (spd < 0.5 && destX != null && destY != null && allowInventCruise()) {
+                const distToDest = Math.hypot(destX - vis.x, destY - vis.y);
+                const wasMoving = (s.flightTime || 0) > 0.05
+                  || (auth && auth.speed > 0.5)
+                  || (vis.lastCruiseSpeed || 0) > 0.5
+                  || (s.currentSpeed || 0) > 0.5;
+                if (distToDest > 20 && wasMoving) {
+                  const remembered = Math.max(
+                    auth ? (auth.speed || 0) : 0,
+                    vis.lastCruiseSpeed || 0
+                  );
+                  let invented = remembered > 0.5 ? Math.min(remembered, predictedSpd) : predictedSpd;
+                  invented *= (0.35 + 0.65 * predictionStrength);
+                  spd = invented;
+                  inventCruise = true;
+                }
+              }
+              // Never extrapolate faster than predicted max (except brief server currentSpeed)
+              if (spd > predictedSpd * 1.05 && (s.currentSpeed || 0) < spd) {
+                spd = predictedSpd;
               }
             }
           }
 
           // 1) Always integrate from the *visual* pose so motion never freezes between packets
           //    Arc forward while turning (server-accurate) — do not stop-and-pivot mid-course.
-          if (spd > 0.5 || inventCruise || optLive) {
+          //    Combat: scale extrapolation so ships don't slide through dogfights.
+          //    Healthy traffic: still extrap for 60fps smoothness but damp invent-heavy motion.
+          const combatExtrapScale = inCombat ? 0.3 : 1.0;
+          // Own optimistic moves always full; ambient DR scales with predictionStrength
+          const ambientExtrapScale = optLive
+            ? 1.0
+            : (0.45 + 0.55 * predictionStrength);
+          if ((spd > 0.5 || inventCruise || optLive) && !(inCombat && (s.currentSpeed || 0) < 0.5 && !optLive)) {
             const circleState = {
               circling: !!vis.predCircling,
               destX: vis.predCircleDestX,
               destY: vis.predCircleDestY
             };
+            let floorSpd = inventCruise || optLive ? Math.min(predictedSpd, Math.max(spd, 1)) : spd;
+            floorSpd *= combatExtrapScale * ambientExtrapScale;
             const pose = extrapolatePose(
-              vis.x, vis.y, vis.angle, Math.max(spd, inventCruise || optLive ? 8 : 0),
-              destX, destY, turnRate, smoothDt, inventCruise || optLive, circleState
+              vis.x, vis.y, vis.angle, floorSpd,
+              destX, destY, turnRate, smoothDt, inventCruise || (optLive && !inCombat), circleState
             );
             vis.x = pose.x;
             vis.y = pose.y;
@@ -17453,8 +17856,8 @@ function getPlanetTradeIncomePerMin(planet) {
             vis.predCircling = pose.circling;
             vis.predCircleDestX = pose.destX;
             vis.predCircleDestY = pose.destY;
-            if (pose.speed > 0.5) {
-              vis.lastCruiseSpeed = pose.speed;
+            if (pose.speed > 0.5 && !inCombat) {
+              vis.lastCruiseSpeed = Math.min(pose.speed, predictedSpd);
             } else if (!inventCruise && !optLive) {
               vis.lastCruiseSpeed = 0;
             }
@@ -17464,20 +17867,47 @@ function getPlanetTradeIncomePerMin(planet) {
               if (Math.hypot(opt.targetX - vis.x, opt.targetY - vis.y) < 3) vis.opt = null;
             }
           } else {
-            vis.lastCruiseSpeed = 0;
+            if (!inCombat) vis.lastCruiseSpeed = 0;
+            // Combat + stationary on server: park visual on last auth/server pose path via correction
           }
 
           // 2) Gentle correction toward server-extrapolated pose (position always;
           // heading only when it won't yank us away from the turn onto dest)
-          if (auth && !optLive) {
+          // Combat: always correct (even during brief opt) so furballs stay locked
+          // Healthy traffic: cap auth age so we hug the last packet instead of long DR
+          if (auth && (!optLive || inCombat)) {
             const age = Math.max(0, (smoothNow - auth.time) / 1000);
+            const ageCap = inCombat ? 0.12 : getAuthExtrapAgeCapSec();
+            const cappedAge = Math.min(age, ageCap);
             let authSpd = auth.speed || 0;
-            if (authSpd < 0.5 && inventCruise) authSpd = spd;
+            if (inCombat) {
+              // Prefer live server speed for combat auth extrapolation
+              authSpd = (s.currentSpeed || 0) * 0.35;
+            } else {
+              if (authSpd < 0.5 && inventCruise) authSpd = spd;
+              // Cap auth extrapolation to predicted max
+              if (authSpd > predictedSpd * 1.05) authSpd = predictedSpd;
+              // Healthy: prefer live server speed over invented auth speed
+              if (predictionStrength < 0.4 && (s.currentSpeed || 0) > 0.5) {
+                authSpd = s.currentSpeed;
+              }
+            }
             const serverPred = extrapolatePose(
               auth.x, auth.y, auth.angle, authSpd,
-              destX, destY, turnRate, age, inventCruise, null
+              destX, destY, turnRate, cappedAge,
+              inventCruise && !inCombat && predictionStrength >= 0.4, null
             );
-            applySoftCorrection(vis, serverPred, destX, destY, Math.max(spd, authSpd, s.speed || defaultSpd, 12));
+            // In combat with near-zero server motion, pull toward raw auth pose
+            if (inCombat && (s.currentSpeed || 0) < 0.5) {
+              serverPred.x = auth.x;
+              serverPred.y = auth.y;
+              serverPred.angle = auth.angle;
+            }
+            applySoftCorrection(
+              vis, serverPred, destX, destY,
+              Math.max(spd, authSpd, inCombat ? 8 : predictedSpd, 8),
+              inCombat
+            );
           }
         }
 
@@ -19021,6 +19451,18 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.stroke();
           } else if (laser.color === 'refuel-beam' || laser.color === 'resupply-beam') {
             // Removed in favor of continuous rays
+          } else if (laser.color === 'terraform-beam') {
+            const fade = 1 - progress;
+            ctx.save();
+            ctx.strokeStyle = `rgba(57, 255, 20, ${0.85 * fade})`;
+            ctx.lineWidth = (laser.width || 3) * (1.2 - progress * 0.5);
+            ctx.shadowColor = '#39ff14';
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.moveTo(laser.startX, laser.startY);
+            ctx.lineTo(laser.endX, laser.endY);
+            ctx.stroke();
+            ctx.restore();
           } else {
             // Cinematic staggered normal lasers
             const totalDuration = laser.duration || 0.8;

@@ -1,5 +1,5 @@
 import { Player } from './entities/Player.js';
-import { Planet, getHabName } from './entities/Planet.js';
+import { Planet, getHabName, applyHabTerraformingStep } from './entities/Planet.js';
 import { Ship } from './entities/Ship.js';
 import { InputHandler } from './systems/InputHandler.js';
 import { SHIP_NAMES } from './entities/ShipNames.js';
@@ -1213,20 +1213,20 @@ export class Game {
         console.log(`Assigned style ${player.cruiserStyle} to player ${player.id}`);
       }
 
-      // Give player starting credits bomb resource
+      // Pioneer starting stockpile: 1 primary bomb resource, 0.2 of each other
       if (player.id !== 'monsters') {
         const bombResource = (player.cruiserStyle === 'Romulan' || player.cruiserStyle === 'Gorn') ? 'antimatter' :
                              ((player.cruiserStyle === 'Tholian' || player.cruiserStyle === 'Lyran') ? 'dilithium' : 'merculite');
-        player.resources = player.resources || {
-          dilithium: 0,
-          merculite: 0,
-          duranium: 0,
-          tritanium: 0,
-          antimatter: 0,
-          deuterium: 0,
-          latinum: 0
+        player.resources = {
+          dilithium: 0.2,
+          merculite: 0.2,
+          duranium: 0.2,
+          tritanium: 0.2,
+          antimatter: 0.2,
+          deuterium: 0.2,
+          latinum: 0.2
         };
-        player.resources[bombResource] = 3;
+        player.resources[bombResource] = 1;
       }
 
       const potentialUpgrades = ['sensorarrays', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel', 'marines', 'command', 'labs', 'diplomat'];
@@ -1281,10 +1281,11 @@ export class Game {
           upgrades[up] = 0;
         }
         upgrades['supply_ship'] = 2;
-        upgrades['diplomat'] = 2;
+        upgrades['diplomat'] = 1;
+        upgrades['extended_fuel'] = 1;
         upgrades['sensorarrays'] = 1;
         upgrades['labs'] = 1;
-        upgrades['damagecontrol'] = 1;
+        upgrades['engine'] = 1;
 
         this.pendingPioneerSpawns.push({
           ownerId: player.id,
@@ -2942,13 +2943,10 @@ export class Game {
     } else {
       // Standard ship payment or credits fallback
       const useCredits = source.owner && source.owner.useCredits !== false;
-      let minAllowedCredits = 0;
-      if (source.owner) {
-        const ownsHomeworld = this.planets.some(p => p.homeworldOf === source.owner.id && p.owner && p.owner.id === source.owner.id);
-        if (ownsHomeworld) {
-          minAllowedCredits = -Math.floor(source.owner.totalTradeShips || 0);
-        }
-      }
+      // Debt floor always from trade ships (no homeworld ownership required)
+      const minAllowedCredits = source.owner
+        ? -Math.floor(source.owner.totalTradeShips || 0)
+        : 0;
       const creditsAvailable = source.owner ? (source.owner.credits - minAllowedCredits) : 0;
       let creditsPaid = 0;
       let shipLaunchCost = launchCost;
@@ -3285,13 +3283,10 @@ export class Game {
     } else {
       // Standard ship payment or credits fallback
       const useCredits = source.owner && source.owner.useCredits !== false;
-      let minAllowedCredits = 0;
-      if (source.owner) {
-        const ownsHomeworld = this.planets.some(p => p.homeworldOf === source.owner.id && p.owner && p.owner.id === source.owner.id);
-        if (ownsHomeworld) {
-          minAllowedCredits = -Math.floor(source.owner.totalTradeShips || 0);
-        }
-      }
+      // Debt floor always from trade ships (no homeworld ownership required)
+      const minAllowedCredits = source.owner
+        ? -Math.floor(source.owner.totalTradeShips || 0)
+        : 0;
       const creditsAvailable = source.owner ? (source.owner.credits - minAllowedCredits) : 0;
       let creditsPaid = 0;
       let shipLaunchCost = launchCost;
@@ -3450,13 +3445,10 @@ export class Game {
       const costCap = cfg.costCap;
       const maxHealth = cfg.hp;
 
-      let minAllowedCredits = 0;
-      if (owner) {
-        const ownsHomeworld = this.planets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id);
-        if (ownsHomeworld) {
-          minAllowedCredits = -Math.floor(owner.totalTradeShips || 0);
-        }
-      }
+      // Debt floor always from trade ships (no homeworld ownership required)
+      const minAllowedCredits = owner
+        ? -Math.floor(owner.totalTradeShips || 0)
+        : 0;
 
       const useCredits = owner && owner.useCredits !== false;
       // How far credits can fall: down to debt floor (minAllowedCredits). Spendable = credits - floor.
@@ -3689,13 +3681,10 @@ export class Game {
       const finalCost = Math.round(baseCostShips + totalUpgradeCost);
       console.log(`[SERVER-CONFIG-COST] Name: ${configName}, classType: ${classType}, upgrades:`, JSON.stringify(upgrades), `baseCostShips: ${baseCostShips}, totalUpgradeCost: ${totalUpgradeCost}, finalCost: ${finalCost}`);
 
-      let minAllowedCredits = 0;
-      if (owner) {
-        const ownsHomeworld = this.planets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id);
-        if (ownsHomeworld) {
-          minAllowedCredits = -Math.floor(owner.totalTradeShips || 0);
-        }
-      }
+      // Debt floor always from trade ships (no homeworld ownership required)
+      const minAllowedCredits = owner
+        ? -Math.floor(owner.totalTradeShips || 0)
+        : 0;
 
       const useCredits = owner && owner.useCredits !== false;
       // Spendable credits = how far balance may fall before the debt floor
@@ -4777,12 +4766,8 @@ export class Game {
         const hasPendingSpawns = this.pendingPioneerSpawns.some(ps => ps.ownerId === player.id);
         if (hasPendingSpawns) continue;
 
-        // 4. Calculate debt limit
-        let minAllowedCredits = 0;
-        const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
-        if (ownsHomeworld) {
-          minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
-        }
+        // 4. Debt floor always from trade ships (no homeworld ownership required)
+        const minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
 
         // 5. Check if credits are above the debt limit (after subtracting 200)
         if (player.credits - 200 >= minAllowedCredits) {
@@ -4890,8 +4875,12 @@ export class Game {
             // Apply upgrade side effects
             if (ship.armor) {
               const armorBonus = 4 + 0.10 * hp;
-              ship.maxArmor = (ship.maxArmor || 0) + armorBonus;
-              ship.armorPoints = (ship.armorPoints || 0) + armorBonus;
+              // Multi-level armor on spawn: one bonus block per level
+              const armorLevels = ship.armor || 1;
+              for (let al = 0; al < armorLevels; al++) {
+                ship.maxArmor = (ship.maxArmor || 0) + armorBonus;
+              }
+              ship.armorPoints = ship.maxArmor || 0;
             }
             if (ship.munitions) {
               ship.splashDamage = ship.munitions;
@@ -4900,12 +4889,17 @@ export class Game {
               ship.maxsupplies = ship.supply_ship * (ship.maxHealth / 2);
             }
 
-            // Load full supplies/marines/bombs/fuel/shields
+            // Load full fuel/shields always; pioneer supply/munitions/armor/marines fill below
             ship.fuel = ship.getMaxFuel();
             ship.bombs = ship.getMaxBombs();
             ship.marineCount = 0;
             ship.supplies = 0;
             ship.shieldPoints = 3 * (ship.shields || 0);
+
+            // Pioneer spawn: begin with full capacity for any of those systems they start with
+            if (typeof ship.refreshPioneerUpgradeCapacities === 'function') {
+              ship.refreshPioneerUpgradeCapacities();
+            }
 
             this.ships.push(ship);
           }
@@ -6356,11 +6350,8 @@ export class Game {
           const fleetCost = (excess * 5) / 60;
           player.fleetCostRate = excess * 5;
 
-          let minAllowedCredits = 0;
-          const ownsHomeworld = this.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
-          if (ownsHomeworld) {
-            minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
-          }
+          // Debt floor always from trade ships (no homeworld ownership required)
+          const minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
 
           const creditsAvailable = Math.max(0, (player.credits || 0) - minAllowedCredits);
           if (creditsAvailable >= fleetCost) {
@@ -7823,9 +7814,15 @@ export class Game {
   applyBankedUpgradeTokens(player, ship) {
     if (!player || !ship || !ship.isCruiser) return;
     const banked = player.bankedUpgradeTokens || 0;
-    if (banked <= 0) return;
-    ship.upgradeTokens = (ship.upgradeTokens || 0) + banked;
-    player.bankedUpgradeTokens = 0;
+    if (banked > 0) {
+      ship.upgradeTokens = (ship.upgradeTokens || 0) + banked;
+      player.bankedUpgradeTokens = 0;
+    }
+    const bankedTerra = player.bankedTerraforming || 0;
+    if (bankedTerra > 0) {
+      ship.terraforming = (ship.terraforming || 0) + bankedTerra;
+      player.bankedTerraforming = 0;
+    }
   }
 
   triggerAnomalyCompletion(planet, player) {
@@ -7897,65 +7894,35 @@ export class Game {
       text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received +${expReward} Player XP!`;
       floatText = `+${expReward} XP`;
     } else if (rewardType === 'hab') {
+      // Terraforming charges go on the completing cruiser; parked over a friendly
+      // world they spend 1 charge / 10s to raise that planet's habitability.
       const habReward = Math.round(creditsValueEquivalent / 5);
-      
-      let targetPlanet = planet;
-      if (planet.isDeepSpaceAnomaly) {
-        let nearest = null;
-        let minDist = Infinity;
-        for (const p of this.planets) {
-          if (p.isDeepSpaceAnomaly || p === planet) continue;
-          const dx = p.x - planet.x;
-          const dy = p.y - planet.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < minDist) {
-            minDist = dist;
-            nearest = p;
+      const completingShipId = planet.anomaly ? planet.anomaly.completingShipId : null;
+      let targetShip = this.ships.find(s => s.id === completingShipId);
+      if (!targetShip || !targetShip.isCruiser || !targetShip.active) {
+        let minDistSq = Infinity;
+        for (const s of this.ships) {
+          if (s.active && s.isCruiser && s.owner === player) {
+            const dx = s.x - (planet.anomaly ? planet.anomaly.x : planet.x);
+            const dy = s.y - (planet.anomaly ? planet.anomaly.y : planet.y);
+            const distSq = dx * dx + dy * dy;
+            if (distSq < minDistSq) {
+              minDistSq = distSq;
+              targetShip = s;
+            }
           }
         }
-        if (nearest) {
-          targetPlanet = nearest;
-        }
       }
-
-      const oldHab = targetPlanet.habitability || 0;
-      let currentHab = oldHab;
-      for (let i = 0; i < habReward; i++) {
-        const stepOldHab = currentHab;
-        currentHab += 1;
-        
-        const stepOldName = getHabName(stepOldHab);
-        const stepNewName = getHabName(currentHab);
-        if (stepOldName === 'Jungle' && stepNewName === 'Ocean') {
-          currentHab = 100; // Terran
-        } else if (stepOldName === 'Desert' && stepNewName === 'Tundra') {
-          currentHab = 90; // Arid
-        } else if (stepOldName === 'Ocean' && stepNewName === 'Arid') {
-          currentHab = 100; // Terran
-        }
-      }
-      targetPlanet.habitability = currentHab;
-      
-      if (planet.isDeepSpaceAnomaly) {
-        text = `ANOMALY RESOLVED in Deep Space: Nearest planet ${targetPlanet.name} habitability increased by +${habReward}%!`;
+      if (targetShip && targetShip.isCruiser) {
+        targetShip.terraforming = (targetShip.terraforming || 0) + habReward;
+        text = `ANOMALY RESOLVED ${preposition} ${locationName}: Cruiser ${targetShip.name || ''} received +${habReward} Terraforming!`;
+        floatText = `+${habReward} 🌱 TERRAFORMING!`;
       } else {
-        text = `ANOMALY RESOLVED on ${planet.name}: Habitability increased by +${habReward}%!`;
-      }
-      floatText = `+${habReward}% HABITABILITY!`;
-      
-      const oldClass = getHabName(oldHab);
-      const newClass = getHabName(targetPlanet.habitability);
-      if (oldClass !== newClass) {
-        this.pendingHabClassChanges = this.pendingHabClassChanges || [];
-        this.pendingHabClassChanges.push({
-          planetId: targetPlanet.id,
-          planetName: targetPlanet.name,
-          ownerId: targetPlanet.owner ? targetPlanet.owner.id : null,
-          oldClass: oldClass,
-          newClass: newClass,
-          x: targetPlanet.x,
-          y: targetPlanet.y
-        });
+        // No cruiser available — charges banked on the player for the next cruiser build path isn't wired;
+        // grant to nearest owned planet's future use by storing on player as bankedTerraforming.
+        player.bankedTerraforming = (player.bankedTerraforming || 0) + habReward;
+        text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received +${habReward} Terraforming (banked for your next cruiser)!`;
+        floatText = `+${habReward} 🌱 (banked)`;
       }
     } else if (rewardType === 'rare_resource_cache') {
       const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];

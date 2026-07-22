@@ -1,3 +1,5 @@
+import { applyHabTerraformingStep } from './Planet.js';
+
 const SHIP_CLASSES = {
   corvette: { name: 'Corvette', key: 's', hp: 15, costShips: 50, costCap: 2 },
   destroyer: { name: 'Destroyer', key: 'd', hp: 25, costShips: 100, costCap: 4 },
@@ -146,6 +148,9 @@ export class Ship {
     this.upgradeAccumulator = 0;
     this.upgradeTokens = 0;
     this.upgradeUsingToken = false;
+    this.terraforming = 0; // anomaly charges: +1 planet hab / 10s when over a friendly world
+    this.terraformingTimer = 0;
+    this.activeTerraformPlanetId = null;
     this.patrolReloadTargetPlanetId = null;
     this.planetBombardTimer = 0;
     this.combatCooldown = 0;
@@ -329,6 +334,37 @@ export class Ship {
     const baseMax = Math.floor(this.maxHealth / 5);
     const bonus = this.munitions || 0;
     return Math.max(0, baseMax + bonus - (this.supply_ship || 0));
+  }
+
+  getMaxMarineCapacity() {
+    if (!(this.marines > 0)) return 0;
+    return Math.ceil(((this.marines || 0) * (this.maxHealth || 0)) / 2) + 5;
+  }
+
+  /**
+   * Pioneer-only: after gaining supply / munitions / armor / marines levels,
+   * top those systems off to full capacity. Non-pioneers are unchanged.
+   * @param {string|string[]|null} props - upgrade prop(s) just gained, or null for all current
+   */
+  refreshPioneerUpgradeCapacities(props = null) {
+    if (!(this.Pioneer || this.isPioneer) || !this.isCruiser) return;
+    const list = props == null
+      ? ['supply_ship', 'munitions', 'armor', 'marines']
+      : (Array.isArray(props) ? props : [props]);
+    for (const prop of list) {
+      if (prop === 'supply_ship' && (this.supply_ship || 0) > 0) {
+        this.maxsupplies = (this.supply_ship || 0) * ((this.maxHealth || 0) / 2);
+        this.supplies = this.maxsupplies || 0;
+      } else if (prop === 'munitions' && (this.munitions || 0) >= 0) {
+        // Munitions level 0 still has base bomb capacity from hull size
+        this.splashDamage = this.munitions || 0;
+        this.bombs = this.getMaxBombs();
+      } else if (prop === 'armor' && (this.maxArmor || 0) > 0) {
+        this.armorPoints = this.maxArmor || 0;
+      } else if (prop === 'marines' && (this.marines || 0) > 0) {
+        this.marineCount = this.getMaxMarineCapacity();
+      }
+    }
   }
 
   getMaxFuel() {
@@ -707,6 +743,208 @@ export class Ship {
     return reduction;
   }
 
+  /** Knowledge/tech/exp-adjusted intensity for pathing and avoidance. */
+  getHazardEffectiveIntensity(storm) {
+    if (!storm) return 0;
+    if (!this.owner) return storm.intensity || 0;
+    const knowledge = (storm.knowledge && storm.knowledge[this.owner.id]) || 0;
+    const tRed = Math.sqrt(this.owner.techScore || 0);
+    const eRed = Math.sqrt(this.owner.expScore || 0);
+    const sRed = this.getLocalXpBonus();
+    return Math.max(0, (storm.intensity || 0) - knowledge - (tRed + eRed) / 2 - sRed);
+  }
+
+  /**
+   * Hazards scouts/refuel paths should route around: minefields and ion storms
+   * with effective intensity strictly greater than 10. Nebulae are ignored.
+   */
+  isDangerousPathHazard(storm) {
+    if (!storm || storm.type === 'nebula') return false;
+    return this.getHazardEffectiveIntensity(storm) > 10;
+  }
+
+  /** True if the segment from (x1,y1)-(x2,y2) intersects a circle. */
+  segmentHitsCircle(x1, y1, x2, y2, cx, cy, r) {
+    if (r <= 0) return false;
+    const rSq = r * r;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq < 1e-8) {
+      const ex = x1 - cx;
+      const ey = y1 - cy;
+      return ex * ex + ey * ey <= rSq;
+    }
+    let t = ((cx - x1) * dx + (cy - y1) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const px = x1 + t * dx;
+    const py = y1 + t * dy;
+    const ex = px - cx;
+    const ey = py - cy;
+    return ex * ex + ey * ey <= rSq;
+  }
+
+  pathCrossesDangerousHazard(x1, y1, x2, y2, ionStorms, buffer = 50) {
+    if (!ionStorms) return false;
+    for (const storm of ionStorms) {
+      if (!this.isDangerousPathHazard(storm)) continue;
+      if (this.segmentHitsCircle(x1, y1, x2, y2, storm.x, storm.y, (storm.radius || 0) + buffer)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Next steering point from (fromX,fromY) toward (toX,toY) that skirts dangerous
+   * minefields / ion storms (effective intensity > 10). Returns the goal unchanged
+   * when the direct path is clear.
+   */
+  getHazardAvoidanceSteer(fromX, fromY, toX, toY, ionStorms, mapWidth = 1920, mapHeight = 1620) {
+    if (toX == null || toY == null) return { x: fromX, y: fromY };
+    if (!ionStorms || ionStorms.length === 0) return { x: toX, y: toY };
+
+    const BUFFER = 55;
+    const mapPad = 25;
+    const clampPt = (x, y) => ({
+      x: Math.max(mapPad, Math.min(mapWidth - mapPad, x)),
+      y: Math.max(mapPad, Math.min(mapHeight - mapPad, y))
+    });
+
+    // 1) If already inside a dangerous hazard, exit radially (prefer toward goal)
+    for (const storm of ionStorms) {
+      if (!this.isDangerousPathHazard(storm)) continue;
+      const r = (storm.radius || 0) + BUFFER;
+      const dx = fromX - storm.x;
+      const dy = fromY - storm.y;
+      const d = Math.hypot(dx, dy);
+      if (d < r - 2) {
+        let ex;
+        let ey;
+        if (d < 1) {
+          const ang = Math.atan2(toY - fromY, toX - fromX);
+          ex = Math.cos(ang);
+          ey = Math.sin(ang);
+        } else {
+          ex = dx / d;
+          ey = dy / d;
+          // Bias escape toward the goal if possible
+          const gx = toX - fromX;
+          const gy = toY - fromY;
+          const gLen = Math.hypot(gx, gy);
+          if (gLen > 1) {
+            const mix = 0.35;
+            let mx = ex * (1 - mix) + (gx / gLen) * mix;
+            let my = ey * (1 - mix) + (gy / gLen) * mix;
+            // Keep outward component so we don't dive deeper into the circle
+            const outward = mx * ex + my * ey;
+            if (outward < 0.25) {
+              mx = ex;
+              my = ey;
+            } else {
+              const mLen = Math.hypot(mx, my) || 1;
+              mx /= mLen;
+              my /= mLen;
+            }
+            ex = mx;
+            ey = my;
+          }
+        }
+        return clampPt(storm.x + ex * (r + 30), storm.y + ey * (r + 30));
+      }
+    }
+
+    // 2) Find first (nearest) dangerous hazard the direct segment crosses
+    let firstHit = null;
+    let firstHitDist = Infinity;
+    for (const storm of ionStorms) {
+      if (!this.isDangerousPathHazard(storm)) continue;
+      const r = (storm.radius || 0) + BUFFER;
+      if (this.segmentHitsCircle(fromX, fromY, toX, toY, storm.x, storm.y, r)) {
+        const dist = Math.hypot(storm.x - fromX, storm.y - fromY);
+        if (dist < firstHitDist) {
+          firstHitDist = dist;
+          firstHit = storm;
+        }
+      }
+    }
+    if (!firstHit) return { x: toX, y: toY };
+
+    // 3) Pick a detour point on the safe ring around that hazard
+    const cx = firstHit.x;
+    const cy = firstHit.y;
+    const r = (firstHit.radius || 0) + BUFFER + 20;
+    const pathAng = Math.atan2(toY - fromY, toX - fromX);
+    const toGoalAng = Math.atan2(toY - cy, toX - cx);
+    const fromAng = Math.atan2(fromY - cy, fromX - cx);
+
+    const candidates = [];
+    for (const side of [-1, 1]) {
+      const ang = pathAng + side * (Math.PI / 2);
+      candidates.push({ x: cx + Math.cos(ang) * r, y: cy + Math.sin(ang) * r });
+    }
+    for (const off of [-1.3, -0.9, -0.55, 0.55, 0.9, 1.3]) {
+      candidates.push({
+        x: cx + Math.cos(toGoalAng + off) * r,
+        y: cy + Math.sin(toGoalAng + off) * r
+      });
+      candidates.push({
+        x: cx + Math.cos(fromAng + off) * r,
+        y: cy + Math.sin(fromAng + off) * r
+      });
+    }
+
+    let best = null;
+    let bestCost = Infinity;
+    for (const c of candidates) {
+      const cl = clampPt(c.x, c.y);
+      // Skip points still deep inside the hazard
+      if (Math.hypot(cl.x - cx, cl.y - cy) < (firstHit.radius || 0) + BUFFER * 0.6) continue;
+
+      let cost = Math.hypot(cl.x - fromX, cl.y - fromY) + Math.hypot(toX - cl.x, toY - cl.y);
+      // Prefer detours whose leg from current position stays outside the blocking storm
+      if (this.segmentHitsCircle(fromX, fromY, cl.x, cl.y, cx, cy, (firstHit.radius || 0) + BUFFER * 0.85)) {
+        cost += 2500;
+      }
+      // Penalize detours that immediately hit other dangerous hazards
+      for (const storm of ionStorms) {
+        if (storm === firstHit || !this.isDangerousPathHazard(storm)) continue;
+        const rr = (storm.radius || 0) + BUFFER;
+        if (this.segmentHitsCircle(fromX, fromY, cl.x, cl.y, storm.x, storm.y, rr)) {
+          cost += 6000;
+        }
+      }
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = cl;
+      }
+    }
+    return best || { x: toX, y: toY };
+  }
+
+  /**
+   * While scouting (explore or refuel retreat), rewrite targetX/Y to skirt
+   * dangerous hazards. Keeps scoutTargetX/Y as the final destination.
+   */
+  applyScoutHazardAvoidance(ionStorms, mapWidth, mapHeight) {
+    if (!this.isScouting) return;
+    if (this.targetX == null || this.targetY == null) return;
+    // Direct chase when actively engaging under Scout Attack
+    if (this.cruiserTargetType === 'ship' && this.scoutAttackEnabled === true) return;
+    // Hold still
+    if (Math.hypot((this.targetX - this.x), (this.targetY - this.y)) < 8) return;
+
+    const steered = this.getHazardAvoidanceSteer(
+      this.x, this.y, this.targetX, this.targetY,
+      ionStorms, mapWidth || 1920, mapHeight || 1620
+    );
+    if (steered && (steered.x !== this.targetX || steered.y !== this.targetY)) {
+      this.targetX = steered.x;
+      this.targetY = steered.y;
+      this.targetPlanet = null;
+    }
+  }
+
   canSeeStats(p, allPlanets, allShips, game) {
     if (p.inFog) return false;
     if (!this.owner) return false;
@@ -851,6 +1089,70 @@ export class Ship {
     }
     this.inFriendlyWell = friendlyWellPlanet !== null;
 
+    // Cruiser Terraforming charges: when directly over a friendly planet, green ray +
+    // +1 habitability / 10s (class skips), consuming 1 terraforming per tick.
+    this.activeTerraformPlanetId = null;
+    if (
+      this.isCruiser &&
+      !this.isAmoeba &&
+      this.active &&
+      (this.terraforming || 0) > 0 &&
+      allPlanets &&
+      this.owner
+    ) {
+      let overPlanet = null;
+      let overDistSq = Infinity;
+      const nearbyForTerra = (game && game.planetGrid && game.planetGridPopulated)
+        ? game.planetGrid.getPlanetsInRadiusSq(this.x, this.y, 400 * 400)
+        : allPlanets;
+      for (const planet of nearbyForTerra) {
+        if (!planet || planet.dead || planet.isDeepSpaceAnomaly) continue;
+        if (!planet.owner || planet.owner.id !== this.owner.id) continue;
+        if ((planet.habitability || 0) >= 100) continue;
+        const pdx = this.x - planet.x;
+        const pdy = this.y - planet.y;
+        const distSq = pdx * pdx + pdy * pdy;
+        // "Directly over" = within the planet's surface radius
+        const r = planet.radius || 10;
+        if (distSq <= r * r && distSq < overDistSq) {
+          overPlanet = planet;
+          overDistSq = distSq;
+        }
+      }
+      if (overPlanet) {
+        this.activeTerraformPlanetId = overPlanet.id;
+        this.terraformingTimer = (this.terraformingTimer || 0) + deltaTime;
+        while (this.terraformingTimer >= 10000 && (this.terraforming || 0) > 0) {
+          this.terraformingTimer -= 10000;
+          if ((overPlanet.habitability || 0) >= 100) break;
+          if (applyHabTerraformingStep(overPlanet, game)) {
+            this.terraforming = Math.max(0, (this.terraforming || 0) - 1);
+            if (lasers) {
+              lasers.push({
+                startX: this.x,
+                startY: this.y,
+                endX: overPlanet.x,
+                endY: overPlanet.y,
+                color: 'terraform-beam',
+                age: 0,
+                duration: 1.2,
+                sourceId: this.id,
+                sourceIsCruiser: true,
+                targetIsPlanet: true,
+                width: 3
+              });
+            }
+          } else {
+            break;
+          }
+        }
+      } else {
+        this.terraformingTimer = 0;
+      }
+    } else {
+      this.terraformingTimer = 0;
+    }
+
     if (this.pioneerWarpIn) {
       const dx = this.pioneerWarpX - this.x;
       const dy = this.pioneerWarpY - this.y;
@@ -988,13 +1290,7 @@ export class Ship {
           const creditsDeduction = (this.buildCostCreditsRemaining / (remainingProgressTime / dt));
           const actualDeduction = Math.min(this.buildCostCreditsRemaining, creditsDeduction);
           if (this.owner) {
-            let minAllowedCredits = 0;
-            if (typeof game !== 'undefined' && game && game.planets) {
-              const ownsHomeworld = game.planets.some(p => p.homeworldOf === this.owner.id && p.owner && p.owner.id === this.owner.id);
-              if (ownsHomeworld) {
-                minAllowedCredits = -(1000 + Math.floor(this.owner.totalShips || 0));
-              }
-            }
+            const minAllowedCredits = -Math.floor(this.owner.totalTradeShips || 0);
             this.owner.credits = Math.max(minAllowedCredits, (this.owner.credits || 0) - actualDeduction);
           }
           this.buildCostCreditsRemaining = Math.max(0, this.buildCostCreditsRemaining - actualDeduction);
@@ -1008,13 +1304,7 @@ export class Ship {
         }
         if (this.buildCostCreditsRemaining > 0) {
           if (this.owner) {
-            let minAllowedCredits = 0;
-            if (typeof game !== 'undefined' && game && game.planets) {
-              const ownsHomeworld = game.planets.some(p => p.homeworldOf === this.owner.id && p.owner && p.owner.id === this.owner.id);
-              if (ownsHomeworld) {
-                minAllowedCredits = -(1000 + Math.floor(this.owner.totalShips || 0));
-              }
-            }
+            const minAllowedCredits = -Math.floor(this.owner.totalTradeShips || 0);
             this.owner.credits = Math.max(minAllowedCredits, (this.owner.credits || 0) - this.buildCostCreditsRemaining);
           }
           this.buildCostCreditsRemaining = 0;
@@ -1582,15 +1872,21 @@ export class Ship {
         this.cruiserTargetType = null;
         this.cruiserTargetId = null;
       } else {
-        // Hunt nearest enemy cruiser map-wide; re-evaluate at least every 15s
-        // (and immediately if the current target is lost/invalid).
+        // Hunt nearest enemy cruiser within 500px; re-evaluate at least every 15s
+        // (and immediately if the current target is lost/out of range/invalid).
+        const PIRATE_HUNT_RANGE = 500;
+        const PIRATE_HUNT_RANGE_SQ = PIRATE_HUNT_RANGE * PIRATE_HUNT_RANGE;
         this.pirateRetargetTimer = (this.pirateRetargetTimer || 0) + deltaTime;
 
         let currentTarget = null;
+        let currentTargetDistSq = Infinity;
         if (this.cruiserTargetType === 'ship' && this.cruiserTargetId != null && allShips) {
           for (const other of allShips) {
             if (other.id === this.cruiserTargetId) {
               currentTarget = other;
+              const cdx = other.x - this.x;
+              const cdy = other.y - this.y;
+              currentTargetDistSq = cdx * cdx + cdy * cdy;
               break;
             }
           }
@@ -1605,7 +1901,8 @@ export class Ship {
           && !currentTarget.isMaterializing
           && currentTarget.owner
           && currentTarget.owner !== this.owner
-          && currentTarget.owner.id !== 'monsters';
+          && currentTarget.owner.id !== 'monsters'
+          && currentTargetDistSq <= PIRATE_HUNT_RANGE_SQ;
 
         const needRetarget = this.pirateRetargetTimer >= 15000 || !targetStillValid;
 
@@ -1614,7 +1911,11 @@ export class Ship {
           let nearestCruiser = null;
           let nearestDistSq = Infinity;
 
-          for (const other of allShips) {
+          const candidateShips = (typeof allShips.getShipsInRadiusSq === 'function')
+            ? allShips.getShipsInRadiusSq(this.x, this.y, PIRATE_HUNT_RANGE_SQ)
+            : allShips;
+
+          for (const other of candidateShips) {
             if (!other.active || !other.isCruiser || other.isAmoeba) continue;
             if (!other.owner || other.owner === this.owner || other.owner.id === 'monsters') continue;
             if (other.isReturnPod || other.isBoardingFleet || other.isMaterializing) continue;
@@ -1624,6 +1925,7 @@ export class Ship {
             const dx = other.x - this.x;
             const dy = other.y - this.y;
             const distSq = dx * dx + dy * dy;
+            if (distSq > PIRATE_HUNT_RANGE_SQ) continue;
             if (distSq < nearestDistSq) {
               nearestDistSq = distSq;
               nearestCruiser = other;
@@ -1651,7 +1953,7 @@ export class Ship {
           this.cruiserTargetType = 'ship';
           this.cruiserTargetId = currentTarget.id;
         } else {
-          // No enemy cruisers — wander randomly
+          // No enemy cruisers in range — wander randomly
           const reachedDest = !this.targetX || (Math.sqrt((this.targetX - this.x) * (this.targetX - this.x) + (this.targetY - this.y) * (this.targetY - this.y)) < 15);
           if (reachedDest) {
             const mapW = mapWidth || 1920;
@@ -1703,10 +2005,13 @@ export class Ship {
           } else if (prop === 'extended_fuel') {
             this.fuel = this.getMaxFuel();
           } else if (prop === 'marines') {
-            // Keep existing marineCount, do not auto-fill
+            // Non-pioneers: capacity only. Pioneers refill below.
           } else if (prop === 'shields') {
             this.shieldPoints = this.getMaxShields();
           }
+
+          // Pioneer: top off supplies / bombs / armor / marines when those upgrades complete
+          this.refreshPioneerUpgradeCapacities(prop);
           
           console.log(`[Cruiser Token Upgrade Complete] Ship ${this.id} upgraded ${prop} to level ${this[prop]}`);
           this.upgradeProp = null;
@@ -1715,13 +2020,9 @@ export class Ship {
         }
       } else {
         const planet = allPlanets ? allPlanets.find(p => p.id === this.upgradePlanetId) : null;
-        let minAllowedCredits = 0;
-        if (this.owner && game && game.planets) {
-          const ownsHomeworld = game.planets.some(p => p.homeworldOf === this.owner.id && p.owner && p.owner.id === this.owner.id);
-          if (ownsHomeworld) {
-            minAllowedCredits = -(1000 + (this.owner.totalShips || 0));
-          }
-        }
+        const minAllowedCredits = this.owner
+          ? -Math.floor(this.owner.totalTradeShips || 0)
+          : 0;
         const creditsAvailable = (this.owner && this.owner.credits !== undefined) ? (this.owner.credits - minAllowedCredits) : 0;
         if (planet && planet.owner && this.owner && planet.owner.id === this.owner.id && (planet.ships >= 1 || creditsAvailable >= 1)) {
           this.upgradeAccumulator += deltaTime / 1000;
@@ -1770,10 +2071,13 @@ export class Ship {
               const baseFuel = this.maxHealth / 5;
               this.fuel = Math.min(this.getMaxFuel(), (this.fuel || 0) + baseFuel);
             } else if (this.upgradeProp === 'marines') {
-              // Just capacity increases; do not load free marines upon upgrade completion
+              // Non-pioneers: capacity only. Pioneers refill below.
             } else if (this.upgradeProp === 'shields') {
               this.shieldPoints = this.getMaxShields();
             }
+
+            // Pioneer: top off supplies / bombs / armor / marines when those upgrades complete
+            this.refreshPioneerUpgradeCapacities(this.upgradeProp);
             
             console.log(`[Cruiser Upgrade Complete] Ship ${this.id} upgraded ${this.upgradeProp} to level ${this[this.upgradeProp]}`);
             this.upgradeProp = null;
@@ -3312,33 +3616,23 @@ export class Ship {
         }
       }
 
-      // Helper: Check if a cell coordinate overlaps with any active ion storm or minefield (radius + 100px buffer)
+      // Helper: cell overlaps a dangerous hazard (eff intensity > 10; radius + 100px buffer)
       const isCellInStorm = (tx, ty) => {
         if (ionStorms) {
           for (const storm of ionStorms) {
+            if (!this.isDangerousPathHazard(storm)) continue;
             const dx = tx - storm.x;
             const dy = ty - storm.y;
-            const safeDist = storm.radius + 100;
+            const safeDist = (storm.radius || 0) + 100;
             if (dx * dx + dy * dy <= safeDist * safeDist) {
-              const knowledge = storm.knowledge[this.owner ? this.owner.id : ''] || 0;
-              const tRed = this.owner ? Math.sqrt(this.owner.techScore || 0) : 0;
-              const eRed = this.owner ? Math.sqrt(this.owner.expScore || 0) : 0;
-              const sRed = this.getLocalXpBonus();
-              const effectiveIntensity = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
-              if (storm.type === 'minefield') {
-                if (effectiveIntensity > 10) {
-                  return true;
-                }
-              } else {
-                if (effectiveIntensity >= 5) {
-                  return true;
-                }
-              }
+              return true;
             }
           }
         }
         return false;
       };
+
+      const mapH = (game && game.height) ? game.height : (mapWidth || 1920);
 
       if (this.scoutFuelRetreating) {
         let needNewTarget = this.targetX === null || this.targetY === null || (!this.scoutFuelRetreatTargetPlanetId && !this.scoutFuelRetreatTargetShipId);
@@ -3690,13 +3984,19 @@ export class Ship {
 
                 const neverExplored = c.lastExplored === 0;
                 c.penalty = neverExplored ? 0 : 1500 * 1500;
+                // Prefer destinations whose straight-line path does not cut through hazards
+                c.pathHazard = this.pathCrossesDangerousHazard(this.x, this.y, tx, ty, ionStorms) ? 1 : 0;
               });
 
               // Sort by composite criteria:
+              // 0. Prefer paths that do not cross dangerous hazards
               // 1. Exploration penalty (never explored first)
               // 2. Closest to himself (scout) - binned by cell size so secondary sorting can break ties
               // 3. Closest to the nearest friendly planet from himself
               eligible.sort((a, b) => {
+                if (a.pathHazard !== b.pathHazard) {
+                  return a.pathHazard - b.pathHazard;
+                }
                 if (a.penalty !== b.penalty) {
                   return a.penalty - b.penalty;
                 }
@@ -3792,6 +4092,10 @@ export class Ship {
           }
         }
       }
+
+      // Path around dangerous minefields / ion storms (eff intensity > 10)
+      // while exploring or returning to refuel — keeps scoutTarget as final goal.
+      this.applyScoutHazardAvoidance(ionStorms, mapWidth || 1920, mapH);
     }
 
     // Cruiser Research Mode Decision Engine
@@ -4360,7 +4664,7 @@ export class Ship {
           if (friendlyWellPlanet) {
             if (owner && owner.useCredits !== false) {
               const costCredits = 1.0 * costMultiplier;
-              const minAllowedCredits = allPlanets && owner ? (allPlanets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id) ? -(1000 + Math.floor(owner.totalShips || 0)) : 0) : 0;
+              const minAllowedCredits = owner ? -Math.floor(owner.totalTradeShips || 0) : 0;
               if ((owner.credits || 0) - costCredits >= minAllowedCredits) {
                 canAfford = true;
               }
@@ -4369,7 +4673,7 @@ export class Ship {
             }
           } else if (neutralWellPlanet) {
             const costCredits = 2.0 * costMultiplier;
-            const minAllowedCredits = allPlanets && owner ? (allPlanets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id) ? -(1000 + Math.floor(owner.totalShips || 0)) : 0) : 0;
+            const minAllowedCredits = owner ? -Math.floor(owner.totalTradeShips || 0) : 0;
             if (owner && (owner.credits || 0) - costCredits >= minAllowedCredits) {
               canAfford = true;
             }
@@ -4391,7 +4695,7 @@ export class Ship {
             let canAffordResupply = false;
             let purchaseFromNeutral = false;
 
-            const minAllowedCredits = allPlanets && owner ? (allPlanets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id) ? -(1000 + Math.floor(owner.totalShips || 0)) : 0) : 0;
+            const minAllowedCredits = owner ? -Math.floor(owner.totalTradeShips || 0) : 0;
 
             if (friendlyWellPlanet && (friendlyWellPlanet.supplies || 0) >= 1.0) {
               if (owner.useCredits !== false) {
@@ -4770,7 +5074,7 @@ export class Ship {
             } else if (hasExcessResource && resourceSellPrice < 12) {
               activeBombSourceForRay = 'planet';
             } else if (owner && owner.useCredits !== false) {
-              const minAllowedCredits = allPlanets && owner ? (allPlanets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id) ? -(1000 + Math.floor(owner.totalShips || 0)) : 0) : 0;
+              const minAllowedCredits = owner ? -Math.floor(owner.totalTradeShips || 0) : 0;
               if ((owner.credits || 0) - 1.0 >= minAllowedCredits) {
                 activeBombSourceForRay = 'planet';
               }
@@ -4818,7 +5122,7 @@ export class Ship {
                 canAffordReload = true;
                 activeBombSource = 'planet';
               } else if (owner && owner.useCredits !== false) {
-                const minAllowedCredits = allPlanets && owner ? (allPlanets.some(p => p.homeworldOf === owner.id && p.owner && p.owner.id === owner.id) ? -(1000 + Math.floor(owner.totalShips || 0)) : 0) : 0;
+                const minAllowedCredits = owner ? -Math.floor(owner.totalTradeShips || 0) : 0;
                 if ((owner.credits || 0) - 1.0 >= minAllowedCredits) {
                   canAffordReload = true;
                   activeBombSource = 'planet';
@@ -6135,7 +6439,8 @@ export class Ship {
           const dx = attacker.x - this.x;
           const dy = attacker.y - this.y;
           if (Math.sqrt(dx * dx + dy * dy) < 30) {
-            shrugChance = 0; // Shields do not deflect at point blank range
+            // Point blank: half shrug (cruisers and amoebas), not zero
+            shrugChance *= 0.5;
           }
         }
         if (Math.random() < shrugChance) {

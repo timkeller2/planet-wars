@@ -820,6 +820,10 @@ async function bootstrap() {
           for (const p of game.planets) {
             if (p.owner) {
               totalUpgradesOfCertainType += (p[prop] || 0);
+              // In-progress builds of this type also consume a galaxy slot
+              if (p.upgradeTransition && p.upgradeTransition.prop === prop) {
+                totalUpgradesOfCertainType += 1;
+              }
             }
           }
 
@@ -857,11 +861,8 @@ async function bootstrap() {
 
           const cost = game.getUpgradeCost(planet, data.type) * 3;
 
-          let minAllowedCredits = 0;
-          const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
-          if (ownsHomeworld) {
-            minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
-          }
+          // Debt floor always from trade ships (no homeworld ownership required)
+          const minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
 
           if (player.useCredits === false) {
             rejectPlanetUpgrade('credits payment is disabled (toggle Use Credits).');
@@ -991,11 +992,8 @@ async function bootstrap() {
 
           const cost = game.getUpgradeCost(ship, data.type);
 
-          let minAllowedCredits = 0;
-          const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
-          if (ownsHomeworld) {
-            minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
-          }
+          // Debt floor always from trade ships (no homeworld ownership required)
+          const minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
 
           let closestPlanet = null;
           let closestDistSq = Infinity;
@@ -1736,11 +1734,8 @@ async function bootstrap() {
         // Debt limit check
         if (player.useCredits === false) return;
         const myCredits = player.credits || 0;
-        let minAllowedCredits = 0;
-        const ownsHomeworld = game.planets.some(p => p.homeworldOf === player.id && p.owner && p.owner.id === player.id);
-        if (ownsHomeworld) {
-          minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
-        }
+        // Debt floor always from trade ships (no homeworld ownership required)
+        const minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
         
         if (myCredits - currentPrice < minAllowedCredits) return;
         
@@ -1804,7 +1799,7 @@ async function bootstrap() {
       if (!planet || !planet.owner || planet.owner.id !== player.id) return;
       if (planet.inRevolt) return;
 
-      const validModes = ['economy', 'research', 'garrison', 'commerce', 'mining', 'terraforming', 'homeworld', 'rootoutspies'];
+      const validModes = ['economy', 'research', 'garrison', 'commerce', 'mining', 'terraforming', 'homeworld', 'rootoutspies', 'supply'];
       if (!validModes.includes(data.focusMode)) return;
       if (data.focusMode === 'commerce' && false) return;
       if (data.focusMode === 'terraforming') {
@@ -1838,13 +1833,10 @@ async function bootstrap() {
 
       if (planet.focusTransition) return; // Prevent concurrent focus shifts on same planet
       const cost = Math.floor(planet.maxShips / 2);
-      let minAllowedCredits = 0;
-      if (player.id !== 'monsters') {
-        const ownsHw = game.planets.some(p => p.homeworldOf === player.id && p.owner === player);
-        if (ownsHw) {
-          minAllowedCredits = -Math.floor(player.totalTradeShips || 0);
-        }
-      }
+      // Debt floor always from trade ships (no homeworld ownership required)
+      const minAllowedCredits = player.id !== 'monsters'
+        ? -Math.floor(player.totalTradeShips || 0)
+        : 0;
       const creditsAvailable = player.useCredits !== false ? Math.max(0, (player.credits || 0) - minAllowedCredits) : 0;
       if ((planet.ships + creditsAvailable) >= cost) {
         planet.focusTransition = {
@@ -2690,6 +2682,7 @@ async function bootstrap() {
           } : null,
           upgradeTransition: p.upgradeTransition ? {
             type: p.upgradeTransition.type,
+            prop: p.upgradeTransition.prop || null,
             progress: Math.min(1.0, p.upgradeTransition.elapsed / 30000)
           } : null,
           finalRateExceedsOne: finalRate > 1.0,
@@ -2837,6 +2830,8 @@ async function bootstrap() {
           upgradeType: s.upgradeType || null,
           upgradeTokens: s.upgradeTokens || 0,
           upgradeUsingToken: s.upgradeUsingToken || false,
+          terraforming: s.terraforming || 0,
+          activeTerraformPlanetId: s.activeTerraformPlanetId || null,
           isDismantling: s.isDismantling || false,
           dismantleTimer: s.dismantleTimer !== undefined ? s.dismantleTimer : 0,
           dismantleDuration: s.dismantleDuration || (s.maxHealth / 2) || 15,
@@ -3407,6 +3402,32 @@ async function bootstrap() {
         }
       }
 
+      // Authoritative galaxy-wide planetary upgrade counts (owned planets only).
+      // Sent so clients can gray out upgrade buttons even when FoW hides other worlds.
+      const planetUpgradePropsForCap = [
+        'sensorarrays', 'labs', 'armor', 'shields', 'engine', 'munitions',
+        'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel',
+        'diplomat', 'marines', 'command'
+      ];
+      const galaxyPlanetUpgradeCounts = {};
+      for (const up of planetUpgradePropsForCap) galaxyPlanetUpgradeCounts[up] = 0;
+      for (const p of game.planets) {
+        if (!p.owner) continue;
+        for (const up of planetUpgradePropsForCap) {
+          galaxyPlanetUpgradeCounts[up] += (p[up] || 0);
+        }
+        // Count in-progress builds toward the type cap so UI matches availability
+        if (p.upgradeTransition && p.upgradeTransition.prop) {
+          const tProp = p.upgradeTransition.prop;
+          if (galaxyPlanetUpgradeCounts[tProp] !== undefined) {
+            galaxyPlanetUpgradeCounts[tProp] += 1;
+          }
+        }
+      }
+      const humanPlayersForCap = game.allPlayers.filter(pl => pl && !pl.isAI && pl.id !== 'monsters');
+      const numHumanPlayersForCap = Math.max(1, humanPlayersForCap.length);
+      const galaxyPlanetUpgradeTypeMax = Math.ceil(numHumanPlayersForCap / 5);
+
       const state = {
         planets: visiblePlanets,
         ships: visibleShips,
@@ -3438,6 +3459,9 @@ async function bootstrap() {
           }
           return pObj;
         }),
+        galaxyPlanetUpgradeCounts,
+        galaxyPlanetUpgradeTypeMax,
+        numHumanPlayers: numHumanPlayersForCap,
         globalUpgradeModifiers: game.globalUpgradeModifiers ? { ...game.globalUpgradeModifiers } : {},
         upgradeEnhanceEvents: visibleUpgradeEnhanceEvents,
         accuracyEvents: visibleAccuracyEvents,
