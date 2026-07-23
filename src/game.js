@@ -5292,12 +5292,16 @@ export class Game {
       }
     }
 
-    // Re-initialize research state for this frame
+    // Re-initialize research state for this frame + maintain anomaly index
+    // (research/completion scans use this instead of all planets)
+    if (!this.anomalyPlanets) this.anomalyPlanets = [];
+    this.anomalyPlanets.length = 0;
     for (const p of this.planets) {
       if (p.anomaly) {
         p.anomaly.beingResearched = false;
         p.anomaly.researchingShipId = null;
         p.anomaly.researchingShipIds = [];
+        if (!p.anomaly.researched) this.anomalyPlanets.push(p);
       }
     }
     const wreckageNow = Date.now();
@@ -5357,9 +5361,10 @@ export class Game {
       const gravityRadius = p.getGravityRadius();
       const searchRadiusSq = gravityRadius * gravityRadius;
       
-      // 1. Check if completing an anomaly
+      // 1. Check if completing an anomaly (anomaly index only)
       let completingPlanet = null;
-      for (const targetP of this.planets) {
+      const anomalyList = this.anomalyPlanets || this.planets;
+      for (const targetP of anomalyList) {
         if (targetP.anomaly && targetP.anomaly.completing && targetP.anomaly.completingShipId === p.id) {
           completingPlanet = targetP;
           break;
@@ -5390,10 +5395,10 @@ export class Game {
       }
       
       if (!completedOrResearched) {
-        // Find best anomaly within gravity well
+        // Find best anomaly within gravity well (anomaly index only)
         let targetAnomaly = null;
         let highestProgress = -1;
-        for (const targetP of this.planets) {
+        for (const targetP of anomalyList) {
           if (!targetP.anomaly || targetP.anomaly.completing || targetP.anomaly.researched) continue;
           
           const currentProgress = (targetP.anomaly.progress && typeof targetP.anomaly.progress === 'object')

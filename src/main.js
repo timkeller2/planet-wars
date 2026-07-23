@@ -14102,9 +14102,10 @@ function getPlanetTradeIncomePerMin(planet) {
 
     // Level-of-detail for galactic / zoomed-out views (screen pixels per world unit)
     // finalScale ~0.02 on a fully-visible 50k map — use extreme LOD
-    const galacticView = finalScale < 0.08;      // whole regions of the galaxy
-    const strategicView = finalScale < 0.2;     // multi-system view
-    const detailView = finalScale >= 0.35;      // labels, wells, full ship art
+    // Thresholds raised vs older builds: 750-planet maps stay in LOD longer when zoomed out.
+    const galacticView = finalScale < 0.12;      // whole regions of the galaxy
+    const strategicView = finalScale < 0.28;     // multi-system view
+    const detailView = finalScale >= 0.45;      // labels, wells, full ship art
 
     ctx.save();
     try {
@@ -14268,19 +14269,23 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      // Draw connections if planets are selected (skip in galactic — O(planets) lines)
-      if (selectedPlanets.length > 0 && detailView) {
+      // Draw connections if planets are selected (detail zoom only — O(selected×planets))
+      // Cap to nearest on-screen worlds when many planets exist
+      if (selectedPlanets.length > 0 && detailView && selectedPlanets.length <= 8) {
         for (const sp of selectedPlanets) {
+          let drawn = 0;
           for (const p of serverState.planets) {
             if (p.isDeepSpaceAnomaly) continue;
-            if (p.id !== sp.id && !selectedPlanets.some(sel => sel.id === p.id)) {
-              ctx.beginPath();
-              ctx.moveTo(sp.x, sp.y);
-              ctx.lineTo(p.x, p.y);
-              ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
-              ctx.lineWidth = 1;
-              ctx.stroke();
-            }
+            if (p.id === sp.id || selectedPlanets.some(sel => sel.id === p.id)) continue;
+            // Only lines to on-screen planets
+            if (p.x < viewMinX || p.x > viewMaxX || p.y < viewMinY || p.y > viewMaxY) continue;
+            ctx.beginPath();
+            ctx.moveTo(sp.x, sp.y);
+            ctx.lineTo(p.x, p.y);
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            if (++drawn >= 40) break;
           }
         }
       }
@@ -14365,8 +14370,11 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       // Draw scanning beams for planets being subverted by a diplomat (yellow scan beams)
+      // Only planets with an active diplomat — do not walk all worlds each frame
       for (const p of serverState.planets) {
-        if (p.activeDiplomatId && p.diplomacyWarmupTimer > 0) {
+        if (!p.activeDiplomatId || !(p.diplomacyWarmupTimer > 0)) continue;
+        if (galacticView) continue;
+        {
           const diplomat = findServerShip(p.activeDiplomatId);
           if (diplomat) {
             const sx = diplomat.x;
@@ -14432,8 +14440,11 @@ function getPlanetTradeIncomePerMin(planet) {
       let anyCompleting = false;
 
       // Draw scanning beams/cones for anomalies being researched/completed
+      // Early-out: only planets with active research (galactic: skip beams)
       for (const p of serverState.planets) {
-        if (p.anomaly && !p.anomaly.researched && p.anomaly.beingResearched) {
+        if (galacticView) break;
+        if (!p.anomaly || p.anomaly.researched || !p.anomaly.beingResearched) continue;
+        {
           const shipIds = new Set();
           if (p.anomaly.completingShipId) shipIds.add(p.anomaly.completingShipId);
           if (p.anomaly.researchingShipId) shipIds.add(p.anomaly.researchingShipId);

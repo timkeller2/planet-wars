@@ -2448,205 +2448,233 @@ async function bootstrap() {
       return;
     }
 
-    // Compute planet visual state
+    // Compute planet visual state (perf: skip odds on quiet worlds, reuse unchanged objects)
     // Deep-space anomalies: cheap stub (hundreds on large maps; full mapping wasted most of the payload time)
+
+    // Contested planets: only these need attacker-odds spatial work
+    const contestedPlanetIds = new Set();
+    for (const ship of game.ships) {
+      if (!ship || !ship.active || !ship.targetPlanet || !ship.owner) continue;
+      const tp = ship.targetPlanet;
+      if (tp.dead || tp.isDeepSpaceAnomaly) continue;
+      if (tp.owner === ship.owner) continue;
+      const cdx = ship.x - tp.x;
+      const cdy = ship.y - tp.y;
+      if (cdx * cdx + cdy * cdy < 22500) contestedPlanetIds.add(tp.id);
+    }
+
+    // Surviving AI count once (was O(planets) inside every odds calc)
+    let survivingAICountGlobal = 0;
+    {
+      const aiOwners = new Set();
+      for (const planet of game.planets) {
+        if (planet.owner && planet.owner.isAI) aiOwners.add(planet.owner.id);
+      }
+      survivingAICountGlobal = aiOwners.size;
+    }
+
+    if (!game._planetMapCache) game._planetMapCache = new Map();
+    const planetMapCache = game._planetMapCache;
+
+    const mapAnomaly = (a) => a ? {
+      id: a.id, x: a.x, y: a.y, difficulty: a.difficulty,
+      progress: a.progress, researched: a.researched,
+      beingResearched: a.beingResearched || false, rewardType: a.rewardType,
+      completing: a.completing || false, completingTimeLeft: a.completingTimeLeft || 0,
+      completingShipId: a.completingShipId || null, completingPlayerId: a.completingPlayerId || null,
+      researchingShipId: a.researchingShipId || null, researchingShipIds: a.researchingShipIds || []
+    } : null;
+
     const allPlanetsMapped = game.planets.map(p => {
         if (p.isDeepSpaceAnomaly) {
-          return {
+          const a = p.anomaly;
+          const dsaSig = a
+            ? ('dsa|' + (a.researched ? 1 : 0) + '|' + (a.beingResearched ? 1 : 0) + '|' + (a.completing ? 1 : 0) + '|' + Math.floor(a.completingTimeLeft || 0) + '|' + (a.researchingShipId || ''))
+            : 'dsa|0';
+          const prevDsa = planetMapCache.get(p.id);
+          if (prevDsa && prevDsa.sig === dsaSig) return prevDsa.obj;
+          const dsaObj = {
             id: p.id, name: p.name, x: p.x, y: p.y, radius: 0, ships: 0, maxShips: 0,
             ownerId: null, dead: false, isDeepSpaceAnomaly: true,
-            anomaly: p.anomaly ? {
-              id: p.anomaly.id, x: p.anomaly.x, y: p.anomaly.y, difficulty: p.anomaly.difficulty,
-              progress: p.anomaly.progress, researched: p.anomaly.researched,
-              beingResearched: p.anomaly.beingResearched || false, rewardType: p.anomaly.rewardType,
-              completing: p.anomaly.completing || false, completingTimeLeft: p.anomaly.completingTimeLeft || 0,
-              completingShipId: p.anomaly.completingShipId || null, completingPlayerId: p.anomaly.completingPlayerId || null,
-              researchingShipId: p.anomaly.researchingShipId || null, researchingShipIds: p.anomaly.researchingShipIds || []
-            } : null
+            anomaly: mapAnomaly(p.anomaly)
           };
+          planetMapCache.set(p.id, { sig: dsaSig, obj: dsaObj });
+          return dsaObj;
         }
-        const incomingShips = [];
-        // Dead worlds never show attacker odds — skip spatial query
-        if (!p.dead) {
+
+        const tEvent = p.techIncreaseEvent;
+        p.techIncreaseEvent = false;
+        const tdEvent = p.techDoubleIncreaseEvent;
+        p.techDoubleIncreaseEvent = false;
+        const prwEvent = p.preferredResourceWantedEvent || false;
+        p.preferredResourceWantedEvent = false;
+        const cEvent = p.capacityDecreaseEvent;
+        p.capacityDecreaseEvent = false;
+        const dEvent = p.defeatEvent;
+        p.defeatEvent = null;
+        const lEvent = p.lastStandEvent;
+        p.lastStandEvent = false;
+        const hwEvent = p.homeworldEvent;
+        p.homeworldEvent = false;
+        const rAttemptEvent = p.revoltAttemptEvent || false;
+        p.revoltAttemptEvent = false;
+
+        const hasPulseEvent = !!(tEvent || tdEvent || prwEvent || cEvent || dEvent || lEvent || hwEvent || rAttemptEvent);
+
+        const ownerId = p.owner ? p.owner.id : '';
+        const shipsQ = Math.floor(p.ships || 0);
+        const maxShipsQ = Math.round(p.maxShips || 0);
+        const suppliesQ = Math.floor(p.supplies || 0);
+        const prodQ = Math.floor((p.productionProgress || 0) * 20);
+        const focusProg = p.focusTransition ? Math.floor(Math.min(1, p.focusTransition.elapsed / 15000) * 20) : -1;
+        const upgProg = p.upgradeTransition ? Math.floor(Math.min(1, p.upgradeTransition.elapsed / 30000) * 20) : -1;
+        const an = p.anomaly;
+        const anSig = an
+          ? ((an.researched ? 1 : 0) + '' + (an.beingResearched ? 1 : 0) + (an.completing ? 1 : 0) + Math.floor(an.completingTimeLeft || 0) + '|' + (an.researchingShipId || ''))
+          : '0';
+        const needOdds = !p.dead && contestedPlanetIds.has(p.id);
+        const dynSig = [
+          ownerId, shipsQ, maxShipsQ, suppliesQ, prodQ,
+          p.dead ? 1 : 0, p.focusMode || 'economy', p.focusChanges || 0,
+          p.inRevolt ? 1 : 0, Math.floor(p.revoltTimer || 0), Math.floor(p.revoltWarmup || 0),
+          focusProg, upgProg, anSig,
+          p.activeDiplomatId || '', Math.floor(p.diplomacyWarmupTimer || 0),
+          p.isResearch ? 1 : 0, p.isMilitary ? 1 : 0, p.isSpeedPlanet ? 1 : 0, p.isSuperPlanet ? 1 : 0,
+          p.habitability || 0, p.minerals || 4, p.sizeClass || 0,
+          p.labs || 0, p.sensorarrays || 0, p.armor || 0, p.shields || 0,
+          p.engine || 0, p.munitions || 0, p.targeting || 0, p.damagecontrol || 0,
+          p.supply_ship || 0, p.extended_fuel || 0, p.diplomat || 0, p.marines || 0, p.command || 0,
+          p.rampageEvent ? 1 : 0, p.rampageIncubating ? 1 : 0,
+          Math.floor(p.expScore || 0), needOdds ? 1 : 0, hasPulseEvent ? 1 : 0
+        ].join('|');
+
+        let maxKillChance = null;
+        if (needOdds) {
+          const incomingShips = [];
           const searchShips = game.spatialGrid ? game.getShipsInRadiusSq(p.x, p.y, 22500) : game.ships;
           for (const s of searchShips) {
             if (s.active && s.targetPlanet === p && s.owner !== p.owner) {
               const dx = s.x - p.x;
               const dy = s.y - p.y;
-              if (dx*dx + dy*dy < 22500) {
-                incomingShips.push(s);
-              }
+              if (dx * dx + dy * dy < 22500) incomingShips.push(s);
             }
           }
-        }
-        let maxKillChance = null;
-        
-        if (incomingShips.length > 0) {
-          const attackersByOwner = new Map();
-          for (const s of incomingShips) {
-            if (!attackersByOwner.has(s.owner)) attackersByOwner.set(s.owner, []);
-            attackersByOwner.get(s.owner).push(s);
-          }
-          
-          for (const [owner, ships] of attackersByOwner.entries()) {
-            let penalty = 0.01 * Math.floor(p.ships / 5);
-            
-            let nearbyFriendlyCount = 0;
-            for (const s of ships) {
-              const dx = s.x - p.x;
-              const dy = s.y - p.y;
-              if (dx*dx + dy*dy < 2500) nearbyFriendlyCount++;
+          if (incomingShips.length > 0) {
+            const attackersByOwner = new Map();
+            for (const s of incomingShips) {
+              if (!attackersByOwner.has(s.owner)) attackersByOwner.set(s.owner, []);
+              attackersByOwner.get(s.owner).push(s);
             }
-            const advantage = 0.01 * Math.floor(nearbyFriendlyCount / 10);
-            
-            let friendlyPlanetBoost = 0;
-            let defenderPlanetPenalty = 0;
-            // Nearby gravity wells only — use planet spatial grid when available
-            const nearbyForOdds = (game.planetGridPopulated && game.planetGrid)
-              ? game.planetGrid.getPlanetsInRadiusSq(p.x, p.y, 400 * 400)
-              : game.planets;
-            for (const otherPlanet of nearbyForOdds) {
-              if (otherPlanet === p || otherPlanet.isDeepSpaceAnomaly) continue;
-              const dx = otherPlanet.x - p.x;
-              const dy = otherPlanet.y - p.y;
-              const gravityRadius = otherPlanet.getGravityRadius();
-              
-              if (dx*dx + dy*dy < gravityRadius * gravityRadius) {
-                if (otherPlanet.owner === owner) {
-                  let mult = 0.002;
-                  if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
-                    if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) {
-                      mult = 0.0045;
-                    } else if (otherPlanet.ships >= otherPlanet.maxShips) {
-                      mult = 0.003;
+            for (const [owner, ships] of attackersByOwner.entries()) {
+              let penalty = 0.01 * Math.floor(p.ships / 5);
+              let nearbyFriendlyCount = 0;
+              for (const s of ships) {
+                const dx = s.x - p.x;
+                const dy = s.y - p.y;
+                if (dx * dx + dy * dy < 2500) nearbyFriendlyCount++;
+              }
+              const advantage = 0.01 * Math.floor(nearbyFriendlyCount / 10);
+              let friendlyPlanetBoost = 0;
+              let defenderPlanetPenalty = 0;
+              const nearbyForOdds = (game.planetGridPopulated && game.planetGrid)
+                ? game.planetGrid.getPlanetsInRadiusSq(p.x, p.y, 400 * 400)
+                : game.planets;
+              for (const otherPlanet of nearbyForOdds) {
+                if (otherPlanet === p || otherPlanet.isDeepSpaceAnomaly) continue;
+                const dx = otherPlanet.x - p.x;
+                const dy = otherPlanet.y - p.y;
+                const gravityRadius = otherPlanet._tickGravityRadius != null
+                  ? otherPlanet._tickGravityRadius
+                  : otherPlanet.getGravityRadius();
+                if (dx * dx + dy * dy < gravityRadius * gravityRadius) {
+                  if (otherPlanet.owner === owner) {
+                    let mult = 0.002;
+                    if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
+                      if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) mult = 0.0045;
+                      else if (otherPlanet.ships >= otherPlanet.maxShips) mult = 0.003;
                     }
-                  }
-                  friendlyPlanetBoost += mult * Math.floor(otherPlanet.ships / 10);
-                } else if (p.owner !== null && otherPlanet.owner === p.owner) {
-                  let mult = 0.002;
-                  if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
-                    if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) {
-                      mult = 0.0045;
-                    } else if (otherPlanet.ships >= otherPlanet.maxShips) {
-                      mult = 0.003;
+                    friendlyPlanetBoost += mult * Math.floor(otherPlanet.ships / 10);
+                  } else if (p.owner !== null && otherPlanet.owner === p.owner) {
+                    let mult = 0.002;
+                    if (otherPlanet.isMilitary || otherPlanet.focusMode === 'garrison') {
+                      if (otherPlanet.ships >= otherPlanet.maxShips * 2 - 10) mult = 0.0045;
+                      else if (otherPlanet.ships >= otherPlanet.maxShips) mult = 0.003;
                     }
+                    let bonus = mult * Math.floor(otherPlanet.ships / 10);
+                    if (otherPlanet.inRevolt) bonus *= 0.5;
+                    defenderPlanetPenalty += bonus;
                   }
-                  let bonus = mult * Math.floor(otherPlanet.ships / 10);
-                  if (otherPlanet.inRevolt) {
-                    bonus *= 0.5;
+                }
+              }
+              const attackerTechBonus = 0.01 * Math.sqrt(owner.techScore || 0);
+              const attackerExpBonus = 0.01 * Math.sqrt(owner.expScore || 0);
+              let defenderTechPenalty = 0.01 * Math.sqrt(p.owner ? (p.owner.techScore || 0) : 0);
+              let defenderExpPenalty = 0.01 * Math.sqrt(p.owner ? (p.owner.expScore || 0) : 0);
+              let maxShipExp = 0;
+              for (const s of ships) {
+                if (s.expScore > maxShipExp) maxShipExp = s.expScore;
+              }
+              const attackerLocalExpBonus = 0.01 * Math.sqrt(maxShipExp || 0);
+              let defenderLocalExpPenalty = 0.01 * Math.sqrt(p.expScore || 0);
+              const humanInvolved = (!owner.isAI) || (p.owner && !p.owner.isAI);
+              const humanVsHuman = (!owner.isAI) && (p.owner && !p.owner.isAI);
+              let humanDefenderBonus = humanVsHuman ? (0.02 * survivingAICountGlobal) : 0;
+              let lastStandPenalty = (humanInvolved && p.owner && p.owner.planetCount === 1) ? 0.20 : 0;
+              let defenderHomeworldPenalty = (humanInvolved && p.owner && p.owner.id === p.homeworldOf) ? 0.20 : 0;
+              const attackerHomeworldBonus = (humanInvolved && owner.id === p.homeworldOf && p.owner !== owner) ? 0.20 : 0;
+              let hazardPenalty = 0;
+              if (game.storms) {
+                for (const storm of game.storms) {
+                  if (storm.type === 'minefield') continue;
+                  const sdx = p.x - storm.x;
+                  const sdy = p.y - storm.y;
+                  if (sdx * sdx + sdy * sdy <= storm.radius * storm.radius) {
+                    const knowledge = (storm.knowledge && typeof storm.knowledge === 'object') ? (storm.knowledge[owner.id] || 0) : (storm.knowledge || 0);
+                    const tRed = Math.sqrt(owner.techScore || 0);
+                    const eRed = Math.sqrt(owner.expScore || 0);
+                    const sRed = Math.sqrt(maxShipExp || 0);
+                    const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
+                    hazardPenalty += eff / 100;
                   }
-                  defenderPlanetPenalty += bonus;
                 }
               }
-            }
-            
-            const attackerTechBonus = 0.01 * Math.sqrt(owner.techScore || 0);
-            const attackerExpBonus = 0.01 * Math.sqrt(owner.expScore || 0);
-            let defenderTechPenalty = 0.01 * Math.sqrt(p.owner ? (p.owner.techScore || 0) : 0);
-            let defenderExpPenalty = 0.01 * Math.sqrt(p.owner ? (p.owner.expScore || 0) : 0);
-            
-            let maxShipExp = 0;
-            for (const s of ships) {
-              if (s.expScore > maxShipExp) maxShipExp = s.expScore;
-            }
-            const attackerLocalExpBonus = 0.01 * Math.sqrt(maxShipExp || 0);
-            let defenderLocalExpPenalty = 0.01 * Math.sqrt(p.expScore || 0);
-            
-            const humanInvolved = (!owner.isAI) || (p.owner && !p.owner.isAI);
-            const humanVsHuman = (!owner.isAI) && (p.owner && !p.owner.isAI);
-            
-            let survivingAICount = 0;
-            if (humanVsHuman) {
-              const aiOwners = new Set();
-              for (const planet of game.planets) {
-                if (planet.owner && planet.owner.isAI) {
-                  aiOwners.add(planet.owner.id);
-                }
+              const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
+              const matchesAnyAttacker = ships.some(s => s.cruiserStyle === p.racialAffinity) || (owner && owner.cruiserStyle === p.racialAffinity);
+              let racialDefenseBonus = !matchesAnyAttacker ? 0.15 : 0;
+              if (p.inRevolt) {
+                penalty *= 0.5;
+                defenderPlanetPenalty *= 0.5;
+                defenderTechPenalty *= 0.5;
+                defenderExpPenalty *= 0.5;
+                defenderLocalExpPenalty *= 0.5;
+                lastStandPenalty *= 0.5;
+                defenderHomeworldPenalty *= 0.5;
+                humanDefenderBonus *= 0.5;
+                racialDefenseBonus *= 0.5;
               }
-              survivingAICount = aiOwners.size;
-            }
-            let humanDefenderBonus = humanVsHuman ? (0.02 * survivingAICount) : 0;
-            
-            let lastStandPenalty = (humanInvolved && p.owner && p.owner.planetCount === 1) ? 0.20 : 0;
-            let defenderHomeworldPenalty = (humanInvolved && p.owner && p.owner.id === p.homeworldOf) ? 0.20 : 0;
-            const attackerHomeworldBonus = (humanInvolved && owner.id === p.homeworldOf && p.owner !== owner) ? 0.20 : 0;
-            
-            let hazardPenalty = 0;
-            if (game.storms) {
-              for (const storm of game.storms) {
-                if (storm.type === 'minefield') continue;
-                const sdx = p.x - storm.x;
-                const sdy = p.y - storm.y;
-                if (sdx * sdx + sdy * sdy <= storm.radius * storm.radius) {
-                  const knowledge = (storm.knowledge && typeof storm.knowledge === 'object') ? (storm.knowledge[owner.id] || 0) : (storm.knowledge || 0);
-                  const tRed = Math.sqrt(owner.techScore || 0);
-                  const eRed = Math.sqrt(owner.expScore || 0);
-                  const sRed = Math.sqrt(maxShipExp || 0);
-                  const eff = Math.max(0, storm.intensity - knowledge - (tRed + eRed) / 2 - sRed);
-                  hazardPenalty += eff / 100;
-                }
-              }
-            }
-
-            const minKillChance = attackerTechBonus + attackerExpBonus + attackerLocalExpBonus;
-            const matchesAnyAttacker = ships.some(s => s.cruiserStyle === p.racialAffinity) || (owner && owner.cruiserStyle === p.racialAffinity);
-            let racialDefenseBonus = !matchesAnyAttacker ? 0.15 : 0;
-
-            if (p.inRevolt) {
-              penalty *= 0.5;
-              defenderPlanetPenalty *= 0.5;
-              defenderTechPenalty *= 0.5;
-              defenderExpPenalty *= 0.5;
-              defenderLocalExpPenalty *= 0.5;
-              lastStandPenalty *= 0.5;
-              defenderHomeworldPenalty *= 0.5;
-              humanDefenderBonus *= 0.5;
-              racialDefenseBonus *= 0.5;
-            }
-
-            let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus - racialDefenseBonus);
-            killChance = Math.max(minKillChance, killChance - hazardPenalty);
-            if (maxKillChance === null || killChance > maxKillChance) {
-              maxKillChance = killChance;
+              let killChance = Math.max(minKillChance, 0.8 - penalty + advantage + friendlyPlanetBoost - defenderPlanetPenalty + attackerTechBonus + attackerExpBonus + attackerLocalExpBonus + attackerHomeworldBonus - defenderTechPenalty - defenderExpPenalty - defenderLocalExpPenalty - lastStandPenalty - defenderHomeworldPenalty - humanDefenderBonus - racialDefenseBonus);
+              killChance = Math.max(minKillChance, killChance - hazardPenalty);
+              if (maxKillChance === null || killChance > maxKillChance) maxKillChance = killChance;
             }
           }
         }
 
-        const tEvent = p.techIncreaseEvent;
-        p.techIncreaseEvent = false;
+        const oddsQ = maxKillChance !== null ? Math.round(maxKillChance * 100) : -1;
+        const fullSig = dynSig + '|o' + oddsQ;
+        const prev = planetMapCache.get(p.id);
+        if (prev && prev.sig === fullSig && !hasPulseEvent) {
+          return prev.obj;
+        }
 
-        const tdEvent = p.techDoubleIncreaseEvent;
-        p.techDoubleIncreaseEvent = false;
-
-        const prwEvent = p.preferredResourceWantedEvent || false;
-        p.preferredResourceWantedEvent = false;
-        
-        const cEvent = p.capacityDecreaseEvent;
-        p.capacityDecreaseEvent = false;
-
-        const dEvent = p.defeatEvent;
-        p.defeatEvent = null;
-
-        const lEvent = p.lastStandEvent;
-        p.lastStandEvent = false;
-
-        const hwEvent = p.homeworldEvent;
-        p.homeworldEvent = false;
-
-        const rAttemptEvent = p.revoltAttemptEvent || false;
-        p.revoltAttemptEvent = false;
-
-        // Calculate final production rate with soft-cap
         const finalRate = p.getFinalProductionRate(game.settings);
-
-        return {
+        const mapped = {
           id: p.id,
           name: p.name,
           x: p.x,
           y: p.y,
           radius: p.radius,
           ships: p.ships,
-          maxShips: Math.round(p.maxShips),
+          maxShips: maxShipsQ,
           ownerId: p.owner ? p.owner.id : null,
           productionProgress: p.productionProgress,
           expScore: p.expScore || 0,
@@ -2711,23 +2739,14 @@ async function bootstrap() {
           diplomat: p.diplomat || 0,
           marines: p.marines || 0,
           command: p.command || 0,
-           anomaly: p.anomaly ? {
-             id: p.anomaly.id,
-             x: p.anomaly.x,
-             y: p.anomaly.y,
-             difficulty: p.anomaly.difficulty,
-             progress: p.anomaly.progress,
-             researched: p.anomaly.researched,
-             beingResearched: p.anomaly.beingResearched || false,
-             rewardType: p.anomaly.rewardType,
-             completing: p.anomaly.completing || false,
-             completingTimeLeft: p.anomaly.completingTimeLeft || 0,
-             completingShipId: p.anomaly.completingShipId || null,
-             completingPlayerId: p.anomaly.completingPlayerId || null,
-             researchingShipId: p.anomaly.researchingShipId || null,
-             researchingShipIds: p.anomaly.researchingShipIds || []
-           } : null
-      };
+          anomaly: mapAnomaly(p.anomaly)
+        };
+        // After pulse events fire once, cache without them so next ticks reuse
+        const cacheSig = hasPulseEvent
+          ? dynSig + '|o' + oddsQ + '|pulse0'
+          : fullSig;
+        planetMapCache.set(p.id, { sig: cacheSig, obj: mapped });
+        return mapped;
     });
 
     const allShipsMapped = game.ships.map(s => {
@@ -3105,8 +3124,11 @@ async function bootstrap() {
             p.anomalyAttempted = true;
             let maxLabs = 0;
             let maxShipXpBonus = 0;
-            const playerShips = game.ships.filter(s => s.active && s.owner && s.owner.id === player.id);
-            for (const ship of playerShips) {
+            // Nearby ships only — full fleet filter was O(ships) per newly discovered world
+            const nearbyPlayerShips = game.spatialGrid
+              ? game.getShipsInRadiusSq(p.x, p.y, 400 * 400).filter(s => s.active && s.owner && s.owner.id === player.id)
+              : game.ships.filter(s => s.active && s.owner && s.owner.id === player.id);
+            for (const ship of nearbyPlayerShips) {
               const radar = ship.isCruiser ? (ship.cruiserRadarRange ? ship.cruiserRadarRange() : 150) : 50;
               const pct = hazardSensorReductionPct(ship.x, ship.y, player.id);
               const eff = Math.max(10, radar * pct);
@@ -3164,17 +3186,29 @@ async function bootstrap() {
           if (isDiscoveredNow) {
             spawnAnomalyForPlanet();
           }
-          const mappedPlanet = Object.assign({}, allPlanetsMapped[i]);
-          if (mappedPlanet.anomaly) {
-            mappedPlanet.anomaly = Object.assign({}, mappedPlanet.anomaly, {
-              progress: (p.anomaly.progress && typeof p.anomaly.progress === 'object') ? (p.anomaly.progress[player.id] || 0) : 0
-            });
+          if (!player._visPlanetCache) player._visPlanetCache = new Map();
+          const baseVis = allPlanetsMapped[i];
+          const progVis = (p.anomaly && p.anomaly.progress && typeof p.anomaly.progress === 'object')
+            ? (p.anomaly.progress[player.id] || 0) : 0;
+          const spyVis = !!(player.spyRootedEvents && player.spyRootedEvents.has(p.id));
+          // Reuse prior per-player view when base mapped object + progress unchanged
+          const visSig = (baseVis && planetMapCache.get(p.id) ? planetMapCache.get(p.id).sig : '') + '|' + progVis + '|' + (spyVis ? 1 : 0);
+          const prevVis = player._visPlanetCache.get(p.id);
+          let mappedPlanet;
+          if (prevVis && prevVis.sig === visSig) {
+            mappedPlanet = prevVis.obj;
+          } else {
+            mappedPlanet = Object.assign({}, baseVis);
+            if (mappedPlanet.anomaly) {
+              mappedPlanet.anomaly = Object.assign({}, mappedPlanet.anomaly, { progress: progVis });
+            }
+            if (spyVis) mappedPlanet.spyRootedOutEvent = true;
+            player._visPlanetCache.set(p.id, { sig: visSig, obj: mappedPlanet });
           }
-          if (player.spyRootedEvents && player.spyRootedEvents.has(p.id)) mappedPlanet.spyRootedOutEvent = true;
           visiblePlanets.push(mappedPlanet);
 
           player.lastKnownPlanets = player.lastKnownPlanets || {};
-          player.lastKnownPlanets[p.id] = Object.assign({}, mappedPlanet);
+          player.lastKnownPlanets[p.id] = mappedPlanet;
         } else if (isSilhouetteVisible(p.x, p.y) || player.discoveredPlanets.has(p.id) || p.rampageEvent) {
           if (isSilhouetteVisible(p.x, p.y)) {
             if (!player.discoveredPlanets.has(p.id)) {
@@ -3186,60 +3220,91 @@ async function bootstrap() {
             }
           }
           const hasAttacked = player.attackedPlanets && player.attackedPlanets.has(p.id) && player.attackedPlanets.get(p.id) > 0;
+          if (!player._fogPlanetCache) player._fogPlanetCache = new Map();
           if (hasAttacked) {
-            const mappedPlanet = Object.assign({}, allPlanetsMapped[i], { inFog: true, permanentlyTracked: true });
-            if (mappedPlanet.anomaly) {
-              mappedPlanet.anomaly = Object.assign({}, mappedPlanet.anomaly, {
-                progress: (p.anomaly.progress && typeof p.anomaly.progress === 'object') ? (p.anomaly.progress[player.id] || 0) : 0
-              });
+            // Permanently tracked: reuse base mapped object when possible; tag inFog
+            const base = allPlanetsMapped[i];
+            const prog = (p.anomaly && p.anomaly.progress && typeof p.anomaly.progress === 'object')
+              ? (p.anomaly.progress[player.id] || 0) : 0;
+            const spyRooted = !!(player.spyRootedEvents && player.spyRootedEvents.has(p.id));
+            const trackSig = (base && base.id) + '|trk|' + (base.ownerId || '') + '|' + Math.floor(base.ships || 0) + '|' + Math.round(base.maxShips || 0) + '|' + (base.dead ? 1 : 0) + '|' + prog + '|' + (spyRooted ? 1 : 0);
+            const prevTrack = player._fogPlanetCache.get(p.id);
+            if (prevTrack && prevTrack.sig === trackSig) {
+              visiblePlanets.push(prevTrack.obj);
+            } else {
+              const mappedPlanet = Object.assign({}, base, { inFog: true, permanentlyTracked: true });
+              if (mappedPlanet.anomaly) {
+                mappedPlanet.anomaly = Object.assign({}, mappedPlanet.anomaly, { progress: prog });
+              }
+              if (spyRooted) mappedPlanet.spyRootedOutEvent = true;
+              player._fogPlanetCache.set(p.id, { sig: trackSig, obj: mappedPlanet });
+              visiblePlanets.push(mappedPlanet);
             }
-            if (player.spyRootedEvents && player.spyRootedEvents.has(p.id)) mappedPlanet.spyRootedOutEvent = true;
-            visiblePlanets.push(mappedPlanet);
           } else {
-            const spyRooted = player.spyRootedEvents && player.spyRootedEvents.has(p.id);
-            visiblePlanets.push({
-              id: p.id,
-              x: p.x,
-              y: p.y,
-              radius: p.radius,
-              ownerId: p.owner ? p.owner.id : null,
-              ships: 0,
-              maxShips: Math.round(p.maxShips),
-              inFog: true,
-              spyRootedOutEvent: spyRooted,
-              isSpeedPlanet: p.isSpeedPlanet,
-              isSuperPlanet: p.isSuperPlanet,
-           dead: p.dead || false,
-              isResearch: p.isResearch,
-              isMilitary: p.isMilitary,
-              rampageEvent: p.rampageEvent || false,
-              rampageIncubating: p.rampageIncubating || false,
-              isAICandidate: p.isAICandidate || false,
-              resources: p.resources || null,
-              expScore: p.expScore || 0,
-              sizeClass: p.sizeClass || 0,
-              habitability: p.habitability || 0,
-              minerals: p.minerals || 4,
-              inRevolt: p.inRevolt || false,
-              revoltTimer: p.revoltTimer || 0,
-              isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false,
-              anomaly: p.anomaly ? {
-                 id: p.anomaly.id,
-                 x: p.anomaly.x,
-                 y: p.anomaly.y,
-                 difficulty: p.anomaly.difficulty,
-                 progress: (p.anomaly.progress && typeof p.anomaly.progress === 'object') ? (p.anomaly.progress[player.id] || 0) : 0,
-                 researched: p.anomaly.researched,
-                 beingResearched: p.anomaly.beingResearched || false,
-                 rewardType: p.anomaly.rewardType,
-                 completing: p.anomaly.completing || false,
-                 completingTimeLeft: p.anomaly.completingTimeLeft || 0,
-                 completingShipId: p.anomaly.completingShipId || null,
-                 completingPlayerId: p.anomaly.completingPlayerId || null,
-                 researchingShipId: p.anomaly.researchingShipId || null,
-                 researchingShipIds: p.anomaly.researchingShipIds || []
-               } : null
-            });
+            // Fog silhouette / last-known: only rebuild when signature changes (delta identity reuse)
+            const spyRooted = !!(player.spyRootedEvents && player.spyRootedEvents.has(p.id));
+            const ownerIdFog = p.owner ? p.owner.id : null;
+            const maxShipsFog = Math.round(p.maxShips);
+            const an = p.anomaly;
+            const anProg = (an && an.progress && typeof an.progress === 'object') ? (an.progress[player.id] || 0) : 0;
+            const fogSig = [
+              ownerIdFog || '', maxShipsFog, p.dead ? 1 : 0, spyRooted ? 1 : 0,
+              p.isSpeedPlanet ? 1 : 0, p.isSuperPlanet ? 1 : 0, p.isResearch ? 1 : 0, p.isMilitary ? 1 : 0,
+              p.rampageEvent ? 1 : 0, p.rampageIncubating ? 1 : 0, p.isAICandidate ? 1 : 0,
+              Math.floor(p.expScore || 0), p.sizeClass || 0, p.habitability || 0, p.minerals || 4,
+              p.inRevolt ? 1 : 0, Math.floor(p.revoltTimer || 0),
+              an ? ((an.researched ? 1 : 0) + '|' + (an.beingResearched ? 1 : 0) + '|' + (an.completing ? 1 : 0) + '|' + anProg) : '0'
+            ].join('|');
+            const prevFog = player._fogPlanetCache.get(p.id);
+            if (prevFog && prevFog.sig === fogSig) {
+              visiblePlanets.push(prevFog.obj);
+            } else {
+              const fogObj = {
+                id: p.id,
+                x: p.x,
+                y: p.y,
+                radius: p.radius,
+                ownerId: ownerIdFog,
+                ships: 0,
+                maxShips: maxShipsFog,
+                inFog: true,
+                spyRootedOutEvent: spyRooted,
+                isSpeedPlanet: p.isSpeedPlanet,
+                isSuperPlanet: p.isSuperPlanet,
+                dead: p.dead || false,
+                isResearch: p.isResearch,
+                isMilitary: p.isMilitary,
+                rampageEvent: p.rampageEvent || false,
+                rampageIncubating: p.rampageIncubating || false,
+                isAICandidate: p.isAICandidate || false,
+                resources: p.resources || null,
+                expScore: p.expScore || 0,
+                sizeClass: p.sizeClass || 0,
+                habitability: p.habitability || 0,
+                minerals: p.minerals || 4,
+                inRevolt: p.inRevolt || false,
+                revoltTimer: p.revoltTimer || 0,
+                isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false,
+                anomaly: an ? {
+                  id: an.id,
+                  x: an.x,
+                  y: an.y,
+                  difficulty: an.difficulty,
+                  progress: anProg,
+                  researched: an.researched,
+                  beingResearched: an.beingResearched || false,
+                  rewardType: an.rewardType,
+                  completing: an.completing || false,
+                  completingTimeLeft: an.completingTimeLeft || 0,
+                  completingShipId: an.completingShipId || null,
+                  completingPlayerId: an.completingPlayerId || null,
+                  researchingShipId: an.researchingShipId || null,
+                  researchingShipIds: an.researchingShipIds || []
+                } : null
+              };
+              player._fogPlanetCache.set(p.id, { sig: fogSig, obj: fogObj });
+              visiblePlanets.push(fogObj);
+            }
           }
         }
       }
@@ -3352,10 +3417,10 @@ async function bootstrap() {
         return (targetPlanet.owner && targetPlanet.owner.id === player.id) || isVisible(targetPlanet.x, targetPlanet.y) || hasSympathy;
       });
 
-      // Explored-grid full scan is O(all cells) — on 50k maps that dominates emit time.
-      // Rebuild at most every 10 ticks (~0.5s) or when the player has no cache yet.
+      // Explored cells: prefer incremental cache (updated when ships explore).
+      // Full grid scan is O(all cells) on 50k maps — only rebuild if forced or empty.
       let playerExploredCells = player._exploredCellsCache;
-      if (!playerExploredCells || (tickCount - (player._exploredCellsCacheTick || 0)) >= 10) {
+      if (!playerExploredCells || player._exploredCellsForceRebuild) {
         playerExploredCells = {};
         if (game.exploredGrid) {
           const prefix = `${player.id}_`;
@@ -3367,6 +3432,7 @@ async function bootstrap() {
           }
         }
         player._exploredCellsCache = playerExploredCells;
+        player._exploredCellsForceRebuild = false;
         player._exploredCellsCacheTick = tickCount;
       }
 
@@ -3404,30 +3470,34 @@ async function bootstrap() {
       }
 
       // Authoritative galaxy-wide planetary upgrade counts (owned planets only).
-      // Sent so clients can gray out upgrade buttons even when FoW hides other worlds.
+      // Recompute every 10 ticks — cheap enough but avoids full scan every emit.
       const planetUpgradePropsForCap = [
         'sensorarrays', 'labs', 'armor', 'shields', 'engine', 'munitions',
         'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel',
         'diplomat', 'marines', 'command'
       ];
-      const galaxyPlanetUpgradeCounts = {};
-      for (const up of planetUpgradePropsForCap) galaxyPlanetUpgradeCounts[up] = 0;
-      for (const p of game.planets) {
-        if (!p.owner) continue;
-        for (const up of planetUpgradePropsForCap) {
-          galaxyPlanetUpgradeCounts[up] += (p[up] || 0);
-        }
-        // Count in-progress builds toward the type cap so UI matches availability
-        if (p.upgradeTransition && p.upgradeTransition.prop) {
-          const tProp = p.upgradeTransition.prop;
-          if (galaxyPlanetUpgradeCounts[tProp] !== undefined) {
-            galaxyPlanetUpgradeCounts[tProp] += 1;
+      if (!game._upgradeCapCache || (tickCount - (game._upgradeCapCacheTick || 0)) >= 10) {
+        const galaxyPlanetUpgradeCounts = {};
+        for (const up of planetUpgradePropsForCap) galaxyPlanetUpgradeCounts[up] = 0;
+        for (const p of game.planets) {
+          if (!p.owner || p.isDeepSpaceAnomaly) continue;
+          for (const up of planetUpgradePropsForCap) {
+            galaxyPlanetUpgradeCounts[up] += (p[up] || 0);
+          }
+          if (p.upgradeTransition && p.upgradeTransition.prop) {
+            const tProp = p.upgradeTransition.prop;
+            if (galaxyPlanetUpgradeCounts[tProp] !== undefined) {
+              galaxyPlanetUpgradeCounts[tProp] += 1;
+            }
           }
         }
+        const humanPlayersForCap = game.allPlayers.filter(pl => pl && !pl.isAI && pl.id !== 'monsters');
+        const numHumanPlayersForCap = Math.max(1, humanPlayersForCap.length);
+        const galaxyPlanetUpgradeTypeMax = Math.ceil(numHumanPlayersForCap / 5);
+        game._upgradeCapCache = { galaxyPlanetUpgradeCounts, numHumanPlayersForCap, galaxyPlanetUpgradeTypeMax };
+        game._upgradeCapCacheTick = tickCount;
       }
-      const humanPlayersForCap = game.allPlayers.filter(pl => pl && !pl.isAI && pl.id !== 'monsters');
-      const numHumanPlayersForCap = Math.max(1, humanPlayersForCap.length);
-      const galaxyPlanetUpgradeTypeMax = Math.ceil(numHumanPlayersForCap / 5);
+      const { galaxyPlanetUpgradeCounts, numHumanPlayersForCap, galaxyPlanetUpgradeTypeMax } = game._upgradeCapCache;
 
       const state = {
         planets: visiblePlanets,

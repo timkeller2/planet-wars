@@ -1769,6 +1769,7 @@ export class Ship {
         const scY = Math.floor(this.y / 100);
         const radarRange = this.isCruiser ? this.cruiserRadarRange() : 50;
         const cellRadius = Math.max(1, Math.ceil(radarRange / 100));
+        let newExplorePatch = null;
         for (let dx = -cellRadius; dx <= cellRadius; dx++) {
           for (let dy = -cellRadius; dy <= cellRadius; dy++) {
             const cx = scX + dx;
@@ -1797,6 +1798,9 @@ export class Ship {
               }
 
               game.exploredGrid[key] = now;
+              // Batch incremental FoW cells (one object assign per ship tick)
+              if (!newExplorePatch) newExplorePatch = {};
+              newExplorePatch[`${cx}_${cy}`] = now;
               if (this.isCruiser) {
                 const xpGain = alreadyExploredByAnyone ? 1 : 2;
                 this.gainXp(xpGain, game, cx * 100 + 50, cy * 100 + 50);
@@ -1808,12 +1812,18 @@ export class Ship {
                   if (tileX >= 0 && tileX <= mapWidth && tileY >= 0 && tileY <= mapH) {
                     let isTileInDeepSpace = true;
                     if (allPlanets) {
-                      for (const planet of allPlanets) {
+                      // Prefer planet grid when available
+                      const nearbyPl = (game.planetGridPopulated && game.planetGrid)
+                        ? game.planetGrid.getPlanetsInRadiusSq(tileX, tileY, 400 * 400)
+                        : allPlanets;
+                      for (const planet of nearbyPl) {
                         if (planet.isDeepSpaceAnomaly) continue;
-                        const dx = planet.x - tileX;
-                        const dy = planet.y - tileY;
-                        const distSq = dx * dx + dy * dy;
-                        const safeDist = planet.getGravityRadius ? planet.getGravityRadius() : (planet.radius * 3);
+                        const pdx = planet.x - tileX;
+                        const pdy = planet.y - tileY;
+                        const distSq = pdx * pdx + pdy * pdy;
+                        const safeDist = planet._tickGravityRadius != null
+                          ? planet._tickGravityRadius
+                          : (planet.getGravityRadius ? planet.getGravityRadius() : (planet.radius * 3));
                         if (distSq <= safeDist * safeDist) {
                           isTileInDeepSpace = false;
                           break;
@@ -1838,6 +1848,11 @@ export class Ship {
               game.exploredGrid[key] = now;
             }
           }
+        }
+        if (newExplorePatch && this.owner) {
+          if (!this.owner._exploredCellsCache) this.owner._exploredCellsCache = {};
+          // New object so socket deltas pick up the change (identity vs lastGameState)
+          this.owner._exploredCellsCache = Object.assign({}, this.owner._exploredCellsCache, newExplorePatch);
         }
       }
     }
