@@ -587,7 +587,7 @@ export class Game {
     const amoeba = new Ship(this.nextShipId++, spawnX, spawnY, null, this.monsterPlayer);
     amoeba.isAmoeba = true;
     amoeba.isGoldenAmoeba = true;
-    amoeba.name = "The Golden Amoeba";
+    amoeba.name = 'The Golden Amoeba';
     amoeba.cruiserStyle = 'Romulan';
     amoeba.speed = 10;
     amoeba.maxHealth = 15;
@@ -6713,10 +6713,13 @@ export class Game {
             this.monsterPlayer.expScore = (this.monsterPlayer.expScore || 0) + triggerMax;
           }
           const halfSize = Math.max(1, Math.floor(triggerMax / 2));
-          ship.maxHealth = halfSize;
-          ship.health = halfSize;
-          // Recalculate and set parent's lastTotalHealth to prevent mitosis wreckage
-          ship.lastTotalHealth = Math.floor(ship.health) + (ship.maxHealth * (ship.maxHealth - 1)) / 2;
+          // The Golden Amoeba keeps full size when splitting; normal amoebas halve.
+          if (!ship.isGoldenAmoeba) {
+            ship.maxHealth = halfSize;
+            ship.health = halfSize;
+            // Recalculate and set parent's lastTotalHealth to prevent mitosis wreckage
+            ship.lastTotalHealth = Math.floor(ship.health) + (ship.maxHealth * (ship.maxHealth - 1)) / 2;
+          }
           
           const newAmoeba = new Ship(this.nextShipId++, ship.x, ship.y, null, this.monsterPlayer, ship.x + (Math.random() - 0.5) * 400, ship.y + (Math.random() - 0.5) * 400);
           newAmoeba.isAmoeba = true;
@@ -9068,13 +9071,18 @@ export class Game {
     
     for (const laser of this.lasers) {
       const progress = laser.age / laser.duration;
-      if (laser.color === 'amoeba') {
+      if (laser.color === 'amoeba' || laser.isAmoebaAttack || laser.isGoldenAmoebaAttack || laser.color === '#b8860b') {
         const curX = laser.startX + (laser.endX - laser.startX) * progress;
         const curY = laser.startY + (laser.endY - laser.startY) * progress;
         this.ctx.beginPath();
         this.ctx.arc(curX, curY, 4, 0, Math.PI * 2);
-        this.ctx.fillStyle = "rgba(0, 100, 0, 1)";
-        this.ctx.strokeStyle = "#ff0";
+        if (laser.isGoldenAmoebaAttack || laser.color === '#b8860b') {
+          this.ctx.fillStyle = "rgba(140, 100, 18, 1)";
+          this.ctx.strokeStyle = "#b8860b";
+        } else {
+          this.ctx.fillStyle = "rgba(0, 100, 0, 1)";
+          this.ctx.strokeStyle = "#ff0";
+        }
         this.ctx.lineWidth = 1.5;
         this.ctx.fill();
         this.ctx.stroke();

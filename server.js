@@ -2765,6 +2765,7 @@ async function bootstrap() {
           name: s.name || null,
           classType: s.classType || null,
           isAmoeba: s.isAmoeba || false,
+          isGoldenAmoeba: s.isGoldenAmoeba || false,
           health: s.health || 0,
           maxHealth: s.maxHealth || 0,
           bombs: s.bombs || 0,

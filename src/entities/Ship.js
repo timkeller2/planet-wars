@@ -17,6 +17,7 @@ export class Ship {
     this.targetX = targetX;
     this.targetY = targetY;
     this.owner = owner;
+    this.isGoldenAmoeba = false;
     this.speed = (owner && owner.isAI) ? 35 : 15;
     this.active = true;
     this.flightTime = 0;
@@ -2296,7 +2297,7 @@ export class Ship {
                   explosions.push({
                     x: this.x,
                     y: this.y,
-                    color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
+                    color: this.getVfxColor(),
                     age: 0
                   });
                 }
@@ -2311,7 +2312,7 @@ export class Ship {
               explosions.push({
                 x: this.x,
                 y: this.y,
-                color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
+                color: this.getVfxColor(),
                 age: 0
               });
             }
@@ -2942,7 +2943,7 @@ export class Ship {
                   explosions.push({
                     x: enemyShip.x,
                     y: enemyShip.y,
-                    color: enemyShip.owner ? enemyShip.owner.color : (enemyShip.isAmoeba ? 'amoeba' : '#fff'),
+                    color: typeof enemyShip.getVfxColor === 'function' ? enemyShip.getVfxColor() : (enemyShip.owner ? enemyShip.owner.color : (enemyShip.isAmoeba ? 'amoeba' : '#fff')),
                     age: 0
                   });
                 }
@@ -2992,13 +2993,14 @@ export class Ship {
               startY: startY,
               endX: enemyShip.x,
               endY: enemyShip.y,
-              color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
+              color: this.getVfxColor(),
               age: 0,
               duration: usedBomb ? 3 * Math.max(0.8, 0.4 + (shotsPerVolley * 0.08)) : Math.max(0.8, 0.4 + (shotsPerVolley * 0.08)),
               width: usedBomb ? 8 : undefined,
               isBombAttack: usedBomb,
               cruiserStyle: this.cruiserStyle || (this.owner ? this.owner.cruiserStyle : 'Klingon'),
               isAmoebaAttack: !!this.isAmoeba,
+              isGoldenAmoebaAttack: !!this.isGoldenAmoeba,
               sourceId: this.id,
               targetId: enemyShip.id,
               sourceCount: this.count || 1,
@@ -3154,9 +3156,10 @@ export class Ship {
                   startX: this.x, startY: this.y,
                   endX: p.x + (Math.random() - 0.5) * p.radius, 
                   endY: p.y + (Math.random() - 0.5) * p.radius,
-                  color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
+                  color: this.getVfxColor(),
                   age: 0, duration: 0.6, width: 8,
                   isAmoebaAttack: !!this.isAmoeba,
+                  isGoldenAmoebaAttack: !!this.isGoldenAmoeba,
                   cruiserStyle: this.owner ? this.owner.cruiserStyle : null
                 });
               }
@@ -4558,10 +4561,11 @@ export class Ship {
             startY: startY,
             endX: this.targetPlanet.x,
             endY: this.targetPlanet.y,
-            color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
+            color: this.getVfxColor(),
             age: 0,
             duration: 0.8,
             isAmoebaAttack: !!this.isAmoeba,
+            isGoldenAmoebaAttack: !!this.isGoldenAmoeba,
             sourceId: this.id,
             sourceCount: this.count || 1,
             sourceAngle: this.angle || 0,
@@ -6454,7 +6458,7 @@ export class Ship {
             explosions.push({
               x: this.x + offsetX,
               y: this.y + offsetY,
-              color: 'amoeba-shrug',
+              color: this.isGoldenAmoeba ? 'golden-amoeba-shrug' : 'amoeba-shrug',
               age: 0
             });
           }
@@ -6622,7 +6626,7 @@ export class Ship {
             explosions.push({
               x: this.x,
               y: this.y,
-              color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
+              color: this.getVfxColor(),
               age: 0,
               isDeath: true
             });
@@ -6632,7 +6636,7 @@ export class Ship {
         explosions.push({
           x: this.x,
           y: this.y,
-          color: this.owner ? this.owner.color : (this.isGoldenAmoeba ? '#ffd700' : (this.isAmoeba ? 'amoeba' : '#fff')),
+          color: this.getVfxColor(),
           age: 0
         });
       }
@@ -6642,10 +6646,20 @@ export class Ship {
   }
 
 
+  /**
+   * Laser / explosion VFX color. Golden amoeba uses darker gold (not monster green).
+   * Body gold is brighter and applied on the client when isGoldenAmoeba is set.
+   */
+  getVfxColor() {
+    if (this.isGoldenAmoeba) return '#b8860b'; // darkgoldenrod — attack / hit VFX
+    if (this.isAmoeba) return 'amoeba';
+    return this.owner ? this.owner.color : '#fff';
+  }
+
   draw(ctx) {
     if (!this.active) return;
 
-    ctx.fillStyle = this.owner.color;
+    ctx.fillStyle = this.isGoldenAmoeba ? '#ffd700' : (this.owner ? this.owner.color : '#0f0');
     ctx.beginPath();
     ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
     ctx.fill();

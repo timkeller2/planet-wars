@@ -2152,8 +2152,13 @@ function getPlanetTradeIncomePerMin(planet) {
           ctxTile.closePath();
           
           ctxTile.save();
-          ctxTile.fillStyle = "rgba(0, 100, 0, 0.7)";
-          ctxTile.strokeStyle = "#0f0";
+          if (s.isGoldenAmoeba) {
+            ctxTile.fillStyle = "rgba(255, 196, 40, 0.8)";
+            ctxTile.strokeStyle = "#ffd700";
+          } else {
+            ctxTile.fillStyle = "rgba(0, 100, 0, 0.7)";
+            ctxTile.strokeStyle = "#0f0";
+          }
           ctxTile.lineWidth = 1.5;
           ctxTile.fill();
           ctxTile.stroke();
@@ -3809,7 +3814,11 @@ function getPlanetTradeIncomePerMin(planet) {
       const lines = [];
 
       if (hs.isAmoeba) {
-        titleHTML = `<span style="color: #0f0">Giant Space Amoeba</span>`;
+        if (hs.isGoldenAmoeba) {
+          titleHTML = `<span style="color: #ffd700">The Golden Amoeba</span>`;
+        } else {
+          titleHTML = `<span style="color: #0f0">Giant Space Amoeba</span>`;
+        }
 
         const currentTotalHealth = Math.floor(hs.health) + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
         const maxTotalHealth = hs.maxHealth + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
@@ -10982,7 +10991,7 @@ function getPlanetTradeIncomePerMin(planet) {
       } else if (pendingEmptyDeselect) {
         // Pure empty-space click: deselect now (deferred from mousedown so pan keeps selection)
         selectedPlanets = [];
-        selectedShips = [];
+        assignSelectedShips([]);
         pendingEmptyDeselect = false;
       }
 
@@ -11306,6 +11315,8 @@ function getPlanetTradeIncomePerMin(planet) {
           touchTimeout = null;
           touchStartActive = false;
           isDraggingCamera = true;
+          // Pan, not a tap — keep current selection
+          pendingEmptyDeselect = false;
         }
       }
 
@@ -11412,6 +11423,15 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       handlePointerDown(cPos.x, cPos.y, event.shiftKey, true, 0);
+
+      // Deep-space quick tap: clear selection. Mouse does this on mouseup via
+      // pendingEmptyDeselect; touch only runs handlePointerDown on lift, and
+      // synthetic mouse events are suppressed — so apply deselect here.
+      if (pendingEmptyDeselect) {
+        selectedPlanets = [];
+        assignSelectedShips([]);
+        pendingEmptyDeselect = false;
+      }
 
       if (tappedType && (tappedId !== null && tappedId !== undefined)) {
         if (tappedType === 'ship' || tappedType === 'fleet') {
@@ -17035,7 +17055,11 @@ function getPlanetTradeIncomePerMin(planet) {
           let totalAttackMod = 0;
 
           if (hs.isAmoeba) {
-            lines.push({ label: 'Giant Space Amoeba', value: '', color: '#0f0', isHeader: true });
+            if (hs.isGoldenAmoeba) {
+              lines.push({ label: 'The Golden Amoeba', value: '', color: '#ffd700', isHeader: true });
+            } else {
+              lines.push({ label: 'Giant Space Amoeba', value: '', color: '#0f0', isHeader: true });
+            }
             const currentTotalHealth = Math.floor(hs.health) + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
             const maxTotalHealth = hs.maxHealth + (hs.maxHealth * (hs.maxHealth - 1)) / 2;
             lines.push({ label: 'Health', value: currentTotalHealth + ' / ' + maxTotalHealth, color: '#fff' });
@@ -18944,7 +18968,7 @@ function getPlanetTradeIncomePerMin(planet) {
           const oldFill = ctx.fillStyle;
           const oldStroke = ctx.strokeStyle;
           const oldLineWidth = ctx.lineWidth;
-          ctx.fillStyle = s.isGoldenAmoeba ? "rgba(200, 150, 0, 0.7)" : "rgba(0, 100, 0, 0.7)";
+          ctx.fillStyle = s.isGoldenAmoeba ? "rgba(255, 196, 40, 0.82)" : "rgba(0, 100, 0, 0.7)";
           ctx.strokeStyle = s.isGoldenAmoeba ? "#ffd700" : "#0f0";
           ctx.lineWidth = 2;
           ctx.fill();
@@ -18960,9 +18984,22 @@ function getPlanetTradeIncomePerMin(planet) {
               const by = s.y + Math.sin(bAngle) * bRadius;
               ctx.beginPath();
               ctx.arc(bx, by, 1.5, 0, Math.PI * 2);
-              ctx.fillStyle = s.isGoldenAmoeba ? `rgba(255, ${200 + ((b * 41) % 50)}, 0, 0.9)` : `rgba(0, ${150 + ((b * 71) % 100)}, 0, 0.9)`;
+              ctx.fillStyle = s.isGoldenAmoeba ? `rgba(218, ${140 + ((b * 41) % 40)}, 20, 0.95)` : `rgba(0, ${150 + ((b * 71) % 100)}, 0, 0.9)`;
               ctx.fill();
             }
+          }
+
+          // Label golden amoeba by name (regular amoebas stay unnamed)
+          if (s.isGoldenAmoeba) {
+            ctx.save();
+            ctx.font = 'bold 7px Orbitron';
+            ctx.fillStyle = '#ffd700';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.shadowColor = 'rgba(0,0,0,0.85)';
+            ctx.shadowBlur = 3;
+            ctx.fillText(s.name || 'The Golden Amoeba', s.x, s.y + size + 3);
+            ctx.restore();
           }
 
           ctx.fillStyle = oldFill;
@@ -19704,11 +19741,12 @@ function getPlanetTradeIncomePerMin(planet) {
             continue;
           }
           
-          if (laser.isAmoebaAttack || laser.color === 'amoeba') {
+          if (laser.isAmoebaAttack || laser.color === 'amoeba' || laser.color === 'golden-amoeba' || laser.isGoldenAmoebaAttack) {
             const numParticles = 8;
             const angle = Math.atan2(laser.endY - laser.startY, laser.endX - laser.startX);
             const dist = Math.sqrt((laser.endX - laser.startX)**2 + (laser.endY - laser.startY)**2);
             const perpAngle = angle + Math.PI / 2;
+            const isGoldenShot = !!laser.isGoldenAmoebaAttack || laser.color === 'golden-amoeba' || laser.color === '#b8860b';
 
             for (let i = 0; i < numParticles; i++) {
               // Deterministic pseudo-random seed based on coordinates and index
@@ -19733,7 +19771,10 @@ function getPlanetTradeIncomePerMin(planet) {
               const pRadius = 1.0 + randSize * 2.0;
               const opacity = Math.max(0, 1.0 - pProgress);
 
-              ctx.fillStyle = `rgba(30, 110, 40, ${opacity * 0.90})`;
+              // Golden amoeba attacks: darker gold (body is brighter #ffd700)
+              ctx.fillStyle = isGoldenShot
+                ? `rgba(140, 100, 18, ${opacity * 0.92})`
+                : `rgba(30, 110, 40, ${opacity * 0.90})`;
               ctx.beginPath();
               ctx.arc(px, py, pRadius * 1.5, 0, Math.PI * 2);
               ctx.fill();
@@ -19953,13 +19994,18 @@ function getPlanetTradeIncomePerMin(planet) {
             const yOffset = exp.age * 10;
             ctx.fillText(text, exp.x, exp.y - 20 - yOffset);
             ctx.restore();
-          } else if (exp.color === 'amoeba-shrug') {
+          } else if (exp.color === 'amoeba-shrug' || exp.color === 'golden-amoeba-shrug') {
             ctx.beginPath();
             const maxRadius = 6;
             ctx.arc(exp.x, exp.y, exp.age * maxRadius, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(0, 255, 0, ${Math.max(0, 1 - exp.age) * 0.6})`;
+            if (exp.color === 'golden-amoeba-shrug') {
+              ctx.fillStyle = `rgba(184, 134, 11, ${Math.max(0, 1 - exp.age) * 0.65})`;
+              ctx.strokeStyle = '#b8860b';
+            } else {
+              ctx.fillStyle = `rgba(0, 255, 0, ${Math.max(0, 1 - exp.age) * 0.6})`;
+              ctx.strokeStyle = '#0f0';
+            }
             ctx.fill();
-            ctx.strokeStyle = '#0f0';
             ctx.lineWidth = 1.0;
             ctx.stroke();
           } else if (exp.isCruiserDeath) {
