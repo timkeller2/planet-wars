@@ -5433,17 +5433,17 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastShipSmoothMs = 0;
 
   // ── Adaptive client prediction ──────────────────────────────────────────
-  // Server ticks at 20 Hz (~50ms). When packets arrive on time with low jitter,
-  // predictionStrength stays low (mostly server pose + light smoothing).
-  // Under lag/spikes it ramps toward 1.0 (full invent-cruise + long optimistic TTL).
-  const PRED_EXPECTED_INTERVAL_MS = 50;
+  // Server simulates at 20 Hz, but the client typically receives full state ~8 Hz
+  // (~120ms). Stress is relative to that observed healthy cadence, not the tick.
+  // Under lag/spikes predictionStrength ramps toward 1.0 (invent-cruise + longer opt TTL).
+  const PRED_EXPECTED_INTERVAL_MS = 120;
   const PRED_INTERVAL_SAMPLES = 28;
   let predPacketIntervals = [];
   let predLastPacketMs = 0;
   /** 0.12 ≈ healthy (minimal invent); 1.0 = full prediction under stress */
-  let predictionStrength = 0.55;
+  let predictionStrength = 0.35;
   /** Smoothed stress 0=healthy … 1=stressed (drives predictionStrength) */
-  let predictionStressSmoothed = 0.45;
+  let predictionStressSmoothed = 0.25;
 
   function noteNetworkPacketForPrediction() {
     const now = performance.now();
@@ -5464,8 +5464,8 @@ function getPlanetTradeIncomePerMin(planet) {
   function updatePredictionStrength() {
     const n = predPacketIntervals.length;
     if (n < 4) {
-      // Warm-up: moderate prediction until we have a stable sample
-      predictionStrength = 0.55;
+      // Warm-up: light prediction until we have a stable sample
+      predictionStrength = 0.35;
       return;
     }
     let sum = 0;
@@ -5481,10 +5481,10 @@ function getPlanetTradeIncomePerMin(planet) {
     const weightSum = recentStart + (n - recentStart) * 2;
     const mean = sum / weightSum;
 
-    // mean 50ms → 0 stress; 150ms+ → 1
+    // mean ~120ms → 0 stress; ~220ms+ → 1 (healthy client cadence is ~8Hz, not 20Hz)
     const meanStress = Math.max(0, Math.min(1, (mean - PRED_EXPECTED_INTERVAL_MS) / 100));
-    // single spike 50→0, 250ms+ → 1
-    const spikeStress = Math.max(0, Math.min(1, (maxI - PRED_EXPECTED_INTERVAL_MS) / 200));
+    // single spike 120→0, ~350ms+ → 1
+    const spikeStress = Math.max(0, Math.min(1, (maxI - PRED_EXPECTED_INTERVAL_MS) / 230));
     const rawStress = Math.max(meanStress, spikeStress * 0.9);
 
     // Asymmetric smooth: ramp up stress fast, decay slowly (don't drop invent mid-spike recovery)
@@ -5498,6 +5498,149 @@ function getPlanetTradeIncomePerMin(planet) {
 
     // Floor 0.12 keeps light 60fps bridging even when perfectly healthy
     predictionStrength = 0.12 + 0.88 * predictionStressSmoothed;
+  }
+
+  /** True when the server ship is essentially at its move destination (arrival latch). */
+  function isServerArrivedAtDest(s, destX, destY) {
+    if (!s || destX == null || destY == null) return false;
+    const d = Math.hypot(destX - s.x, destY - s.y);
+    // On the pin — even if residual speed is reported (circling / stale speed)
+    if (d < 10) return true;
+    if (d < 18 && (s.currentSpeed || 0) < 1.25) return true;
+    if (d < 25 && (s.currentSpeed || 0) < 0.4 && (s.flightTime || 0) < 0.12) return true;
+    return false;
+  }
+
+  /**
+   * Snap/blend frozen off-screen visuals toward authority so panning back does not
+   * rubber-band from hundreds of px of unsimulated drift.
+   * Prefer along-track recovery when heading agrees (less sideways yank).
+   */
+  function catchUpOwnCruiserVisual(s, vis) {
+    if (!s || !vis || !s.isCruiser || s.isAmoeba) return;
+    if (!localPlayer || s.ownerId !== localPlayer.id) return;
+    const errX = s.x - (vis.x || 0);
+    const errY = s.y - (vis.y || 0);
+    const pe = Math.hypot(errX, errY);
+    if (pe < 28) return;
+    let headErr = (vis.angle || 0) - (s.angle || 0);
+    while (headErr <= -Math.PI) headErr += Math.PI * 2;
+    while (headErr > Math.PI) headErr -= Math.PI * 2;
+    const headMatch = Math.abs(headErr) < 18 * Math.PI / 180;
+    // Large lag with matching heading = freeze/skip-sim, not a turn disagreement
+    if (pe > 90 && headMatch) {
+      vis.x = s.x;
+      vis.y = s.y;
+      vis.angle = s.angle || 0;
+      if (vis.smoothSpeed != null) vis.smoothSpeed = s.currentSpeed || 0;
+      return;
+    }
+    // Along-track hard catch-up when heading agrees and we have a dest/nose
+    let pullX = errX;
+    let pullY = errY;
+    if (headMatch && pe > 35) {
+      let ux = Math.cos(vis.angle || 0);
+      let uy = Math.sin(vis.angle || 0);
+      const held = vis.heldCruise;
+      const dx = (s.targetX != null ? s.targetX : (held ? held.destX : (vis.auth && vis.auth.destX))) ;
+      const dy = (s.targetY != null ? s.targetY : (held ? held.destY : (vis.auth && vis.auth.destY)));
+      if (dx != null && dy != null) {
+        const tdx = dx - vis.x;
+        const tdy = dy - vis.y;
+        const tlen = Math.hypot(tdx, tdy);
+        if (tlen > 8) {
+          ux = tdx / tlen;
+          uy = tdy / tlen;
+        }
+      }
+      const along = errX * ux + errY * uy;
+      const latX = errX - along * ux;
+      const latY = errY - along * uy;
+      // Recover almost fully along-track; keep only a little lateral (anti rubber-band)
+      pullX = along * ux + latX * 0.22;
+      pullY = along * uy + latY * 0.22;
+    }
+    const blend = pe > 200 ? 1 : Math.min(1, (pe - 28) / 160);
+    vis.x += pullX * blend;
+    vis.y += pullY * blend;
+    if (pe > 60) {
+      vis.angle = (vis.angle || 0) + headErr * Math.min(1, blend * 0.85);
+    }
+  }
+
+  /**
+   * Post-opt cruise authority: keep destination + turn lock after optimistic TTL
+   * while the server is still flying the same order (sparse target fields / lag).
+   */
+  function setHeldCruise(vis, destX, destY, turnDir, speed, turnRateRad) {
+    if (!vis || destX == null || destY == null) return;
+    vis.heldCruise = {
+      destX,
+      destY,
+      turnDir: turnDir || 0,
+      speed: speed || 0,
+      turnRateRad: turnRateRad || 0,
+      setAt: performance.now()
+    };
+  }
+
+  function clearHeldCruise(vis) {
+    if (vis) vis.heldCruise = null;
+  }
+
+  /** Whether held cruise dest still matches server intent (or server has not overridden yet). */
+  function heldCruiseStillValid(s, held) {
+    if (!s || !held || held.destX == null || held.destY == null) return false;
+    // Arrived / idle — drop
+    if (isServerArrivedAtDest(s, held.destX, held.destY)) return false;
+    if ((s.currentSpeed || 0) < 0.3 && (s.flightTime || 0) < 0.06) return false;
+    // Server published a clearly different destination
+    let serverDx = s.targetX;
+    let serverDy = s.targetY;
+    if ((serverDx == null || serverDy == null) && s.targetPlanet) {
+      serverDx = s.targetPlanet.x;
+      serverDy = s.targetPlanet.y;
+    }
+    if (serverDx != null && serverDy != null) {
+      const d = Math.hypot(serverDx - held.destX, serverDy - held.destY);
+      if (d > 55) return false;
+    }
+    // Stale hold (no order for a long time) — safety
+    if (held.setAt && (performance.now() - held.setAt) > 120000) return false;
+    return true;
+  }
+
+  /** Resolve best cruise destination after optimistic move expires. */
+  function resolvePostOptDest(s, vis, auth) {
+    let destX = s.targetX != null ? s.targetX : null;
+    let destY = s.targetY != null ? s.targetY : null;
+    if ((destX == null || destY == null) && s.targetPlanet) {
+      destX = s.targetPlanet.x;
+      destY = s.targetPlanet.y;
+    }
+    if ((destX == null || destY == null) && auth && auth.destX != null) {
+      destX = auth.destX;
+      destY = auth.destY;
+    }
+    const held = vis && vis.heldCruise;
+    if (held && heldCruiseStillValid(s, held)) {
+      // Prefer live server dest when present; otherwise keep held dest authority
+      if (destX == null || destY == null) {
+        destX = held.destX;
+        destY = held.destY;
+      } else {
+        // Same order: refresh held stamp so TTL doesn't expire mid-flight
+        const d = Math.hypot(destX - held.destX, destY - held.destY);
+        if (d <= 55) {
+          held.destX = destX;
+          held.destY = destY;
+          held.setAt = performance.now();
+          // Keep turn lock from the original order when still valid
+          if (held.turnDir && !vis.turnDir) vis.turnDir = held.turnDir;
+        }
+      }
+    }
+    return { destX, destY, held };
   }
 
   /** Optimistic-move TTL (ms): short when healthy so server takes over quickly. */
@@ -5600,6 +5743,16 @@ function getPlanetTradeIncomePerMin(planet) {
     if (source === 'packet' && vis.netTime && (now - vis.netTime) > PRED_DESYNC_MAX_PACKET_GAP_MS) return;
     if (vis._predDesyncSkipUntil && now < vis._predDesyncSkipUntil) return;
 
+    // Metric cleanup: only score ships that were actually simulated recently.
+    // Unsimulated freezes (old frustum skip / galactic pin) are not prediction quality.
+    const simAge = vis._predSimulatedAt != null ? (now - vis._predSimulatedAt) : Infinity;
+    const simulated = Number.isFinite(simAge) && simAge < 220;
+    if (!simulated) {
+      // Allow rare catastrophic unsimulated samples for debugging freezes, tagged clearly
+      const peQuick = Math.hypot((vis.x || 0) - authX, (vis.y || 0) - authY);
+      if (peQuick < 80) return;
+    }
+
     const clientX = vis.x;
     const clientY = vis.y;
     const clientAngle = vis.angle || 0;
@@ -5608,19 +5761,26 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (posErr < PRED_DESYNC_POS_PX && headErr < PRED_DESYNC_HEADING_DEG) return;
 
+    // Arrived / idle-hold: skip mild heading-only noise (arrival latch handles this)
+    if (vis.arrivedLatch || vis.idleHoldHeading) {
+      if (posErr < 24 && headErr < 55) return;
+    }
+
     const opt = vis.opt;
     const optLive = !!(opt && now < opt.expiresAt);
+    const heldLive = !!(vis.heldCruise && heldCruiseStillValid(ship, vis.heldCruise));
     const inCombat = isShipNearEnemyForPredLog(ship);
     const hasDest = (vis.auth && vis.auth.destX != null) ||
       (ship.targetX != null && ship.targetY != null) ||
       !!ship.targetPlanet ||
-      optLive;
+      optLive ||
+      heldLive;
     const recentMove = !!(vis._predContextUntil && now < vis._predContextUntil);
 
     // Focus: combat, move orders, active cruise — skip boring idle noise
     let context = 'other';
     if (inCombat) context = 'combat';
-    else if (optLive || recentMove || vis._predContext === 'move_order') context = 'move_order';
+    else if (optLive || heldLive || recentMove || vis._predContext === 'move_order') context = 'move_order';
     else if (hasDest && (ship.currentSpeed || 0) > 0.5) context = 'cruise';
     else if ((ship.currentSpeed || 0) < 0.5 && posErr < 40 && headErr < 45) {
       // Idle with mild heading drift after stop — not interesting
@@ -5638,13 +5798,50 @@ function getPlanetTradeIncomePerMin(planet) {
     predDesyncLastLogMs.set(ship.id, now);
 
     const destX = optLive ? opt.targetX
-      : (vis.auth && vis.auth.destX != null ? vis.auth.destX
-        : (ship.targetX != null ? ship.targetX
-          : (ship.targetPlanet ? ship.targetPlanet.x : null)));
+      : (vis.heldCruise && vis.heldCruise.destX != null ? vis.heldCruise.destX
+        : (vis.auth && vis.auth.destX != null ? vis.auth.destX
+          : (ship.targetX != null ? ship.targetX
+            : (ship.targetPlanet ? ship.targetPlanet.x : null))));
     const destY = optLive ? opt.targetY
-      : (vis.auth && vis.auth.destY != null ? vis.auth.destY
-        : (ship.targetY != null ? ship.targetY
-          : (ship.targetPlanet ? ship.targetPlanet.y : null)));
+      : (vis.heldCruise && vis.heldCruise.destY != null ? vis.heldCruise.destY
+        : (vis.auth && vis.auth.destY != null ? vis.auth.destY
+          : (ship.targetY != null ? ship.targetY
+            : (ship.targetPlanet ? ship.targetPlanet.y : null))));
+
+    // serverTurnDir only meaningful when not nearly aligned / not on the pin
+    let serverTurnDir = 0;
+    let headingToDestDeg = null;
+    if (destX != null && destY != null) {
+      const toDx = destX - authX;
+      const toDy = destY - authY;
+      const toDist = Math.hypot(toDx, toDy);
+      if (toDist > 12) {
+        const desired = Math.atan2(toDy, toDx);
+        const diff = shortestAngleDiff(authAngle || 0, desired);
+        headingToDestDeg = Math.round(Math.abs(diff) * 180 / Math.PI * 10) / 10;
+        // Sign noise near alignment polluted 60%+ of old logs
+        if (Math.abs(diff) > 15 * Math.PI / 180) {
+          serverTurnDir = Math.sign(diff) || 0;
+        }
+      }
+    }
+
+    // Along-track / lateral error for diagnosis
+    let alongTrackErr = null;
+    let lateralErr = null;
+    if (destX != null && destY != null) {
+      const tdx = destX - clientX;
+      const tdy = destY - clientY;
+      const tlen = Math.hypot(tdx, tdy);
+      if (tlen > 1) {
+        const ux = tdx / tlen;
+        const uy = tdy / tlen;
+        const ex = authX - clientX;
+        const ey = authY - clientY;
+        alongTrackErr = Math.round((ex * ux + ey * uy) * 10) / 10;
+        lateralErr = Math.round((ex * -uy + ey * ux) * 10) / 10;
+      }
+    }
 
     const sample = {
       t: Date.now(),
@@ -5655,6 +5852,13 @@ function getPlanetTradeIncomePerMin(planet) {
       classType: ship.classType || null,
       posErr: Math.round(posErr * 10) / 10,
       headErrDeg: Math.round(headErr * 10) / 10,
+      simulated,
+      simAgeMs: simulated ? Math.round(simAge) : (Number.isFinite(simAge) ? Math.round(simAge) : null),
+      heldCruise: heldLive,
+      arrivedLatch: !!vis.arrivedLatch,
+      alongTrackErr,
+      lateralErr,
+      headingToDestDeg,
       client: {
         x: Math.round(clientX * 10) / 10,
         y: Math.round(clientY * 10) / 10,
@@ -5673,11 +5877,8 @@ function getPlanetTradeIncomePerMin(planet) {
         : null,
       optLive,
       inCombat,
-      clientTurnDir: vis.turnDir || (opt && opt.turnDir) || 0,
-      // Implied server turn toward dest (sign of shortestAngleDiff server→desired)
-      serverTurnDir: (destX != null && destY != null)
-        ? (Math.sign(shortestAngleDiff(authAngle || 0, Math.atan2(destY - authY, destX - authX))) || 0)
-        : 0,
+      clientTurnDir: vis.turnDir || (opt && opt.turnDir) || (vis.heldCruise && vis.heldCruise.turnDir) || 0,
+      serverTurnDir,
       predStrength: Math.round(predictionStrength * 100) / 100,
       predStress: Math.round(predictionStressSmoothed * 100) / 100,
       packetGapMs: vis.netTime ? Math.round(now - vis.netTime) : null,
@@ -5715,6 +5916,10 @@ function getPlanetTradeIncomePerMin(planet) {
       name: s.name,
       posErr: s.posErr,
       headErr: s.headErrDeg,
+      sim: s.simulated,
+      held: s.heldCruise,
+      along: s.alongTrackErr,
+      lat: s.lateralErr,
       inCombat: s.inCombat,
       optLive: s.optLive,
       pred: s.predStrength
@@ -5885,6 +6090,7 @@ function getPlanetTradeIncomePerMin(planet) {
       vis.predCircling = false;
       vis.predCircleDestX = tx;
       vis.predCircleDestY = ty;
+      vis.arrivedLatch = false;
       // Lock turn direction for this order (match server 180° convention: -π → +π)
       const turnDiff = shortestAngleDiff(startAngle, desiredAngle);
       vis.turnDir = Math.abs(turnDiff) > 0.05 ? (Math.sign(turnDiff) || 1) : 0;
@@ -5910,9 +6116,11 @@ function getPlanetTradeIncomePerMin(planet) {
         expiresAt: now + getOptimisticMoveTtlMs(),
         lastSimTime: now
       };
-      // Desync log context: treat as move-order until TTL + a few extra seconds
+      // Survives opt TTL: keeps dest + turn lock while server is still on this order
+      setHeldCruise(vis, tx, ty, vis.turnDir, spd, turnRateRad);
+      // Desync log context: treat as move-order for the whole held-cruise flight
       vis._predContext = 'move_order';
-      vis._predContextUntil = now + getOptimisticMoveTtlMs() + 2500;
+      vis._predContextUntil = now + Math.max(getOptimisticMoveTtlMs() + 2500, 45000);
     }
   }
 
@@ -7092,14 +7300,10 @@ function getPlanetTradeIncomePerMin(planet) {
 
         // Soft correction: store authority for continuous prediction — do NOT hard-reset
         // the visual pose. Hard resets + sparse packets on huge maps = choppy cruisers.
-        const authTx = s.targetX;
-        const authTy = s.targetY;
-        let destX = authTx;
-        let destY = authTy;
-        if ((destX == null || destY == null) && s.targetPlanet) {
-          destX = s.targetPlanet.x;
-          destY = s.targetPlanet.y;
-        }
+        // Prefer live server dest, then prior auth, then held post-opt cruise dest.
+        const resolved = resolvePostOptDest(s, vis, vis.auth);
+        let destX = resolved.destX;
+        let destY = resolved.destY;
         // Only fall back to prior dest while still clearly en-route (avoids fleets
         // holding a stale dest after arrival and rubber-banding).
         if (destX == null && vis.auth && (s.currentSpeed || 0) > 0.5) {
@@ -7107,16 +7311,38 @@ function getPlanetTradeIncomePerMin(planet) {
           destY = vis.auth.destY;
         }
 
+        // Arrival latch (packet): server parked on dest → stop inventing cruise/turns
+        const arrivedAuth = isServerArrivedAtDest(s, destX, destY);
+        if (arrivedAuth) {
+          destX = null;
+          destY = null;
+          vis.turnDir = 0;
+          vis.predCircling = false;
+          vis.arrivedLatch = true;
+          if (vis.opt) vis.opt = null;
+          clearHeldCruise(vis);
+        } else {
+          vis.arrivedLatch = false;
+          // Preserve turn lock from held order when server still on that flight
+          if (resolved.held && resolved.held.turnDir && !vis.turnDir) {
+            vis.turnDir = resolved.held.turnDir;
+          }
+        }
+
         let authSpeed = s.currentSpeed || 0;
-        if (authSpeed < 0.5 && destX != null && destY != null && allowInventCruise()) {
+        if (arrivedAuth) {
+          authSpeed = Math.min(authSpeed, s.currentSpeed || 0);
+          if ((s.currentSpeed || 0) < 2) authSpeed = s.currentSpeed || 0;
+        } else if (authSpeed < 0.5 && destX != null && destY != null && allowInventCruise()) {
           const distLeft = Math.hypot(destX - s.x, destY - s.y);
           // Sparse packets sometimes report 0 speed for a tick while still mid-flight.
           // Invent only when adaptive prediction is elevated (laggy traffic).
-          if (distLeft > 25 && ((s.flightTime || 0) > 0.05 || (vis.lastCruiseSpeed || 0) > 0.5 || (vis.auth && vis.auth.speed > 0.5))) {
+          if (distLeft > 25 && ((s.flightTime || 0) > 0.05 || (vis.lastCruiseSpeed || 0) > 0.5 || (vis.auth && vis.auth.speed > 0.5) || (vis.heldCruise && vis.heldCruise.speed > 0.5))) {
             const pred = getPredictedCruiseSpeed(s);
             const remembered = Math.max(
               vis.auth ? (vis.auth.speed || 0) : 0,
-              vis.lastCruiseSpeed || 0
+              vis.lastCruiseSpeed || 0,
+              vis.heldCruise ? (vis.heldCruise.speed || 0) : 0
             );
             // Prefer remembered if still plausible; else predicted (never invent faster than predicted)
             let invented = remembered > 0.5 ? Math.min(remembered, pred) : pred;
@@ -7125,9 +7351,16 @@ function getPlanetTradeIncomePerMin(planet) {
             authSpeed = invented;
           }
         }
-        if (authSpeed > 0.5) {
+        if (authSpeed > 0.5 && !arrivedAuth) {
           // Cap stored cruise so a past warp leg cannot inflate future departures
           vis.lastCruiseSpeed = Math.min(authSpeed, getPredictedCruiseSpeed(s));
+          // Keep held cruise speed in sync with live authority
+          if (vis.heldCruise && destX != null) {
+            vis.heldCruise.speed = Math.max(vis.heldCruise.speed || 0, authSpeed);
+            if (vis.turnDir) vis.heldCruise.turnDir = vis.turnDir;
+          }
+        } else if (arrivedAuth) {
+          vis.lastCruiseSpeed = 0;
         }
 
         vis.auth = {
@@ -7146,6 +7379,19 @@ function getPlanetTradeIncomePerMin(planet) {
         vis.serverAngle = s.angle || 0;
         vis.serverSpeed = authSpeed;
         vis.netTime = lastNetworkUpdateMs;
+
+        // Own cruisers: catch up frozen/off-screen visuals on every auth packet
+        catchUpOwnCruiserVisual(s, vis);
+        if (arrivedAuth) {
+          // Park visual near authority so arrival heading does not free-spin
+          const pe = Math.hypot(vis.x - s.x, vis.y - s.y);
+          if (pe < 40) {
+            vis.x = s.x;
+            vis.y = s.y;
+            vis.angle = s.angle || 0;
+            vis.smoothSpeed = s.currentSpeed || 0;
+          }
+        }
       }
     }
 
@@ -18421,6 +18667,7 @@ function getPlanetTradeIncomePerMin(planet) {
        * Silk soft-correction toward the server-predicted pose.
        * - Deadzone ignores sub-pixel / tick noise
        * - Along-track vs lateral split (less sideways rubber-band)
+       * - Along-track hard catch-up when heading agrees and lag is large
        * - Exponential settle with per-frame travel cap — almost never hard-snaps
        * combatMode: settle faster (dogfights invent false motion).
        */
@@ -18429,6 +18676,9 @@ function getPlanetTradeIncomePerMin(planet) {
         let errY = serverPred.y - vis.y;
         let err = Math.hypot(errX, errY);
         const corrBoost = getSoftCorrectionBoost();
+        const headMatch = Math.abs(shortestAngleDiff(vis.angle, serverPred.angle)) < 18 * Math.PI / 180;
+        // Large lag + matching heading: recover hard along-track (freeze residual / packet gap)
+        const alongTrackBoost = !combatMode && headMatch && err > 35;
 
         // Deadzone: do not chase packet noise (major silk win)
         const deadzone = combatMode ? 0.4 : 1.35;
@@ -18464,19 +18714,21 @@ function getPlanetTradeIncomePerMin(planet) {
             const along = pullX * ux + pullY * uy;
             const latX = pullX - along * ux;
             const latY = pullY - along * uy;
-            const latScale = 0.42;
+            // Tighter lateral when heading agrees and we're catching up a freeze
+            const latScale = alongTrackBoost ? 0.18 : 0.42;
             pullX = along * ux + latX * latScale;
             pullY = along * uy + latY * latScale;
           }
-        } else if (!combatMode && (cruiseSpd > 2 || (vis.smoothSpeed || 0) > 2)) {
+        } else if (!combatMode && (cruiseSpd > 2 || (vis.smoothSpeed || 0) > 2 || alongTrackBoost)) {
           // Moving but no dest: damp correction perpendicular to nose
           const ux = Math.cos(vis.angle || 0);
           const uy = Math.sin(vis.angle || 0);
           const along = pullX * ux + pullY * uy;
           const latX = pullX - along * ux;
           const latY = pullY - along * uy;
-          pullX = along * ux + latX * 0.5;
-          pullY = along * uy + latY * 0.5;
+          const latScale = alongTrackBoost ? 0.2 : 0.5;
+          pullX = along * ux + latX * latScale;
+          pullY = along * uy + latY * latScale;
         }
 
         err = Math.hypot(pullX, pullY);
@@ -18486,6 +18738,9 @@ function getPlanetTradeIncomePerMin(planet) {
         let tau;
         if (combatMode) {
           tau = err < 25 ? 0.07 : 0.12;
+        } else if (alongTrackBoost) {
+          // Heading agrees — recover lag faster without full snap
+          tau = err < 60 ? 0.09 : (err < 160 ? 0.14 : 0.2);
         } else if (err < 10) {
           tau = 0.11;
         } else if (err < 45) {
@@ -18499,8 +18754,12 @@ function getPlanetTradeIncomePerMin(planet) {
         let alpha = 1 - Math.exp(-smoothDt / tau);
 
         // Per-frame travel cap — silk: no teleports mid-frame
-        const maxCorr = Math.max(cruiseSpd, 10) * smoothDt * (combatMode ? 3.8 : 2.15)
+        // Along-track boost raises the cap so freezes close in seconds not tens of seconds
+        let maxCorr = Math.max(cruiseSpd, 10) * smoothDt * (combatMode ? 3.8 : 2.15)
           + (combatMode ? 2.5 : 1.75);
+        if (alongTrackBoost) {
+          maxCorr = Math.max(cruiseSpd, 12) * smoothDt * 4.2 + 3.5;
+        }
         if (err * alpha > maxCorr) alpha = maxCorr / err;
 
         // Catastrophic only (FoW re-entry / long gap) — soft 100% settle, not a hard pop
@@ -18593,21 +18852,37 @@ function getPlanetTradeIncomePerMin(planet) {
       for (const s of serverState.ships) {
         if (!s.active) continue;
 
+        const isOwnShip = !!(localPlayer && s.ownerId === localPlayer.id);
+        // Always keep predicting own cruisers (even off-screen) — frustum skip was the
+        // main cause of frozen client poses while the server marched away.
+        const alwaysPredict = isOwnShip && !!s.isCruiser && !s.isAmoeba;
+
         // Frustum cull before expensive prediction (huge maps: most ships off-screen when zoomed in)
         {
           const sx = s.x, sy = s.y;
           if (sx < viewMinX - 150 || sx > viewMaxX + 150 || sy < viewMinY - 150 || sy > viewMaxY + 150) {
-            if (!selectedShipIds.has(s.id)) continue;
+            if (!selectedShipIds.has(s.id) && !alwaysPredict) continue;
           }
         }
 
-        // Galactic LOD: skip prediction + full art — colored dots only
+        // Galactic LOD: skip full art — colored dots only. Still pin own cruiser visuals
+        // so leaving galactic view does not reveal a frozen pose.
         if (galacticView) {
           const owner = playersById.get(s.ownerId);
           const color = owner ? (owner.color || '#fff') : '#0f0';
           ctx.fillStyle = color;
           const d = Math.max(2.5, 3.5 / finalScale);
           ctx.fillRect(s.x - d * 0.5, s.y - d * 0.5, d, d);
+          if (alwaysPredict) {
+            let gVis = visualShips.get(s.id);
+            if (gVis) {
+              gVis.x = s.x;
+              gVis.y = s.y;
+              gVis.angle = s.angle || 0;
+              gVis.smoothSpeed = s.currentSpeed || 0;
+              gVis.netTime = smoothNow;
+            }
+          }
           continue;
         }
 
@@ -18637,6 +18912,14 @@ function getPlanetTradeIncomePerMin(planet) {
             vis.opt = null;
             opt = null;
           }
+          // Server already parked on the opt dest — drop optimistic sim (stops spin-at-pin)
+          if (opt && !inCombat && isServerArrivedAtDest(s, opt.targetX, opt.targetY)) {
+            vis.opt = null;
+            opt = null;
+            vis.arrivedLatch = true;
+            vis.turnDir = 0;
+            vis.predCircling = false;
+          }
           const optLive = opt && smoothNow < opt.expiresAt;
           const auth = vis.auth;
 
@@ -18656,6 +18939,8 @@ function getPlanetTradeIncomePerMin(planet) {
             inventCruise = true;
             s.targetX = opt.targetX;
             s.targetY = opt.targetY;
+            // Keep post-opt authority in lockstep while optimistic window is live
+            setHeldCruise(vis, destX, destY, opt.turnDir || vis.turnDir, spd, turnRate);
           } else if (optLive && inCombat) {
             // Brief optimistic move still allowed, but damped and no invent-cruise stretch
             destX = opt.targetX;
@@ -18666,12 +18951,40 @@ function getPlanetTradeIncomePerMin(planet) {
             s.targetX = opt.targetX;
             s.targetY = opt.targetY;
           } else {
-            if (opt && smoothNow >= opt.expiresAt) vis.opt = null;
-            destX = s.targetX != null ? s.targetX : (auth ? auth.destX : null);
-            destY = s.targetY != null ? s.targetY : (auth ? auth.destY : null);
-            if ((destX == null || destY == null) && s.targetPlanet) {
-              destX = s.targetPlanet.x;
-              destY = s.targetPlanet.y;
+            // Opt expired: promote to held-cruise authority (dest + turn lock) until arrival
+            if (opt && smoothNow >= opt.expiresAt) {
+              if (!vis.heldCruise && opt.targetX != null) {
+                setHeldCruise(vis, opt.targetX, opt.targetY, opt.turnDir || vis.turnDir, opt.speed, opt.turnRateRad);
+              }
+              vis.opt = null;
+              opt = null;
+            }
+            const resolved = resolvePostOptDest(s, vis, auth);
+            destX = resolved.destX;
+            destY = resolved.destY;
+            if (resolved.held && resolved.held.turnDir && !vis.turnDir) {
+              vis.turnDir = resolved.held.turnDir;
+            }
+            if (resolved.held && resolved.held.turnRateRad) {
+              turnRate = resolved.held.turnRateRad;
+            }
+            // Arrival latch: server on/near dest → clear dest, kill turn invent, hold heading.
+            // Critical when dist≈0: atan2(0,0) is garbage and caused free-spin heading desync.
+            const arrived = isServerArrivedAtDest(s, destX, destY) || !!vis.arrivedLatch;
+            if (arrived) {
+              destX = null;
+              destY = null;
+              vis.turnDir = 0;
+              vis.predCircling = false;
+              vis.arrivedLatch = true;
+              clearHeldCruise(vis);
+              if (auth) {
+                auth.destX = null;
+                auth.destY = null;
+                auth.speed = Math.min(auth.speed || 0, s.currentSpeed || 0);
+              }
+            } else {
+              vis.arrivedLatch = false;
             }
             // Clear stale auth dest once ship is essentially idle at/near dest
             if (destX != null && destY != null && (s.currentSpeed || 0) < 0.5 && (s.flightTime || 0) < 0.05) {
@@ -18679,6 +18992,7 @@ function getPlanetTradeIncomePerMin(planet) {
               if (dSelf < 18) {
                 destX = null;
                 destY = null;
+                clearHeldCruise(vis);
                 if (auth) {
                   auth.destX = null;
                   auth.destY = null;
@@ -18688,38 +19002,59 @@ function getPlanetTradeIncomePerMin(planet) {
             }
             // Fully stopped (common after killing an amoeba): drop residual dest so
             // we do not invent cruise or chase a dead target heading.
+            // Keep held post-opt dest when the order is still valid (server lag / 0-speed blip).
             if ((s.currentSpeed || 0) < 0.35 && (s.flightTime || 0) < 0.08 && !optLive) {
-              destX = null;
-              destY = null;
+              if (vis.heldCruise && heldCruiseStillValid(s, vis.heldCruise)) {
+                destX = vis.heldCruise.destX;
+                destY = vis.heldCruise.destY;
+              } else {
+                destX = null;
+                destY = null;
+                clearHeldCruise(vis);
+              }
             }
             if (inCombat) {
               // Combat: only trust server-reported speed — no invent-cruise slide
               spd = s.currentSpeed || 0;
               inventCruise = false;
+            } else if (arrived) {
+              // Park: trust server speed only, never invent past the pin
+              spd = s.currentSpeed || 0;
+              inventCruise = false;
+              vis.lastCruiseSpeed = 0;
             } else {
-              // Prefer live server speed; fall back to last auth speed only while still en-route
+              // Prefer live server speed; fall back to last auth / held cruise while en-route
               spd = s.currentSpeed || 0;
               if (spd < 0.5 && auth && (auth.speed || 0) > 0.5 && (s.flightTime || 0) > 0.08) {
                 spd = auth.speed;
               }
+              if (spd < 0.5 && vis.heldCruise && (vis.heldCruise.speed || 0) > 0.5
+                  && heldCruiseStillValid(s, vis.heldCruise)) {
+                spd = Math.min(vis.heldCruise.speed, predictedSpd);
+              }
               // Hard stop: server idle — do not keep coasting on stale auth speed (heading jitter source)
-              if ((s.currentSpeed || 0) < 0.35 && (s.flightTime || 0) < 0.08) {
+              // (unless we still have a valid held order the server has not finished)
+              if ((s.currentSpeed || 0) < 0.35 && (s.flightTime || 0) < 0.08
+                  && !(vis.heldCruise && heldCruiseStillValid(s, vis.heldCruise))) {
                 spd = 0;
               }
               if (auth && auth.turnRateRad) turnRate = auth.turnRateRad;
               if (spd < 0.5 && destX != null && destY != null && allowInventCruise()
-                  && ((s.currentSpeed || 0) > 0.2 || (s.flightTime || 0) > 0.08)) {
+                  && ((s.currentSpeed || 0) > 0.2 || (s.flightTime || 0) > 0.08
+                    || (vis.heldCruise && heldCruiseStillValid(s, vis.heldCruise)))) {
                 const distToDest = Math.hypot(destX - vis.x, destY - vis.y);
                 const wasMoving = (s.flightTime || 0) > 0.05
                   || (auth && auth.speed > 0.5)
                   || (vis.lastCruiseSpeed || 0) > 0.5
                   || (s.currentSpeed || 0) > 0.5
-                  || (vis.smoothSpeed || 0) > 0.5;
+                  || (vis.smoothSpeed || 0) > 0.5
+                  || (vis.heldCruise && vis.heldCruise.speed > 0.5);
                 if (distToDest > 20 && wasMoving) {
                   const remembered = Math.max(
                     auth ? (auth.speed || 0) : 0,
                     vis.lastCruiseSpeed || 0,
-                    vis.smoothSpeed || 0
+                    vis.smoothSpeed || 0,
+                    vis.heldCruise ? (vis.heldCruise.speed || 0) : 0
                   );
                   let invented = remembered > 0.5 ? Math.min(remembered, predictedSpd) : predictedSpd;
                   // Only invent a fraction when mildly stressed — full invent when laggy
@@ -18794,18 +19129,39 @@ function getPlanetTradeIncomePerMin(planet) {
             // Combat + stationary on server: park visual via soft correction only
           }
 
-          // Idle after stop/combat: hold visual heading (server angle can tick each packet).
+          // Idle after stop/combat/arrival: hold visual heading (server angle can tick each packet).
+          // Arrived latch also holds heading even if residual server speed is non-zero.
           vis.idleHoldHeading = !optLive
-            && (s.currentSpeed || 0) < 0.35
-            && (vis.smoothSpeed || 0) < 0.45
             && !inventCruise
-            && (s.flightTime || 0) < 0.08;
+            && (
+              !!vis.arrivedLatch
+              || (
+                (s.currentSpeed || 0) < 0.35
+                && (vis.smoothSpeed || 0) < 0.45
+                && (s.flightTime || 0) < 0.08
+              )
+            );
           if (vis.idleHoldHeading) {
             vis.lastCruiseSpeed = 0;
+            vis.turnDir = 0;
             if (auth) {
-              auth.speed = 0;
-              auth.destX = null;
-              auth.destY = null;
+              if (vis.arrivedLatch) {
+                auth.destX = null;
+                auth.destY = null;
+                auth.speed = Math.min(auth.speed || 0, s.currentSpeed || 0);
+              } else {
+                auth.speed = 0;
+                auth.destX = null;
+                auth.destY = null;
+              }
+            }
+            // Ease heading to authority when arrived so we don't free-spin on a pin dest
+            if (vis.arrivedLatch && auth) {
+              let ad = shortestAngleDiff(vis.angle, auth.angle || 0);
+              if (Math.abs(ad) > 2 * Math.PI / 180) {
+                const aAlpha = 1 - Math.exp(-smoothDt / 0.12);
+                vis.angle += ad * aAlpha;
+              }
             }
           }
 
@@ -18846,6 +19202,10 @@ function getPlanetTradeIncomePerMin(planet) {
               inCombat
             );
           }
+          // Mark that this ship received a real prediction integrate this frame
+          // (used by desync logs to filter unsimulated / off-screen noise)
+          vis._predSimulatedAt = smoothNow;
+          vis._predSimulated = true;
         }
 
         const trueServerX = s.x;
@@ -20231,17 +20591,21 @@ function getPlanetTradeIncomePerMin(planet) {
 
           const laserAge = (laser.age || 0) + laserExtrapSec;
           const laserDuration = laser.duration || 0.8;
-          if (laserAge > laserDuration + 0.05) continue;
+          // Bomb / plasma flights self-cull by delay + travelDuration; don't truncate them here
+          // (Romulan plasma in particular is intentionally slower than default bomb duration floors).
+          if (!laser.isBombAttack && laserAge > laserDuration + 0.05) continue;
 
           // Ease progress slightly so motion doesn't look stepped when packets cluster
           let progress = Math.min(1, Math.max(0, laserAge / laserDuration));
           
           if (laser.isBombAttack) {
-            const delay = (laser.index || 0) * 0.24;
+            const style = laser.cruiserStyle || 'Klingon';
+            // Romulan plasma balls read better when they drift slower across the arc
+            const delay = (laser.index || 0) * (style === 'Romulan' ? 0.36 : 0.24);
             if (laserAge < delay) {
               continue;
             }
-            const travelDuration = 1.05;
+            const travelDuration = style === 'Romulan' ? 1.9 : 1.05;
             if (laserAge > delay + travelDuration) {
               continue;
             }
@@ -20293,7 +20657,6 @@ function getPlanetTradeIncomePerMin(planet) {
               endPtY = laser.endY + (randVal2 - 0.5) * 40;
             }
             
-            const style = laser.cruiserStyle || 'Klingon';
             if (style === 'Lyran') {
               ctx.save();
               ctx.beginPath();
