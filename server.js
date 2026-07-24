@@ -1145,6 +1145,30 @@ async function bootstrap() {
       markSocketNeedsState(socket);
     });
 
+    // Client prediction desync diagnostics → logs/pred-desync.jsonl (readable by tools)
+    socket.on('predDesyncLog', (sample) => {
+      try {
+        if (!sample || typeof sample !== 'object') return;
+        const player = connectedClients.get(socket.id);
+        const logsDir = path.join(__dirname, 'logs');
+        if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+        const line = JSON.stringify({
+          ...sample,
+          playerId: player ? player.id : null,
+          playerName: player ? (player.name || player.id) : null,
+          socketId: socket.id,
+          serverRecvAt: Date.now()
+        }) + '\n';
+        fs.appendFileSync(path.join(logsDir, 'pred-desync.jsonl'), line, 'utf8');
+      } catch (e) {
+        // Never break the game for logging failures
+        if (!(socket._predLogErrLogged)) {
+          socket._predLogErrLogged = true;
+          console.warn('[PRED DESYNC LOG] write failed:', e && e.message);
+        }
+      }
+    });
+
     socket.on('chatMessage', (text) => {
       const player = connectedClients.get(socket.id);
       if (player && text && typeof text === 'string' && text.trim().length > 0) {
@@ -1804,12 +1828,14 @@ async function bootstrap() {
       if (data.focusMode === 'commerce' && false) return;
       if (data.focusMode === 'terraforming') {
         const techBonus = Math.floor(Math.sqrt(player.techScore || 0));
+        // Soft cap: base multiplier*tech; if >100 → 100+(cap-100)/2
         const settings = game.settings || {};
         const isUnlimited = !settings.timedGameLimit || settings.timedGameLimit === 'unlimited';
         const timedLimitSecs = !isUnlimited ? parseFloat(settings.timedGameLimit) : null;
         const durationInMinutes = timedLimitSecs ? (timedLimitSecs / 60) : null;
         const multiplier = (durationInMinutes && durationInMinutes > 0) ? (600 / durationInMinutes) : 5;
-        const capVal = Math.round(multiplier * techBonus);
+        let capVal = Math.round(multiplier * techBonus);
+        if (capVal > 100) capVal = 100 + (capVal - 100) / 2;
         if (planet.habitability > capVal) return;
       }
       if (data.focusMode === 'homeworld') {
@@ -2105,6 +2131,12 @@ async function bootstrap() {
           p.disconnectTime = null;
           p.discoveredPlanets = new Set();
           p.attackedPlanets = new Map();
+          p.lastKnownPlanets = {};
+          p._exploredCellsCache = null;
+          p._exploredCellsForceRebuild = true;
+          p._exploredCellsGameStart = game.gameStartTime;
+          p._fogPlanetCache = null;
+          p._visPlanetCache = null;
           p.credits = game.settings && game.settings.startingCredits !== undefined ? game.settings.startingCredits : 0;
         }
         for (const [socketId, activePlayer] of connectedClients.entries()) {
@@ -2184,6 +2216,13 @@ async function bootstrap() {
         p.disconnectTime = null;
         p.discoveredPlanets = new Set();
         p.attackedPlanets = new Map();
+        p.lastKnownPlanets = {};
+        // Wipe FoW tile cache so new maps start fully fogged
+        p._exploredCellsCache = null;
+        p._exploredCellsForceRebuild = true;
+        p._exploredCellsGameStart = game.gameStartTime;
+        p._fogPlanetCache = null;
+        p._visPlanetCache = null;
         
         const initiatingPlayer = connectedClients.get(socket.id);
         if (p === initiatingPlayer) {
@@ -3418,7 +3457,12 @@ async function bootstrap() {
       });
 
       // Explored cells: prefer incremental cache (updated when ships explore).
-      // Full grid scan is O(all cells) on 50k maps — only rebuild if forced or empty.
+      // Full grid scan is O(all cells) on 50k maps — only rebuild if forced, empty,
+      // or the game map was restarted (stale cache caused permanent FoW holes).
+      if (player._exploredCellsGameStart !== game.gameStartTime) {
+        player._exploredCellsForceRebuild = true;
+        player._exploredCellsGameStart = game.gameStartTime;
+      }
       let playerExploredCells = player._exploredCellsCache;
       if (!playerExploredCells || player._exploredCellsForceRebuild) {
         playerExploredCells = {};

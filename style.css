@@ -1038,6 +1038,79 @@ canvas {
   box-shadow: 0 0 4px #00ffcc;
 }
 
+/* Upgrade HUD rich tooltips */
+.upgrade-tooltip-panel {
+  position: fixed;
+  z-index: 10050;
+  max-width: min(360px, calc(100vw - 24px));
+  max-height: min(70vh, 420px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: rgba(8, 18, 32, 0.96);
+  border: 1px solid rgba(0, 229, 255, 0.45);
+  box-shadow: 0 0 22px rgba(0, 229, 255, 0.28), inset 0 0 14px rgba(0, 229, 255, 0.08);
+  border-radius: 10px;
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+  color: #fff;
+  font-family: 'Orbitron', sans-serif;
+}
+
+.upgrade-tooltip-title {
+  padding: 12px 14px 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #00e5ff;
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.55);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.28);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.upgrade-tooltip-body {
+  padding: 10px 14px 14px;
+  overflow-y: auto;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: #d0dce8;
+}
+
+.upgrade-tooltip-body p {
+  margin: 0 0 8px 0;
+}
+
+.upgrade-tooltip-body ul {
+  margin: 0 0 8px 0;
+  padding-left: 1.15em;
+}
+
+.upgrade-tooltip-body li {
+  margin-bottom: 5px;
+}
+
+.upgrade-tooltip-body .ut-section {
+  color: #7ee8ff;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 10px 0 4px;
+  border-bottom: 1px dashed rgba(0, 229, 255, 0.2);
+  padding-bottom: 2px;
+}
+
+.upgrade-tooltip-body .ut-note {
+  color: #9ab;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.upgrade-tooltip-body strong {
+  color: #fff;
+}
+
 #selection-tiles-container {
   position: absolute;
   bottom: 20px;

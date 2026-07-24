@@ -2828,7 +2828,7 @@ function getPlanetTradeIncomePerMin(planet) {
       'button, a, input, textarea, select, .cyber-btn, .action-btn-icon, ' +
       '#action-buttons, #resources-hud, #market-panel, #top-left-hud, #top-right-hud, ' +
       '#selection-tiles-container, #score-board, #chat-container, #player-names-container, ' +
-      '#credits-tooltip-panel, #touch-context-menu, #info-panel-modal, #info-panel-container, ' +
+      '#credits-tooltip-panel, #upgrade-tooltip-panel, #touch-context-menu, #info-panel-modal, #info-panel-container, ' +
       '#help-modal, #recordings-modal, #ai-chat-modal, #boarding-combat-overlay, ' +
       '[id^="res-card-"], #player-credits-display, #player-trade-options-display, ' +
       '#game-timer, #config-build-buttons, .cruiser-build-btn, .selection-tile'
@@ -4582,7 +4582,6 @@ function getPlanetTradeIncomePerMin(planet) {
     focus: '👁️ Focus Modes',
     ships: '🚀 Ships & Combat',
     cruisers: '🛸 Cruisers',
-    upgrades: '🛠️ Upgrades',
     diplomacy: '🤝 Diplomacy & Sympathy',
     hazards: '⚡ Hazards',
     monsters: '🧬 Space Amoebas',
@@ -4987,7 +4986,7 @@ function getPlanetTradeIncomePerMin(planet) {
     const enableCheats = document.getElementById('cheats-checkbox').checked;
     const aiCount = parseInt(document.getElementById('ai-count-input').value, 10);
     const productionMultiple = parseFloat(document.getElementById('production-multiple-input').value) || 1.0;
-    const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 2000;
+    const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 3000;
     const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 60;
     const clustersInput = document.getElementById('clusters-input');
     const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
@@ -5535,6 +5534,199 @@ function getPlanetTradeIncomePerMin(planet) {
   window.getPredictionStrength = () => predictionStrength;
   window.getPredictionStress = () => predictionStressSmoothed;
 
+  // ── Prediction desync diagnostics ───────────────────────────────────────
+  // Logs when local client pose diverges from server authority in world space
+  // (zoom-independent). Focus: battles + move orders, not FoW re-entry noise.
+  // Samples are sent to the server and appended to logs/pred-desync.jsonl
+  // (also kept in window._predDesyncLog). Toggle: window.PRED_DESYNC_LOG = false
+  window.PRED_DESYNC_LOG = true;
+  window._predDesyncLog = [];
+  const PRED_DESYNC_POS_PX = 16;           // world units — significant position error
+  const PRED_DESYNC_HEADING_DEG = 22;      // significant heading error
+  const PRED_DESYNC_LOG_COOLDOWN_MS = 700; // per-ship rate limit
+  const PRED_DESYNC_MAX_SAMPLES = 250;
+  const PRED_DESYNC_MAX_PACKET_GAP_MS = 380; // skip after long gaps (FoW / tab)
+  const predDesyncLastLogMs = new Map();
+
+  function angleDiffDeg(a, b) {
+    // Prefer shared shortestAngleDiff when available (defined later in this scope
+    // at runtime when logs fire — use local normalize for early safety)
+    let d = (a || 0) - (b || 0);
+    while (d <= -Math.PI) d += Math.PI * 2;
+    while (d > Math.PI) d -= Math.PI * 2;
+    return Math.abs(d) * 180 / Math.PI;
+  }
+
+  /** Lightweight combat proximity for desync context (world-space). */
+  function isShipNearEnemyForPredLog(ship) {
+    if (!ship || !serverState || !serverState.ships) return false;
+    const oid = ship.ownerId;
+    const R2 = 150 * 150;
+    for (let i = 0; i < serverState.ships.length; i++) {
+      const o = serverState.ships[i];
+      if (!o || !o.active || o.id === ship.id) continue;
+      let isEnemy = false;
+      if (o.isAmoeba) isEnemy = true;
+      else if (oid && o.ownerId && o.ownerId !== oid) isEnemy = true;
+      else if (oid && !o.ownerId) isEnemy = true;
+      else if (!oid && o.ownerId) isEnemy = true;
+      if (!isEnemy) continue;
+      const dx = o.x - ship.x;
+      const dy = o.y - ship.y;
+      if (dx * dx + dy * dy <= R2) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Compare client visual pose to server authority and log meaningful desyncs.
+   * @param {object} ship live server ship
+   * @param {object} vis visualShips entry (client prediction)
+   * @param {number} authX server x
+   * @param {number} authY server y
+   * @param {number} authAngle server heading
+   * @param {string} source 'packet' | 'soft_snap' | 'soft_frame'
+   */
+  function maybeLogPredDesync(ship, vis, authX, authY, authAngle, source) {
+    if (window.PRED_DESYNC_LOG === false) return;
+    if (!ship || !vis || !ship.active) return;
+    // Cruisers / capital ships only (not green fleets, not pure amoebas)
+    if (!ship.isCruiser || ship.isAmoeba) return;
+    // Own units — move orders + own battles are what we want to tune
+    if (localPlayer && ship.ownerId != null && ship.ownerId !== localPlayer.id) return;
+
+    const now = performance.now();
+    // Skip FoW re-entry / tab-suspend gaps (not prediction quality)
+    if (source === 'packet' && vis.netTime && (now - vis.netTime) > PRED_DESYNC_MAX_PACKET_GAP_MS) return;
+    if (vis._predDesyncSkipUntil && now < vis._predDesyncSkipUntil) return;
+
+    const clientX = vis.x;
+    const clientY = vis.y;
+    const clientAngle = vis.angle || 0;
+    const posErr = Math.hypot(clientX - authX, clientY - authY);
+    const headErr = angleDiffDeg(clientAngle, authAngle || 0);
+
+    if (posErr < PRED_DESYNC_POS_PX && headErr < PRED_DESYNC_HEADING_DEG) return;
+
+    const opt = vis.opt;
+    const optLive = !!(opt && now < opt.expiresAt);
+    const inCombat = isShipNearEnemyForPredLog(ship);
+    const hasDest = (vis.auth && vis.auth.destX != null) ||
+      (ship.targetX != null && ship.targetY != null) ||
+      !!ship.targetPlanet ||
+      optLive;
+    const recentMove = !!(vis._predContextUntil && now < vis._predContextUntil);
+
+    // Focus: combat, move orders, active cruise — skip boring idle noise
+    let context = 'other';
+    if (inCombat) context = 'combat';
+    else if (optLive || recentMove || vis._predContext === 'move_order') context = 'move_order';
+    else if (hasDest && (ship.currentSpeed || 0) > 0.5) context = 'cruise';
+    else if ((ship.currentSpeed || 0) < 0.5 && posErr < 40 && headErr < 45) {
+      // Idle with mild heading drift after stop — not interesting
+      return;
+    } else if ((ship.currentSpeed || 0) < 0.5) {
+      context = 'idle';
+    }
+
+    // Idle desync only if large (possible bug); mild idle skip above
+    if (context === 'idle' && posErr < 40) return;
+    if (context === 'other' && !inCombat && !hasDest && posErr < 50) return;
+
+    const last = predDesyncLastLogMs.get(ship.id) || 0;
+    if (now - last < PRED_DESYNC_LOG_COOLDOWN_MS) return;
+    predDesyncLastLogMs.set(ship.id, now);
+
+    const destX = optLive ? opt.targetX
+      : (vis.auth && vis.auth.destX != null ? vis.auth.destX
+        : (ship.targetX != null ? ship.targetX
+          : (ship.targetPlanet ? ship.targetPlanet.x : null)));
+    const destY = optLive ? opt.targetY
+      : (vis.auth && vis.auth.destY != null ? vis.auth.destY
+        : (ship.targetY != null ? ship.targetY
+          : (ship.targetPlanet ? ship.targetPlanet.y : null)));
+
+    const sample = {
+      t: Date.now(),
+      source,
+      context,
+      id: ship.id,
+      name: ship.name || null,
+      classType: ship.classType || null,
+      posErr: Math.round(posErr * 10) / 10,
+      headErrDeg: Math.round(headErr * 10) / 10,
+      client: {
+        x: Math.round(clientX * 10) / 10,
+        y: Math.round(clientY * 10) / 10,
+        angleDeg: Math.round((clientAngle * 180 / Math.PI) * 10) / 10,
+        smoothSpeed: vis.smoothSpeed != null ? Math.round(vis.smoothSpeed * 10) / 10 : null
+      },
+      server: {
+        x: Math.round(authX * 10) / 10,
+        y: Math.round(authY * 10) / 10,
+        angleDeg: Math.round(((authAngle || 0) * 180 / Math.PI) * 10) / 10,
+        speed: Math.round((ship.currentSpeed || 0) * 10) / 10,
+        maxSpeed: ship.speed != null ? Math.round(ship.speed * 10) / 10 : null
+      },
+      dest: (destX != null && destY != null)
+        ? { x: Math.round(destX * 10) / 10, y: Math.round(destY * 10) / 10 }
+        : null,
+      optLive,
+      inCombat,
+      clientTurnDir: vis.turnDir || (opt && opt.turnDir) || 0,
+      // Implied server turn toward dest (sign of shortestAngleDiff server→desired)
+      serverTurnDir: (destX != null && destY != null)
+        ? (Math.sign(shortestAngleDiff(authAngle || 0, Math.atan2(destY - authY, destX - authX))) || 0)
+        : 0,
+      predStrength: Math.round(predictionStrength * 100) / 100,
+      predStress: Math.round(predictionStressSmoothed * 100) / 100,
+      packetGapMs: vis.netTime ? Math.round(now - vis.netTime) : null,
+      flightTime: ship.flightTime != null ? Math.round(ship.flightTime * 100) / 100 : null
+    };
+
+    window._predDesyncLog.push(sample);
+    if (window._predDesyncLog.length > PRED_DESYNC_MAX_SAMPLES) {
+      window._predDesyncLog.shift();
+    }
+    // Write to server file logs/pred-desync.jsonl (accessible to tooling)
+    try {
+      if (socket && socket.connected) {
+        socket.emit('predDesyncLog', sample);
+      }
+    } catch (_) { /* ignore */ }
+    // Quiet console by default — file is the primary sink. Set PRED_DESYNC_CONSOLE=true to spam.
+    if (window.PRED_DESYNC_CONSOLE) {
+      console.log(
+        `[PRED DESYNC] ${context}/${source} id=${sample.id}` +
+        (sample.name ? ` "${sample.name}"` : '') +
+        ` posErr=${sample.posErr} headErr=${sample.headErrDeg}°` +
+        ` spd=${sample.server.speed}/${sample.client.smoothSpeed ?? '—'} pred=${sample.predStrength}`,
+        sample
+      );
+    }
+  }
+
+  window.dumpPredDesyncLog = () => {
+    console.table(window._predDesyncLog.map(s => ({
+      t: new Date(s.t).toISOString().slice(11, 23),
+      context: s.context,
+      source: s.source,
+      id: s.id,
+      name: s.name,
+      posErr: s.posErr,
+      headErr: s.headErrDeg,
+      inCombat: s.inCombat,
+      optLive: s.optLive,
+      pred: s.predStrength
+    })));
+    console.log('[PRED DESYNC] Also written server-side to logs/pred-desync.jsonl');
+    return window._predDesyncLog;
+  };
+  window.clearPredDesyncLog = () => {
+    window._predDesyncLog.length = 0;
+    predDesyncLastLogMs.clear();
+  };
+
   /** Prefer predicted/visual pose for hit-tests so clicks match what the player sees. */
   function getShipDisplayPos(ship) {
     if (!ship) return { x: 0, y: 0 };
@@ -5693,6 +5885,9 @@ function getPlanetTradeIncomePerMin(planet) {
       vis.predCircling = false;
       vis.predCircleDestX = tx;
       vis.predCircleDestY = ty;
+      // Lock turn direction for this order (match server 180° convention: -π → +π)
+      const turnDiff = shortestAngleDiff(startAngle, desiredAngle);
+      vis.turnDir = Math.abs(turnDiff) > 0.05 ? (Math.sign(turnDiff) || 1) : 0;
       vis.auth = {
         x: startX,
         y: startY,
@@ -5710,18 +5905,30 @@ function getPlanetTradeIncomePerMin(planet) {
         speed: spd,
         desiredAngle,
         turnRateRad,
+        turnDir: vis.turnDir,
         startTime: now,
         expiresAt: now + getOptimisticMoveTtlMs(),
         lastSimTime: now
       };
+      // Desync log context: treat as move-order until TTL + a few extra seconds
+      vis._predContext = 'move_order';
+      vis._predContextUntil = now + getOptimisticMoveTtlMs() + 2500;
     }
   }
 
-  function angleDiffAbs(a, b) {
-    let d = a - b;
-    while (d < -Math.PI) d += Math.PI * 2;
+  /**
+   * Shortest signed angle from `from` to `to` in (-π, π].
+   * Maps -π → +π so 180° turns always pick the same CW/CCW as the server.
+   */
+  function shortestAngleDiff(from, to) {
+    let d = (to || 0) - (from || 0);
+    while (d <= -Math.PI) d += Math.PI * 2;
     while (d > Math.PI) d -= Math.PI * 2;
-    return Math.abs(d);
+    return d;
+  }
+
+  function angleDiffAbs(a, b) {
+    return Math.abs(shortestAngleDiff(b, a));
   }
 
   /**
@@ -6175,6 +6382,15 @@ function getPlanetTradeIncomePerMin(planet) {
       resetClientModeFlags();
       lastKnownPlanets = {};
       lastKnownHazards = {};
+      clientPlanetOwners = {};
+      // Drop any stale FoW tile map until this packet's exploredCells is applied
+      if (serverState && serverState !== state) {
+        serverState.exploredCells = {};
+      }
+      // Full snapshot should carry a fresh exploredCells object (possibly empty)
+      if (state.exploredCells == null) {
+        state.exploredCells = {};
+      }
     }
 
     if (state.players && localPlayer) {
@@ -6832,9 +7048,14 @@ function getPlanetTradeIncomePerMin(planet) {
             netTime: lastNetworkUpdateMs,
             opt: null
           };
+          // Skip desync logs briefly after first sighting (spawn / FoW re-entry)
+          vis._predDesyncSkipUntil = lastNetworkUpdateMs + 600;
           visualShips.set(s.id, vis);
           continue;
         }
+
+        // Compare client prediction to this packet BEFORE we adopt auth (best desync signal)
+        maybeLogPredDesync(s, vis, s.x, s.y, s.angle || 0, 'packet');
 
         const opt = vis.opt;
         const optLive = opt && lastNetworkUpdateMs < opt.expiresAt;
@@ -12842,8 +13063,328 @@ function getPlanetTradeIncomePerMin(planet) {
   registerUpgradeBtn('btn-up-marines', 'marines');
   registerUpgradeBtn('btn-up-command', 'command');
 
+  // ── Upgrade button rich tooltips (hover / light touch) ──────────────────
+  const UPGRADE_TOOLTIP_DATA = {
+    sensorarrays: {
+      title: '📡 Sensor Array',
+      body: `
+        <p><strong>Per level:</strong> +25% scan, weapon, and diplomacy range.</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li>Expands <strong>radar / fog-of-war vision</strong> around the cruiser.</li>
+          <li>Increases <strong>weapon engagement range</strong> for lasers and bomb fire arcs.</li>
+          <li>Widens the radius used for <strong>Diplomat</strong> sympathy attempts and other sensor-gated actions.</li>
+          <li>Helps <strong>Command</strong> auras and fuel/supply sharing find allies farther away.</li>
+        </ul>
+        <p class="ut-note">Also available as a planetary module (global 20% discount per owned planet module of this type, up to free).</p>
+      `
+    },
+    labs: {
+      title: '🔬 Laboratories',
+      body: `
+        <p><strong>Per level:</strong> +1 Lab on the ship (or planet module).</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li>Cruisers with labs <strong>research planetary anomalies</strong> in sensor range, building progress toward rewards.</li>
+          <li>Each research cycle can grant 🧪 <strong>tech</strong> (chance scales with ship XP, player XP, and tech).</li>
+          <li>Labs help accumulate <strong>hazard knowledge</strong> near storms/nebulae, reducing their effective intensity for you.</li>
+          <li>More labs improve anomaly discovery odds when exploring deep space tiles.</li>
+        </ul>
+        <p class="ut-note">Planetary labs contribute research-style benefits when the world is focused on research or has research infrastructure.</p>
+      `
+    },
+    armor: {
+      title: '⛨ Armor Plating',
+      body: `
+        <p><strong>Per level:</strong> +4 flat armor capacity <em>plus</em> +10% of maxHealth to armor pool.</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li>Armor points absorb damage <strong>before hull HP</strong>.</li>
+          <li>If you have <strong>Duranium</strong> stockpiled, consuming it can boost the armor capacity bonus by about <strong>+50%</strong>.</li>
+          <li>Critical for surviving bombardments, dogfights, and amoeba pressure.</li>
+        </ul>
+        <p class="ut-note">Armor regenerates/refills according to repair rules when you return to friendly support.</p>
+      `
+    },
+    shields: {
+      title: '🛡️ Energy Shields',
+      body: `
+        <p><strong>Per level:</strong> Max shield points = <strong>(2 + ceil(techBonus/5))</strong> per level (player tech scales capacity).</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li>Shields absorb hits <strong>before armor and hull</strong>.</li>
+          <li>Regenerate anywhere at roughly <strong>5% of max shields / second</strong> while you have fuel (paused in ion storms).</li>
+          <li>If shields hit 0, a <strong>1–3s regen cooldown</strong> applies (reduced by Damage Control).</li>
+          <li>Nearby friendly cruisers can share shield umbrellas to protect allies in range.</li>
+        </ul>
+        <p class="ut-note">Shield installs can be blocked if projected deflection would exceed ~90% effectiveness soft limits.</p>
+      `
+    },
+    engine: {
+      title: '🚀 Overcharged Engine',
+      body: `
+        <p><strong>Per level:</strong> +3 speed and +3°/sec turn rate; also +2 / +1 / +1 bonus fuel capacity at levels 1 / 2 / 3.</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li>Faster transit, kiting, and pursuit.</li>
+          <li>Tighter turn arcs for combat maneuvering and post-order pivots.</li>
+          <li>Slightly more fuel budget for long patrols and scouting.</li>
+        </ul>
+        <div class="ut-section">Dilithium Reactor</div>
+        <ul>
+          <li>Inside friendly wells, consumes <strong>0.05 Dilithium/sec</strong> to charge reactor points (cap <strong>10 × engine level</strong>).</li>
+          <li>When fuel is below max − engine level, auto-restores up to <strong>engine level</strong> fuel from the reactor.</li>
+          <li>Emergency restore cooldown: <strong>30 / level seconds</strong>.</li>
+        </ul>
+      `
+    },
+    munitions: {
+      title: '💣 Munition Pods',
+      body: `
+        <p><strong>Per level:</strong> +1 bomb capacity and +1 splash damage.</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li>More planetary/ship <strong>bombardment</strong> magazine depth.</li>
+          <li>Splash destroys extra fleet ships or chips extra HP on cruisers/amoebas (capped vs target size, ~1/50th).</li>
+          <li>Pairs with Scout Attack / bomb orders for sieges and clearing escorts.</li>
+        </ul>
+      `
+    },
+    targeting: {
+      title: '🎯 Targeting Computer',
+      body: `
+        <p><strong>Per level:</strong> +5% weapon range and +5% accuracy.</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li>Stack with Sensor Array for long-range sniping packages.</li>
+          <li>Improves hit chance in dogfights and against agile targets.</li>
+          <li>Affects effective bomb/laser engagement envelopes.</li>
+        </ul>
+      `
+    },
+    damagecontrol: {
+      title: '🔧 Damage Control',
+      body: `
+        <p><strong>Per level:</strong> Stronger repair, shield recovery, and damage mitigation.</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li><strong>+50% hull repair rate</strong> per level in friendly wells (works even while fighting).</li>
+          <li>Deep-space healing at <strong>20% of the well rate per level</strong>.</li>
+          <li>Shield regen rate <strong>+50% of base per level</strong>.</li>
+          <li>Reduces shield zero-cooldown by <strong>1 second per level</strong>.</li>
+          <li>Softens crippled-cruiser penalties to speed and volley size by <code>1/(1+level)</code>.</li>
+        </ul>
+      `
+    },
+    supply_ship: {
+      title: '📦 Supply Ship',
+      body: `
+        <p><strong>Capacity:</strong> level × maxHealth / 2. <strong>Discount:</strong> +(25 + 10×level)% supply cost savings. Tradeoffs apply.</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li>Carry <strong>supplies</strong> that convert to fuel / sustain operations away from home.</li>
+          <li>If you run dry on fuel while moving but still have supplies, the ship <strong>stops until at least 1 supply converts to fuel</strong>.</li>
+          <li>Can resupply nearby friendlies (purple resupply rays).</li>
+        </ul>
+        <div class="ut-section">Penalties per level</div>
+        <ul>
+          <li>−3 speed, −5% accuracy, −5 weapon range, −20 sensor range (min 25), −2 volleys (min 1).</li>
+        </ul>
+        <p class="ut-note">Best on dedicated tenders, not pure combat hulls.</p>
+      `
+    },
+    extended_fuel: {
+      title: '⛽ Extended Fuel',
+      body: `
+        <p><strong>Per level:</strong> +twice base fuel capacity (base = maxHealth/5) with no combat penalties.</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li>Greatly expands the cruiser’s fuel tank for long-range operations.</li>
+          <li>Enables long scouting, patrol, and distant anomaly runs without constant docking.</li>
+        </ul>
+        <p class="ut-note">Dilithium Reactor charging is part of the <strong>Engine</strong> upgrade, not Extended Fuel.</p>
+      `
+    },
+    diplomat: {
+      title: '🤝 Diplomat',
+      body: `
+        <p><strong>Per level:</strong> One diplomacy attempt every <strong>60/level seconds</strong> (faster at higher levels).</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li>Builds <strong>sympathy</strong> on neutral/enemy worlds in sensor range; can flip planets via revolt.</li>
+          <li>Can reduce enemy sympathy on your own worlds.</li>
+          <li>Success chance scales with disposition, existing sympathy, player XP, and ship XP (bonus if you hold their preferred resource).</li>
+          <li>Awards player Exp and ship Exp on success; sympathy pierces fog of war on that world.</li>
+          <li>Dismantling a Diplomat cruiser in a friendly well auto-runs diplomacy as it breaks down.</li>
+        </ul>
+      `
+    },
+    marines: {
+      title: '🪖 Marines',
+      body: `
+        <p><strong>Capacity:</strong> level × maxHealth / 2 (rounded up) + 5.</p>
+        <div class="ut-section">Scout Attack drives marines</div>
+        <ul>
+          <li><strong>Not Hold Fire (Off or On):</strong> load 1/sec from friendly planets with &gt;50% garrison (double-garrison worlds only if within 25px).</li>
+          <li><strong>Hold Fire:</strong> deposit 1/sec to friendly planets with free capacity.</li>
+          <li><strong>On + over enemy planet</strong> (within radius+15): invade if more than half capacity is loaded (after bombard hold rules).</li>
+          <li><strong>Board disabled enemy cruisers</strong> (health &lt; 2) when not Hold Fire, with whole marines loaded and target isolated from its friends.</li>
+        </ul>
+        <p class="ut-note">Tritanium can boost launched marine fleets (+400 Exp, speed 35).</p>
+      `
+    },
+    command: {
+      title: '👑 Command',
+      body: `
+        <p><strong>Per level:</strong> Project command authority to nearby friendly ships inside this cruiser’s sensor range.</p>
+        <div class="ut-section">Uses &amp; effects</div>
+        <ul>
+          <li>Nearby friendlies gain <strong>Command Points</strong> ≈ (√commanderXP × command level) / 4, capped by 1.5 × best commander √XP in range.</li>
+          <li>Command Points boost <strong>local XP bonus</strong>, <strong>speed</strong> (~+0.5 per CP), and slightly <strong>range</strong> (~+1% per CP).</li>
+          <li>Stacks from multiple command ships within range (subject to the cap).</li>
+          <li>Planetary Command modules contribute to empire command/stockpile economy systems and discounts where applicable.</li>
+        </ul>
+        <p class="ut-note">Ideal on flagships that stay near a battle group.</p>
+      `
+    }
+  };
+
+  const upgradeTooltipPanel = document.getElementById('upgrade-tooltip-panel');
+  const upgradeTooltipTitle = document.getElementById('upgrade-tooltip-title');
+  const upgradeTooltipBody = document.getElementById('upgrade-tooltip-body');
+  let upgradeTooltipHideTimer = null;
+  let upgradeTooltipTouchTimer = null;
+  let upgradeTooltipFromTouch = false;
+
+  function positionUpgradeTooltip(anchorEl) {
+    if (!upgradeTooltipPanel || !anchorEl) return;
+    const rect = anchorEl.getBoundingClientRect();
+    const pad = 10;
+    // Prefer above the button bar; fall back below if clipped
+    upgradeTooltipPanel.style.display = 'flex';
+    const panelRect = upgradeTooltipPanel.getBoundingClientRect();
+    let left = rect.left + rect.width / 2 - panelRect.width / 2;
+    left = Math.max(pad, Math.min(left, window.innerWidth - panelRect.width - pad));
+    let top = rect.top - panelRect.height - 10;
+    if (top < pad) {
+      top = rect.bottom + 10;
+    }
+    if (top + panelRect.height > window.innerHeight - pad) {
+      top = Math.max(pad, window.innerHeight - panelRect.height - pad);
+    }
+    upgradeTooltipPanel.style.left = `${left}px`;
+    upgradeTooltipPanel.style.top = `${top}px`;
+  }
+
+  function showUpgradeTooltip(typeKey, anchorEl) {
+    const data = UPGRADE_TOOLTIP_DATA[typeKey];
+    if (!data || !upgradeTooltipPanel) return;
+    if (upgradeTooltipHideTimer) {
+      clearTimeout(upgradeTooltipHideTimer);
+      upgradeTooltipHideTimer = null;
+    }
+    upgradeTooltipTitle.innerHTML = data.title;
+    upgradeTooltipBody.innerHTML = data.body;
+    upgradeTooltipPanel.setAttribute('aria-hidden', 'false');
+    positionUpgradeTooltip(anchorEl);
+  }
+
+  function hideUpgradeTooltip(immediate = false) {
+    if (!upgradeTooltipPanel) return;
+    if (upgradeTooltipHideTimer) {
+      clearTimeout(upgradeTooltipHideTimer);
+      upgradeTooltipHideTimer = null;
+    }
+    const doHide = () => {
+      upgradeTooltipPanel.style.display = 'none';
+      upgradeTooltipPanel.setAttribute('aria-hidden', 'true');
+      upgradeTooltipFromTouch = false;
+    };
+    if (immediate) doHide();
+    else upgradeTooltipHideTimer = setTimeout(doHide, 120);
+  }
+
+  const upgradeBtnTypeMap = {
+    'btn-up-sensorarray': 'sensorarrays',
+    'btn-up-lab': 'labs',
+    'btn-up-armor': 'armor',
+    'btn-up-shields': 'shields',
+    'btn-up-engine': 'engine',
+    'btn-up-munitions': 'munitions',
+    'btn-up-targeting': 'targeting',
+    'btn-up-damagecontrol': 'damagecontrol',
+    'btn-up-supplyship': 'supply_ship',
+    'btn-up-extendedfuel': 'extended_fuel',
+    'btn-up-diplomat': 'diplomat',
+    'btn-up-marines': 'marines',
+    'btn-up-command': 'command'
+  };
+
+  for (const [btnId, typeKey] of Object.entries(upgradeBtnTypeMap)) {
+    const btn = document.getElementById(btnId);
+    if (!btn) continue;
+    // Desktop hover
+    btn.addEventListener('mouseenter', () => {
+      upgradeTooltipFromTouch = false;
+      showUpgradeTooltip(typeKey, btn);
+    });
+    btn.addEventListener('mouseleave', () => {
+      if (!upgradeTooltipFromTouch) hideUpgradeTooltip(false);
+    });
+    // Light touch: brief finger hold (~280ms) without much movement shows tooltip
+    // without blocking the existing short-tap upgrade click path.
+    btn.addEventListener('touchstart', (e) => {
+      if (!e.touches || e.touches.length !== 1) return;
+      const t0 = e.touches[0];
+      const startX = t0.clientX;
+      const startY = t0.clientY;
+      if (upgradeTooltipTouchTimer) clearTimeout(upgradeTooltipTouchTimer);
+      upgradeTooltipTouchTimer = setTimeout(() => {
+        upgradeTooltipFromTouch = true;
+        showUpgradeTooltip(typeKey, btn);
+        // Auto-hide so it does not block the HUD forever
+        if (upgradeTooltipHideTimer) clearTimeout(upgradeTooltipHideTimer);
+        upgradeTooltipHideTimer = setTimeout(() => hideUpgradeTooltip(true), 4500);
+      }, 280);
+      const cancelTouchTooltip = (ev) => {
+        if (upgradeTooltipTouchTimer) {
+          clearTimeout(upgradeTooltipTouchTimer);
+          upgradeTooltipTouchTimer = null;
+        }
+        if (ev && ev.touches && ev.touches[0]) {
+          const dx = Math.abs(ev.touches[0].clientX - startX);
+          const dy = Math.abs(ev.touches[0].clientY - startY);
+          if (dx > 12 || dy > 12) {
+            // scrolling / drag — do not show
+          }
+        }
+      };
+      const endTouchTooltip = () => {
+        if (upgradeTooltipTouchTimer) {
+          clearTimeout(upgradeTooltipTouchTimer);
+          upgradeTooltipTouchTimer = null;
+        }
+        btn.removeEventListener('touchmove', cancelTouchTooltip);
+        btn.removeEventListener('touchend', endTouchTooltip);
+        btn.removeEventListener('touchcancel', endTouchTooltip);
+      };
+      btn.addEventListener('touchmove', cancelTouchTooltip, { passive: true });
+      btn.addEventListener('touchend', endTouchTooltip);
+      btn.addEventListener('touchcancel', endTouchTooltip);
+    }, { passive: true });
+  }
+
+  // Hide upgrade tooltip when leaving upgrade mode / clicking elsewhere
+  document.addEventListener('pointerdown', (e) => {
+    if (!upgradeTooltipPanel || upgradeTooltipPanel.style.display === 'none') return;
+    const t = e.target;
+    if (t && t.closest && (t.closest('#upgrade-tooltip-panel') || t.closest('[id^="btn-up-"]'))) return;
+    hideUpgradeTooltip(true);
+  }, true);
+
   bindActionClick('btn-up-cancel', () => {
     upgradeModeActive = false;
+    hideUpgradeTooltip(true);
   });
   function updateButtonHighlights() {
     const toggle = (id, active) => {
@@ -12874,7 +13415,7 @@ function getPlanetTradeIncomePerMin(planet) {
     const noRampagers = document.getElementById('no-rampagers-checkbox').checked;
     const aiCount = parseInt(document.getElementById('ai-count-input').value, 10);
     const productionMultiple = parseFloat(document.getElementById('production-multiple-input').value) || 1.0;
-    const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 2000;
+    const mapSize = parseInt(document.getElementById('map-size-input').value, 10) || 3000;
     const planetCount = parseInt(document.getElementById('planet-count-input').value, 10) || 60;
     const clustersInput = document.getElementById('clusters-input');
     const clusters = clustersInput ? (parseInt(clustersInput.value, 10) || 0) : 0;
@@ -13428,7 +13969,8 @@ function getPlanetTradeIncomePerMin(planet) {
             const timedLimitSecs = !isUnlimited ? parseFloat(settings.timedGameLimit) : null;
             const durationInMinutes = timedLimitSecs ? (timedLimitSecs / 60) : null;
             const multiplier = (durationInMinutes && durationInMinutes > 0) ? (600 / durationInMinutes) : 5;
-            const capVal = Math.round(multiplier * techBonus);
+            let capVal = Math.round(multiplier * techBonus);
+            if (capVal > 100) capVal = 100 + (capVal - 100) / 2;
             if (selectedPlanetFocus.habitability > capVal) {
               shouldShow = false;
             }
@@ -13507,7 +14049,7 @@ function getPlanetTradeIncomePerMin(planet) {
         'munitions': 'Adds +1 bomb capacity and +1 splash damage rating per level to standard weapon dogfights',
         'targeting': 'Adds +5% weapon range and +5% laser accuracy hit chance per level in combat',
         'damagecontrol': 'Adds +50% out-of-combat repair and +20% deep-space repair rate per level. Also increases shield regen rate by +50% of the base rate per level.',
-        'supply_ship': 'Adds +12 max supplies, and +(25 + level*10)% supply cost discount per level. Penalties: -3 speed, -5% accuracy, -5 weapon range, -20 sensor range (min 25), -2 weapon volleys (min 1) per level',
+        'supply_ship': 'Max supplies = level × maxHealth / 2. +(25 + level×10)% supply cost discount. Penalties: -3 speed, -5% accuracy, -5 weapon range, -20 sensor range (min 25), -2 weapon volleys (min 1) per level',
         'extended_fuel': 'Each level increases the maximum fuel capacity for the cruiser by twice the base amount at no penalty',
         'diplomat': 'Adds diplomat subversion to project 1 passive sympathy/min or reduce 1 enemy sympathy/min',
         'marines': 'Adds +1 marine capacity factor per level to drastically boost planetary boarding success',
@@ -14598,7 +15140,7 @@ function getPlanetTradeIncomePerMin(planet) {
       // Draw purple resupply rays, orange fuel sharing rays, and green terraform rays
       if (serverState.ships) {
         for (const ship of serverState.ships) {
-          // Continuous green terraforming beam while parked over a friendly planet
+          // Continuous dark-green terraforming beam (diplomacy-ray style) while parked
           if (ship.activeTerraformPlanetId != null && (ship.terraforming || 0) > 0) {
             const tPlanet = findServerPlanet(ship.activeTerraformPlanetId);
             if (tPlanet) {
@@ -14608,30 +15150,39 @@ function getPlanetTradeIncomePerMin(planet) {
               const ty = tPlanet.y;
               const angle = Math.atan2(ty - sy, tx - sx);
               ctx.save();
-              const shimmer = 0.55 + 0.25 * Math.sin(Date.now() / 70) + 0.15 * Math.random();
-              const alpha = 0.55 * shimmer;
-              ctx.beginPath();
-              ctx.moveTo(sx, sy);
+              // Same shimmer pattern as diplomacy scan, dark green instead of yellow
+              const shimmer = 0.5 + 0.3 * Math.sin(Date.now() / 50) + 0.2 * Math.random();
+              const alpha = 0.45 * shimmer;
               const coneWidth = 5;
               const perpAngle = angle + Math.PI / 2;
               const tx1 = tx - Math.cos(perpAngle) * coneWidth;
               const ty1 = ty - Math.sin(perpAngle) * coneWidth;
               const tx2 = tx + Math.cos(perpAngle) * coneWidth;
               const ty2 = ty + Math.sin(perpAngle) * coneWidth;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
               ctx.lineTo(tx1, ty1);
               ctx.lineTo(tx2, ty2);
               ctx.closePath();
               const grad = ctx.createLinearGradient(sx, sy, tx, ty);
-              grad.addColorStop(0, `rgba(57, 255, 20, ${alpha})`);
-              grad.addColorStop(0.4, `rgba(0, 200, 80, ${alpha * 0.7})`);
-              grad.addColorStop(1, `rgba(0, 120, 40, 0.08)`);
+              grad.addColorStop(0, `rgba(10, 60, 20, 0.05)`);
+              grad.addColorStop(0.3, `rgba(20, 100, 35, ${alpha * 0.7})`);
+              grad.addColorStop(1, `rgba(15, 80, 25, ${alpha})`);
               ctx.fillStyle = grad;
               ctx.fill();
-              ctx.strokeStyle = `rgba(180, 255, 160, ${alpha * 0.9})`;
-              ctx.lineWidth = 1.2 + Math.random();
+              ctx.strokeStyle = `rgba(160, 220, 150, ${alpha * 0.8})`;
+              ctx.lineWidth = 1 + Math.random() * 1.5;
               ctx.beginPath();
               ctx.moveTo(sx, sy);
               ctx.lineTo(tx, ty);
+              ctx.stroke();
+              ctx.strokeStyle = `rgba(20, 90, 30, ${alpha * 0.4})`;
+              ctx.lineWidth = 0.8;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx1, ty1);
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx2, ty2);
               ctx.stroke();
               ctx.restore();
             }
@@ -17780,8 +18331,14 @@ function getPlanetTradeIncomePerMin(planet) {
        * heading change. Client used to slow on any big turn, which made the cruiser
        * "stop and pivot" while the server kept arcing forward → later position shift.
        */
-      function extrapolatePose(x, y, angle, speed, destX, destY, turnRateRad, totalDt, inventCruise, circleState) {
-        if (totalDt <= 0) return { x, y, angle, speed, circling: !!(circleState && circleState.circling) };
+      function extrapolatePose(x, y, angle, speed, destX, destY, turnRateRad, totalDt, inventCruise, circleState, turnDirLock) {
+        if (totalDt <= 0) {
+          return {
+            x, y, angle, speed,
+            circling: !!(circleState && circleState.circling),
+            turnDir: turnDirLock || 0
+          };
+        }
         const dtTotal = Math.min(1.25, totalDt);
         // Finer steps for short frame DTs (smoother turns for fleets at 60fps)
         const steps = Math.max(1, Math.min(12, Math.ceil(dtTotal / 0.033)));
@@ -17793,6 +18350,7 @@ function getPlanetTradeIncomePerMin(planet) {
         let circleDestX = circleState ? circleState.destX : null;
         let circleDestY = circleState ? circleState.destY : null;
         const tr = Math.max(turnRateRad, 0.01);
+        let turnDir = turnDirLock || 0;
 
         for (let i = 0; i < steps; i++) {
           let moveSpd = sp;
@@ -17802,25 +18360,40 @@ function getPlanetTradeIncomePerMin(planet) {
               circling = false;
               circleDestX = destX;
               circleDestY = destY;
+              turnDir = 0; // new dest: re-evaluate lock
             }
             const desired = Math.atan2(destY - y, destX - x);
-            let diff = desired - angle;
-            while (diff < -Math.PI) diff += Math.PI * 2;
-            while (diff > Math.PI) diff -= Math.PI * 2;
+            let diff = shortestAngleDiff(angle, desired);
+
+            // Commit turn direction (same rule as server) — stops CW/CCW desync on large turns
+            if (Math.abs(diff) < 12 * Math.PI / 180) {
+              turnDir = 0;
+            } else if (!turnDir) {
+              turnDir = Math.sign(diff) || 1;
+            } else if (Math.sign(diff) !== 0 && Math.sign(diff) !== turnDir) {
+              diff = turnDir * (2 * Math.PI - Math.abs(diff));
+            }
+
             const maxRot = tr * dt;
-            if (Math.abs(diff) <= maxRot) angle = desired;
-            else angle += Math.sign(diff) * maxRot;
+            if (Math.abs(diff) <= maxRot) {
+              angle = desired;
+              turnDir = 0;
+            } else {
+              angle += Math.sign(diff) * maxRot;
+            }
 
             const distLeft = Math.hypot(destX - x, destY - y);
             // turningRadius = speed / turnRate (before circling slowdown)
             const turningRadius = moveSpd / tr;
+            // Recompute shortest |diff| for circling check (after lock may have expanded)
+            const alignDiff = Math.abs(shortestAngleDiff(angle, desired));
             if (!circling) {
-              if (distLeft < 1.8 * turningRadius && Math.abs(diff) > 40 * Math.PI / 180) {
+              if (distLeft < 1.8 * turningRadius && alignDiff > 40 * Math.PI / 180) {
                 circling = true;
               }
             }
             if (circling) {
-              if (Math.abs(diff) < 0.15) {
+              if (alignDiff < 0.15) {
                 circling = false;
               } else {
                 moveSpd *= 0.25;
@@ -17831,6 +18404,7 @@ function getPlanetTradeIncomePerMin(planet) {
             if (distLeft <= step) {
               x = destX; y = destY; sp = 0;
               circling = false;
+              turnDir = 0;
               break;
             }
           } else if (moveSpd < 0.5) {
@@ -17840,7 +18414,7 @@ function getPlanetTradeIncomePerMin(planet) {
           y += Math.sin(angle) * moveSpd * dt;
           sp = moveSpd;
         }
-        return { x, y, angle, speed: sp, circling, destX: circleDestX, destY: circleDestY };
+        return { x, y, angle, speed: sp, circling, destX: circleDestX, destY: circleDestY, turnDir };
       }
 
       /**
@@ -17862,9 +18436,12 @@ function getPlanetTradeIncomePerMin(planet) {
           // Stopped ships: freeze heading. Soft-correcting angle to each server
           // packet after combat caused continuous nose-wiggle.
           if (vis.idleHoldHeading) return;
-          let adiff = serverPred.angle - vis.angle;
-          while (adiff < -Math.PI) adiff += Math.PI * 2;
-          while (adiff > Math.PI) adiff -= Math.PI * 2;
+          // Mid-order turn: never yank heading while locked to a turn direction
+          if (vis.turnDir && destX != null && destY != null) {
+            const toDesired = Math.abs(shortestAngleDiff(vis.angle, Math.atan2(destY - vis.y, destX - vis.x)));
+            if (toDesired > 12 * Math.PI / 180) return;
+          }
+          let adiff = shortestAngleDiff(vis.angle, serverPred.angle);
           if (Math.abs(adiff) < 3 * Math.PI / 180) return;
           const angAlpha = 1 - Math.exp(-(combatMode ? 10 : 5) * smoothDt);
           vis.angle += adiff * angAlpha * (combatMode ? 0.75 : 0.4);
@@ -17928,6 +18505,13 @@ function getPlanetTradeIncomePerMin(planet) {
 
         // Catastrophic only (FoW re-entry / long gap) — soft 100% settle, not a hard pop
         if (err > (combatMode ? 220 : 480)) {
+          // Log snap before overwriting (if we still know which ship this is)
+          if (vis._shipIdForDesync && serverState && serverState.ships) {
+            const snapShip = findServerShip(vis._shipIdForDesync);
+            if (snapShip) {
+              maybeLogPredDesync(snapShip, vis, serverPred.x, serverPred.y, serverPred.angle, 'soft_snap');
+            }
+          }
           vis.x = serverPred.x;
           vis.y = serverPred.y;
           vis.angle = serverPred.angle;
@@ -17938,20 +18522,34 @@ function getPlanetTradeIncomePerMin(planet) {
         vis.x += pullX * alpha;
         vis.y += pullY * alpha;
 
-        // Heading: trust local turn when mid-course; otherwise ease toward server
+        // Heading: trust local turn when mid-course / locked turn direction.
+        // Soft-pulling the other way was a top cause of "client turns left, server right".
         let applyAngleCorr = true;
-        if (!combatMode && destX != null && destY != null) {
+        if (vis.idleHoldHeading) {
+          applyAngleCorr = false;
+        } else if (vis.opt && performance.now() < vis.opt.expiresAt) {
+          // Optimistic move: never fight local turn with server heading
+          applyAngleCorr = false;
+        } else if (destX != null && destY != null) {
           const desired = Math.atan2(destY - vis.y, destX - vis.x);
           const localErr = angleDiffAbs(vis.angle, desired);
           const serverErr = angleDiffAbs(serverPred.angle, desired);
-          if (localErr > 12 * Math.PI / 180 && localErr < serverErr - 0.02) {
+          // Actively turning toward dest — keep our arc
+          if (localErr > 12 * Math.PI / 180) {
+            applyAngleCorr = false;
+          } else if (!combatMode && localErr < serverErr - 0.02) {
             applyAngleCorr = false;
           }
+          // If server is turning the opposite way from our lock, don't snap across
+          if (vis.turnDir && applyAngleCorr) {
+            const serverDiff = shortestAngleDiff(vis.angle, serverPred.angle);
+            if (Math.sign(serverDiff) !== 0 && Math.sign(serverDiff) !== vis.turnDir && Math.abs(serverDiff) > 15 * Math.PI / 180) {
+              applyAngleCorr = false;
+            }
+          }
         }
-        if (applyAngleCorr && !vis.idleHoldHeading) {
-          let adiff = serverPred.angle - vis.angle;
-          while (adiff < -Math.PI) adiff += Math.PI * 2;
-          while (adiff > Math.PI) adiff -= Math.PI * 2;
+        if (applyAngleCorr) {
+          let adiff = shortestAngleDiff(vis.angle, serverPred.angle);
           if (Math.abs(adiff) >= 2.5 * Math.PI / 180) {
             const angAlpha = Math.min(1, alpha * (combatMode ? 0.85 : 0.48));
             vis.angle += adiff * angAlpha;
@@ -18028,8 +18626,10 @@ function getPlanetTradeIncomePerMin(planet) {
             auth: null,
             lastCruiseSpeed: s.currentSpeed || 0
           };
+          vis._predDesyncSkipUntil = smoothNow + 600;
           visualShips.set(s.id, vis);
         } else {
+          vis._shipIdForDesync = s.id;
           const inCombat = isShipNearEnemy(s);
           let opt = vis.opt;
           // Near enemies: only keep optimistic moves for a brief click window
@@ -18168,11 +18768,14 @@ function getPlanetTradeIncomePerMin(planet) {
             floorSpd *= combatExtrapScale;
             const pose = extrapolatePose(
               vis.x, vis.y, vis.angle, floorSpd,
-              destX, destY, turnRate, smoothDt, inventCruise || (optLive && !inCombat), circleState
+              destX, destY, turnRate, smoothDt, inventCruise || (optLive && !inCombat), circleState,
+              vis.turnDir || (opt && opt.turnDir) || 0
             );
             vis.x = pose.x;
             vis.y = pose.y;
             vis.angle = pose.angle;
+            vis.turnDir = pose.turnDir || 0;
+            if (opt && pose.turnDir) opt.turnDir = pose.turnDir;
             vis.predCircling = pose.circling;
             vis.predCircleDestX = pose.destX;
             vis.predCircleDestY = pose.destY;
@@ -19611,6 +20214,12 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       if (serverState.lasers) {
+        // Advance laser ages between network packets (~20 Hz) so projectiles
+        // move every animation frame instead of stuttering at tick rate.
+        const laserExtrapSec = lastNetworkUpdateMs
+          ? Math.max(0, Math.min(0.25, (performance.now() - lastNetworkUpdateMs) / 1000))
+          : 0;
+
         for (const laser of serverState.lasers) {
           // Frustum culling for lasers: skip if both endpoints are way off-screen
           const buffer = 150;
@@ -19620,18 +20229,26 @@ function getPlanetTradeIncomePerMin(planet) {
             continue;
           }
 
-          const progress = laser.age / laser.duration;
+          const laserAge = (laser.age || 0) + laserExtrapSec;
+          const laserDuration = laser.duration || 0.8;
+          if (laserAge > laserDuration + 0.05) continue;
+
+          // Ease progress slightly so motion doesn't look stepped when packets cluster
+          let progress = Math.min(1, Math.max(0, laserAge / laserDuration));
           
           if (laser.isBombAttack) {
             const delay = (laser.index || 0) * 0.24;
-            if (laser.age < delay) {
+            if (laserAge < delay) {
               continue;
             }
             const travelDuration = 1.05;
-            if (laser.age > delay + travelDuration) {
+            if (laserAge > delay + travelDuration) {
               continue;
             }
-            const progress = (laser.age - delay) / travelDuration;
+            // Smoothstep for plasma flight — large red balls look much silkier
+            let t = (laserAge - delay) / travelDuration;
+            t = Math.min(1, Math.max(0, t));
+            progress = t * t * (3 - 2 * t);
 
             let startPtX = laser.startX;
             let startPtY = laser.startY;
@@ -19723,6 +20340,7 @@ function getPlanetTradeIncomePerMin(planet) {
                 ctx.shadowBlur = 12;
                 ctx.fill();
               } else {
+                // Klingon / default plasma-style bolt + flame (deterministic flicker)
                 const angle = Math.atan2(endPtY - startPtY, endPtX - startPtX);
                 ctx.rotate(angle + Math.PI / 2);
                 ctx.beginPath();
@@ -19739,9 +20357,12 @@ function getPlanetTradeIncomePerMin(planet) {
                 ctx.shadowBlur = 6;
                 ctx.fill();
                 
+                // Seeded flame length — Math.random() every frame made the trail shimmer/stutter
+                const flameSeed = Math.sin(laser.startX * 9.1 + laser.startY * 4.7 + (laser.index || 0) * 3.1 + laserAge * 18) * 43758.5453;
+                const flameFlicker = (flameSeed - Math.floor(flameSeed));
                 ctx.beginPath();
                 ctx.moveTo(0.5, 3);
-                ctx.lineTo(0, 4.5 + Math.random() * 1.5);
+                ctx.lineTo(0, 4.5 + flameFlicker * 1.5);
                 ctx.lineTo(-0.5, 3);
                 ctx.closePath();
                 ctx.fillStyle = '#ffaa00';
@@ -19791,8 +20412,11 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.fill();
             }
           } else if (laser.color === 'cruiser-projectile') {
-            const curX = laser.startX + (laser.endX - laser.startX) * progress;
-            const curY = laser.startY + (laser.endY - laser.startY) * progress;
+            // Non-bomb cruiser projectiles also use extrapolated age (via progress)
+            const t = progress;
+            const ease = t * t * (3 - 2 * t);
+            const curX = laser.startX + (laser.endX - laser.startX) * ease;
+            const curY = laser.startY + (laser.endY - laser.startY) * ease;
             ctx.beginPath();
             ctx.arc(curX, curY, 1, 0, Math.PI * 2);
             ctx.fillStyle = "#ff5500";
@@ -19803,15 +20427,45 @@ function getPlanetTradeIncomePerMin(planet) {
           } else if (laser.color === 'refuel-beam' || laser.color === 'resupply-beam') {
             // Removed in favor of continuous rays
           } else if (laser.color === 'terraform-beam') {
+            // Pulse beam on +1 hab: dark-green diplomacy-style cone
             const fade = 1 - progress;
+            const sx = laser.startX;
+            const sy = laser.startY;
+            const tx = laser.endX;
+            const ty = laser.endY;
+            const angle = Math.atan2(ty - sy, tx - sx);
+            const coneWidth = 5;
+            const perpAngle = angle + Math.PI / 2;
+            const tx1 = tx - Math.cos(perpAngle) * coneWidth;
+            const ty1 = ty - Math.sin(perpAngle) * coneWidth;
+            const tx2 = tx + Math.cos(perpAngle) * coneWidth;
+            const ty2 = ty + Math.sin(perpAngle) * coneWidth;
+            const alpha = 0.55 * fade;
             ctx.save();
-            ctx.strokeStyle = `rgba(57, 255, 20, ${0.85 * fade})`;
-            ctx.lineWidth = (laser.width || 3) * (1.2 - progress * 0.5);
-            ctx.shadowColor = '#39ff14';
-            ctx.shadowBlur = 8;
             ctx.beginPath();
-            ctx.moveTo(laser.startX, laser.startY);
-            ctx.lineTo(laser.endX, laser.endY);
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(tx1, ty1);
+            ctx.lineTo(tx2, ty2);
+            ctx.closePath();
+            const grad = ctx.createLinearGradient(sx, sy, tx, ty);
+            grad.addColorStop(0, `rgba(10, 60, 20, 0.05)`);
+            grad.addColorStop(0.3, `rgba(20, 100, 35, ${alpha * 0.7})`);
+            grad.addColorStop(1, `rgba(15, 80, 25, ${alpha})`);
+            ctx.fillStyle = grad;
+            ctx.fill();
+            ctx.strokeStyle = `rgba(160, 220, 150, ${alpha * 0.85})`;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(tx, ty);
+            ctx.stroke();
+            ctx.strokeStyle = `rgba(20, 90, 30, ${alpha * 0.45})`;
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(tx1, ty1);
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(tx2, ty2);
             ctx.stroke();
             ctx.restore();
           } else {
@@ -19820,8 +20474,8 @@ function getPlanetTradeIncomePerMin(planet) {
             const delay = (laser.index || 0) * 0.08; // Staggered by 80ms per laser!
             const laserDuration = 0.25; // Each blast lasts 250ms
 
-            if (laser.age >= delay && laser.age <= delay + laserDuration) {
-              const activeProgress = (laser.age - delay) / laserDuration;
+            if (laserAge >= delay && laserAge <= delay + laserDuration) {
+              const activeProgress = (laserAge - delay) / laserDuration;
 
               // Find exact start and end coordinates based on ship positions
               let startPtX = laser.startX;

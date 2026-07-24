@@ -16,28 +16,46 @@ export function getHabName(habitability) {
 }
 
 /**
+ * Soft tech cap for planet-focus terraforming.
+ * Base: multiplier * techBonus (timed games use 600/minutes, else 5).
+ * If base cap > 100: soften excess → 100 + (cap - 100) / 2.
+ */
+export function getTerraformingHabCap(techBonus, settings) {
+  const isUnlimited = !settings || !settings.timedGameLimit || settings.timedGameLimit === 'unlimited';
+  const timedLimitSecs = !isUnlimited ? parseFloat(settings.timedGameLimit) : null;
+  const durationInMinutes = timedLimitSecs ? (timedLimitSecs / 60) : null;
+  const multiplier = (durationInMinutes && durationInMinutes > 0) ? (600 / durationInMinutes) : 5;
+  let cap = Math.round(multiplier * (techBonus || 0));
+  if (cap > 100) cap = 100 + (cap - 100) / 2;
+  return cap;
+}
+
+/**
  * Apply one +1 habitability step with terraforming class skips
  * (Jungle→Ocean→Terran 100, Desert→Tundra→Arid 90, Ocean→Arid→Terran 100).
- * Caps at 100 (same as planet Focus terraforming). Returns true if applied.
+ * No hard cap — planets may go past 100 (Terran → Gaia, etc.).
+ * Returns true if applied.
  */
 export function applyHabTerraformingStep(planet, game = null) {
   if (!planet) return false;
   const oldHab = planet.habitability || 0;
-  if (oldHab >= 100) return false;
 
   planet.habitability = oldHab + 1;
 
   const oldName = getHabName(oldHab);
   const steppedName = getHabName(planet.habitability);
-  if (oldName === 'Jungle' && steppedName === 'Ocean') {
-    planet.habitability = 100; // Terran skip
-  } else if (oldName === 'Desert' && steppedName === 'Tundra') {
-    planet.habitability = 90; // Arid skip
-  } else if (oldName === 'Ocean' && steppedName === 'Arid') {
-    planet.habitability = 100; // Terran skip
+  // Class-skip transitions still jump when crossing those bands (only applies below Terran)
+  if (oldHab < 100) {
+    if (oldName === 'Jungle' && steppedName === 'Ocean') {
+      planet.habitability = 100; // Terran skip
+    } else if (oldName === 'Desert' && steppedName === 'Tundra') {
+      planet.habitability = 90; // Arid skip
+    } else if (oldName === 'Ocean' && steppedName === 'Arid') {
+      planet.habitability = 100; // Terran skip
+    }
   }
 
-  planet.habitability = Math.min(100, Math.max(0, planet.habitability));
+  planet.habitability = Math.max(0, planet.habitability);
 
   const newName = getHabName(planet.habitability);
   if (oldName !== newName && game) {
@@ -295,11 +313,7 @@ export class Planet {
 
     if (this.owner && this.focusMode === 'terraforming') {
       const techBonus = Math.floor(Math.sqrt(this.owner.techScore || 0));
-      const isUnlimited = !settings || !settings.timedGameLimit || settings.timedGameLimit === 'unlimited';
-      const timedLimitSecs = !isUnlimited ? parseFloat(settings.timedGameLimit) : null;
-      const durationInMinutes = timedLimitSecs ? (timedLimitSecs / 60) : null;
-      const multiplier = (durationInMinutes && durationInMinutes > 0) ? (600 / durationInMinutes) : 5;
-      const capVal = Math.round(multiplier * techBonus);
+      const capVal = getTerraformingHabCap(techBonus, settings);
       if (this.habitability > capVal) {
         this.focusMode = 'economy';
         this.focusTransition = null;
@@ -497,7 +511,10 @@ export class Planet {
             this.maxShips += increase;
             this.radius = this.sizeClass / 4;
           } else if (focus === 'terraforming') {
-            this.productionProgress += shipsWouldBeProduced;
+            // Above 100 hab, planet-focus terraforming is 1/3 speed (not cruiser charges)
+            let terraRate = shipsWouldBeProduced;
+            if ((this.habitability || 0) > 100) terraRate /= 3;
+            this.productionProgress += terraRate;
             if (this.productionProgress >= 15) {
               const cycles = Math.floor(this.productionProgress / 15);
               this.productionProgress -= (cycles * 15);
@@ -518,7 +535,10 @@ export class Planet {
     // Increase max capacity, tech score, or maintain garrison mode if full
     const isFull = this.owner && (this.ships >= (isHuman && focus === 'garrison' ? this.maxShips * 2 : this.maxShips));
     if (isFull || (this.owner && this.owner.isAI && this.ships >= this.maxShips)) {
-      const timeToIncrease = focus === 'terraforming' ? 30 : (focus === 'research' ? 15 : 10);
+      // AI terraforming uses this timer; 1/3 rate when hab > 100
+      let terraInterval = 30;
+      if (focus === 'terraforming' && (this.habitability || 0) > 100) terraInterval = 90;
+      const timeToIncrease = focus === 'terraforming' ? terraInterval : (focus === 'research' ? 15 : 10);
       this.capacityProgress += (deltaTime / 1000);
       if (this.capacityProgress >= timeToIncrease) {
         if (isHuman) {

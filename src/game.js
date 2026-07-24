@@ -2360,6 +2360,13 @@ export class Game {
       player.lastKnownPlanets = {};
       player.spyRootedEvents = new Set();
       player.lastBundleSaleTime = null;
+      // FoW / vision caches must not survive map restarts (stale yellow fog tiles)
+      player._exploredCellsCache = null;
+      player._exploredCellsForceRebuild = true;
+      player._exploredCellsCacheTick = 0;
+      player._exploredCellsGameStart = null;
+      player._fogPlanetCache = null;
+      player._visPlanetCache = null;
       const resources = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
       player.autoBuyOrders = resources.map(res => ({
         id: "autobuy_" + Math.random().toString(36).substring(2, 9),
@@ -8506,6 +8513,7 @@ export class Game {
         );
 
         if (!friendlyNearby) {
+          // Scout Attack not Peace (On or Off) — Hold Fire does not board
           const enemiesInRange = cruisers.filter(other => 
             other.owner && 
             ship.owner && 
@@ -8513,7 +8521,7 @@ export class Game {
             !other.isAmoeba &&
             Math.floor(other.marineCount || 0) > 0 && 
             !other.isMaterializing && 
-            other.scoutAttackEnabled === true &&
+            other.scoutAttackEnabled !== 'peace' &&
             Math.hypot(other.x - ship.x, other.y - ship.y) <= other.cruiserRadarRange()
           );
 
@@ -8596,7 +8604,7 @@ export class Game {
               !other.isAmoeba &&
               other.marineCount > 0 &&
               !other.isMaterializing &&
-              other.scoutAttackEnabled === true &&
+              other.scoutAttackEnabled !== 'peace' &&
               Math.hypot(other.x - ship.x, other.y - ship.y) <= other.cruiserRadarRange()
             );
 

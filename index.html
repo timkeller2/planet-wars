@@ -70,20 +70,21 @@
           </label>
           <label style="cursor: pointer; display: flex; align-items: center;">
             <select id="map-size-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
-              <option value="1000">Very Small: 1000</option>
-              <option value="1500">Small: 1500</option>
-              <option value="2000" selected>Normal: 2000</option>
-              <option value="2500">Large: 2500</option>
-              <option value="3000">Very Large: 3000</option>
-              <option value="4000">Huge: 4000</option>
-              <option value="6000">Epic: 6000</option>
-              <option value="10000">Galactic: 10000</option>
+              <option value="1000">Skirmish: 1000</option>
+              <option value="1500">Very Small: 1500</option>
+              <option value="2000">Small: 2000</option>
+              <option value="3000" selected>Normal: 3000</option>
+              <option value="4000">Large: 4000</option>
+              <option value="6000">Very Large: 6000</option>
+              <option value="10000">Huge: 10000</option>
+              <option value="20000">Epic: 20000</option>
+              <option value="50000">Galactic: 50000</option>
               <option value="custom">Custom</option>
             </select>
             Map Size
           </label>
           <label id="custom-map-size-container" style="display: none; cursor: pointer; align-items: center;">
-            <input type="number" id="map-size-input" value="2000" min="500" max="50000" style="width: 60px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
+            <input type="number" id="map-size-input" value="3000" min="500" max="50000" style="width: 60px; margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;" />
             Custom Map Size (XY)
           </label>
           <label style="cursor: pointer; display: flex; align-items: center;">
@@ -407,7 +408,6 @@
               <button class="help-topic-btn" data-topic="focus">👁️ Focus Modes</button>
               <button class="help-topic-btn" data-topic="ships">🚀 Ships &amp; Combat</button>
               <button class="help-topic-btn" data-topic="cruisers">🛸 Cruisers</button>
-              <button class="help-topic-btn" data-topic="upgrades">🛠️ Upgrades</button>
               <button class="help-topic-btn" data-topic="diplomacy">🤝 Diplomacy &amp; Sympathy</button>
               <button class="help-topic-btn" data-topic="hazards">⚡ Hazards</button>
               <button class="help-topic-btn" data-topic="monsters">🧬 Space Amoebas</button>
@@ -530,7 +530,7 @@
                 </ul>
                 Your <strong>trade capacity</strong> is <code>ceil(total effective ships / 400)</code>. Passive trade income uses your effective ships plus visible non-war partners' effective ships (partners' commerce worlds use the same multipliers). Commerce does <em>not</em> convert overflow production into on-planet credits or grow capacity/tech while focused — its value is the trade weight of the garrison you park there. Stack ships (ideally full, on rich minerals) to maximize trade.</li>
               <li><strong>⛏️ Mining (M):</strong> When selected, the planet passively extracts dilithium, merculite, duranium, and other resources found on it at double rate. If the planet is at full capacity (ships ≥ max capacity), the extraction rate is doubled again. Stockpiled resources can be traded or sold to the galactic bank.</li>
-              <li><strong>🌱 Terraforming (T):</strong> Available if your tech bonus is higher than 1/5 of the planet's habitability rounded up. While full of ships, overflow production acts as phantom ships that continually increase habitability score (requires 15 phantom ships per 1 habitability point). If habitability exceeds the cap value (defined as: (600 / game duration in minutes, or 5 if unlimited) * tech bonus), the focus automatically reverts to Economy. Special planetary transitions: Jungle-to-Ocean becomes Terran; Desert-to-Tundra becomes Arid; Ocean-to-Arid becomes Terran. Additionally, when a planet earns a happiness point for high population, if its focus is terraforming, there is a 50% chance of gaining 1 sympathy for the owner of the planet.</li>
+              <li><strong>🌱 Terraforming (T):</strong> Soft tech cap = (600 / game duration in minutes, or 5 if unlimited) × tech bonus; if that value exceeds 100 it becomes <code>100 + (cap − 100) / 2</code>. Focus reverts to Economy if habitability exceeds the cap. While full of ships, overflow production acts as phantom ships (15 phantom ships → +1 habitability). Above 100 habitability, planet-focus terraforming runs at <strong>1/3 rate</strong>. No hard 100 hab ceiling — planets can push into Gaia territory. Class skips: Jungle→Terran, Desert→Arid, Ocean→Terran. High-pop happiness ticks while terraforming have a 50% chance of +1 owner sympathy.</li>
               <li><strong>📦 Supply Production (S):</strong> Multiplies planetary supply regeneration by <strong>×4</strong> while the planet is below full capacity. When the planet is full of ships (<code>ships ≥ maxShips</code>), supply regeneration is <strong>×8</strong> instead. Supplies still cap at max capacity.</li>
               <li><strong>🕵️ Root Out Spies (P):</strong> Only available when enemy sympathy exists on the planet. When the planet is at full capacity, its overflow production converts into espionage defense. Every <strong>3 phantom ships</strong> produced reduces the highest enemy sympathy on the planet by 1. Once all enemy sympathy is eliminated, the planet will automatically switch to Commerce mode.</li>
               <li><strong>🏠 Homeworld (H):</strong> Declares this planet your homeworld (only one allowed). Grants homeworld production/combat benefits and command-limit bonuses while you hold it.</li>
@@ -592,35 +592,9 @@
               <li><strong>Crew System:</strong> Cruisers have crew (up to 2× current health). Crew restores at 1/sec inside friendly wells when no enemies are within <strong>100px</strong>. Crew is consumed during boarding combat.</li>
               <li><strong>Patrol Mode (P):</strong> Toggled via <strong>P</strong> key or button. Cruiser attacks enemies in sensor range, flies to a nearby friendly well to rearm, then returns to its patrol station. Target-locking a planet automatically deactivates patrol mode. Note: Auto-retreat to refuel, rearm, or heal is restricted to cruisers in <em>Patrol</em> or <em>Scout</em> modes; manually ordered/attacking cruisers will not auto-retreat.</li>
               <li><strong>Bombardment Threat Safety:</strong> Cruisers automatically <strong>suspend bombardment</strong> when any enemy ship or Amoeba is within sensor range, switching to defensive engagement.</li>
-              <li><strong>Marine Boarding &amp; Replays:</strong> Cruisers with Marines can board enemy cruisers when their marine count exceeds 2× the enemy's crew. Boarding is restricted to cruisers in <em>Scout Attack</em> mode. When boarding is initiated, a <strong>9-second custom animated overlay replay</strong> shows names, troop counts, and calculated kill rates (based on tech and XP bonuses). Subsequent boarding attempts on the same cruiser are appended with a <em>"Round [N]"</em> tag. Victory captures the enemy cruiser!</li>
+              <li><strong>Marine Boarding &amp; Replays:</strong> Cruisers with Marines can board disabled enemy cruisers (health &lt; 2) when Scout Attack is <em>not Hold Fire</em> (On or Off). Friend with marines nearby also cease fire so the crippled ship can be captured. When boarding is initiated, a <strong>9-second custom animated overlay replay</strong> shows names, troop counts, and calculated kill rates (based on tech and XP bonuses). Subsequent boarding attempts on the same cruiser are appended with a <em>"Round [N]"</em> tag. Victory captures the enemy cruiser!</li>
               <li><strong>Order Queueing (Shift+Right-click):</strong> Queue movement and targeting orders. Cruisers execute them sequentially, advancing to the next waypoint automatically.</li>
               <li><strong>Cruiser Bomb Toggle (B):</strong> When cruiser(s) are selected, <strong>B</strong> toggles auto-planet-bombardment on/off for those cruisers.</li>
-            </ul>
-          </div>
-
-          <!-- UPGRADES -->
-          <div id="help-topic-upgrades" class="help-page hidden">
-            <ul>
-              <li><strong>Upgrade Mode (G) ⚙️:</strong> Select a cruiser near a friendly planet and press <strong>G</strong> (or click the cruiser again) to open the upgrade panel. Costs are paid from the nearby planet's garrison (and your credit balance).</li>
-              <li><strong>Cost Formula:</strong> Base cost = <code>min(150, 25 + maxHealth × (3 + totalUpgrades/3))</code>, modified by global/player discounts (randomized at initialization and dynamically updated) and Command upgrade modifiers. Additionally, each planet upgrade of that type built on your planets reduces the cost of that cruiser upgrade category by <strong>20%</strong> (up to 100% discount, making upgrades completely free).</li>
-              <li><strong>Upgrade Limits:</strong> Each category caps at <strong>Level 5</strong>. Individual upgrade level ≤ <strong>maxHealth/10</strong>. Total upgrades ≤ <strong>maxHealth/5</strong>. Bigger hulls support more upgrades.</li>
-              <li><strong>Available Modules:</strong>
-                <ul style="margin-top: 6px; padding-left: 20px;">
-                  <li><strong>📡 Sensor Array (S):</strong> <strong>+25% scan/weapon range per level</strong>. Expands the cruiser's detection, attack, and diplomacy radius.</li>
-                  <li><strong>🔬 Laboratories (L):</strong> <strong>+1 lab per level</strong>. Labs accumulate hazard knowledge when near storms/nebulae, reducing their danger. Uses 🔬 icon.</li>
-                  <li><strong>⛨ Armor Plating (A):</strong> <strong>+4 flat + 10% maxHealth</strong> armor capacity per level. Consuming Duranium resource (if available in player stockpile) boosts this armor capacity bonus by <strong>+50%</strong>. Absorbs damage before hull.</li>
-                  <li><strong>🛡️ Energy Shields (H):</strong> Provides energy shield points that absorb incoming damage first. Max capacity is <strong>(2 + 1/5 player tech bonus, rounded up) per level</strong>. Regenerates anywhere at <strong>5% of max shields per second</strong> (requires fuel, pauses in Ion Storms). If shields are fully depleted to 0, they incur a <strong>1 to 3 second regeneration cooldown</strong> (reduced by 1 second per level of 🔧 Damage Control).</li>
-                  <li><strong>🚀 Overcharged Engine (E):</strong> <strong>+3 speed and +3°/sec turn rate per level</strong>. Also adds +2/+1/+1 bonus fuel capacity at Levels 1/2/3.</li>
-                  <li><strong>💣 Munition Pods (M):</strong> <strong>+1 bomb capacity and +1 splash damage per level</strong>. Splash destroys additional fleet ships or deals bonus HP damage to cruisers/amoebas (limited to 1/50th of target's size).</li>
-                  <li><strong>🎯 Targeting Computer (T):</strong> <strong>+5% weapon range and +5% accuracy per level</strong>.</li>
-                  <li><strong>🔧 Damage Control (D):</strong> <strong>+50% hull repair speed per level</strong> inside friendly wells (continues even while in combat). Enables deep-space healing at 20% per level. Also increases shield regeneration rate by <strong>+50% of the base rate per level</strong>, mitigates damaged-cruiser speed and volley size reduction by <code>1/(1+level)</code>, and reduces shield depletion cooldown by 1 second per level.</li>
-                  <li><strong>📦 Supply Ship (Y):</strong> <strong>+12 max supplies per level</strong>, and <strong>+(50 + level*10)% supply cost discount</strong> per level. Penalties per level: -3 speed, -5% weapon accuracy, -5 weapon range, -20 sensor range (min 25), and -2 weapon volleys (min 1). If a cruiser is moving and runs out of fuel but has supplies, it automatically stops moving until it converts at least 1 supply to fuel.</li>
-                  <li><strong>⛽ Extended Fuel (F):</strong> Increases the cruiser's maximum fuel capacity by the base amount per level at no penalty. Cruisers with this upgrade passively regenerate <strong>1 fuel per level every 3 minutes</strong> outside friendly wells. Inside friendly wells, dilithium can be consumed to charge a reactor (max 10 points per level), which automatically replenishes fuel when it drops below 50%.</li>
-                  <li><strong>🤝 Diplomat (I):</strong> <strong>+1 diplomatic attempt per 60/level seconds</strong>. Generates sympathy on neutral and enemy planets in sensor range, potentially flipping them via revolt. Also reduces enemy sympathy on your own planets. Earns Exp on success. See 🤝 Diplomacy topic.</li>
-                  <li><strong>🪖 Marines (R):</strong> <strong>Marine capacity = level × maxHealth / 2 (rounded up) + 5</strong>. <em>Scout Attack</em> controls marines: <strong>not Hold Fire</strong> loads from friendly wells (1/sec, planets &gt;50% garrison; double-garrison worlds only if within 25px); <strong>Hold Fire</strong> deposits to under-capacity friendly planets; <strong>On</strong> + over an enemy planet (within radius+15) invades if more than half capacity is loaded. Revolt dumps use not-Hold-Fire + inbound marine caps. Can board enemy cruisers in Scout Attack On when marines exceed 2× enemy crew. Tritanium (if available) grants launched marine fleets <strong>+400</strong> starting Exp and speed <strong>35</strong>.</li>
-                </ul>
-              </li>
-              <li><strong>Cancel:</strong> Press <strong>C</strong>, <strong>G</strong>, <strong>Escape</strong>, or click ❌ Cancel to exit Upgrade Mode. The cruiser stays selected.</li>
             </ul>
           </div>
 
@@ -642,7 +616,7 @@
                   <li><strong>Hold Fire (Peace):</strong> Deposits marines (1/sec) to friendly planets with free capacity.</li>
                 </ul>
               </li>
-              <li><strong>Marine Boarding &amp; Assaults:</strong> Board enemy cruisers with Scout Attack <strong>On</strong> when marines exceed ~2× enemy crew. Invade planets with Scout Attack <strong>On</strong> while over the target (radius+15) and more than half marine capacity loaded. Revolt-reaction dumps use not-Hold-Fire and cap inbound marines at maxShips+ships.</li>
+              <li><strong>Marine Boarding &amp; Assaults:</strong> Board disabled enemy cruisers with Scout Attack <strong>not Hold Fire</strong> (On or Off) when you have marines loaded and are in radar range (and the target is isolated from its friends). Allies with marines nearby also hold fire on that cripple so it can be captured. Invade planets with Scout Attack <strong>On</strong> while over the target (radius+15) and more than half marine capacity loaded. Revolt-reaction dumps use not-Hold-Fire and cap inbound marines at maxShips+ships.</li>
             </ul>
           </div>
 
@@ -728,7 +702,7 @@
                   <li><strong>Star Field:</strong> Toggle the cosmetic background star field.</li>
                   <li><strong>Production Speed:</strong> 0.5× (Grand Strategy) to 3× (Blitz) or custom.</li>
                   <li><strong>Hazard Level:</strong> 0 (none) to 4× (lots) or custom.</li>
-                  <li><strong>Map Size:</strong> 800 (Very Small) up to very large custom maps (e.g. 20000–50000) for galaxy-scale games.</li>
+                  <li><strong>Map Size:</strong> Skirmish (1000) through Galactic (50000), plus Custom (500–50000) for arbitrary square maps.</li>
                   <li><strong>Planet Count:</strong> 10–1000+ (default scales with map; large maps can use hundreds of worlds).</li>
                   <li><strong>Timed Game:</strong> 30 min to 3 hours, custom, or unlimited.</li>
                 </ul>
@@ -754,7 +728,7 @@
                   <li><strong>Upgrade Discounts:</strong> <code>1 + floor(difficulty / 20)</code> discounts of 15% on cruiser upgrade modules (6% chance).</li>
                   <li><strong>Tech Score:</strong> 1/10 of equivalent credit value added directly to tech score (6% chance).</li>
                   <li><strong>Player XP:</strong> 1/10 of equivalent credit value added to crew experience score (6% chance).</li>
-                  <li><strong>Terraforming:</strong> Grants the completing cruiser <code>round(credit value / 5)</code> Terraforming charges (6% chance). Park the cruiser <strong>directly over</strong> a friendly planet to channel a green ray: every <strong>10 seconds</strong> the planet gains <strong>+1 habitability</strong> (honoring Jungle→Terran / Desert→Arid / Ocean→Terran skips) and 1 charge is consumed. Cap at habitability 100.</li>
+                  <li><strong>Terraforming:</strong> Grants the completing cruiser <code>round(credit value / 5)</code> Terraforming charges (6% chance). Park the cruiser <strong>directly over</strong> a friendly planet to channel a <strong>dark-green diplomacy-style ray</strong>: every <strong>10 seconds</strong> the planet gains <strong>+1 habitability</strong> (honoring Jungle→Terran / Desert→Arid / Ocean→Terran skips) and 1 charge is consumed. No hard 100 hab cap (unlike planet-focus soft tech cap); cruiser rate is not slowed above 100 hab.</li>
                   <li><strong>Upgrade Tokens:</strong> <code>1 + floor(credit value / 40)</code> upgrade tokens rewarded directly to the cruiser (6% chance).</li>
                   <li><strong>Rare Resource Cache:</strong> <code>Random(1 to 6) + floor(credit value / 20)</code> units of a rare/exotic resource (6% chance).</li>
                 </ul>
@@ -805,6 +779,11 @@
       </div>
     </div>
     <div id="credits-tooltip-panel" style="position: absolute; display: none; background: rgba(10, 25, 35, 0.95); border: 1px solid rgba(255, 235, 59, 0.4); box-shadow: 0 0 15px rgba(255, 235, 59, 0.25), inset 0 0 10px rgba(0, 229, 255, 0.1); padding: 12px 16px; border-radius: 6px; backdrop-filter: blur(8px); font-family: 'Orbitron', sans-serif; color: #fff; z-index: 10000; pointer-events: none; min-width: 260px;"></div>
+    <!-- Upgrade button rich tooltip (hover / light touch) -->
+    <div id="upgrade-tooltip-panel" class="upgrade-tooltip-panel" style="display: none;" aria-hidden="true">
+      <div id="upgrade-tooltip-title" class="upgrade-tooltip-title"></div>
+      <div id="upgrade-tooltip-body" class="upgrade-tooltip-body"></div>
+    </div>
     <!-- Cyber Deep Space Touch Menu -->
     <div id="touch-context-menu" class="hidden">
       <div class="touch-context-header">DEEP SPACE CONTROLS</div>

@@ -1,5 +1,17 @@
 import { applyHabTerraformingStep } from './Planet.js';
 
+/**
+ * Shortest signed angle from `from` to `to` in (-π, π].
+ * Maps exact reverse (-π) to +π so client and server always pick the same
+ * turn direction on 180° orders (Math.sign(-π) vs Math.sign(+π) was opposite).
+ */
+export function shortestAngleDiff(from, to) {
+  let d = (to || 0) - (from || 0);
+  while (d <= -Math.PI) d += Math.PI * 2;
+  while (d > Math.PI) d -= Math.PI * 2;
+  return d;
+}
+
 const SHIP_CLASSES = {
   corvette: { name: 'Corvette', key: 's', hp: 15, costShips: 50, costCap: 2 },
   destroyer: { name: 'Destroyer', key: 'd', hp: 25, costShips: 100, costCap: 4 },
@@ -340,6 +352,44 @@ export class Ship {
   getMaxMarineCapacity() {
     if (!(this.marines > 0)) return 0;
     return Math.ceil(((this.marines || 0) * (this.maxHealth || 0)) / 2) + 5;
+  }
+
+  /** Display class name for chat / UI (Corvette, Destroyer, …). */
+  getShipClassName() {
+    if (this.classType && SHIP_CLASSES[this.classType]) {
+      return SHIP_CLASSES[this.classType].name;
+    }
+    const hp = this.maxHealth || 0;
+    if (hp <= 19) return 'Corvette';
+    if (hp <= 24) return 'Frigate';
+    if (hp <= 29) return 'Destroyer';
+    if (hp <= 34) return 'Cruiser';
+    if (hp <= 39) return 'Battlecruiser';
+    if (hp <= 44) return 'Battleship';
+    if (hp <= 49) return 'Titan';
+    return 'Mammoth';
+  }
+
+  /**
+   * Broadcast destruction to all players via pending system chat.
+   * Safe to call multiple times — announces at most once per ship instance.
+   */
+  announceCruiserDestroyed(game) {
+    if (!this.isCruiser || this.isAmoeba) return;
+    if (this._destructionAnnounced) return;
+    this._destructionAnnounced = true;
+    if (!game) return;
+    game.pendingChatMessages = game.pendingChatMessages || [];
+    const playerName = (this.owner && (this.owner.name || this.owner.id)) || 'Unknown';
+    const className = this.getShipClassName();
+    const shipName = this.name || this.configName || '';
+    const text = shipName
+      ? `${playerName}'s ${className} ${shipName} was destroyed!`
+      : `${playerName}'s ${className} was destroyed!`;
+    game.pendingChatMessages.push({
+      playerId: 'all',
+      text
+    });
   }
 
   /**
@@ -1090,8 +1140,9 @@ export class Ship {
     }
     this.inFriendlyWell = friendlyWellPlanet !== null;
 
-    // Cruiser Terraforming charges: when directly over a friendly planet, green ray +
+    // Cruiser Terraforming charges: when directly over a friendly planet, dark-green ray +
     // +1 habitability / 10s (class skips), consuming 1 terraforming per tick.
+    // No hard hab cap (unlike planet-focus soft tech cap).
     this.activeTerraformPlanetId = null;
     if (
       this.isCruiser &&
@@ -1109,7 +1160,6 @@ export class Ship {
       for (const planet of nearbyForTerra) {
         if (!planet || planet.dead || planet.isDeepSpaceAnomaly) continue;
         if (!planet.owner || planet.owner.id !== this.owner.id) continue;
-        if ((planet.habitability || 0) >= 100) continue;
         const pdx = this.x - planet.x;
         const pdy = this.y - planet.y;
         const distSq = pdx * pdx + pdy * pdy;
@@ -1125,7 +1175,6 @@ export class Ship {
         this.terraformingTimer = (this.terraformingTimer || 0) + deltaTime;
         while (this.terraformingTimer >= 10000 && (this.terraforming || 0) > 0) {
           this.terraformingTimer -= 10000;
-          if ((overPlanet.habitability || 0) >= 100) break;
           if (applyHabTerraformingStep(overPlanet, game)) {
             this.terraforming = Math.max(0, (this.terraforming || 0) - 1);
             if (lasers) {
@@ -2482,8 +2531,8 @@ export class Ship {
             if (allShips) {
               const candidateMarines = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(enemyShip.x, enemyShip.y, 500 * 500) : allShips;
               for (const other of candidateMarines) {
-                // Marine capacity + Scout Attack (loaded marine count not required)
-                if (other.active && other.isCruiser && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner) && (other.marines || 0) > 0 && other.scoutAttackEnabled === true) {
+                // Marine capacity + Scout Attack not Peace (On or Off can board/hold fire off ships)
+                if (other.active && other.isCruiser && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner) && (other.marines || 0) > 0 && other.scoutAttackEnabled !== 'peace') {
                   const dx = other.x - enemyShip.x;
                   const dy = other.y - enemyShip.y;
                   if (dx * dx + dy * dy <= 500 * 500) {
@@ -3517,8 +3566,8 @@ export class Ship {
                   if (!isBoardingCandidate && allShips) {
                     const candidateMarines = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(other.x, other.y, 500 * 500) : allShips;
                     for (const s of candidateMarines) {
-                      // Marine capacity + Scout Attack (loaded marine count not required)
-                      if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marines || 0) > 0 && s.scoutAttackEnabled === true) {
+                      // Marine capacity + Scout Attack not Peace (hold fire = will not board/capture)
+                      if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marines || 0) > 0 && s.scoutAttackEnabled !== 'peace') {
                         const dx = s.x - other.x;
                         const dy = s.y - other.y;
                         if (dx * dx + dy * dy <= 500 * 500) {
@@ -4528,12 +4577,30 @@ export class Ship {
         const turnRateRad = turnRateDeg * Math.PI / 180;
         const maxRotation = turnRateRad * (deltaTime / 1000);
 
-        let diff = desiredAngle - this.angle;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        while (diff > Math.PI) diff -= Math.PI * 2;
+        // Dest key for turn-direction lock (prevents CW/CCW flips mid-turn)
+        const destKeyX = Math.round((this.targetX != null ? this.targetX : (this.targetPlanet ? this.targetPlanet.x : desiredAngle)) * 10) / 10;
+        const destKeyY = Math.round((this.targetY != null ? this.targetY : (this.targetPlanet ? this.targetPlanet.y : 0)) * 10) / 10;
+        if (this._turnLockDestX !== destKeyX || this._turnLockDestY !== destKeyY) {
+          this._turnLockDestX = destKeyX;
+          this._turnLockDestY = destKeyY;
+          this._turnDir = 0;
+        }
+
+        let diff = shortestAngleDiff(this.angle, desiredAngle);
+
+        // Commit to a turn direction until roughly aligned (stops 180° flip-flops)
+        if (Math.abs(diff) < 12 * Math.PI / 180) {
+          this._turnDir = 0;
+        } else if (!this._turnDir) {
+          this._turnDir = Math.sign(diff) || 1;
+        } else if (Math.sign(diff) !== 0 && Math.sign(diff) !== this._turnDir) {
+          // Shortest path flipped opposite of our lock — keep turning the locked way
+          diff = this._turnDir * (2 * Math.PI - Math.abs(diff));
+        }
 
         if (Math.abs(diff) <= maxRotation) {
           this.angle = desiredAngle;
+          this._turnDir = 0;
         } else {
           this.angle += Math.sign(diff) * maxRotation;
         }
@@ -5759,8 +5826,9 @@ export class Ship {
                   // Cruiser
                   this.health -= dmg;
                   if (this.health <= 0) {
-                    this.health = 0;
+                    this.health = -1;
                     this.active = false;
+                    this.announceCruiserDestroyed(game);
                   }
                 } else {
                   // Standard fleet
@@ -5772,7 +5840,14 @@ export class Ship {
                 this.isWarp = false;
                 effectiveSpeed = Math.max(0, effectiveSpeed - this.getWarpBonus());
                 if (explosions) {
-                  explosions.push({ x: this.x, y: this.y, color: '#ff3300', age: 0, isMassive: true });
+                  explosions.push({
+                    x: this.x,
+                    y: this.y,
+                    color: '#ff3300',
+                    age: 0,
+                    isMassive: true,
+                    isCruiserDeath: !!(this.isCruiser && !this.active)
+                  });
                 }
                 if (!this.active) {
                   this.insideHazards = currentHazards;
@@ -5992,9 +6067,7 @@ export class Ship {
       const turnRateDeg = this.isCruiser ? Math.max(15, 60 - (this.maxHealth || 0) + (this.engine || 0) * 3) : 60;
       const turnRateRad = turnRateDeg * Math.PI / 180;
       
-      let diff = desiredAngle - this.angle;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      while (diff > Math.PI) diff -= Math.PI * 2;
+      let diff = shortestAngleDiff(this.angle, desiredAngle);
       
       const turningRadius = effectiveSpeed / turnRateRad;
       if (!this.circling) {
@@ -6624,8 +6697,13 @@ export class Ship {
       }
       const isCruiser = this.isCruiser || (this.maxHealth > 0 && !this.isAmoeba);
       const isAmoeba = this.isAmoeba;
-      if (this.health < 0) {
+      // Cruisers die at health <= 0 (was only < 0, so exact-0 kills never detonated/announced)
+      if (this.health < 0 || (isCruiser && this.health <= 0)) {
+        if (isCruiser && this.health === 0) this.health = -1;
         this.active = false;
+        if (isCruiser) {
+          this.announceCruiserDestroyed(game);
+        }
         if (explosions) {
           if (isCruiser) {
             explosions.push({
