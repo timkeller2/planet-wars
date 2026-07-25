@@ -55,6 +55,27 @@ canvas {
   touch-action: manipulation;
 }
 
+/* Full-button hit targets: nested <sup>/<span> no longer steal edge clicks */
+#player-credits-display,
+#player-trade-options-display {
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 8px 14px !important;
+  box-sizing: border-box;
+  /* Expand invisible hit pad slightly past the visual border */
+  margin: -2px;
+}
+#player-credits-display:not([style*="display: none"]),
+#player-trade-options-display:not([style*="display: none"]) {
+  display: inline-flex !important;
+}
+#player-credits-display > *,
+#player-trade-options-display > * {
+  pointer-events: none;
+}
+
 #ui-layer {
   position: absolute;
   top: 0;

@@ -5,17 +5,18 @@ import { Planet } from '../src/entities/Planet.js';
 function testFleetLaunchDebt() {
   console.log("Running Fleet Launch Debt Limit Test...");
 
-  // Test Case 1: Player owns homeworld, has 0 credits (can go into debt up to -1000).
+  // Test Case 1: Player can pay launch fee with credits into trade-ship debt.
   {
     const game = new Game();
     const player = new Player('human-1', '#ff0000', false);
     player.isAlive = true;
     player.credits = 0;
     player.totalShips = 0;
+    player.totalTradeShips = 1000;
     player.planetCount = 1;
+    player.techScore = 0;
     game.allPlayers = [player];
 
-    // Homeworld owned by the player
     const homeworld = new Planet('p-1', 100, 100, 30, player, 20);
     homeworld.homeworldOf = player.id;
     game.planets = [homeworld];
@@ -23,49 +24,47 @@ function testFleetLaunchDebt() {
     const targetPlanet = new Planet('p-2', 200, 200, 30, null, 10);
     game.planets.push(targetPlanet);
 
-    // Launch cost should be 10 + 1 (planetCount) - 0 = 11.
-    // Credits available: 0 - (-1000) = 1000.
-    // So player can pay the full 11 credits and go to -11 credits.
-    // Expected ships sent: 20 / 2 = 10 ships.
-    // Remaining planet ships: 20 - 10 = 10 (no ship launch cost deducted).
-    
+    // Ships launched: floor(20/2) = 10
+    // Fee: max(0, 2√10 − √0) ≈ 6.3246, paid fully with credits into debt
+    // Remaining planet ships: 20 - 10 = 10
+    const expectedFee = Game.computeFleetLaunchCost(10, 0);
+
     game.sendShips(homeworld, targetPlanet, false, null, false, null, false, false);
 
-    if (player.credits !== -11) {
-      console.error(`FAIL Case 1: Player credits should be -11, got ${player.credits}`);
+    if (Math.abs(player.credits - (-expectedFee)) > 1e-6) {
+      console.error(`FAIL Case 1: Player credits should be ${-expectedFee}, got ${player.credits}`);
       process.exit(1);
     }
     if (homeworld.ships !== 10) {
       console.error(`FAIL Case 1: Planet ships should be 10, got ${homeworld.ships}`);
       process.exit(1);
     }
-    console.log("SUCCESS Case 1: Paid launch cost with credits down to debt limit (-11 credits).");
+    console.log("SUCCESS Case 1: Paid launch cost with credits (2√ships − √tech).");
   }
 
-  // Test Case 2: Player does not own homeworld, has 0 credits (cannot go into debt).
+  // Test Case 2: No credits / no debt room — fee paid in ships.
   {
     const game = new Game();
     const player = new Player('human-1', '#ff0000', false);
     player.isAlive = true;
     player.credits = 0;
     player.totalShips = 0;
+    player.totalTradeShips = 0;
     player.planetCount = 1;
+    player.techScore = 0;
+    player.useCredits = true;
     game.allPlayers = [player];
 
-    // Regular planet (NOT homeworld) owned by player
     const regularPlanet = new Planet('p-1', 100, 100, 30, player, 20);
     game.planets = [regularPlanet];
 
     const targetPlanet = new Planet('p-2', 200, 200, 30, null, 10);
     game.planets.push(targetPlanet);
 
-    // Launch cost should be 11.
-    // Credits available: 0.
-    // So player cannot pay with credits.
-    // Ship launch cost: 11.
-    // tempShips: 20 - 11 = 9.
-    // standardShipsToSend: 9 / 2 = 4.
-    // Remaining planet ships: 20 - 11 (launch cost) - 4 (sent) = 5.
+    // Ships launched: 10, fee ≈ 6.3246 in ships
+    // Remaining: 20 - 6.3246 - 10 ≈ 3.6754
+    const expectedFee = Game.computeFleetLaunchCost(10, 0);
+    const expectedRemaining = 20 - expectedFee - 10;
 
     game.sendShips(regularPlanet, targetPlanet, false, null, false, null, false, false);
 
@@ -73,15 +72,46 @@ function testFleetLaunchDebt() {
       console.error(`FAIL Case 2: Player credits should remain 0, got ${player.credits}`);
       process.exit(1);
     }
-    if (regularPlanet.ships !== 5) {
-      console.error(`FAIL Case 2: Planet ships should be 5, got ${regularPlanet.ships}`);
+    if (Math.abs(regularPlanet.ships - expectedRemaining) > 1e-6) {
+      console.error(`FAIL Case 2: Planet ships should be ${expectedRemaining}, got ${regularPlanet.ships}`);
       process.exit(1);
     }
-    console.log("SUCCESS Case 2: Paid launch cost with ships because no homeworld is owned.");
+    console.log("SUCCESS Case 2: Paid launch cost with ships when no credit debt room.");
   }
 
-  console.log("ALL TESTS PASSED!");
-  process.exit(0);
+  // Test Case 3: Tech reduces fee to zero for small fleets
+  {
+    const game = new Game();
+    const player = new Player('human-1', '#ff0000', false);
+    player.isAlive = true;
+    player.credits = 0;
+    player.totalTradeShips = 0;
+    player.techScore = 100; // √100 = 10; 2√10 ≈ 6.32 → fee 0
+    game.allPlayers = [player];
+
+    const planet = new Planet('p-1', 100, 100, 30, player, 20);
+    game.planets = [planet];
+    const target = new Planet('p-2', 200, 200, 30, null, 10);
+    game.planets.push(target);
+
+    game.sendShips(planet, target, false, null, false, null, false, false);
+
+    if (Game.computeFleetLaunchCost(10, 100) !== 0) {
+      console.error(`FAIL Case 3: Expected zero fee formula for tech 100 / 10 ships`);
+      process.exit(1);
+    }
+    if (planet.ships !== 10) {
+      console.error(`FAIL Case 3: Planet ships should be 10 with free launch, got ${planet.ships}`);
+      process.exit(1);
+    }
+    if (player.credits !== 0) {
+      console.error(`FAIL Case 3: Credits should stay 0, got ${player.credits}`);
+      process.exit(1);
+    }
+    console.log("SUCCESS Case 3: High tech zeroes launch fee for a 10-ship fleet.");
+  }
+
+  console.log("All fleet launch cost tests passed.");
 }
 
 testFleetLaunchDebt();

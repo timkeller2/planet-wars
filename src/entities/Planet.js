@@ -447,7 +447,7 @@ export class Planet {
           let newShips = Math.floor(this.productionProgress);
           this.productionProgress -= newShips;
           this.ships += newShips;
-          this.decreaseMaxShips(0.04 * newShips, true);
+          this.decreaseMaxShips(0.07 * newShips, true);
         }
       } else if (focus === 'rootoutspies') {
         this.productionProgress += effectiveRate * (deltaTime / 1000);

@@ -14,6 +14,10 @@ export class Player {
     // Once true, conquering this player again yields loot but no elim XP
     this.eliminationXpAwarded = false;
     this.cruiserStyle = null;
+    /** Player menu choice: 'Federation'|... or null for Random / unset */
+    this.preferredRace = null;
+    /** True when preferredRace is an explicit non-Random selection (must never be reassigned) */
+    this.raceLocked = false;
     this.credits = 0;
     this.hasOwnedPlanet = false;
     Object.defineProperty(this, 'ownedPlanets', {

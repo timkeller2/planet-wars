@@ -3,15 +3,19 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { Game } from './src/game.js';
 import { Ship } from './src/entities/Ship.js';
+import { GameReplayRecorder } from './src/systems/GameReplayRecorder.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import readline from 'readline';
 import fs from 'fs';
 import * as dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import zlib from 'zlib';
+import { promisify } from 'util';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const gunzipAsync = promisify(zlib.gunzip);
 
 dotenv.config();
 
@@ -100,6 +104,34 @@ if (!fs.existsSync(shipConfigsDir)) {
   fs.mkdirSync(shipConfigsDir, { recursive: true });
 }
 
+const gameReplaysDir = path.join(savesDir, 'game_replays');
+if (!fs.existsSync(gameReplaysDir)) {
+  fs.mkdirSync(gameReplaysDir, { recursive: true });
+}
+const gameReplayRecorder = new GameReplayRecorder(gameReplaysDir);
+
+/** Start or discard compact game replay based on settings after a fresh map. */
+function syncGameReplayRecording(game) {
+  if (!game) return;
+  if (game.settings && game.settings.recordGameReplay) {
+    gameReplayRecorder.start(game);
+  } else {
+    gameReplayRecorder.discard();
+  }
+}
+
+async function finalizeGameReplayIfNeeded(game) {
+  if (!gameReplayRecorder.active) return null;
+  try {
+    const meta = await gameReplayRecorder.finalizeAndSave(game, game && game.gameOverMessage);
+    return meta;
+  } catch (e) {
+    console.error('[GameReplay] finalize error', e);
+    gameReplayRecorder.discard();
+    return null;
+  }
+}
+
 function getConfigsForPlayer(playerName) {
   if (!playerName) return [];
   const sanitized = playerName.replace(/[^a-z0-9_-]/gi, '_');
@@ -143,6 +175,42 @@ async function bootstrap() {
     console.log("DUMP ENDPOINT HIT! Exiting for profile.");
     res.send("Exiting...");
     process.exit(0);
+  });
+
+  // --- Compact full-game replays (last 10 on disk) ---
+  app.get('/api/game-replays', (req, res) => {
+    try {
+      res.json({ replays: gameReplayRecorder.listReplays() });
+    } catch (e) {
+      console.error('[GameReplay] list API error', e);
+      res.status(500).json({ error: 'Failed to list replays' });
+    }
+  });
+
+  app.get('/api/game-replays/:name', async (req, res) => {
+    try {
+      const filePath = gameReplayRecorder.getReplayPath(req.params.name);
+      if (!filePath) return res.status(404).json({ error: 'Replay not found' });
+      const gz = await fs.promises.readFile(filePath);
+      const jsonBuf = await gunzipAsync(gz);
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Encoding', 'identity');
+      res.send(jsonBuf);
+    } catch (e) {
+      console.error('[GameReplay] get API error', e);
+      res.status(500).json({ error: 'Failed to load replay' });
+    }
+  });
+
+  app.delete('/api/game-replays/:name', (req, res) => {
+    try {
+      const ok = gameReplayRecorder.deleteReplay(req.params.name);
+      if (!ok) return res.status(404).json({ error: 'Replay not found' });
+      res.json({ ok: true, replays: gameReplayRecorder.listReplays() });
+    } catch (e) {
+      console.error('[GameReplay] delete API error', e);
+      res.status(500).json({ error: 'Failed to delete replay' });
+    }
   });
 
   /** True if arr looks like a list of entities with stable `id` (planets, ships, …). */
@@ -458,6 +526,10 @@ async function bootstrap() {
       }
 
       case 'pause': {
+        if (game.gameOverMessage) {
+          game.isPaused = true;
+          return 'Game is over — cannot unpause until the next game starts.';
+        }
         game.isPaused = !game.isPaused;
         return `Game is now ${game.isPaused ? 'PAUSED' : 'UNPAUSED'}.`;
       }
@@ -659,7 +731,7 @@ async function bootstrap() {
     }
     
     lastHumanActivityTime = Date.now();
-    if (game.isPaused && game.pausedForAFK) {
+    if (game.isPaused && game.pausedForAFK && !game.gameOverMessage) {
       game.isPaused = false;
       game.pausedForAFK = false;
       console.log(`[Auto-Unpause] Client connection detected. Unpausing game.`);
@@ -671,7 +743,7 @@ async function bootstrap() {
       if (player) {
         player.lastCommandTime = Date.now();
       }
-      if (game.isPaused && game.pausedForAFK) {
+      if (game.isPaused && game.pausedForAFK && !game.gameOverMessage) {
         game.isPaused = false;
         game.pausedForAFK = false;
         console.log(`[Auto-Unpause] Human interaction packet detected (${packet ? packet[0] : 'unknown'}). Unpausing game.`);
@@ -1207,7 +1279,32 @@ async function bootstrap() {
         player.isAI = false;
       }
 
-      game.moveShipsToSpace(player, data.shipIds, data.targetX, data.targetY, data.isWarp, data.speedModifier, data.isShift);
+      const formationHeading = (data && data.formationHeading != null && Number.isFinite(Number(data.formationHeading)))
+        ? Number(data.formationHeading)
+        : null;
+      game.moveShipsToSpace(player, data.shipIds, data.targetX, data.targetY, data.isWarp, data.speedModifier, data.isShift, formationHeading);
+      markSocketNeedsState(socket);
+    });
+
+    // Fleets (and cruisers) chase a ship/amoeba to point-blank range
+    socket.on('moveShipsToTargetShip', (data) => {
+      if (!game.isRunning || game.isPaused) return;
+      const player = connectedClients.get(socket.id);
+      if (!player) return;
+
+      player.lastCommandTime = Date.now();
+      player.afkWarningSent = false;
+      if (player.isAI) {
+        player.isAI = false;
+      }
+
+      if (!data || !data.shipIds || data.targetId === undefined || data.targetId === null) return;
+      const targetShip = game.shipsById
+        ? game.shipsById.get(data.targetId)
+        : game.ships.find(s => s && s.id === data.targetId);
+      if (!targetShip || !targetShip.active) return;
+
+      game.moveShipsToTargetShip(player, data.shipIds, targetShip, data.isWarp, data.speedModifier, data.isShift);
       markSocketNeedsState(socket);
     });
 
@@ -1462,7 +1559,10 @@ async function bootstrap() {
         || game.planets.find(p => p.id === data.targetId);
       if (!targetPlanet) return;
 
-      game.moveShipsToPlanet(player, data.shipIds, targetPlanet, data.isWarp, data.speedModifier, data.isShift);
+      const formationHeading = (data && data.formationHeading != null && Number.isFinite(Number(data.formationHeading)))
+        ? Number(data.formationHeading)
+        : null;
+      game.moveShipsToPlanet(player, data.shipIds, targetPlanet, data.isWarp, data.speedModifier, data.isShift, formationHeading);
       markSocketNeedsState(socket);
     });
 
@@ -1709,7 +1809,17 @@ async function bootstrap() {
 
 
     socket.on('togglePause', () => {
+      // Post-game review: stay paused until the next game starts (no unpause).
+      if (game.gameOverMessage) {
+        game.isPaused = true;
+        return;
+      }
       game.isPaused = !game.isPaused;
+    });
+
+    socket.on('requestFullState', () => {
+      socket.needsFullState = true;
+      socket.priorityState = true;
     });
 
     socket.on('changeGameSpeed', (data) => {
@@ -2163,6 +2273,7 @@ async function bootstrap() {
           financialVictoryTarget: options && options.financialVictoryTarget !== undefined ? options.financialVictoryTarget : "none",
           graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
           enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false,
+          recordGameReplay: options && options.recordGameReplay !== undefined ? !!options.recordGameReplay : false,
           aiEntry: options && options.aiEntry !== undefined ? options.aiEntry : 'mid',
           customAiEntryMin: options && options.customAiEntryMin !== undefined ? parseFloat(options.customAiEntryMin) : 5
         };
@@ -2180,6 +2291,7 @@ async function bootstrap() {
         game.isPaused = false;
         game.gameSpeed = 1.0;
         game.highestSpeedMilestoneTriggered = 0;
+        syncGameReplayRecording(game);
         
         // Ensure all connected clients are assigned to the new players in the new map
         for (const [socketId, oldPlayer] of connectedClients.entries()) {
@@ -2215,11 +2327,7 @@ async function bootstrap() {
       const p = connectedClients.get(socket.id);
       if (p) {
         p.lastCommandTime = Date.now();
-        if (options && options.race && options.race !== 'Random') {
-          p.cruiserStyle = options.race;
-        } else {
-          p.cruiserStyle = null;
-        }
+        game.applyRaceChoice(p, options && options.race);
         game.tryAssignPlanet(p);
         // Homeworld just assigned — force full state so the map appears immediately
         invalidateClientGameStates([socket.id]);
@@ -2248,6 +2356,7 @@ async function bootstrap() {
           financialVictoryTarget: options && options.financialVictoryTarget !== undefined ? options.financialVictoryTarget : "none",
           graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
           enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false,
+          recordGameReplay: options && options.recordGameReplay !== undefined ? !!options.recordGameReplay : false,
           aiEntry: options && options.aiEntry !== undefined ? options.aiEntry : 'mid',
           customAiEntryMin: options && options.customAiEntryMin !== undefined ? parseFloat(options.customAiEntryMin) : 5
       };
@@ -2260,12 +2369,14 @@ async function bootstrap() {
       
       game.width = game.settings.mapSize;
       game.height = game.settings.mapSize;
+      gameReplayRecorder.discard();
       game.initMap();
       game.gameStartTime = now;
       game.isRunning = true;
       game.isPaused = false;
       game.gameSpeed = 1.0;
       game.highestSpeedMilestoneTriggered = 0;
+      syncGameReplayRecording(game);
       
       for (const [socketId, oldPlayer] of connectedClients.entries()) {
         const newPlayer = game.allPlayers.find(p => p.id === oldPlayer.id);
@@ -2295,13 +2406,16 @@ async function bootstrap() {
         
         const initiatingPlayer = connectedClients.get(socket.id);
         if (p === initiatingPlayer) {
-          if (options && options.race && options.race !== 'Random') {
-            p.cruiserStyle = options.race;
-          } else {
-            p.cruiserStyle = null;
-          }
+          // Host / restarter: apply their menu race choice (locked if not Random)
+          game.applyRaceChoice(p, options && options.race);
+        } else if (p.raceLocked && p.preferredRace) {
+          // Other humans keep their previously selected race; never reassigned
+          p.cruiserStyle = p.preferredRace;
         } else {
+          // Random / unset: will be filled from unused pool in assignPlanet
           p.cruiserStyle = null;
+          p.raceLocked = false;
+          p.preferredRace = null;
         }
         
         p.credits = game.settings && game.settings.startingCredits !== undefined ? game.settings.startingCredits : 0;
@@ -2364,6 +2478,16 @@ async function bootstrap() {
         console.log(`[Connection Timeout] No clients connected to the running game for 15 minutes. Triggering time victory.`);
         game.triggerTimedGameVictory();
         noClientStartTime = null;
+        finalizeGameReplayIfNeeded(game).then((meta) => {
+          if (meta) {
+            io.emit('gameReplaySaved', meta);
+            io.emit('chatMessage', {
+              sender: 'System',
+              color: '#39ff14',
+              text: `Game replay saved: ${meta.title}`
+            });
+          }
+        });
       }
     } else {
       noClientStartTime = null;
@@ -2400,6 +2524,7 @@ async function bootstrap() {
       }
 
       const speed = game.gameSpeed || 1.0;
+      const hadGameOverBeforeUpdate = !!game.gameOverMessage;
       game.update(deltaTime * speed);
       updateEndPerf = performance.now();
 
@@ -2425,7 +2550,31 @@ async function bootstrap() {
         game.aiUpgradePurchases = [];
       }
 
-      game.checkWinCondition();
+      // Win checks also run inside game.update; keep server-side pass for any extra paths
+      if (game.isRunning) game.checkWinCondition();
+
+      // Compact full-game replay sample (2–5 Hz via gameTime). Final sample on game over too.
+      if (gameReplayRecorder.active) {
+        try {
+          gameReplayRecorder.sample(game, !game.isRunning && !!game.gameOverMessage);
+        } catch (e) {
+          console.error('[GameReplay] sample error', e);
+        }
+      }
+
+      // Game just ended — finalize replay async (does not block tick)
+      if (!hadGameOverBeforeUpdate && game.gameOverMessage) {
+        finalizeGameReplayIfNeeded(game).then((meta) => {
+          if (meta) {
+            io.emit('gameReplaySaved', meta);
+            io.emit('chatMessage', {
+              sender: 'System',
+              color: '#39ff14',
+              text: `Game replay saved: ${meta.title}`
+            });
+          }
+        });
+      }
       
       // Process pending game chat messages
       if (game.pendingChatMessages && game.pendingChatMessages.length > 0) {
@@ -2449,6 +2598,19 @@ async function bootstrap() {
           }
         }
         game.pendingChatMessages = [];
+      }
+
+      // Timed-game countdown banners (10 / 5 / 2 minutes remaining)
+      if (game.pendingTimedGameWarnings && game.pendingTimedGameWarnings.length > 0) {
+        for (const warn of game.pendingTimedGameWarnings) {
+          io.emit('timedGameWarning', {
+            minutes: warn.minutes,
+            text: warn.minutes === 1
+              ? '1 MINUTE REMAINING'
+              : `${warn.minutes} MINUTES REMAINING`
+          });
+        }
+        game.pendingTimedGameWarnings = [];
       }
 
       // Process pending exploration events
@@ -3233,8 +3395,9 @@ async function bootstrap() {
       // Default FoW ON when settings are missing (lobby / pre-start). Treating null as
       // "FoW off" permanently marked every anomaly as known for sticky tracking.
       const fogOfWarEnabled = !game.settings || game.settings.fogOfWar !== false;
-      // Full map vision this tick: AI, spectators/pre-start (no entities), or FoW disabled
-      const fullVision = !fogOfWarEnabled || player.isAI || !hasEntities;
+      // Full map vision this tick: AI, spectators/pre-start (no entities), FoW disabled,
+      // or post-game review (victory screen "VIEW MAP" — fog lifted until next game).
+      const fullVision = !fogOfWarEnabled || player.isAI || !hasEntities || !!game.gameOverMessage;
       // Only permanently record discoveries when the player has a real foothold under FoW,
       // or when FoW is off (everything is legitimately known). Spectators / pre-start
       // full-vision must not fill discoveredPlanets / spawn map-wide anomalies.
@@ -3493,26 +3656,47 @@ async function bootstrap() {
       }
 
 
-      // Sticky anomaly tracking: once a player has seen an unresearched anomaly on a
-      // planet under real FoW, keep that planet in their FoW payload until resolved.
-      // Never sticky-learn while on full vision (spectators / FoW off / pre-start) —
-      // that would reveal every deep-space anomaly for the rest of the match/restart.
+      // Sticky anomaly tracking: once a player has seen an unresearched anomaly,
+      // keep it in their FoW payload until resolved — including when the planet
+      // is still listed but anomaly data was dropped by a fog/cache path.
+      // Never sticky-learn while on full vision (spectators / FoW off / pre-start).
+      const mapStickyAnomaly = (an, prog) => ({
+        id: an.id,
+        x: an.x,
+        y: an.y,
+        difficulty: an.difficulty,
+        progress: prog,
+        researched: false,
+        beingResearched: an.beingResearched || false,
+        rewardType: an.rewardType,
+        rewardFactor: an.rewardFactor,
+        rewardResource: an.rewardResource || null,
+        rewardDiscountCategories: an.rewardDiscountCategories || null,
+        completing: an.completing || false,
+        completingTimeLeft: an.completingTimeLeft || 0,
+        completingShipId: an.completingShipId || null,
+        completingPlayerId: an.completingPlayerId || null,
+        researchingShipId: an.researchingShipId || null,
+        researchingShipIds: an.researchingShipIds || []
+      });
+
       if (fogOfWarEnabled && hasEntities && !player.isAI) {
         for (let vi = 0; vi < visiblePlanets.length; vi++) {
           const vp = visiblePlanets[vi];
           if (vp && vp.anomaly && !vp.anomaly.researched) {
             player.knownAnomalyPlanetIds.add(vp.id);
+            player.knownAnomalyPlanetIds.add(String(vp.id));
           }
         }
       }
       if (fogOfWarEnabled && hasEntities && !player.isAI &&
           player.knownAnomalyPlanetIds && player.knownAnomalyPlanetIds.size > 0) {
-        const already = new Set();
+        const byVisId = new Map();
         for (let vi = 0; vi < visiblePlanets.length; vi++) {
           const vp = visiblePlanets[vi];
           if (vp && vp.id != null) {
-            already.add(vp.id);
-            already.add(String(vp.id));
+            byVisId.set(vp.id, vp);
+            byVisId.set(String(vp.id), vp);
           }
         }
         for (const rawId of Array.from(player.knownAnomalyPlanetIds)) {
@@ -3521,13 +3705,25 @@ async function bootstrap() {
             player.knownAnomalyPlanetIds.delete(rawId);
             continue;
           }
-          if (already.has(p.id) || already.has(String(p.id))) continue;
           const an = p.anomaly;
           const anProg = (an.progress && typeof an.progress === 'object')
             ? (an.progress[player.id] || 0)
             : (typeof an.progress === 'number' ? an.progress : 0);
           player.discoveredPlanets.add(p.id);
-          visiblePlanets.push({
+          player.lastKnownPlanets = player.lastKnownPlanets || {};
+
+          const existing = byVisId.get(p.id) || byVisId.get(String(p.id));
+          if (existing) {
+            // Ensure anomaly data is never stripped from a known discovery
+            if (!existing.anomaly || existing.anomaly.researched) {
+              existing.anomaly = mapStickyAnomaly(an, anProg);
+              if (p.isDeepSpaceAnomaly) existing.isDeepSpaceAnomaly = true;
+            }
+            player.lastKnownPlanets[p.id] = existing;
+            continue;
+          }
+
+          const stickyObj = {
             id: p.id,
             x: p.x,
             y: p.y,
@@ -3539,28 +3735,12 @@ async function bootstrap() {
             dead: p.dead || false,
             isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false,
             name: p.name,
-            anomaly: {
-              id: an.id,
-              x: an.x,
-              y: an.y,
-              difficulty: an.difficulty,
-              progress: anProg,
-              researched: false,
-              beingResearched: an.beingResearched || false,
-              rewardType: an.rewardType,
-                  rewardFactor: an.rewardFactor,
-                  rewardResource: an.rewardResource || null,
-                  rewardDiscountCategories: an.rewardDiscountCategories || null,
-              completing: an.completing || false,
-              completingTimeLeft: an.completingTimeLeft || 0,
-              completingShipId: an.completingShipId || null,
-              completingPlayerId: an.completingPlayerId || null,
-              researchingShipId: an.researchingShipId || null,
-              researchingShipIds: an.researchingShipIds || []
-            }
-          });
-          already.add(p.id);
-          already.add(String(p.id));
+            anomaly: mapStickyAnomaly(an, anProg)
+          };
+          visiblePlanets.push(stickyObj);
+          player.lastKnownPlanets[p.id] = stickyObj;
+          byVisId.set(p.id, stickyObj);
+          byVisId.set(String(p.id), stickyObj);
         }
       }
 

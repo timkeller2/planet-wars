@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import { expandGameReplayFrame } from './systems/gameReplayExpand.js';
 
 const bundleSaleStyle = document.createElement('style');
 bundleSaleStyle.textContent = `
@@ -454,6 +455,15 @@ function getPlanetTradeIncomePerMin(planet) {
 
   let localPlayer = null;
   let serverState = null;
+  /** Full-game compact replay playback (god's-eye, fog off). */
+  let isGameReplayPlayback = false;
+  let gameReplayDoc = null;
+  let gameReplayFrameIndex = 0;
+  let gameReplayPlaying = true;
+  let gameReplaySpeed = 1;
+  let gameReplayLastWallMs = 0;
+  let gameReplayCursorMs = 0; // game-time ms along the replay
+  let lastSavedGameReplayMeta = null;
   const serverShipsMap = new Map();
   const serverPlanetsMap = new Map();
   function clearServerStateMaps() {
@@ -631,6 +641,8 @@ function getPlanetTradeIncomePerMin(planet) {
   let lastKnownHazards = {}; // Cache of last-known states for hazards (nebulae, minefields, storms) under Fog of War
   /** Once the player has seen an unresearched anomaly, keep drawing it even if a bad FoW delta drops it. */
   let knownAnomaliesByPlanetId = new Map();
+  /** Right-click press pending mouseup so a drag can set formation facing heading. */
+  let pendingRightClickOrder = null;
 
 
   function resetClientModeFlags() {
@@ -3009,16 +3021,29 @@ function getPlanetTradeIncomePerMin(planet) {
 
     // Determine current pause state
     const isPaused = serverState && serverState.isPaused;
-    const pauseLabel = isPaused ? '▶ RESUME GAME' : '⏸ PAUSE GAME';
+    const isGameOver = !!(serverState && (serverState.gameOverMessage || !serverState.isRunning));
+    const pauseLabel = isGameOver
+      ? '⛔ GAME OVER'
+      : (isPaused ? '▶ RESUME GAME' : '⏸ PAUSE GAME');
 
     const options = [
       {
         text: pauseLabel,
         action: () => {
+          if (isGameOver) return; // Cannot unpause after victory until next game
           socket.emit('togglePause');
         }
       }
     ];
+
+    if (isGameOver && postGameMapView) {
+      options.push({
+        text: '🏆 VICTORY SCREEN',
+        action: () => {
+          exitPostGameMapViewToResults();
+        }
+      });
+    }
 
     // Open Recordings option
     options.push({
@@ -3205,6 +3230,7 @@ function getPlanetTradeIncomePerMin(planet) {
     const fogCheck = document.getElementById('fog-of-war-checkbox');
     const aiInput = document.getElementById('ai-count-input');
 
+    postGameMapView = false;
     if (es) es.classList.add('hidden');
     if (gu) gu.classList.add('hidden');
     if (ss) ss.classList.remove('hidden');
@@ -4584,10 +4610,38 @@ function getPlanetTradeIncomePerMin(planet) {
   const startBtn = document.getElementById('start-btn');
   const restartBtn = document.getElementById('restart-btn');
   const lobbyBtn = document.getElementById('lobby-btn');
+  const viewMapBtn = document.getElementById('view-map-btn');
   const endTitle = document.getElementById('end-title');
 
   const leaderboardContent = document.getElementById('leaderboard-content');
   const scoreBoard = document.getElementById('score-board');
+
+  // Post-victory map review: end-screen VIEW MAP until the next game starts
+  let postGameMapView = false;
+
+  function enterPostGameMapView() {
+    if (!serverState || serverState.isRunning) return;
+    postGameMapView = true;
+    if (endScreen) endScreen.classList.add('hidden');
+    if (gameUI) gameUI.classList.remove('hidden');
+    if (scoreBoard && gameUI && scoreBoard.parentNode !== gameUI) {
+      const chatContainer = document.getElementById('chat-container');
+      if (chatContainer) gameUI.insertBefore(scoreBoard, chatContainer);
+      else gameUI.appendChild(scoreBoard);
+    }
+    if (scoreBoard) scoreBoard.classList.remove('hidden');
+  }
+
+  function exitPostGameMapViewToResults() {
+    if (!serverState || serverState.isRunning) return;
+    postGameMapView = false;
+    if (gameUI) gameUI.classList.add('hidden');
+    if (endScreen) endScreen.classList.remove('hidden');
+    if (scoreBoard && endScreen) {
+      endScreen.appendChild(scoreBoard);
+      scoreBoard.classList.remove('hidden');
+    }
+  }
 
   let hudToggleState = 0; // 0: all visible, 1: HUD hidden
 
@@ -5093,7 +5147,8 @@ function getPlanetTradeIncomePerMin(planet) {
     const customAiEntryIn = document.getElementById('custom-ai-entry-input');
     const customAiEntryMin = customAiEntryIn ? parseFloat(customAiEntryIn.value) : 5;
 
-    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), financialVictoryTarget: financialVictoryTargetVal, graphicalMode: !!graphicalMode, enableCheats, race: selectedRace, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin };
+    const recordGameReplay = !!(document.getElementById('record-game-replay-checkbox') && document.getElementById('record-game-replay-checkbox').checked);
+    const payload = { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), financialVictoryTarget: financialVictoryTargetVal, graphicalMode: !!graphicalMode, enableCheats, recordGameReplay, race: selectedRace, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin };
 
     if (startBtn.textContent === 'START GAME') {
       hasCenteredOnHomeworld = false;
@@ -5443,6 +5498,20 @@ function getPlanetTradeIncomePerMin(planet) {
       type: 'exploration_xp',
       age: 0,
       duration: 1.5
+    });
+  });
+
+  socket.on('timedGameWarning', (data) => {
+    playSound('trumpet');
+    const minutes = data && data.minutes != null ? data.minutes : null;
+    const text = (data && data.text)
+      || (minutes === 1 ? '1 MINUTE REMAINING' : `${minutes} MINUTES REMAINING`);
+    floatingAnimations.push({
+      text,
+      minutes,
+      type: 'timed_warning',
+      age: 0,
+      duration: 4.0
     });
   });
 
@@ -5905,6 +5974,56 @@ function getPlanetTradeIncomePerMin(planet) {
     return predictionStrength >= 0.32;
   }
 
+  /**
+   * Combat / approach proximity for prediction damping.
+   * Logs showed jank when enemies approach: invent-cruise keeps sliding while the
+   * server face-targets / slows, then soft-corr yanks nose 90°+ with good position.
+   * Uses hysteresis so the mode does not flicker at the boundary.
+   * @returns {{ minDist: number, inCombat: boolean, inApproach: boolean, intensity: number }}
+   */
+  function getShipCombatProximity(ship, vis) {
+    const out = { minDist: Infinity, inCombat: false, inApproach: false, intensity: 0 };
+    if (!ship || !serverState || !serverState.ships) return out;
+    const oid = ship.ownerId;
+    const ships = serverState.ships;
+    let minD = Infinity;
+    for (let i = 0; i < ships.length; i++) {
+      const o = ships[i];
+      if (!o || !o.active || o.id === ship.id) continue;
+      let isEnemy = false;
+      if (o.isAmoeba) isEnemy = true;
+      else if (oid && o.ownerId && o.ownerId !== oid) isEnemy = true;
+      else if (oid && !o.ownerId) isEnemy = true;
+      else if (!oid && o.ownerId) isEnemy = true;
+      if (!isEnemy) continue;
+      // Use display pos for enemies when available so approach triggers with what player sees
+      const op = getShipDisplayPos(o);
+      const dx = op.x - ship.x;
+      const dy = op.y - ship.y;
+      const d = Math.hypot(dx, dy);
+      if (d < minD) minD = d;
+    }
+    out.minDist = minD;
+    // Hysteresis: enter combat @200, leave @270; approach enter @320, leave @400
+    const wasCombat = !!(vis && vis._combatMode);
+    const wasApproach = !!(vis && vis._approachMode);
+    const inCombat = wasCombat ? (minD < 270) : (minD < 200);
+    const inApproach = inCombat || (wasApproach ? (minD < 400) : (minD < 320));
+    out.inCombat = inCombat;
+    out.inApproach = inApproach;
+    if (vis) {
+      vis._combatMode = inCombat;
+      vis._approachMode = inApproach;
+      vis._combatMinDist = minD;
+    }
+    // intensity 0 at 400px → 1 at 120px (smooth ramp for damping)
+    if (!Number.isFinite(minD)) out.intensity = 0;
+    else if (minD >= 400) out.intensity = 0;
+    else if (minD <= 120) out.intensity = 1;
+    else out.intensity = 1 - (minD - 120) / (400 - 120);
+    return out;
+  }
+
   /** Cap how far into the future we extrapolate last auth pose (seconds). */
   function getAuthExtrapAgeCapSec() {
     // Keep auth look-ahead close to local DR so they don't fight (was 0.055 when healthy,
@@ -5954,25 +6073,12 @@ function getPlanetTradeIncomePerMin(planet) {
     return Math.abs(d) * 180 / Math.PI;
   }
 
-  /** Lightweight combat proximity for desync context (world-space). */
+  /** Lightweight combat proximity for desync context (matches prediction combat radius). */
   function isShipNearEnemyForPredLog(ship) {
-    if (!ship || !serverState || !serverState.ships) return false;
-    const oid = ship.ownerId;
-    const R2 = 150 * 150;
-    for (let i = 0; i < serverState.ships.length; i++) {
-      const o = serverState.ships[i];
-      if (!o || !o.active || o.id === ship.id) continue;
-      let isEnemy = false;
-      if (o.isAmoeba) isEnemy = true;
-      else if (oid && o.ownerId && o.ownerId !== oid) isEnemy = true;
-      else if (oid && !o.ownerId) isEnemy = true;
-      else if (!oid && o.ownerId) isEnemy = true;
-      if (!isEnemy) continue;
-      const dx = o.x - ship.x;
-      const dy = o.y - ship.y;
-      if (dx * dx + dy * dy <= R2) return true;
-    }
-    return false;
+    if (!ship) return false;
+    const vis = visualShips.get(ship.id);
+    const prox = getShipCombatProximity(ship, vis);
+    return prox.inCombat || prox.intensity > 0.55;
   }
 
   /**
@@ -6840,7 +6946,9 @@ function getPlanetTradeIncomePerMin(planet) {
     // Lobby / start menu: only light bookkeeping. Full ship expansion, visual DR,
     // SFX and UI rebuilds were running at ~10 Hz under the menu on huge maps and
     // made the lobby feel laggy after the cruiser-smoothing work landed.
-    const onLobby = startScreen && !startScreen.classList.contains('hidden');
+    // During full-game replay playback, live packets are ignored at the socket layer;
+    // processGameState is still used to inject expanded replay frames.
+    const onLobby = startScreen && !startScreen.classList.contains('hidden') && !isGameReplayPlayback;
     if (onLobby) {
       const gameInProgressMsg = document.getElementById('game-in-progress-msg');
       if (gameInProgressMsg) {
@@ -7258,26 +7366,47 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
-      // Re-inject ONLY when an unresearched anomaly's planet is entirely missing.
-      // Never overwrite a live researched anomaly (that kept completed DSA icons alive).
+      // Keep discovered unresearched anomalies visible forever until resolved.
+      // FoW / id-based deltas sometimes drop anomaly data (or the whole planet);
+      // restore from sticky memory in either case.
       if (knownAnomaliesByPlanetId.size > 0) {
-        const have = new Set();
+        const byId = new Map();
         for (const p of state.planets) {
-          if (p && p.id != null) have.add(String(p.id));
+          if (p && p.id != null) byId.set(String(p.id), p);
         }
         for (const [idKey, cached] of Array.from(knownAnomaliesByPlanetId.entries())) {
           if (!cached.anomaly || cached.anomaly.researched) {
             knownAnomaliesByPlanetId.delete(idKey);
             continue;
           }
-          if (have.has(idKey)) {
-            const live = state.planets.find(pl => pl && String(pl.id) === idKey);
-            if (live && live.anomaly && live.anomaly.researched) {
+          const live = byId.get(idKey);
+          if (live) {
+            // Resolved on server — drop sticky memory
+            if (live.anomaly && live.anomaly.researched) {
               knownAnomaliesByPlanetId.delete(idKey);
+              continue;
             }
-            // Planet present in packet: trust server (do not resurrect anomaly)
+            // Planet present but anomaly stripped/null — restore so it never blinks out
+            if (!live.anomaly || live.anomaly.researched) {
+              live.anomaly = { ...cached.anomaly, researched: false };
+              if (cached.isDeepSpaceAnomaly) live.isDeepSpaceAnomaly = true;
+              if (live.x == null && cached.x != null) live.x = cached.x;
+              if (live.y == null && cached.y != null) live.y = cached.y;
+            } else {
+              // Refresh sticky cache from live server data
+              knownAnomaliesByPlanetId.set(idKey, {
+                id: live.id,
+                x: live.x,
+                y: live.y,
+                radius: live.radius || 0,
+                name: live.name,
+                isDeepSpaceAnomaly: !!live.isDeepSpaceAnomaly,
+                anomaly: { ...live.anomaly }
+              });
+            }
             continue;
           }
+          // Planet entirely missing from packet — re-inject fogged stub
           state.planets.push({
             id: cached.id,
             x: cached.x,
@@ -7623,6 +7752,37 @@ function getPlanetTradeIncomePerMin(planet) {
         // Compare client prediction to this packet BEFORE we adopt auth (best desync signal)
         maybeLogPredDesync(s, vis, s.x, s.y, s.angle || 0, 'packet');
 
+        // Combat/approach: latch heading + kill invent early (enemy-approach jank)
+        const proxPkt = getShipCombatProximity(s, vis);
+        if (proxPkt.inApproach) {
+          // Server decelerating into engagement — do not keep client coasting past it
+          if ((s.currentSpeed || 0) < 1.25) {
+            vis.lastCruiseSpeed = Math.min(vis.lastCruiseSpeed || 0, s.currentSpeed || 0);
+            if (vis.smoothSpeed != null && vis.smoothSpeed > (s.currentSpeed || 0) + 2) {
+              vis.smoothSpeed = (vis.smoothSpeed * 0.45) + (s.currentSpeed || 0) * 0.55;
+            }
+          }
+          if (proxPkt.inCombat) {
+            // Face-target: pull nose toward live server immediately on packet
+            let ad = shortestAngleDiff(vis.angle || 0, s.angle || 0);
+            const absAd = Math.abs(ad);
+            if (absAd > 12 * Math.PI / 180) {
+              // Large combat heading error: blend hard (50–100%) so dogfights don't whip later
+              const blend = absAd > 50 * Math.PI / 180 ? 1.0 : (absAd > 25 * Math.PI / 180 ? 0.72 : 0.45);
+              vis.angle = (vis.angle || 0) + ad * blend;
+            }
+            vis.turnDir = 0;
+            // Drop optimistic / held dest-steer so we stop inventing arcs into the melee
+            if (vis.opt && vis.opt.startTime != null
+                && (lastNetworkUpdateMs - vis.opt.startTime) > 200) {
+              vis.opt = null;
+            }
+            if (vis.heldCruise && (s.currentSpeed || 0) < 2) {
+              clearHeldCruise(vis);
+            }
+          }
+        }
+
         const opt = vis.opt;
         const optLive = opt && lastNetworkUpdateMs < opt.expiresAt;
         if (optLive && !serverAgreesWithOpt(s, opt)) {
@@ -7693,6 +7853,17 @@ function getPlanetTradeIncomePerMin(planet) {
         if (arrivedAuth) {
           authSpeed = Math.min(authSpeed, s.currentSpeed || 0);
           if ((s.currentSpeed || 0) < 2) authSpeed = s.currentSpeed || 0;
+        } else if (proxPkt.inCombat) {
+          // Engagement: never invent auth speed (logs: client 25 vs server 0 → 180px rubber-band)
+          authSpeed = s.currentSpeed || 0;
+        } else if (proxPkt.inApproach) {
+          // Approach: only mild invent if still clearly flying
+          if (authSpeed < 0.5 && destX != null && destY != null
+              && (s.flightTime || 0) > 0.12 && (s.currentSpeed || 0) > 0.2) {
+            authSpeed = Math.min(getPredictedCruiseSpeed(s), Math.max(vis.lastCruiseSpeed || 0, 1)) * 0.45;
+          } else {
+            authSpeed = s.currentSpeed || 0;
+          }
         } else if (authSpeed < 0.5 && destX != null && destY != null && allowInventCruise()) {
           const distLeft = Math.hypot(destX - s.x, destY - s.y);
           // Sparse packets sometimes report 0 speed for a tick while still mid-flight.
@@ -7979,6 +8150,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     if (state.isRunning) {
+      postGameMapView = false;
       if (!endScreen.classList.contains('hidden')) {
         endScreen.classList.add('hidden');
       }
@@ -8018,10 +8190,12 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   socket.on('gameStateUpdate', (state) => {
+    if (isGameReplayPlayback) return;
     processGameState(state);
   });
 
   socket.on('gameStateDelta', (delta) => {
+    if (isGameReplayPlayback) return;
     // Skip deep delta merges while the lobby is open — on large maps this alone
     // can stall the main thread and make the menu feel laggy.
     if (startScreen && !startScreen.classList.contains('hidden')) {
@@ -8850,6 +9024,266 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     });
   }
+
+  // --- Full-game compact replays (2–5 Hz, fog off, last 10 on server) ---
+  function formatReplayClock(ms) {
+    const totalSeconds = Math.max(0, Math.floor((ms || 0) / 1000));
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  async function fetchGameReplaysList() {
+    try {
+      const res = await fetch('/api/game-replays');
+      if (!res.ok) throw new Error('list failed');
+      const data = await res.json();
+      return data.replays || [];
+    } catch (e) {
+      console.error('[GameReplay] list fetch failed', e);
+      return [];
+    }
+  }
+
+  async function renderGameReplaysList() {
+    const container = document.getElementById('game-replays-list');
+    if (!container) return;
+    container.innerHTML = '<p style="color: #aaa; text-align: center;">Loading…</p>';
+    const replays = await fetchGameReplaysList();
+    if (!replays.length) {
+      container.innerHTML = '<p style="color: #aaa; text-align: center;">No full-game replays yet. Enable <b>Record Game Replay</b> when starting a game.</p>';
+      return;
+    }
+    container.innerHTML = '';
+    for (const r of replays) {
+      const btn = document.createElement('button');
+      btn.className = 'cyber-btn';
+      btn.style.width = '100%';
+      btn.style.textAlign = 'left';
+      btn.style.padding = '10px';
+      const sizeMb = r.sizeBytes ? (r.sizeBytes / (1024 * 1024)).toFixed(2) + ' MB' : '';
+      btn.innerHTML = `<span style="font-weight: bold; color: #ff0;">${r.title || r.fileName}</span><span style="float: right; color: #aaa;">${sizeMb}</span>`;
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('game-replays-modal')?.classList.add('hidden');
+        loadAndPlayGameReplay(r.fileName || r.id);
+      });
+      btn.addEventListener('contextmenu', async (e) => {
+        e.preventDefault();
+        try {
+          await fetch(`/api/game-replays/${encodeURIComponent(r.fileName || r.id)}`, { method: 'DELETE' });
+        } catch (err) {
+          console.error(err);
+        }
+        renderGameReplaysList();
+      });
+      container.appendChild(btn);
+    }
+  }
+
+  function openGameReplaysModal() {
+    const modal = document.getElementById('game-replays-modal');
+    if (modal) modal.classList.remove('hidden');
+    renderGameReplaysList();
+  }
+
+  function updateGameReplayBarUI() {
+    const bar = document.getElementById('game-replay-bar');
+    const titleEl = document.getElementById('game-replay-title');
+    const playBtn = document.getElementById('game-replay-play');
+    const speedBtn = document.getElementById('game-replay-speed');
+    const scrub = document.getElementById('game-replay-scrub');
+    const timeEl = document.getElementById('game-replay-time');
+    if (!isGameReplayPlayback || !gameReplayDoc) {
+      if (bar) bar.classList.add('hidden');
+      return;
+    }
+    if (bar) bar.classList.remove('hidden');
+    if (titleEl) titleEl.textContent = gameReplayDoc.title || 'Game Replay';
+    if (playBtn) playBtn.textContent = gameReplayPlaying ? '❚❚' : '▶';
+    if (speedBtn) speedBtn.textContent = `${gameReplaySpeed}×`;
+    const dur = gameReplayDoc.durationMs || 0;
+    if (scrub && !scrub._dragging) {
+      scrub.max = String(Math.max(1, dur));
+      scrub.value = String(Math.min(dur, Math.max(0, gameReplayCursorMs)));
+    }
+    if (timeEl) timeEl.textContent = `${formatReplayClock(gameReplayCursorMs)} / ${formatReplayClock(dur)}`;
+  }
+
+  function findReplayFrameIndexAtTime(doc, tMs) {
+    if (!doc || !doc.frames || !doc.frames.length) return 0;
+    // Binary search by frame.t
+    let lo = 0;
+    let hi = doc.frames.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if ((doc.frames[mid].t || 0) <= tMs) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  }
+
+  function applyGameReplayFrameAtCursor() {
+    if (!gameReplayDoc) return;
+    const idx = findReplayFrameIndexAtTime(gameReplayDoc, gameReplayCursorMs);
+    gameReplayFrameIndex = idx;
+    const state = expandGameReplayFrame(gameReplayDoc, idx);
+    if (!state) return;
+    // Full vision already baked in; keep HUD quiet
+    processGameState(state);
+    if (serverState) {
+      serverState.isPaused = !gameReplayPlaying;
+      serverState.isGameReplay = true;
+    }
+    updateGameReplayBarUI();
+  }
+
+  async function loadAndPlayGameReplay(fileName) {
+    try {
+      const res = await fetch(`/api/game-replays/${encodeURIComponent(fileName)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const doc = await res.json();
+      if (!doc || !doc.frames || !doc.frames.length) {
+        alert('Replay file is empty or invalid.');
+        return;
+      }
+      startGameReplayPlayback(doc);
+    } catch (e) {
+      console.error('[GameReplay] load failed', e);
+      alert('Failed to load game replay.');
+    }
+  }
+
+  function startGameReplayPlayback(doc) {
+    // Leave menus / end screen
+    if (startScreen) startScreen.classList.add('hidden');
+    if (endScreen) endScreen.classList.add('hidden');
+    if (gameUI) gameUI.classList.remove('hidden');
+    postGameMapView = false;
+
+    gameReplayDoc = doc;
+    isGameReplayPlayback = true;
+    gameReplayPlaying = true;
+    gameReplaySpeed = 1;
+    gameReplayCursorMs = doc.frames[0].t || 0;
+    gameReplayLastWallMs = performance.now();
+    gameReplayFrameIndex = 0;
+    hasCenteredOnHomeworld = false;
+    visualShips.clear();
+    visualProjectiles.clear();
+    clearServerStateMaps();
+
+    // Center camera on map
+    if (doc.width && doc.height) {
+      cameraPanX = doc.width / 2;
+      cameraPanY = doc.height / 2;
+      cameraZoom = Math.min(window.innerWidth / doc.width, window.innerHeight / doc.height) * 0.9;
+    }
+
+    applyGameReplayFrameAtCursor();
+    updateGameReplayBarUI();
+  }
+
+  function stopGameReplayPlayback() {
+    isGameReplayPlayback = false;
+    gameReplayDoc = null;
+    gameReplayPlaying = false;
+    const bar = document.getElementById('game-replay-bar');
+    if (bar) bar.classList.add('hidden');
+    // Resync live multiplayer state after ignoring packets during playback
+    try { socket.emit('requestFullState'); } catch (e) { /* ignore */ }
+    // Return to lobby
+    if (gameUI) gameUI.classList.add('hidden');
+    if (endScreen) endScreen.classList.add('hidden');
+    if (startScreen) startScreen.classList.remove('hidden');
+  }
+
+  function tickGameReplayPlayback(nowMs) {
+    if (!isGameReplayPlayback || !gameReplayDoc) return;
+    if (gameReplayPlaying) {
+      const dt = Math.min(250, nowMs - (gameReplayLastWallMs || nowMs));
+      gameReplayLastWallMs = nowMs;
+      gameReplayCursorMs += dt * gameReplaySpeed;
+      const maxT = gameReplayDoc.durationMs || (gameReplayDoc.frames[gameReplayDoc.frames.length - 1].t || 0);
+      const minT = gameReplayDoc.frames[0].t || 0;
+      if (gameReplayCursorMs >= maxT) {
+        gameReplayCursorMs = maxT;
+        gameReplayPlaying = false;
+      }
+      if (gameReplayCursorMs < minT) gameReplayCursorMs = minT;
+      const idx = findReplayFrameIndexAtTime(gameReplayDoc, gameReplayCursorMs);
+      // Only re-expand when the compact frame changes (2–5 Hz), not every rAF
+      if (idx !== gameReplayFrameIndex || !serverState || !serverState.isGameReplay) {
+        applyGameReplayFrameAtCursor();
+      } else {
+        updateGameReplayBarUI();
+      }
+    } else {
+      gameReplayLastWallMs = nowMs;
+      updateGameReplayBarUI();
+    }
+  }
+
+  // Wire replay bar controls once DOM is ready (this script runs after DOM parse for module)
+  (function wireGameReplayUI() {
+    const closeBtn = document.getElementById('close-game-replays');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        document.getElementById('game-replays-modal')?.classList.add('hidden');
+      });
+    }
+    const modal = document.getElementById('game-replays-modal');
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.add('hidden');
+      });
+    }
+    const lobbyBtn = document.getElementById('lobby-game-replays-btn');
+    if (lobbyBtn) bindActionClick(lobbyBtn, openGameReplaysModal);
+    const endBtn = document.getElementById('game-replays-btn');
+    if (endBtn) bindActionClick(endBtn, openGameReplaysModal);
+
+    const playBtn = document.getElementById('game-replay-play');
+    if (playBtn) {
+      playBtn.addEventListener('click', () => {
+        if (!isGameReplayPlayback) return;
+        gameReplayPlaying = !gameReplayPlaying;
+        gameReplayLastWallMs = performance.now();
+        if (serverState) serverState.isPaused = !gameReplayPlaying;
+        updateGameReplayBarUI();
+      });
+    }
+    const speedBtn = document.getElementById('game-replay-speed');
+    if (speedBtn) {
+      speedBtn.addEventListener('click', () => {
+        const steps = [1, 2, 4, 8, 16];
+        const i = steps.indexOf(gameReplaySpeed);
+        gameReplaySpeed = steps[(i + 1) % steps.length];
+        updateGameReplayBarUI();
+      });
+    }
+    const scrub = document.getElementById('game-replay-scrub');
+    if (scrub) {
+      scrub.addEventListener('pointerdown', () => { scrub._dragging = true; });
+      scrub.addEventListener('pointerup', () => { scrub._dragging = false; });
+      scrub.addEventListener('input', () => {
+        if (!isGameReplayPlayback || !gameReplayDoc) return;
+        gameReplayCursorMs = parseFloat(scrub.value) || 0;
+        applyGameReplayFrameAtCursor();
+      });
+    }
+    const exitBtn = document.getElementById('game-replay-exit');
+    if (exitBtn) {
+      exitBtn.addEventListener('click', () => stopGameReplayPlayback());
+    }
+
+    socket.on('gameReplaySaved', (meta) => {
+      lastSavedGameReplayMeta = meta;
+      // Refresh list if open
+      const m = document.getElementById('game-replays-modal');
+      if (m && !m.classList.contains('hidden')) renderGameReplaysList();
+    });
+  })();
 
   function playReplay(replay) {
     viewedReplayIds.add(replay.id);
@@ -9762,7 +10196,7 @@ function getPlanetTradeIncomePerMin(planet) {
         `;
       }
 
-      creditsDisplay.style.display = 'block';
+      creditsDisplay.style.display = 'inline-flex';
       const hasMoneyBags = myPlayer.otherEffectiveShips !== undefined && myPlayer.playerEffectiveShips !== undefined && myPlayer.otherEffectiveShips >= myPlayer.playerEffectiveShips && myPlayer.playerEffectiveShips > 0;
       
       let domesticTradeShips = 0;
@@ -9836,7 +10270,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (tradeOptionsDisplay) {
       const tradeOptions = myPlayer.tradeOptions !== undefined ? Math.floor(myPlayer.tradeOptions) : 5;
       const tradeCapacity = myPlayer.tradeCapacity !== undefined ? Math.floor(myPlayer.tradeCapacity) : 5;
-      tradeOptionsDisplay.style.display = 'block';
+      tradeOptionsDisplay.style.display = 'inline-flex';
       tradeOptionsDisplay.innerHTML = `⚖️${tradeOptions}/${tradeCapacity}`;
       if (myPlayer.tradeRegenAccumulator !== undefined && myPlayer.tradeRegenInterval !== undefined && tradeOptions < tradeCapacity) {
         const pct = Math.floor((myPlayer.tradeRegenAccumulator / myPlayer.tradeRegenInterval) * 100);
@@ -10171,7 +10605,8 @@ function getPlanetTradeIncomePerMin(planet) {
       leaderboardContent.innerHTML = html;
     }
 
-    if (!serverState.isRunning && gameUI.classList.contains('hidden') === false) {
+    // Show victory screen when the game ends, unless the player is reviewing the map or watching a full-game replay.
+    if (!serverState.isRunning && !postGameMapView && !isGameReplayPlayback && gameUI.classList.contains('hidden') === false) {
       gameUI.classList.add('hidden');
       endScreen.classList.remove('hidden');
       
@@ -10221,6 +10656,14 @@ function getPlanetTradeIncomePerMin(planet) {
       if (scoreBoard) {
         endScreen.appendChild(scoreBoard);
         scoreBoard.classList.remove('hidden');
+      }
+    }
+
+    // Keep victory title/art fresh if end screen is already open (map review left it)
+    if (!serverState.isRunning && endScreen && !endScreen.classList.contains('hidden') && serverState.gameOverMessage && endTitle) {
+      const msg = serverState.gameOverMessage || '';
+      if (endTitle.innerHTML !== msg.replace(/\n/g, '<br>')) {
+        endTitle.innerHTML = msg.replace(/\n/g, '<br>');
       }
     }
   }
@@ -10560,6 +11003,12 @@ function getPlanetTradeIncomePerMin(planet) {
       ? -Math.floor(myPlayer.totalTradeShips || 0)
       : 0;
     return myPlayer ? ((myPlayer.credits || 0) - minAllowedCredits) : 0;
+  }
+
+  /** Spendable credits for purchases: 0 when Use Credits is off; otherwise balance down to debt floor. */
+  function getSpendableCredits(myPlayer) {
+    if (!myPlayer || myPlayer.useCredits === false) return 0;
+    return Math.max(0, getCreditsAvailableForConfig(myPlayer));
   }
 
   function getUpgradeIconsHtml(upgrades) {
@@ -11326,6 +11775,32 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     if (button === 2) {
+      // RIGHT CLICK: on mouse, wait for mouseup so a drag can set arrival facing.
+      // Touch long-press issues immediately (no drag-heading gesture).
+      if (!isTouch && (selectedShips.length > 0 || selectedPlanets.length > 0)) {
+        pendingRightClickOrder = {
+          canvasX: x,
+          canvasY: y,
+          isShift: !!isShift,
+          warp: warpOrderNext,
+          speed: speedModifierNext,
+          scout: scoutModeNext,
+          bomb: bombOrderNext
+        };
+        return;
+      }
+      issueRightClickOrder(x, y, isShift, null);
+      return;
+    }
+  }
+
+  /**
+   * Issue move/attack orders at canvas click (x,y).
+   * formationHeading (radians, world space) is optional — applied after ships arrive.
+   */
+  function issueRightClickOrder(x, y, isShift = false, formationHeading = null) {
+    if (!serverState || !localPlayer) return;
+    {
       // RIGHT CLICK: Issue Orders
       const clickPos = getMouseServerPos(x, y);
       
@@ -11403,11 +11878,20 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           if (!isShift) {
             applyOptimisticCruiserMove(fleetIds, clickedTargetShip.x, clickedTargetShip.y, {
+              targetType: 'ship',
+              targetId: clickedTargetShip.id,
               isWarp: warpOrderNext,
               speedModifier: speedModifierNext
             });
           }
-          socket.emit('moveShipsToSpace', { shipIds: fleetIds, targetX: clickedTargetShip.x, targetY: clickedTargetShip.y, isWarp: warpOrderNext, speedModifier: speedModifierNext, isShift });
+          // Pursue cruiser/amoeba to point-blank (server sets pursueTarget)
+          socket.emit('moveShipsToTargetShip', {
+            shipIds: fleetIds,
+            targetId: clickedTargetShip.id,
+            isWarp: warpOrderNext,
+            speedModifier: speedModifierNext,
+            isShift
+          });
         }
       } else if (clickedPlanet) {
         if (selectedPlanets.length > 0 || selectedShips.length > 0) {
@@ -11429,7 +11913,8 @@ function getPlanetTradeIncomePerMin(planet) {
                 targetY: clickPos.y, 
                 isWarp: warpOrderNext, 
                 speedModifier: speedModifierNext, 
-                isShift 
+                isShift,
+                formationHeading
               });
             }
             
@@ -11445,26 +11930,34 @@ function getPlanetTradeIncomePerMin(planet) {
                   speedModifier: speedModifierNext
                 });
               }
-              socket.emit('moveShipsToPlanet', { shipIds: fleetIds, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext, isShift });
+              socket.emit('moveShipsToPlanet', {
+                shipIds: fleetIds,
+                targetId: clickedPlanet.id,
+                isWarp: warpOrderNext,
+                speedModifier: speedModifierNext,
+                isShift,
+                formationHeading
+              });
             }
           }
 
           if (selectedPlanets.length > 0) {
             selectedPlanets.forEach(sourcePlanet => {
               const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
-              let launchCost = myPlayer ? 10 + (myPlayer.planetCount || 0) : 10;
-              if (myPlayer) {
-                const techBonus = Math.floor(Math.sqrt(myPlayer.techScore || 0));
-                launchCost = Math.max(0, launchCost - techBonus);
-              }
-              launchCost = Math.min(250, launchCost);
+              const estShips = scoutModeNext
+                ? Math.max(3, Math.floor(sourcePlanet.ships * 0.1))
+                : Math.floor(sourcePlanet.ships / 2);
+              const shipsLaunched = Math.min(250, Math.max(0, Math.min(estShips, sourcePlanet.ships)));
+              let launchCost = shipsLaunched > 0
+                ? Math.max(0, Math.sqrt(shipsLaunched) * 2 - Math.sqrt((myPlayer && myPlayer.techScore) || 0))
+                : 0;
 
               const useCredits = myPlayer && myPlayer.useCredits !== false;
               const creditsAvailable = myPlayer ? getCreditsAvailableForConfig(myPlayer) : 0;
               const creditsPaid = (useCredits && creditsAvailable > 0) ? Math.min(creditsAvailable, launchCost) : 0;
               const shipLaunchCost = launchCost - creditsPaid;
 
-              if (sourcePlanet.ships >= shipLaunchCost + 1) {
+              if (shipsLaunched > 0 && sourcePlanet.ships >= shipLaunchCost + shipsLaunched) {
                 socket.emit('sendShips', { sourceId: sourcePlanet.id, targetId: clickedPlanet.id, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, fillAmount: null, scoutMode: scoutModeNext, isCruiser: false });
                 if (creditsPaid > 0) {
                   floatingAnimations.push({
@@ -11508,25 +12001,34 @@ function getPlanetTradeIncomePerMin(planet) {
                 speedModifier: speedModifierNext
               });
             }
-            socket.emit('moveShipsToSpace', { shipIds, targetX: targetPos.x, targetY: targetPos.y, isWarp: warpOrderNext, speedModifier: speedModifierNext, isShift });
+            socket.emit('moveShipsToSpace', {
+              shipIds,
+              targetX: targetPos.x,
+              targetY: targetPos.y,
+              isWarp: warpOrderNext,
+              speedModifier: speedModifierNext,
+              isShift,
+              formationHeading
+            });
           }
 
           if (selectedPlanets.length > 0) {
             selectedPlanets.forEach(sourcePlanet => {
               const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
-              let launchCost = myPlayer ? 10 + (myPlayer.planetCount || 0) : 10;
-              if (myPlayer) {
-                const techBonus = Math.floor(Math.sqrt(myPlayer.techScore || 0));
-                launchCost = Math.max(0, launchCost - techBonus);
-              }
-              launchCost = Math.min(250, launchCost);
+              const estShips = scoutModeNext
+                ? Math.max(3, Math.floor(sourcePlanet.ships * 0.1))
+                : Math.floor(sourcePlanet.ships / 2);
+              const shipsLaunched = Math.min(250, Math.max(0, Math.min(estShips, sourcePlanet.ships)));
+              let launchCost = shipsLaunched > 0
+                ? Math.max(0, Math.sqrt(shipsLaunched) * 2 - Math.sqrt((myPlayer && myPlayer.techScore) || 0))
+                : 0;
 
               const useCredits = myPlayer && myPlayer.useCredits !== false;
               const creditsAvailable = myPlayer ? getCreditsAvailableForConfig(myPlayer) : 0;
               const creditsPaid = (useCredits && creditsAvailable > 0) ? Math.min(creditsAvailable, launchCost) : 0;
               const shipLaunchCost = launchCost - creditsPaid;
 
-              if (sourcePlanet.ships >= shipLaunchCost + 1) {
+              if (shipsLaunched > 0 && sourcePlanet.ships >= shipLaunchCost + shipsLaunched) {
                 socket.emit('sendShipsToSpace', { sourceId: sourcePlanet.id, targetX: targetPos.x, targetY: targetPos.y, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, scoutMode: scoutModeNext, isCruiser: false });
                 if (creditsPaid > 0) {
                   floatingAnimations.push({
@@ -11559,8 +12061,30 @@ function getPlanetTradeIncomePerMin(planet) {
       bombOrderNext = false;
       warpOrderNext = false;
       speedModifierNext = null;
-      return;
     }
+  }
+
+  function finishPendingRightClickOrder(upCanvasX, upCanvasY) {
+    const pending = pendingRightClickOrder;
+    pendingRightClickOrder = null;
+    if (!pending) return;
+
+    const downServer = getMouseServerPos(pending.canvasX, pending.canvasY);
+    const upServer = getMouseServerPos(upCanvasX, upCanvasY);
+    const dragCanvas = Math.hypot(upCanvasX - pending.canvasX, upCanvasY - pending.canvasY);
+    let formationHeading = null;
+    if (dragCanvas > 20) {
+      // World-space heading from right-down to right-up
+      formationHeading = Math.atan2(upServer.y - downServer.y, upServer.x - downServer.x);
+    }
+
+    // Restore order modifiers frozen at mousedown
+    warpOrderNext = pending.warp;
+    speedModifierNext = pending.speed;
+    scoutModeNext = pending.scout;
+    bombOrderNext = pending.bomb;
+
+    issueRightClickOrder(pending.canvasX, pending.canvasY, pending.isShift, formationHeading);
   }
 
   function handlePointerMove(x, y, isTouchInput = false) {
@@ -11935,8 +12459,16 @@ function getPlanetTradeIncomePerMin(planet) {
       mouseTimeout = null;
     }
     isDraggingCamera = false;
-    if (event.button === 1 || event.button === 2) {
+    if (event.button === 1) {
       lasso.active = false;
+      return;
+    }
+    if (event.button === 2) {
+      lasso.active = false;
+      if (pendingRightClickOrder) {
+        const cPos = getCanvasPos(event.clientX, event.clientY);
+        finishPendingRightClickOrder(cPos.x, cPos.y);
+      }
       return;
     }
     handlePointerUp(event);
@@ -12517,6 +13049,20 @@ function getPlanetTradeIncomePerMin(planet) {
         event.preventDefault();
         return;
       }
+
+      // Exit full-game replay playback
+      if (isGameReplayPlayback) {
+        stopGameReplayPlayback();
+        event.preventDefault();
+        return;
+      }
+
+      // Return from post-game map review to the victory / end screen
+      if (postGameMapView && serverState && !serverState.isRunning) {
+        exitPostGameMapViewToResults();
+        event.preventDefault();
+        return;
+      }
     }
 
     if (document.activeElement && 
@@ -12815,6 +13361,35 @@ function getPlanetTradeIncomePerMin(planet) {
         };
 
         const emitUpgrade = (type) => {
+          const propName = type === 'sensorarray' ? 'sensorarrays'
+            : type === 'lab' ? 'labs'
+            : type === 'shield' ? 'shields'
+            : type === 'supplyship' ? 'supply_ship'
+            : type === 'extendedfuel' ? 'extended_fuel'
+            : type;
+          const uCost = isPlanet ? getUpgradeCostForShip(entity, propName) * 3 : getUpgradeCostForShip(entity, propName);
+          const myP = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
+          const creditsPay = getSpendableCredits(myP);
+          if (!isPlanet && entity.upgradeTokens > 0) {
+            // token path — no credit check
+          } else if (isPlanet) {
+            if (creditsPay < uCost) return;
+          } else {
+            // Cruiser upgrades draw ships from a nearby friendly dock when available
+            let dockShips = 0;
+            if (serverState && serverState.planets && localPlayer) {
+              for (const p of serverState.planets) {
+                if (!p || p.ownerId !== localPlayer.id) continue;
+                const gr = (p.radius || 20) + 80;
+                const dx = (p.x || 0) - (entity.x || 0);
+                const dy = (p.y || 0) - (entity.y || 0);
+                if (dx * dx + dy * dy <= gr * gr) {
+                  dockShips = Math.max(dockShips, p.ships || 0);
+                }
+              }
+            }
+            if (dockShips + creditsPay < uCost) return;
+          }
           if (isPlanet) {
             socket.emit('upgradePlanet', { planetId: entity.id, type });
           } else {
@@ -12935,6 +13510,8 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (event.code === 'Pause') {
       event.preventDefault();
+      // After victory, the game stays paused until the next game starts
+      if (serverState && (serverState.gameOverMessage || !serverState.isRunning)) return;
       socket.emit('togglePause');
     }
     if (event.key.toLowerCase() === 'i') {
@@ -13783,10 +14360,18 @@ function getPlanetTradeIncomePerMin(planet) {
 
         const uCostClick = isPlanet ? getUpgradeCostForShip(entity, type) * 3 : getUpgradeCostForShip(entity, type);
         const myPlayerClick = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
-        const creditsAvailClick = getCreditsAvailableForConfig(myPlayerClick);
+        const creditsAvailClick = getSpendableCredits(myPlayerClick);
+        const entityShipsClick = isPlanet
+          ? 0
+          : (() => {
+              const dock = (serverState && serverState.planets)
+                ? serverState.planets.find(p => p && entity && Math.hypot((p.x || 0) - (entity.x || 0), (p.y || 0) - (entity.y || 0)) < (p.radius || 0) + 60 && p.ownerId === localPlayer.id)
+                : null;
+              return dock ? (dock.ships || 0) : 0;
+            })();
         const canAffordClick = isPlanet
-          ? (myPlayerClick && myPlayerClick.useCredits !== false && creditsAvailClick >= uCostClick)
-          : true;
+          ? (creditsAvailClick >= uCostClick)
+          : ((entityShipsClick + creditsAvailClick) >= uCostClick);
 
         if (currentVal < 5 && nextLevel <= maxIndividualLevel && (totalUpgrades + 1) <= maxTotalUpgrades && shieldCheck && typeCapCheck && canAffordClick) {
           const socketType = upgradeToSocketTypeMap[type] || type;
@@ -14157,8 +14742,15 @@ function getPlanetTradeIncomePerMin(planet) {
 
 
 
+  if (viewMapBtn) {
+    bindActionClick(viewMapBtn, () => {
+      enterPostGameMapView();
+    });
+  }
+
   bindActionClick(restartBtn, () => {
     console.log('restartBtn clicked!');
+    postGameMapView = false;
     endScreen.classList.add('hidden');
     gameUI.classList.remove('hidden');
     if (serverState) serverState.isRunning = true;
@@ -14206,10 +14798,12 @@ function getPlanetTradeIncomePerMin(planet) {
     clearServerStateMaps();
     lastKnownPlanets = {}; // Clear cached planet details
     lastKnownHazards = {};
-    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin });
+    const recordGameReplay = !!(document.getElementById('record-game-replay-checkbox') && document.getElementById('record-game-replay-checkbox').checked);
+    socket.emit('restartGame', { fogOfWar, smallEmpires, noRampagers, aiCount: isNaN(aiCount) ? 6 : aiCount, productionMultiple, mapSize, planetCount, clusters, hazardMultiple: hm, timedGameLimit, homeworldSize: homeworldSizeSetting, startingCredits: parseInt(startingCreditsVal, 10), graphicalMode: !!graphicalMode, recordGameReplay, aiEntry, customAiEntryMin: isNaN(customAiEntryMin) ? 5 : customAiEntryMin });
   });
 
   bindActionClick(lobbyBtn, () => {
+    postGameMapView = false;
     endScreen.classList.add('hidden');
     startScreen.classList.remove('hidden');
     lockedSettings = false;
@@ -14617,8 +15211,9 @@ function getPlanetTradeIncomePerMin(planet) {
 
   function draw() {
     // Don't thrash the main thread with button DOM + map render under the lobby
-    if (startScreen && !startScreen.classList.contains('hidden')) return;
-    if (endScreen && !endScreen.classList.contains('hidden') && (!serverState || !serverState.isRunning)) return;
+    if (startScreen && !startScreen.classList.contains('hidden') && !isGameReplayPlayback) return;
+    // End screen blocks map draw unless player opened post-game map review or full-game replay
+    if (endScreen && !endScreen.classList.contains('hidden') && (!serverState || !serverState.isRunning) && !postGameMapView && !isGameReplayPlayback) return;
 
     if (keysDown['ArrowUp']) cameraPanY += 40 / cameraZoom;
     if (keysDown['ArrowDown']) cameraPanY -= 40 / cameraZoom;
@@ -14702,7 +15297,8 @@ function getPlanetTradeIncomePerMin(planet) {
       if (elUpCancel) elUpCancel.style.display = 'none';
 
       const focusCost = Math.floor(selectedPlanetFocus.maxShips / 2);
-      const creditsAvailable = (myPlayer && myPlayer.useCredits !== false) ? Math.max(0, getCreditsAvailableForConfig(myPlayer)) : 0;
+      // When Use Credits is off, only ships pay (no debt / no credit contribution)
+      const creditsAvailable = getSpendableCredits(myPlayer);
       const canAffordFocus = (selectedPlanetFocus.ships + creditsAvailable) >= focusCost;
       for (const [btnId, mode] of Object.entries(focusButtonsMap)) {
         const el = document.getElementById(btnId);
@@ -14909,10 +15505,15 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
 
-          const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
-          const creditsForPayment = myPlayer && myPlayer.useCredits !== false ? Math.max(0, creditsAvailable) : 0;
-          const entityResourceShips = isPlanet ? entity.ships : (upgradeQual ? upgradeQual.planet.ships : 0);
-          const canAfford = hasTokens || (isPlanet ? (creditsForPayment >= uCost) : ((entityResourceShips + creditsForPayment) >= uCost));
+          const creditsForPayment = getSpendableCredits(myPlayer);
+          // Planet upgrades are credit-only; cruisers can pay with docked/resource ships + credits
+          const entityResourceShips = isPlanet
+            ? 0
+            : (upgradeQual && upgradeQual.planet ? (upgradeQual.planet.ships || 0) : (entity.ships || 0));
+          // When credits are off: no credit payment (and no debt). Unaffordable → disabled.
+          const canAfford = hasTokens || (isPlanet
+            ? (creditsForPayment >= uCost)
+            : ((entityResourceShips + creditsForPayment) >= uCost));
           
           // Gray out unavailable upgrades (galaxy type cap, capacity, cost, etc.)
           if (!canAfford || !displayUpgrade) {
@@ -15154,6 +15755,10 @@ function getPlanetTradeIncomePerMin(planet) {
               iconSpan.textContent = '⚙️';
             }
           }
+          btnUpgradeMode.style.opacity = '1';
+          btnUpgradeMode.style.pointerEvents = 'auto';
+          btnUpgradeMode.style.filter = 'none';
+          btnUpgradeMode.removeAttribute('aria-disabled');
         } else if (showPlanetUpgrade) {
           btnUpgradeMode.style.display = 'inline-flex';
           btnUpgradeMode.setAttribute('title', `Upgrade Planet (U) (Cost: ${planetUpgradeCost})`);
@@ -15164,9 +15769,29 @@ function getPlanetTradeIncomePerMin(planet) {
           if (iconSpan) {
             iconSpan.textContent = '⚙️';
           }
+          // Planet upgrades are credit-only; when Use Credits is off (or cash is short
+          // without debt headroom), gray the entry button.
+          const spendable = getSpendableCredits(myPlayer);
+          if (spendable < planetUpgradeCost) {
+            btnUpgradeMode.style.opacity = '0.45';
+            btnUpgradeMode.style.pointerEvents = 'none';
+            btnUpgradeMode.style.filter = 'grayscale(100%)';
+            btnUpgradeMode.setAttribute('aria-disabled', 'true');
+          } else {
+            btnUpgradeMode.style.opacity = '1';
+            btnUpgradeMode.style.pointerEvents = 'auto';
+            btnUpgradeMode.style.filter = 'none';
+            btnUpgradeMode.removeAttribute('aria-disabled');
+          }
         } else {
           if (iconSpan) {
             iconSpan.textContent = '⚙️';
+          }
+          if (btnUpgradeMode) {
+            btnUpgradeMode.style.opacity = '1';
+            btnUpgradeMode.style.pointerEvents = 'auto';
+            btnUpgradeMode.style.filter = 'none';
+            btnUpgradeMode.removeAttribute('aria-disabled');
           }
         }
       }
@@ -15598,6 +16223,40 @@ function getPlanetTradeIncomePerMin(planet) {
         const h = Math.abs(lasso.endY - lasso.startY);
         ctx.fillRect(x, y, w, h);
         ctx.strokeRect(x, y, w, h);
+      }
+
+      // Right-drag formation heading preview (mousedown dest → current pointer)
+      if (pendingRightClickOrder) {
+        const down = getMouseServerPos(pendingRightClickOrder.canvasX, pendingRightClickOrder.canvasY);
+        const up = getMouseServerPos(lastCanvasMouseX, lastCanvasMouseY);
+        const cdx = lastCanvasMouseX - pendingRightClickOrder.canvasX;
+        const cdy = lastCanvasMouseY - pendingRightClickOrder.canvasY;
+        const dragPx = Math.hypot(cdx, cdy);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(down.x, down.y, 8 / Math.max(0.001, finalScale), 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.85)';
+        ctx.lineWidth = 2 / Math.max(0.001, finalScale);
+        ctx.stroke();
+        if (dragPx > 20) {
+          ctx.beginPath();
+          ctx.moveTo(down.x, down.y);
+          ctx.lineTo(up.x, up.y);
+          ctx.strokeStyle = 'rgba(255, 235, 59, 0.9)';
+          ctx.lineWidth = 2.5 / Math.max(0.001, finalScale);
+          ctx.stroke();
+          // Arrow head
+          const ang = Math.atan2(up.y - down.y, up.x - down.x);
+          const ah = 14 / Math.max(0.001, finalScale);
+          ctx.beginPath();
+          ctx.moveTo(up.x, up.y);
+          ctx.lineTo(up.x - Math.cos(ang - 0.4) * ah, up.y - Math.sin(ang - 0.4) * ah);
+          ctx.lineTo(up.x - Math.cos(ang + 0.4) * ah, up.y - Math.sin(ang + 0.4) * ah);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(255, 235, 59, 0.9)';
+          ctx.fill();
+        }
+        ctx.restore();
       }
 
       // Draw hazard circles (background)
@@ -19213,8 +19872,13 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           let adiff = shortestAngleDiff(vis.angle, serverPred.angle);
           if (Math.abs(adiff) < (combatMode ? 1.5 : 3) * Math.PI / 180) return;
-          // Combat: trust server face-target heading aggressively
-          const angAlpha = 1 - Math.exp(-(combatMode ? 14 : 5) * smoothDt);
+          // Combat: trust server face-target heading aggressively.
+          // Large nose error (logs: p50≈73° head with pos≈0.7) → nearly snap.
+          if (combatMode && Math.abs(adiff) > 40 * Math.PI / 180) {
+            vis.angle += adiff * Math.min(1, 1 - Math.exp(-smoothDt / 0.035));
+            return;
+          }
+          const angAlpha = 1 - Math.exp(-(combatMode ? 18 : 5) * smoothDt);
           vis.angle += adiff * angAlpha * (combatMode ? 1.0 : 0.4);
           return;
         }
@@ -19335,45 +19999,37 @@ function getPlanetTradeIncomePerMin(planet) {
           const minAd = combatMode ? 1.2 : 2.5;
           if (Math.abs(adiff) >= minAd * Math.PI / 180) {
             // Combat: strong, fast blend to server nose; cruise: gentler
-            const angAlpha = combatMode
-              ? Math.min(1, 1 - Math.exp(-smoothDt / 0.07))
-              : Math.min(1, alpha * 0.48);
+            // Dogfight face-target: large heading errors settle in ~2–3 frames
+            let angAlpha;
+            if (combatMode) {
+              const bigHead = Math.abs(adiff) > 35 * Math.PI / 180;
+              angAlpha = Math.min(1, 1 - Math.exp(-smoothDt / (bigHead ? 0.04 : 0.055)));
+            } else {
+              angAlpha = Math.min(1, alpha * 0.48);
+            }
             vis.angle += adiff * angAlpha;
           }
         }
       }
 
-      // Combat proximity: damp prediction when dogfighting (smooth battles)
-      const COMBAT_PRED_RADIUS = 150;
-      const COMBAT_PRED_RADIUS_SQ = COMBAT_PRED_RADIUS * COMBAT_PRED_RADIUS;
+      // Combat proximity: damp prediction when dogfighting / enemies approach
       const COMBAT_OPT_MAX_MS = 250; // allow only a brief optimistic click near enemies
-      const combatEnemyCache = new Map(); // shipId -> bool (this frame)
+      const combatProxCache = new Map(); // shipId -> proximity result this frame
 
-      function isShipNearEnemy(ship) {
+      function isShipNearEnemy(ship, vis) {
         if (!ship || !ship.active) return false;
-        if (combatEnemyCache.has(ship.id)) return combatEnemyCache.get(ship.id);
-        const oid = ship.ownerId;
-        const ships = serverState.ships;
-        let near = false;
-        for (let i = 0; i < ships.length; i++) {
-          const o = ships[i];
-          if (!o || !o.active || o.id === ship.id) continue;
-          // Hostiles: amoebas, other owners (incl. monsters), or unowned vs owned
-          let isEnemy = false;
-          if (o.isAmoeba) isEnemy = true;
-          else if (oid && o.ownerId && o.ownerId !== oid) isEnemy = true;
-          else if (oid && !o.ownerId) isEnemy = true;
-          else if (!oid && o.ownerId) isEnemy = true;
-          if (!isEnemy) continue;
-          const dx = o.x - ship.x;
-          const dy = o.y - ship.y;
-          if (dx * dx + dy * dy <= COMBAT_PRED_RADIUS_SQ) {
-            near = true;
-            break;
-          }
-        }
-        combatEnemyCache.set(ship.id, near);
-        return near;
+        if (combatProxCache.has(ship.id)) return combatProxCache.get(ship.id).inCombat;
+        const prox = getShipCombatProximity(ship, vis || visualShips.get(ship.id));
+        combatProxCache.set(ship.id, prox);
+        return prox.inCombat;
+      }
+
+      function getCachedCombatProximity(ship, vis) {
+        if (!ship) return { minDist: Infinity, inCombat: false, inApproach: false, intensity: 0 };
+        if (combatProxCache.has(ship.id)) return combatProxCache.get(ship.id);
+        const prox = getShipCombatProximity(ship, vis || visualShips.get(ship.id));
+        combatProxCache.set(ship.id, prox);
+        return prox;
       }
 
       for (const s of serverState.ships) {
@@ -19432,10 +20088,13 @@ function getPlanetTradeIncomePerMin(planet) {
           visualShips.set(s.id, vis);
         } else {
           vis._shipIdForDesync = s.id;
-          const inCombat = isShipNearEnemy(s);
+          const prox = getCachedCombatProximity(s, vis);
+          const inCombat = prox.inCombat;
+          const inApproach = prox.inApproach;
+          const combatIntensity = prox.intensity || 0;
           let opt = vis.opt;
           // Near enemies: only keep optimistic moves for a brief click window
-          if (opt && inCombat && opt.startTime != null && (smoothNow - opt.startTime) > COMBAT_OPT_MAX_MS) {
+          if (opt && inApproach && opt.startTime != null && (smoothNow - opt.startTime) > COMBAT_OPT_MAX_MS) {
             vis.opt = null;
             opt = null;
           }
@@ -19457,7 +20116,7 @@ function getPlanetTradeIncomePerMin(planet) {
           let inventCruise = false;
           const predictedSpd = getPredictedCruiseSpeed(s);
 
-          if (optLive && !inCombat) {
+          if (optLive && !inApproach) {
             destX = opt.targetX;
             destY = opt.targetY;
             // Cap optimistic speed so a stale opt cannot outrun server max
@@ -19469,16 +20128,16 @@ function getPlanetTradeIncomePerMin(planet) {
             // Keep post-opt authority in lockstep while optimistic window is live
             setHeldCruise(vis, destX, destY, opt.turnDir || vis.turnDir, spd, turnRate);
             syncTurnDirFromServer(vis, s, destX, destY);
-          } else if (optLive && inCombat) {
+          } else if (optLive && inApproach) {
             // Brief optimistic translation only — do not dest-steer (server faces targets)
             destX = opt.targetX;
             destY = opt.targetY;
-            spd = Math.min(opt.speed || predictedSpd, predictedSpd) * 0.45;
+            spd = Math.min(opt.speed || predictedSpd, predictedSpd) * (inCombat ? 0.35 : 0.5);
             turnRate = opt.turnRateRad || turnRate;
             inventCruise = false;
             s.targetX = opt.targetX;
             s.targetY = opt.targetY;
-            vis.turnDir = 0; // combat: no dest turn lock
+            vis.turnDir = 0; // combat/approach: no dest turn lock
           } else {
             // Opt expired: promote to held-cruise authority (dest + turn lock) until arrival
             if (opt && smoothNow >= opt.expiresAt) {
@@ -19498,9 +20157,12 @@ function getPlanetTradeIncomePerMin(planet) {
               if (resolved.held && resolved.held.turnRateRad) {
                 turnRate = resolved.held.turnRateRad;
               }
-              syncTurnDirFromServer(vis, s, destX, destY);
+              // Approach: still sync turn toward move dest; combat face-target clears lock
+              if (!inApproach || combatIntensity < 0.7) {
+                syncTurnDirFromServer(vis, s, destX, destY);
+              }
             } else {
-              // Combat: drop dest turn lock; position may still use dest for soft-corr along-track
+              // Combat: drop dest turn lock; server faces targets
               vis.turnDir = 0;
             }
             // Arrival latch: server on/near dest → clear dest, kill turn invent, hold heading.
@@ -19552,6 +20214,15 @@ function getPlanetTradeIncomePerMin(planet) {
               // Combat: only trust server-reported speed — no invent-cruise slide
               spd = s.currentSpeed || 0;
               inventCruise = false;
+            } else if (inApproach) {
+              // Enemies approaching: trust server speed; allow only tiny held-order coast
+              spd = s.currentSpeed || 0;
+              inventCruise = false;
+              if (spd < 0.5 && vis.heldCruise && heldCruiseStillValid(s, vis.heldCruise)
+                  && (s.flightTime || 0) > 0.12) {
+                // Cap coast well below cruise so we don't overshoot into the engagement
+                spd = Math.min(predictedSpd, vis.heldCruise.speed || 0) * (0.55 - 0.35 * combatIntensity);
+              }
             } else if (arrived) {
               // Park: trust server speed only, never invent past the pin
               spd = s.currentSpeed || 0;
@@ -19572,6 +20243,12 @@ function getPlanetTradeIncomePerMin(planet) {
               if ((s.currentSpeed || 0) < 0.35 && (s.flightTime || 0) < 0.08
                   && !(vis.heldCruise && heldCruiseStillValid(s, vis.heldCruise))) {
                 spd = 0;
+              }
+              // Server decelerating hard (often pre-combat) — kill invent immediately
+              if ((vis.smoothSpeed || 0) > 4 && (s.currentSpeed || 0) < (vis.smoothSpeed || 0) * 0.45
+                  && (s.currentSpeed || 0) < 6) {
+                spd = s.currentSpeed || 0;
+                inventCruise = false;
               }
               if (auth && auth.turnRateRad) turnRate = auth.turnRateRad;
               if (spd < 0.5 && destX != null && destY != null && allowInventCruise()
@@ -19614,9 +20291,12 @@ function getPlanetTradeIncomePerMin(planet) {
             let speedTau = 0.14;
             if (spd < 0.5 && vis.smoothSpeed > 1.5) speedTau = 0.08;
             else if (Math.abs(spd - vis.smoothSpeed) > 8) speedTau = 0.18;
-            if (inCombat) speedTau *= 0.65;
+            // Approach/combat: dump excess client speed quickly (enemy-approach jank)
+            if (inCombat) speedTau *= 0.45;
+            else if (inApproach) speedTau *= 0.6;
+            if ((s.currentSpeed || 0) < 1 && vis.smoothSpeed > 3 && inApproach) speedTau = 0.05;
             if (optLive) speedTau = 0.06;
-            const sAlpha = 1 - Math.exp(-smoothDt / Math.max(0.04, speedTau));
+            const sAlpha = 1 - Math.exp(-smoothDt / Math.max(0.035, speedTau));
             vis.smoothSpeed += (spd - vis.smoothSpeed) * sAlpha;
             if (vis.smoothSpeed < 0.05) vis.smoothSpeed = 0;
           }
@@ -19625,7 +20305,10 @@ function getPlanetTradeIncomePerMin(planet) {
           // 1) Full-rate local integration every frame (never under-drive ambient DR —
           //    that was a top source of "chug then snap" when traffic was healthy).
           //    Combat: damp translation and do NOT steer toward move dest (face-target on server).
-          const combatExtrapScale = inCombat ? 0.35 : 1.0;
+          //    Approach: damp speed/invent only — still steer toward order until true combat.
+          const combatExtrapScale = inCombat
+            ? 0.28
+            : (inApproach ? (0.9 - 0.35 * combatIntensity) : 1.0);
           const steerToDest = !inCombat;
           if ((useSpd > 0.5 || inventCruise || optLive) && !(inCombat && (s.currentSpeed || 0) < 0.5 && !optLive)) {
             const circleState = {
@@ -19709,17 +20392,23 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           // 2) Soft-correct residual toward server-extrapolated pose (silk blend, not snap)
-          if (auth && (!optLive || inCombat)) {
+          if (auth && (!optLive || inCombat || inApproach)) {
             const age = Math.max(0, (smoothNow - auth.time) / 1000);
             // Jitter-aware: allow at least ~1 packet of look-ahead
             const meanPkt = getMeanPacketIntervalMs() / 1000;
+            // Combat/approach: short look-ahead so we don't invent past face-target
             const ageCap = inCombat
-              ? 0.12
-              : Math.max(getAuthExtrapAgeCapSec(), meanPkt * 1.15);
+              ? 0.09
+              : (inApproach
+                ? Math.min(0.16, Math.max(0.1, meanPkt * 0.9))
+                : Math.max(getAuthExtrapAgeCapSec(), meanPkt * 1.15));
             const cappedAge = Math.min(age, ageCap);
             let authSpd = auth.speed || 0;
             if (inCombat) {
-              authSpd = (s.currentSpeed || 0) * 0.35;
+              authSpd = (s.currentSpeed || 0) * 0.3;
+            } else if (inApproach) {
+              authSpd = (s.currentSpeed || 0) * (0.75 - 0.35 * combatIntensity);
+              if (authSpd < 0.5) authSpd = s.currentSpeed || 0;
             } else {
               if (authSpd < 0.5 && inventCruise) authSpd = useSpd;
               if (authSpd < 0.5 && useSpd > 0.5) authSpd = useSpd;
@@ -19729,11 +20418,11 @@ function getPlanetTradeIncomePerMin(planet) {
                 authSpd = useSpd * 0.35 + authSpd * 0.65;
               }
             }
-            // Combat: extrapolate auth without dest-steering so serverPred.angle stays face-target
+            // Combat: no dest-steer on auth look-ahead (face-target). Approach still uses dest.
             const serverPred = extrapolatePose(
               auth.x, auth.y, auth.angle, authSpd,
               destX, destY, turnRate, cappedAge,
-              inventCruise && !inCombat && predictionStrength >= 0.4, null,
+              inventCruise && !inCombat && !inApproach && predictionStrength >= 0.4, null,
               0,
               !inCombat
             );
@@ -19744,6 +20433,11 @@ function getPlanetTradeIncomePerMin(planet) {
                 serverPred.x = auth.x;
                 serverPred.y = auth.y;
               }
+            } else if (inApproach && combatIntensity > 0.5) {
+              // Blend auth heading toward live server as enemies close
+              const liveA = s.angle || auth.angle || 0;
+              let ad = shortestAngleDiff(serverPred.angle, liveA);
+              serverPred.angle += ad * combatIntensity * 0.65;
             }
             applySoftCorrection(
               vis, serverPred,
@@ -19756,10 +20450,18 @@ function getPlanetTradeIncomePerMin(planet) {
             if (inCombat) {
               let ad = shortestAngleDiff(vis.angle, s.angle || auth.angle || 0);
               if (Math.abs(ad) > 1 * Math.PI / 180) {
-                const aAlpha = 1 - Math.exp(-smoothDt / 0.065);
+                const big = Math.abs(ad) > 40 * Math.PI / 180;
+                const aAlpha = 1 - Math.exp(-smoothDt / (big ? 0.04 : 0.055));
                 vis.angle += ad * aAlpha;
               }
               vis.turnDir = 0;
+            } else if (inApproach && combatIntensity > 0.45) {
+              // Soft approach: ease nose toward server so the combat transition is not a whip
+              let ad = shortestAngleDiff(vis.angle, s.angle || auth.angle || 0);
+              if (Math.abs(ad) > 8 * Math.PI / 180) {
+                const aAlpha = (1 - Math.exp(-smoothDt / 0.12)) * combatIntensity;
+                vis.angle += ad * aAlpha;
+              }
             }
           }
           // Mark that this ship received a real prediction integrate this frame
@@ -21701,6 +22403,11 @@ function getPlanetTradeIncomePerMin(planet) {
           continue;
         }
 
+        // Screen-space banners are drawn after the world transform is restored
+        if (anim.type === 'timed_warning') {
+          continue;
+        }
+
         const progress = anim.age / anim.duration;
 
         let drawX = anim.x;
@@ -21995,13 +22702,54 @@ function getPlanetTradeIncomePerMin(planet) {
 
     } finally {
       ctx.restore();
+      // Screen-space timed-game countdown banners (true center of the display)
+      for (let i = 0; i < floatingAnimations.length; i++) {
+        const anim = floatingAnimations[i];
+        if (!anim || anim.type !== 'timed_warning') continue;
+        const progress = Math.min(1, anim.age / Math.max(0.001, anim.duration));
+        let alpha = 1;
+        if (progress < 0.15) alpha = progress / 0.15;
+        else if (progress > 0.7) alpha = Math.max(0, (1 - progress) / 0.3);
+        const pulse = 1 + 0.06 * Math.sin(anim.age * Math.PI * 4);
+        const baseSize = Math.min(canvas.width, canvas.height) * 0.055;
+        const fontsize = (baseSize + progress * baseSize * 0.55) * pulse;
+        ctx.save();
+        // Dim vignette flash
+        ctx.fillStyle = `rgba(255, 80, 40, ${0.12 * alpha})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = `bold ${Math.round(fontsize)}px Orbitron`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = `rgba(255, 80, 0, ${alpha})`;
+        ctx.shadowBlur = 28 * alpha;
+        ctx.fillStyle = `rgba(255, 230, 120, ${alpha})`;
+        ctx.strokeStyle = `rgba(255, 60, 40, ${alpha * 0.9})`;
+        ctx.lineWidth = Math.max(2, fontsize * 0.06);
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const label = anim.text || 'TIME REMAINING';
+        ctx.strokeText(label, cx, cy);
+        ctx.fillText(label, cx, cy);
+        // Subtitle
+        ctx.shadowBlur = 8 * alpha;
+        ctx.font = `bold ${Math.round(fontsize * 0.35)}px Orbitron`;
+        ctx.fillStyle = `rgba(255, 180, 100, ${alpha * 0.9})`;
+        ctx.fillText('TIMED GAME', cx, cy + fontsize * 0.75);
+        ctx.restore();
+      }
       if (serverState && serverState.isPaused) {
         ctx.save();
         ctx.fillStyle = '#fff';
         ctx.font = '40px Orbitron';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+        let pauseText = 'PAUSED';
+        if (serverState.isGameReplay || isGameReplayPlayback) {
+          pauseText = gameReplayPlaying ? '' : 'REPLAY PAUSED';
+        } else if (serverState.gameOverMessage || !serverState.isRunning) {
+          pauseText = 'GAME OVER';
+        }
+        if (pauseText) ctx.fillText(pauseText, canvas.width / 2, canvas.height / 2);
         ctx.restore();
       }
       updateButtonHighlights();
@@ -22023,6 +22771,9 @@ function getPlanetTradeIncomePerMin(planet) {
           checkMusicRotation();
         }
       } else {
+        if (isGameReplayPlayback) {
+          tickGameReplayPlayback(startTime);
+        }
         updateSelectionTimes();
         draw();
         // HUD DOM/canvas tiles do not need 60 Hz — throttle to keep frames silky

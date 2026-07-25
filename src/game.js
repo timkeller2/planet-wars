@@ -222,6 +222,55 @@ export class Game {
     }
   }
 
+  static RACE_STYLES = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
+
+  /**
+   * Apply ENTER GAME race choice. Explicit races are locked and never reassigned.
+   * Random clears lock so assignment can pick an unused race later.
+   */
+  applyRaceChoice(player, raceOption) {
+    if (!player) return;
+    const styles = Game.RACE_STYLES;
+    if (raceOption && raceOption !== 'Random' && styles.includes(raceOption)) {
+      player.preferredRace = raceOption;
+      player.raceLocked = true;
+      player.cruiserStyle = raceOption;
+    } else {
+      player.preferredRace = null;
+      player.raceLocked = false;
+      // Leave cruiserStyle null so assignPlayerRace can fill from unused pool
+      player.cruiserStyle = null;
+    }
+  }
+
+  /**
+   * Ensure player has a cruiserStyle. Locked/explicit choices are preserved.
+   * Random humans (and AIs) prefer races not already taken until all are used.
+   */
+  assignPlayerRace(player) {
+    if (!player) return;
+    const styles = Game.RACE_STYLES;
+    if (player.raceLocked && player.preferredRace && styles.includes(player.preferredRace)) {
+      player.cruiserStyle = player.preferredRace;
+      return;
+    }
+    if (player.cruiserStyle && styles.includes(player.cruiserStyle)) {
+      return;
+    }
+    const used = new Set();
+    for (const p of this.allPlayers) {
+      if (!p || p === player) continue;
+      if (p.cruiserStyle && styles.includes(p.cruiserStyle)) {
+        used.add(p.cruiserStyle);
+      }
+    }
+    const unused = styles.filter(s => !used.has(s));
+    const pool = unused.length > 0 ? unused : styles;
+    player.cruiserStyle = pool[Math.floor(Math.random() * pool.length)];
+    player.raceLocked = false;
+    console.log(`Assigned style ${player.cruiserStyle} to player ${player.id}${player.isAI ? ' (AI)' : ' (random)'}`);
+  }
+
   static getRandomAnomalyRewardType() {
     const roll = Math.random() * 100;
     if (roll < 64) {
@@ -239,6 +288,12 @@ export class Game {
     } else {
       return 'upgrade_token';
     }
+  }
+
+  /** Fleet launch fee in ships/credits: max(0, 2√shipsLaunched − √techScore). */
+  static computeFleetLaunchCost(shipsLaunched, techScore = 0) {
+    if (!(shipsLaunched > 0)) return 0;
+    return Math.max(0, Math.sqrt(shipsLaunched) * 2 - Math.sqrt(Math.max(0, techScore || 0)));
   }
 
   /**
@@ -505,6 +560,10 @@ export class Game {
     this.accuracyEvents = [];
     this.happinessEvents = [];
     this.pendingChatMessages = [];
+    /** Timed-game countdown banners: { minutes: 10|5|2 } */
+    this.pendingTimedGameWarnings = [];
+    /** Set of minute marks already announced this game (avoids double-fire) */
+    this.timedWarningFired = new Set();
     this.pendingAnomalyCompletions = [];
     this.sellOrders = [];
     this.fulfillOrders = [];
@@ -1267,24 +1326,8 @@ export class Game {
         bestPos = { x, y };
       }
 
-      // Assign player cruiserStyle if not already set
-      if (!player.cruiserStyle) {
-        const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
-        if (!player.isAI) {
-          const assignedStyles = this.allPlayers
-            .filter(p => !p.isAI && p.cruiserStyle)
-            .map(p => p.cruiserStyle);
-          const unusedStyles = styles.filter(s => !assignedStyles.includes(s));
-          if (unusedStyles.length > 0) {
-            player.cruiserStyle = unusedStyles[Math.floor(Math.random() * unusedStyles.length)];
-          } else {
-            player.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
-          }
-        } else {
-          player.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
-        }
-        console.log(`Assigned style ${player.cruiserStyle} to player ${player.id}`);
-      }
+      // Assign race if needed (never overwrites locked player selection)
+      this.assignPlayerRace(player);
 
       // Pioneer starting stockpile: 1 primary bomb resource, 0.2 of each other
       if (player.id !== 'monsters') {
@@ -1306,13 +1349,10 @@ export class Game {
 
       if (hwSizeSetting === 'pioneers-corvettes') {
         const angles = [0, 120, 240];
-        const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
+        const styles = Game.RACE_STYLES;
         
-        let firstStyle = player.cruiserStyle;
-        if (!firstStyle) {
-          firstStyle = styles[Math.floor(Math.random() * styles.length)];
-          player.cruiserStyle = firstStyle;
-        }
+        this.assignPlayerRace(player);
+        const firstStyle = player.cruiserStyle;
 
         for (let i = 0; i < 3; i++) {
           const angleRad = (angles[i] * Math.PI) / 180;
@@ -1585,23 +1625,8 @@ export class Game {
 
     if (targetPlanet) {
       targetPlanet.owner = player;
-      if (!player.cruiserStyle) {
-        const styles = ['Federation', 'Romulan', 'Klingon', 'Gorn', 'Tholian', 'Lyran'];
-        if (!player.isAI) {
-          const assignedStyles = this.allPlayers
-            .filter(p => !p.isAI && p.cruiserStyle)
-            .map(p => p.cruiserStyle);
-          const unusedStyles = styles.filter(s => !assignedStyles.includes(s));
-          if (unusedStyles.length > 0) {
-            player.cruiserStyle = unusedStyles[Math.floor(Math.random() * unusedStyles.length)];
-          } else {
-            player.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
-          }
-        } else {
-          player.cruiserStyle = styles[Math.floor(Math.random() * styles.length)];
-        }
-        console.log(`Assigned style ${player.cruiserStyle} to player ${player.id}`);
-      }
+      // Assign race if needed (never overwrites locked player selection)
+      this.assignPlayerRace(player);
       targetPlanet.racialAffinity = player.cruiserStyle;
       const hwSizeSetting = (this.settings && this.settings.homeworldSize) ? this.settings.homeworldSize : "120";
       if (hwSizeSetting !== 'natural') {
@@ -1813,6 +1838,7 @@ export class Game {
       baseGameSpeed: this.baseGameSpeed || 1.0,
       battlecam: this.battlecam || 0,
       highestSpeedMilestoneTriggered: this.highestSpeedMilestoneTriggered || 0,
+      timedWarningFired: this.timedWarningFired ? Array.from(this.timedWarningFired) : [],
       nextIonStormId: this.nextIonStormId,
       ionStormSpawnTimer: this.ionStormSpawnTimer,
       happinessTimer: this.happinessTimer,
@@ -1859,6 +1885,8 @@ export class Game {
         totalCapacity: p.totalCapacity,
         prevTechBonus: p.prevTechBonus,
         cruiserStyle: p.cruiserStyle,
+        preferredRace: p.preferredRace || null,
+        raceLocked: !!p.raceLocked,
         afkWarningSent: p.afkWarningSent,
         storageFeeAccumulator: p.storageFeeAccumulator,
         tradeOptions: p.tradeOptions,
@@ -2020,6 +2048,8 @@ export class Game {
     this.gameSpeed = state.gameSpeed !== undefined ? state.gameSpeed : 1.0;
     this.battlecam = state.battlecam !== undefined ? state.battlecam : 0;
     this.highestSpeedMilestoneTriggered = state.highestSpeedMilestoneTriggered !== undefined ? state.highestSpeedMilestoneTriggered : 0;
+    this.timedWarningFired = new Set(state.timedWarningFired || []);
+    this.pendingTimedGameWarnings = [];
     this.nextIonStormId = state.nextIonStormId !== undefined ? state.nextIonStormId : 0;
     this.ionStormSpawnTimer = state.ionStormSpawnTimer !== undefined ? state.ionStormSpawnTimer : 0;
     this.ionStormDamageTimer = state.ionStormDamageTimer !== undefined ? state.ionStormDamageTimer : 0;
@@ -2060,6 +2090,11 @@ export class Game {
       p.totalCapacity = pData.totalCapacity;
       p.prevTechBonus = pData.prevTechBonus;
       p.cruiserStyle = pData.cruiserStyle;
+      p.preferredRace = pData.preferredRace || null;
+      p.raceLocked = !!pData.raceLocked;
+      if (p.raceLocked && p.preferredRace) {
+        p.cruiserStyle = p.preferredRace;
+      }
       p.afkWarningSent = pData.afkWarningSent;
       p.storageFeeAccumulator = pData.storageFeeAccumulator;
       p.tradeOptions = pData.tradeOptions;
@@ -2298,6 +2333,8 @@ export class Game {
     this.bundleValue = 200;
     this.marketFluctuationTimer = 0;
     this.highestSpeedMilestoneTriggered = 0;
+    this.timedWarningFired = new Set();
+    this.pendingTimedGameWarnings = [];
     this.ionStormSpawnTimer = 0;
     this.ionStormDamageTimer = 0;
     this.minefieldDamageTimer = 0;
@@ -2305,6 +2342,8 @@ export class Game {
     this.nextShipId = Math.max(this.nextShipId || 1000000, 1000000);
     this.gameTime = 0;
     this.timeRemaining = null;
+    // New map clears post-game review lock (full vision / no unpause until restart)
+    this.gameOverMessage = null;
     let rampageDelayMultiple = 1.0;
     if (this.width < 1600) {
       rampageDelayMultiple = 1600 / this.width;
@@ -2359,7 +2398,14 @@ export class Game {
       player.lastTechMilestoneTier = 0;
       player.lastExpMilestoneTier = 0;
       player.lastHappinessMilestoneTier = 0;
-      player.cruiserStyle = null;
+      // Preserve ENTER GAME race selection across map resets
+      if (player.raceLocked && player.preferredRace && Game.RACE_STYLES.includes(player.preferredRace)) {
+        player.cruiserStyle = player.preferredRace;
+      } else {
+        player.cruiserStyle = null;
+        player.raceLocked = false;
+        player.preferredRace = null;
+      }
       player.prevTechBonus = 0;
       player.tradeLimitToggle = true;
       player.credits = this.settings && this.settings.startingCredits !== undefined ? this.settings.startingCredits : 0;
@@ -2925,6 +2971,9 @@ export class Game {
 
   stop() {
     this.isRunning = false;
+    // Lock the sim in a paused review state until the next game starts.
+    // Clients show "Game Over" (not "PAUSED") while gameOverMessage is set.
+    this.isPaused = true;
   }
 
   setSelection(planet) {
@@ -2983,14 +3032,7 @@ export class Game {
     }
     
 
-    let launchCost = source.owner ? 10 + (source.owner.planetCount || 0) : 10;
-    if (source.owner) {
-      const techBonus = Math.floor(Math.sqrt(source.owner.techScore || 0));
-      launchCost = Math.max(0, launchCost - techBonus);
-    }
-    launchCost = Math.min(250, launchCost);
-
-    // Calculate potential shipsToSend without deducting launch cost first
+    // Desired fleet size first; launch fee depends on ships launched.
     let shipsToSend;
     const isReinforcing = source.owner && target && target.owner && source.owner.id === target.owner.id;
     if (isReinforcing && !isBombing) {
@@ -3025,7 +3067,9 @@ export class Game {
     }
 
     shipsToSend = Math.min(250, shipsToSend);
+    if (shipsToSend <= 0) return;
 
+    const techScore = source.owner ? (source.owner.techScore || 0) : 0;
     const tritaniumCost = 0.01 * shipsToSend;
     const payWithTritanium = !isReinforcing && source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0 && source.useResources;
 
@@ -3037,62 +3081,41 @@ export class Game {
       isTritaniumPaid = true;
       source.owner.resources.tritanium -= tritaniumCost;
     } else {
-      // Standard ship payment or credits fallback
+      // Fee: max(0, 2√ships − √tech); credits offset 1:1 when enabled
       const useCredits = source.owner && source.owner.useCredits !== false;
-      // Debt floor always from trade ships (no homeworld ownership required)
       const minAllowedCredits = source.owner
         ? -Math.floor(source.owner.totalTradeShips || 0)
         : 0;
       const creditsAvailable = source.owner ? (source.owner.credits - minAllowedCredits) : 0;
-      let creditsPaid = 0;
-      let shipLaunchCost = launchCost;
 
-      if (useCredits && creditsAvailable > 0) {
-        creditsPaid = Math.min(creditsAvailable, launchCost);
-        shipLaunchCost = launchCost - creditsPaid;
-      }
-
-      if (source.ships < shipLaunchCost + 1) return;
-      
-      const tempShips = source.ships - shipLaunchCost;
-      let standardShipsToSend;
-      if (isReinforcing && !isBombing) {
-        const maxS = (target.focusMode === 'garrison') ? (target.maxShips * 2) : target.maxShips;
-        if (target.ships >= maxS) {
-          standardShipsToSend = 0;
-        } else {
-          const fillNeeded = maxS - target.ships;
-          if (tempShips >= fillNeeded) {
-            standardShipsToSend = fillNeeded;
-          } else {
-            standardShipsToSend = Math.floor(tempShips / 2);
-          }
+      const resolveLaunchPayment = (fleetSize) => {
+        const cost = Game.computeFleetLaunchCost(fleetSize, techScore);
+        let creditsPaid = 0;
+        let shipCost = cost;
+        if (useCredits && creditsAvailable > 0) {
+          creditsPaid = Math.min(creditsAvailable, cost);
+          shipCost = cost - creditsPaid;
         }
-        standardShipsToSend = Math.min(standardShipsToSend, Math.max(0, tempShips - 10));
-      } else {
-        standardShipsToSend = scoutMode ? Math.max(3, Math.floor(tempShips * 0.1)) : Math.floor(tempShips / 2);
-      }
-      standardShipsToSend = Math.min(standardShipsToSend, tempShips);
-      if (source.rampageEvent) {
-        const minReserve = source.maxShips * 0.75;
-        if (tempShips - standardShipsToSend < minReserve) {
-          standardShipsToSend = Math.floor(tempShips - minReserve);
+        return { cost, creditsPaid, shipCost };
+      };
+
+      let pay = resolveLaunchPayment(finalShipsToSend);
+      if (source.ships < pay.shipCost + finalShipsToSend) {
+        finalShipsToSend = Math.floor(source.ships - pay.shipCost);
+        if (finalShipsToSend <= 0) return;
+        finalShipsToSend = Math.min(250, finalShipsToSend);
+        pay = resolveLaunchPayment(finalShipsToSend);
+        if (source.ships < pay.shipCost + finalShipsToSend) {
+          finalShipsToSend = Math.floor(source.ships - pay.shipCost);
+          if (finalShipsToSend <= 0) return;
+          pay = resolveLaunchPayment(finalShipsToSend);
         }
       }
-      if (fillAmount !== null) {
-        const maxCanSend = Math.max(0, Math.floor(tempShips) - 10);
-        standardShipsToSend = Math.min(maxCanSend, fillAmount);
+
+      if (pay.creditsPaid > 0) {
+        source.owner.credits -= pay.creditsPaid;
       }
-      standardShipsToSend = Math.min(250, standardShipsToSend);
-      
-      if (standardShipsToSend <= 0) {
-        return;
-      }
-      if (creditsPaid > 0) {
-        source.owner.credits -= creditsPaid;
-      }
-      finalShipsToSend = standardShipsToSend;
-      finalLaunchCost = shipLaunchCost;
+      finalLaunchCost = pay.shipCost;
     }
 
     source.ships -= finalLaunchCost;
@@ -3346,14 +3369,6 @@ export class Game {
     }
     
 
-    let launchCost = source.owner ? 10 + (source.owner.planetCount || 0) : 10;
-    if (source.owner) {
-      const techBonus = Math.floor(Math.sqrt(source.owner.techScore || 0));
-      launchCost = Math.max(0, launchCost - techBonus);
-    }
-    launchCost = Math.min(250, launchCost);
-
-    // Calculate potential shipsToSend without deducting launch cost first
     let shipsToSend = scoutMode ? Math.max(3, Math.floor(source.ships * 0.1)) : Math.floor(source.ships / 2);
     shipsToSend = Math.min(shipsToSend, source.ships);
     
@@ -3365,7 +3380,9 @@ export class Game {
     }
     
     shipsToSend = Math.min(250, shipsToSend);
+    if (shipsToSend <= 0) return;
 
+    const techScore = source.owner ? (source.owner.techScore || 0) : 0;
     const tritaniumCost = 0.01 * shipsToSend;
     const payWithTritanium = source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0 && source.useResources;
 
@@ -3377,42 +3394,41 @@ export class Game {
       isTritaniumPaid = true;
       source.owner.resources.tritanium -= tritaniumCost;
     } else {
-      // Standard ship payment or credits fallback
+      // Fee: max(0, 2√ships − √tech); credits offset 1:1 when enabled
       const useCredits = source.owner && source.owner.useCredits !== false;
-      // Debt floor always from trade ships (no homeworld ownership required)
       const minAllowedCredits = source.owner
         ? -Math.floor(source.owner.totalTradeShips || 0)
         : 0;
       const creditsAvailable = source.owner ? (source.owner.credits - minAllowedCredits) : 0;
-      let creditsPaid = 0;
-      let shipLaunchCost = launchCost;
 
-      if (useCredits && creditsAvailable > 0) {
-        creditsPaid = Math.min(creditsAvailable, launchCost);
-        shipLaunchCost = launchCost - creditsPaid;
-      }
+      const resolveLaunchPayment = (fleetSize) => {
+        const cost = Game.computeFleetLaunchCost(fleetSize, techScore);
+        let creditsPaid = 0;
+        let shipCost = cost;
+        if (useCredits && creditsAvailable > 0) {
+          creditsPaid = Math.min(creditsAvailable, cost);
+          shipCost = cost - creditsPaid;
+        }
+        return { cost, creditsPaid, shipCost };
+      };
 
-      if (source.ships < shipLaunchCost + 1) return;
-      
-      const tempShips = source.ships - shipLaunchCost;
-      let standardShipsToSend = scoutMode ? Math.max(3, Math.floor(tempShips * 0.1)) : Math.floor(tempShips / 2);
-      standardShipsToSend = Math.min(standardShipsToSend, tempShips);
-      if (source.rampageEvent) {
-        const minReserve = source.maxShips * 0.75;
-        if (tempShips - standardShipsToSend < minReserve) {
-          standardShipsToSend = Math.floor(tempShips - minReserve);
+      let pay = resolveLaunchPayment(finalShipsToSend);
+      if (source.ships < pay.shipCost + finalShipsToSend) {
+        finalShipsToSend = Math.floor(source.ships - pay.shipCost);
+        if (finalShipsToSend <= 0) return;
+        finalShipsToSend = Math.min(250, finalShipsToSend);
+        pay = resolveLaunchPayment(finalShipsToSend);
+        if (source.ships < pay.shipCost + finalShipsToSend) {
+          finalShipsToSend = Math.floor(source.ships - pay.shipCost);
+          if (finalShipsToSend <= 0) return;
+          pay = resolveLaunchPayment(finalShipsToSend);
         }
       }
-      standardShipsToSend = Math.min(250, standardShipsToSend);
-      
-      if (standardShipsToSend <= 0) {
-        return;
+
+      if (pay.creditsPaid > 0) {
+        source.owner.credits -= pay.creditsPaid;
       }
-      if (creditsPaid > 0) {
-        source.owner.credits -= creditsPaid;
-      }
-      finalShipsToSend = standardShipsToSend;
-      finalLaunchCost = shipLaunchCost;
+      finalLaunchCost = pay.shipCost;
     }
 
     source.ships -= finalLaunchCost;
@@ -3915,7 +3931,49 @@ export class Game {
     }
   }
 
-  moveShipsToSpace(player, shipIds, targetX, targetY, isWarp = false, speedModifier = null, isShift = false) {
+  /**
+   * Multi-ship formation: tight if every pair is within 300px.
+   * Anchor = ship closest to the group's centroid (not closest to the click).
+   */
+  getFormationMeta(ships) {
+    if (!ships || ships.length === 0) return { anchor: null, tight: true };
+    let cx = 0, cy = 0;
+    for (const s of ships) {
+      cx += s.x;
+      cy += s.y;
+    }
+    cx /= ships.length;
+    cy /= ships.length;
+    let anchor = ships[0];
+    let bestD = Infinity;
+    for (const s of ships) {
+      const dx = s.x - cx;
+      const dy = s.y - cy;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        anchor = s;
+      }
+    }
+    let tight = true;
+    if (ships.length > 1) {
+      const r2 = 300 * 300;
+      outer:
+      for (let j = 0; j < ships.length; j++) {
+        for (let k = j + 1; k < ships.length; k++) {
+          const dx = ships[j].x - ships[k].x;
+          const dy = ships[j].y - ships[k].y;
+          if (dx * dx + dy * dy > r2) {
+            tight = false;
+            break outer;
+          }
+        }
+      }
+    }
+    return { anchor, tight };
+  }
+
+  moveShipsToSpace(player, shipIds, targetX, targetY, isWarp = false, speedModifier = null, isShift = false, formationHeading = null) {
     // Prefer per-tick shipsById; fall back to a one-shot map if called mid-bootstrap
     let shipMap = this.shipsById;
     if (!shipMap || shipMap.size === 0) {
@@ -3933,34 +3991,8 @@ export class Game {
       ship.groupSpeedLimit = null;
     }
 
-    let anchor = null;
-    if (numCruisers > 0) {
-      let minDist = Infinity;
-      for (const c of cruisers) {
-        const dx = c.x - targetX;
-        const dy = c.y - targetY;
-        const dist = dx * dx + dy * dy;
-        if (dist < minDist) {
-          minDist = dist;
-          anchor = c;
-        }
-      }
-    }
-
-    let dispersedSpace = false;
-    if (numCruisers > 1) {
-      for (let j = 0; j < numCruisers; j++) {
-        for (let k = j + 1; k < numCruisers; k++) {
-          const dx = cruisers[j].x - cruisers[k].x;
-          const dy = cruisers[j].y - cruisers[k].y;
-          if (dx * dx + dy * dy > 150 * 150) {
-            dispersedSpace = true;
-            break;
-          }
-        }
-        if (dispersedSpace) break;
-      }
-    }
+    const { anchor, tight: tightSpace } = this.getFormationMeta(cruisers);
+    const dispersedSpace = numCruisers > 1 && !tightSpace;
 
     if (numCruisers > 1 && !dispersedSpace) {
       let slowestSpeed = Infinity;
@@ -4027,7 +4059,8 @@ export class Game {
           targetX: tX,
           targetY: tY,
           isWarp,
-          speedModifier
+          speedModifier,
+          formationHeading: formationHeading != null ? formationHeading : null
         });
         let isCurrentlyIdle = !ship.cruiserTargetType;
         if (isCurrentlyIdle) {
@@ -4048,6 +4081,9 @@ export class Game {
       } else {
         ship.handlePlayerMoveOrder({ x: tX, y: tY }, this);
         ship.orderQueue = [];
+        ship.arrivalFacingHeading = (formationHeading != null && Number.isFinite(formationHeading)) ? formationHeading : null;
+        ship.isReorientingFacing = false;
+        ship.reorientFacingHeading = null;
         if (ship.isPatrolling) {
           ship.patrolStationX = tX;
           ship.patrolStationY = tY;
@@ -4083,11 +4119,15 @@ export class Game {
 
     for (const ship of validShips) {
       if (!ship.isCruiser) {
+        ship.pursueTarget = null;
         ship.targetPlanet = null;
         ship.targetX = targetX + (Math.random() - 0.5) * 30;
         ship.targetY = targetY + (Math.random() - 0.5) * 30;
         ship.startX = ship.x;
         ship.startY = ship.y;
+        ship.arrivalFacingHeading = (formationHeading != null && Number.isFinite(formationHeading)) ? formationHeading : null;
+        ship.isReorientingFacing = false;
+        ship.reorientFacingHeading = null;
         if (speedModifier !== null) ship.speedModifier = speedModifier;
         if (isWarp) {
           if (!ship.isWarp) {
@@ -4102,7 +4142,64 @@ export class Game {
     }
   }
 
-  moveShipsToPlanet(player, shipIds, targetPlanet, isWarp = false, speedModifier = null, isShift = false) {
+  /**
+   * Order fleets (and optionally cruisers via pursue) to chase a ship/amoeba to point-blank range.
+   * Cruisers should prefer setCruiserTarget; this is primarily for non-cruiser fleets.
+   */
+  moveShipsToTargetShip(player, shipIds, targetShip, isWarp = false, speedModifier = null, isShift = false) {
+    if (!targetShip || !targetShip.active) return;
+    let shipMap = this.shipsById;
+    if (!shipMap || shipMap.size === 0) {
+      shipMap = new Map();
+      for (let i = 0; i < this.ships.length; i++) {
+        const s = this.ships[i];
+        if (s && s.active) shipMap.set(s.id, s);
+      }
+    }
+    const validShips = shipIds.map(id => shipMap.get(id)).filter(s =>
+      s && s.active && s.owner && s.owner.id === player.id && !s.isUpgrading && !s.isMarineFleet && !s.isBoardingFleet
+    );
+
+    for (const ship of validShips) {
+      if (ship.isCruiser) {
+        // Cruisers use the dedicated target lock path when possible
+        ship.groupSpeedLimit = null;
+        if (isShift) {
+          if (!ship.orderQueue) ship.orderQueue = [];
+          ship.orderQueue.push({ type: 'target', targetType: 'ship', targetId: targetShip.id });
+          continue;
+        }
+        ship.handlePlayerMoveOrder({ x: targetShip.x, y: targetShip.y }, this);
+        ship.orderQueue = [];
+        ship.isPatrolling = false;
+        ship.cruiserTargetType = 'ship';
+        ship.cruiserTargetId = targetShip.id;
+        ship.targetPlanet = null;
+        ship.targetX = targetShip.x;
+        ship.targetY = targetShip.y;
+        ship.pursueTarget = targetShip;
+      } else {
+        ship.pursueTarget = targetShip;
+        ship.targetPlanet = null;
+        ship.targetX = targetShip.x;
+        ship.targetY = targetShip.y;
+        ship.startX = ship.x;
+        ship.startY = ship.y;
+        if (speedModifier !== null) ship.speedModifier = speedModifier;
+        if (isWarp) {
+          if (!ship.isWarp) {
+            if (this.applyWarpToShip(ship, player)) {
+              ship.active = false;
+            }
+          }
+        } else {
+          if (ship.maxHealth > 0) ship.isWarp = false;
+        }
+      }
+    }
+  }
+
+  moveShipsToPlanet(player, shipIds, targetPlanet, isWarp = false, speedModifier = null, isShift = false, formationHeading = null) {
     let shipMap = this.shipsById;
     if (!shipMap || shipMap.size === 0) {
       shipMap = new Map();
@@ -4119,34 +4216,8 @@ export class Game {
       ship.groupSpeedLimit = null;
     }
 
-    let anchor = null;
-    if (numCruisers > 0) {
-      let minDist = Infinity;
-      for (const c of cruisers) {
-        const dx = c.x - targetPlanet.x;
-        const dy = c.y - targetPlanet.y;
-        const dist = dx * dx + dy * dy;
-        if (dist < minDist) {
-          minDist = dist;
-          anchor = c;
-        }
-      }
-    }
-
-    let dispersedPlanet = false;
-    if (numCruisers > 1) {
-      for (let j = 0; j < numCruisers; j++) {
-        for (let k = j + 1; k < numCruisers; k++) {
-          const dx = cruisers[j].x - cruisers[k].x;
-          const dy = cruisers[j].y - cruisers[k].y;
-          if (dx * dx + dy * dy > 150 * 150) {
-            dispersedPlanet = true;
-            break;
-          }
-        }
-        if (dispersedPlanet) break;
-      }
-    }
+    const { anchor, tight: tightPlanet } = this.getFormationMeta(cruisers);
+    const dispersedPlanet = numCruisers > 1 && !tightPlanet;
 
     if (numCruisers > 1 && !dispersedPlanet) {
       let slowestSpeed = Infinity;
@@ -4214,7 +4285,8 @@ export class Game {
           offsetX: oX,
           offsetY: oY,
           isWarp,
-          speedModifier
+          speedModifier,
+          formationHeading: formationHeading != null ? formationHeading : null
         });
         let isCurrentlyIdle = !ship.cruiserTargetType;
         if (isCurrentlyIdle) {
@@ -4235,6 +4307,9 @@ export class Game {
       } else {
         ship.handlePlayerMoveOrder({ planet: targetPlanet, x: targetPlanet.x + oX, y: targetPlanet.y + oY }, this);
         ship.orderQueue = [];
+        ship.arrivalFacingHeading = (formationHeading != null && Number.isFinite(formationHeading)) ? formationHeading : null;
+        ship.isReorientingFacing = false;
+        ship.reorientFacingHeading = null;
         if (ship.isPatrolling) {
           ship.patrolStationX = targetPlanet.x + oX;
           ship.patrolStationY = targetPlanet.y + oY;
@@ -4270,11 +4345,15 @@ export class Game {
 
     for (const ship of validShips) {
       if (!ship.isCruiser) {
+        ship.pursueTarget = null;
         ship.targetPlanet = targetPlanet;
         ship.targetX = null;
         ship.targetY = null;
         ship.startX = ship.x;
         ship.startY = ship.y;
+        ship.arrivalFacingHeading = (formationHeading != null && Number.isFinite(formationHeading)) ? formationHeading : null;
+        ship.isReorientingFacing = false;
+        ship.reorientFacingHeading = null;
         if (speedModifier !== null) ship.speedModifier = speedModifier;
         if (isWarp) {
           if (!ship.isWarp) {
@@ -5108,7 +5187,25 @@ export class Game {
       if (this.timeRemaining === undefined || this.timeRemaining === null) {
         this.timeRemaining = parseFloat(this.settings.timedGameLimit);
       }
+      const prevRemaining = this.timeRemaining;
       this.timeRemaining -= deltaTime / 1000;
+      // Announce 10 / 5 / 2 minutes remaining once each as the timer crosses those marks
+      if (!this.timedWarningFired) this.timedWarningFired = new Set();
+      if (!this.pendingTimedGameWarnings) this.pendingTimedGameWarnings = [];
+      const marks = [10, 5, 2];
+      for (const minutes of marks) {
+        const secs = minutes * 60;
+        if (prevRemaining > secs && this.timeRemaining <= secs && !this.timedWarningFired.has(minutes)) {
+          this.timedWarningFired.add(minutes);
+          const label = minutes === 1 ? '1 minute' : `${minutes} minutes`;
+          this.pendingChatMessages = this.pendingChatMessages || [];
+          this.pendingChatMessages.push({
+            playerId: 'all',
+            text: `⏱️ Timed game: ${label} remaining!`
+          });
+          this.pendingTimedGameWarnings.push({ minutes });
+        }
+      }
       if (this.timeRemaining <= 0) {
         this.timeRemaining = 0;
         this.triggerTimedGameVictory();
@@ -9344,7 +9441,7 @@ export class Game {
       this.ctx.font = '40px Orbitron';
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
-      this.ctx.fillText('PAUSED', this.width / 2, this.height / 2);
+      this.ctx.fillText(this.gameOverMessage ? 'GAME OVER' : 'PAUSED', this.width / 2, this.height / 2);
     }
   }
   

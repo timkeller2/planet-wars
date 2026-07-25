@@ -50,6 +50,10 @@ export class Ship {
     this.cruiserTargetClickX = null;
     this.cruiserTargetClickY = null;
     this.orderQueue = [];
+    /** After arriving at a move dest, turn to this heading (radians) while holding formation. */
+    this.arrivalFacingHeading = null;
+    this.isReorientingFacing = false;
+    this.reorientFacingHeading = null;
     this.savedBombardPlanetId = null;
     this.isRetreating = false;
     this.retreatTargetPlanetId = null;
@@ -584,6 +588,10 @@ export class Ship {
       this.targetY = order.targetY;
       this.startX = this.x;
       this.startY = this.y;
+      this.arrivalFacingHeading = (order.formationHeading != null && Number.isFinite(order.formationHeading))
+        ? order.formationHeading : null;
+      this.isReorientingFacing = false;
+      this.reorientFacingHeading = null;
       
       if (order.speedModifier !== null && order.speedModifier !== undefined) {
         this.speedModifier = order.speedModifier;
@@ -613,6 +621,10 @@ export class Ship {
         this.cruiserTargetOffsetY = order.offsetY || 0;
         this.startX = this.x;
         this.startY = this.y;
+        this.arrivalFacingHeading = (order.formationHeading != null && Number.isFinite(order.formationHeading))
+          ? order.formationHeading : null;
+        this.isReorientingFacing = false;
+        this.reorientFacingHeading = null;
         
         if (order.speedModifier !== null && order.speedModifier !== undefined) {
           this.speedModifier = order.speedModifier;
@@ -2229,8 +2241,16 @@ export class Ship {
         const pDistSq = pdx * pdx + pdy * pdy;
         if (!this.isAmoeba || pDistSq <= 250000) {
           this.targetPlanet = null;
-          this.targetX = this.pursueTarget.x;
-          this.targetY = this.pursueTarget.y;
+          // Hold at point-blank (close combat) range rather than stacking on the target center
+          const pDist = Math.sqrt(pDistSq) || 1;
+          const pointBlank = (this.isCruiser || this.isAmoeba) ? 0 : 10;
+          if (pointBlank > 0 && pDist > 0.001) {
+            this.targetX = this.pursueTarget.x - (pdx / pDist) * pointBlank;
+            this.targetY = this.pursueTarget.y - (pdy / pDist) * pointBlank;
+          } else {
+            this.targetX = this.pursueTarget.x;
+            this.targetY = this.pursueTarget.y;
+          }
         } else {
           this.pursueTarget = null;
         }
@@ -2527,29 +2547,32 @@ export class Ship {
           if (this.owner && enemyShip.isCruiser && enemyShip.health < 2) {
             let attemptBoarding = false;
             
-            // 1. Cruiser with marines is nearby (within 500px)
+            // 1. Friendly marine cruiser within 500px, Scout Attack not Hold Fire → hold fire for capture.
+            //    Hold Fire (peace) does NOT suppress ally fire — destroy is allowed.
             if (allShips) {
               const candidateMarines = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(enemyShip.x, enemyShip.y, 500 * 500) : allShips;
               for (const other of candidateMarines) {
-                // Marine capacity + Scout Attack not Peace (On or Off can board/hold fire off ships)
-                if (other.active && other.isCruiser && other.owner && (other.owner.id === this.owner.id || other.owner === this.owner) && (other.marines || 0) > 0 && other.scoutAttackEnabled !== 'peace') {
-                  const dx = other.x - enemyShip.x;
-                  const dy = other.y - enemyShip.y;
-                  if (dx * dx + dy * dy <= 500 * 500) {
-                    attemptBoarding = true;
-                    break;
-                  }
+                if (!other.active || !other.isCruiser || !other.owner) continue;
+                if (!(other.owner.id === this.owner.id || other.owner === this.owner)) continue;
+                if (!(other.marines > 0)) continue;
+                // Peace = do not prevent others from finishing the cripple
+                if (other.scoutAttackEnabled === 'peace') continue;
+                const dx = other.x - enemyShip.x;
+                const dy = other.y - enemyShip.y;
+                if (dx * dx + dy * dy <= 500 * 500) {
+                  attemptBoarding = true;
+                  break;
                 }
               }
             }
             
-            // 2. Marines actively attacking (already boarding)
+            // 2. Marines already boarding this ship (in-progress capture)
             if (!attemptBoarding && enemyShip.isUnderBoarding && enemyShip.boardingPlayer && (enemyShip.boardingPlayer.id === this.owner.id || enemyShip.boardingPlayer === this.owner || enemyShip.boardingPlayer === this.owner.id)) {
               attemptBoarding = true;
             }
             
             if (attemptBoarding) {
-              continue; // Cease firing!
+              continue; // Cease firing so capture can proceed
             }
           }
 
@@ -3567,14 +3590,15 @@ export class Ship {
                   if (!isBoardingCandidate && allShips) {
                     const candidateMarines = (typeof allShips.getShipsInRadiusSq === 'function') ? allShips.getShipsInRadiusSq(other.x, other.y, 500 * 500) : allShips;
                     for (const s of candidateMarines) {
-                      // Marine capacity + Scout Attack not Peace (hold fire = will not board/capture)
-                      if (s.active && s.isCruiser && s.owner && s.owner.id === this.owner.id && (s.marines || 0) > 0 && s.scoutAttackEnabled !== 'peace') {
-                        const dx = s.x - other.x;
-                        const dy = s.y - other.y;
-                        if (dx * dx + dy * dy <= 500 * 500) {
-                          isBoardingCandidate = true;
-                          break;
-                        }
+                      // Marine module + not Hold Fire = prefer capture over destroy
+                      if (!s.active || !s.isCruiser || !s.owner || s.owner.id !== this.owner.id) continue;
+                      if (!(s.marines > 0)) continue;
+                      if (s.scoutAttackEnabled === 'peace') continue;
+                      const dx = s.x - other.x;
+                      const dy = s.y - other.y;
+                      if (dx * dx + dy * dy <= 500 * 500) {
+                        isBoardingCandidate = true;
+                        break;
                       }
                     }
                   }
@@ -4536,14 +4560,84 @@ export class Ship {
           distance = Math.sqrt(newBaseTargetDx * newBaseTargetDx + newBaseTargetDy * newBaseTargetDy);
         }
       } else {
-        if (!this.cruiserTargetType && !this.targetPlanet && this.targetX !== null && this.targetY !== null) {
+        // Space waypoint or held station after arrival
+        if (!this.cruiserTargetType && this.targetX !== null && this.targetY !== null && !this.targetPlanet) {
           if (moveDistanceToDest < 15) {
-            this.targetX = null;
-            this.targetY = null;
-            moveDistanceToDest = 0;
+            if (this.isReorientingFacing) {
+              this.targetX = this.x;
+              this.targetY = this.y;
+              moveDistanceToDest = 0;
+            } else if (this.arrivalFacingHeading != null && Number.isFinite(this.arrivalFacingHeading)) {
+              this.isReorientingFacing = true;
+              this.reorientFacingHeading = this.arrivalFacingHeading;
+              this.arrivalFacingHeading = null;
+              this.targetX = this.x;
+              this.targetY = this.y;
+              moveDistanceToDest = 0;
+            } else {
+              this.targetX = null;
+              this.targetY = null;
+              moveDistanceToDest = 0;
+            }
           }
         }
+        // Planet station: once near offset point, apply optional arrival facing
+        if (!this.cruiserTargetType && this.targetPlanet && this.arrivalFacingHeading != null
+            && Number.isFinite(this.arrivalFacingHeading) && moveDistanceToDest < 20) {
+          this.isReorientingFacing = true;
+          this.reorientFacingHeading = this.arrivalFacingHeading;
+          this.arrivalFacingHeading = null;
+          // Stay on planet station while turning
+          this.targetX = this.x;
+          this.targetY = this.y;
+          // keep targetPlanet for station keep; offsets already applied
+          moveDistanceToDest = 0;
+        }
       }
+    }
+
+    // Non-cruiser fleets: snap facing on arrival when a heading was ordered
+    if (!this.isCruiser && this.arrivalFacingHeading != null && Number.isFinite(this.arrivalFacingHeading)
+        && this.targetX !== null && this.targetY !== null && moveDistanceToDest < 15) {
+      this.angle = this.arrivalFacingHeading;
+      this.arrivalFacingHeading = null;
+      this.targetX = null;
+      this.targetY = null;
+      moveDistanceToDest = 0;
+    }
+
+    // Post-arrival reorient: turn in place to formation heading
+    if (this.isReorientingFacing && this.reorientFacingHeading != null) {
+      let desiredAngle = this.reorientFacingHeading;
+      if (this.isAmoeba) {
+        this.angle = desiredAngle;
+        this.isReorientingFacing = false;
+        this.reorientFacingHeading = null;
+        this.targetX = null;
+        this.targetY = null;
+      } else {
+        const turnRateDeg = this.isCruiser ? Math.max(15, 60 - (this.maxHealth || 0) + (this.engine || 0) * 3) : 60;
+        const turnRateRad = turnRateDeg * Math.PI / 180;
+        const maxRotation = turnRateRad * (deltaTime / 1000);
+        let diff = shortestAngleDiff(this.angle, desiredAngle);
+        if (Math.abs(diff) <= maxRotation + 0.01) {
+          this.angle = desiredAngle;
+          this.isReorientingFacing = false;
+          this.reorientFacingHeading = null;
+          this.targetX = null;
+          this.targetY = null;
+        } else {
+          const step = Math.sign(diff) * maxRotation;
+          this.angle = this.angle + step;
+          // keep holding position
+          this.targetX = this.x;
+          this.targetY = this.y;
+        }
+      }
+      // Skip normal move/turn toward destination this frame
+      moveDistanceToDest = 0;
+      dy = 0;
+      // fall through with moveDistanceToDest 0 so we don't double-turn below incorrectly
     }
     
     if (moveDistanceToDest > 0) {
