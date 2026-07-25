@@ -66,6 +66,10 @@ canvas {
   box-sizing: border-box;
   /* Expand invisible hit pad slightly past the visual border */
   margin: -2px;
+  /* Stay above the full-screen map canvas (z-index 1) for reliable clicks */
+  z-index: 120;
+  pointer-events: auto !important;
+  cursor: pointer;
 }
 #player-credits-display:not([style*="display: none"]),
 #player-trade-options-display:not([style*="display: none"]) {
@@ -74,6 +78,12 @@ canvas {
 #player-credits-display > *,
 #player-trade-options-display > * {
   pointer-events: none;
+}
+#market-panel,
+#left-hud-column {
+  position: relative;
+  z-index: 120;
+  pointer-events: auto !important;
 }
 
 #ui-layer {

@@ -2956,13 +2956,27 @@ function getPlanetTradeIncomePerMin(planet) {
     const el = typeof elementOrId === 'string' ? document.getElementById(elementOrId) : elementOrId;
     if (!el) return;
 
+    // One action per gesture: touchstart alone can be followed by a synthetic click,
+    // which double-fired toggles (on→off→on) and made Use Credits look broken.
+    let ignoreClickUntil = 0;
     const handler = (e) => {
-      if (e.type === 'touchstart' || e.type === 'touchend') {
+      if (e.type === 'touchstart') {
         if (e.cancelable) e.preventDefault();
         e.stopPropagation();
         cancelCameraDragFromUi();
+        ignoreClickUntil = Date.now() + 450;
+        callback(e);
+        return;
       }
-      callback(e);
+      if (e.type === 'click') {
+        if (Date.now() < ignoreClickUntil) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        e.stopPropagation();
+        callback(e);
+      }
     };
 
     el.addEventListener('touchstart', handler, { passive: false });
@@ -4047,9 +4061,9 @@ function getPlanetTradeIncomePerMin(planet) {
           shrugChance = Math.floor(shrugChance / 2);
         }
         if (hs.specialduranium && hs.specialduranium > 0) {
-          shrugChance += 10;
+          shrugChance += getSpecialDuraniumBonusClient(hs);
         }
-        shrugChance = Math.min(90, shrugChance);
+        shrugChance = Math.min(90, Math.floor(shrugChance));
         let deflectionLabel = 'Deflection';
         if (hs.specialduranium && hs.specialduranium > 0) {
           deflectionLabel += '*';
@@ -4081,7 +4095,7 @@ function getPlanetTradeIncomePerMin(planet) {
           effectiveRange = Math.max(5, effectiveRange - hs.supply_ship * 5);
         }
         if (hs.specialbombs && hs.specialbombs > 0) {
-          effectiveRange += 10;
+          effectiveRange += getSpecialBombBonusClient(hs);
         }
         if (hs.package === 'brute') {
           effectiveRange *= 0.5;
@@ -4116,7 +4130,7 @@ function getPlanetTradeIncomePerMin(planet) {
           hitChanceValue -= hs.supply_ship * 5;
         }
         if (hs.specialbombs && hs.specialbombs > 0) {
-          hitChanceValue += 10;
+          hitChanceValue += getSpecialBombBonusClient(hs);
         }
         
         let friendlyGrav = 0;
@@ -7066,21 +7080,21 @@ function getPlanetTradeIncomePerMin(planet) {
       lockedSettings = true;
     }
 
-    // Regenerate starfield if map size changed, and reset camera
-    if (state.width && state.height) {
-      if (state.width !== starsMapWidth || state.height !== starsMapHeight) {
-        cameraPanX = 0;
-        cameraPanY = 0;
-        cameraZoom = 1.0;
-        hasCenteredOnHomeworld = false;
-      }
+    // Regenerate starfield if map size changed.
+    // Do NOT reset camera / hasCenteredOnHomeworld mid-game — a bad width/height
+    // blip (or late full-state) was re-snapping to homeworld at zoom 2 after events
+    // like anomaly completion, which felt like a random hard zoom-in.
+    if (state.width && state.height && isFinite(state.width) && isFinite(state.height)
+        && state.width > 0 && state.height > 0) {
       regenerateStars(state.width, state.height);
     }
 
-    // Center on homeworld/initial corvettes and select them on first sync
-    if (!hasCenteredOnHomeworld && localPlayer && state.settings && state.width && state.height) {
+    // Center on homeworld/initial corvettes once per game (only after a fresh gameStartTime)
+    if (!hasCenteredOnHomeworld && localPlayer && state.settings && state.width && state.height
+        && isFinite(state.width) && isFinite(state.height) && state.isRunning) {
       if (state.settings.homeworldSize === 'pioneers' || state.settings.homeworldSize === 'pioneers-corvettes') {
-        const myShips = state.ships.filter(s => s.ownerId === localPlayer.id && s.active);
+        const myShips = (state.ships || []).filter(s => s && s.ownerId === localPlayer.id && s.active
+          && isFinite(s.x) && isFinite(s.y));
         if (myShips.length > 0) {
           // Calculate average position of player's initial ships
           let sumX = 0, sumY = 0;
@@ -7090,14 +7104,16 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           const centerX = sumX / myShips.length;
           const centerY = sumY / myShips.length;
-
-          cameraPanX = state.width / 2 - centerX;
-          cameraPanY = state.height / 2 - centerY;
-          cameraZoom = 2.0; // Zoom in!
-          hasCenteredOnHomeworld = true;
+          if (isFinite(centerX) && isFinite(centerY)) {
+            cameraPanX = state.width / 2 - centerX;
+            cameraPanY = state.height / 2 - centerY;
+            cameraZoom = 2.0; // Zoom in!
+            hasCenteredOnHomeworld = true;
+          }
         }
       } else {
-        const hw = state.planets.find(p => p.homeworldOf === localPlayer.id);
+        const hw = (state.planets || []).find(p => p && p.homeworldOf === localPlayer.id
+          && isFinite(p.x) && isFinite(p.y));
         if (hw) {
           cameraPanX = state.width / 2 - hw.x;
           cameraPanY = state.height / 2 - hw.y;
@@ -10235,26 +10251,37 @@ function getPlanetTradeIncomePerMin(planet) {
         creditsDisplay.innerHTML += `<sup style="margin-left: 4px; font-size: 0.7rem; color: #fff; text-shadow: 0 0 3px #fff;">(${maxCredits})</sup>`;
       }
       
-      creditsDisplay.removeAttribute('title');
+      // Click to toggle spending credits on builds/launches/upgrades
+      creditsDisplay.title = myPlayer.useCredits === false
+        ? 'Use Credits: OFF (click to enable spending credits)'
+        : 'Use Credits: ON (click to disable spending credits)';
+      creditsDisplay.style.cursor = 'pointer';
+      creditsDisplay.style.pointerEvents = 'auto';
 
-      if (creditsVal < 0) {
+      // Always show on/off clearly. Debt used to force red for both states, so the
+      // toggle looked broken when balance was negative.
+      const creditsOn = myPlayer.useCredits !== false;
+      if (!creditsOn) {
+        creditsDisplay.style.color = '#888';
+        creditsDisplay.style.textShadow = 'none';
+        creditsDisplay.style.background = 'rgba(255, 255, 255, 0.05)';
+        creditsDisplay.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+        creditsDisplay.style.textDecoration = 'line-through';
+        creditsDisplay.style.opacity = '0.75';
+      } else if (creditsVal < 0) {
         creditsDisplay.style.color = '#ff3333';
         creditsDisplay.style.textShadow = '0 0 5px #ff3333';
         creditsDisplay.style.background = 'rgba(255, 51, 51, 0.15)';
         creditsDisplay.style.borderColor = '#ff3333';
         creditsDisplay.style.textDecoration = 'none';
-      } else if (myPlayer.useCredits !== false) {
+        creditsDisplay.style.opacity = '1';
+      } else {
         creditsDisplay.style.color = '#ffeb3b';
         creditsDisplay.style.textShadow = '0 0 5px #ffeb3b';
         creditsDisplay.style.background = 'rgba(255, 235, 59, 0.15)';
         creditsDisplay.style.borderColor = '#ffeb3b';
         creditsDisplay.style.textDecoration = 'none';
-      } else {
-        creditsDisplay.style.color = '#888';
-        creditsDisplay.style.textShadow = 'none';
-        creditsDisplay.style.background = 'rgba(255, 255, 255, 0.05)';
-        creditsDisplay.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-        creditsDisplay.style.textDecoration = 'none';
+        creditsDisplay.style.opacity = '1';
       }
     }
 
@@ -11451,6 +11478,67 @@ function getPlanetTradeIncomePerMin(planet) {
     return false;
   }
 
+  /**
+   * Find a friendly financing planet for a cruiser upgrade (mirrors server upgradeCruiser).
+   * Uses gravity well + spendable credits (respects Use Credits toggle), not a tight dock radius.
+   */
+  function findCruiserUpgradeFinancingPlanet(ship, cost) {
+    if (!serverState || !localPlayer || !ship) return null;
+    const myPlayer = serverState.players ? serverState.players.find(pl => pl.id === localPlayer.id) : null;
+    // Match server: 0 when Use Credits is off; otherwise debt-floor headroom
+    const creditsAvailable = getSpendableCredits(myPlayer);
+    let closestPlanet = null;
+    let closestDistSq = Infinity;
+
+    for (const p of serverState.planets) {
+      if (p.ownerId !== localPlayer.id || p.dead) continue;
+      if ((p.ships + creditsAvailable) < cost) continue;
+
+      const techBonus = 0.01 * Math.sqrt((myPlayer && myPlayer.techScore) || localPlayer.techScore || 0);
+      const expBonus = 0.01 * Math.sqrt((myPlayer && myPlayer.expScore) || localPlayer.expScore || 0);
+      let baseRadius = (p.maxShips || 0) * 1.5;
+      if (p.isMilitary && p.ships >= p.maxShips) {
+        baseRadius *= 1.5;
+      }
+      if (p.focusMode === 'garrison' && p.ships >= p.maxShips) {
+        baseRadius += (p.ships / 2);
+      }
+      const gravityRadius = baseRadius * (1 + techBonus + expBonus);
+      const pct = hazardSensorReductionPct(p.x, p.y, p.ownerId);
+      const effGravity = Math.max(10, gravityRadius * pct);
+
+      const dx = ship.x - p.x;
+      const dy = ship.y - p.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > effGravity * effGravity) continue;
+
+      // Garrison full-well ships only finance when ship is within 25px, unless credits alone cover cost
+      const isSuchGarrisonWorld = (p.isMilitary || p.focusMode === 'garrison') && (p.ships >= p.maxShips * 2 - 10);
+      const hasEnoughCredits = creditsAvailable >= cost;
+      if (isSuchGarrisonWorld && distSq > 25 * 25 && !hasEnoughCredits) {
+        continue;
+      }
+
+      if (distSq < closestDistSq) {
+        closestDistSq = distSq;
+        closestPlanet = p;
+      }
+    }
+    return closestPlanet;
+  }
+
+  function canAffordCruiserUpgrade(ship, cost) {
+    if (!ship) return false;
+    if ((ship.upgradeTokens || 0) > 0) return true;
+    const planet = findCruiserUpgradeFinancingPlanet(ship, cost);
+    if (!planet) return false;
+    const myPlayer = serverState && localPlayer
+      ? serverState.players.find(pl => pl.id === localPlayer.id)
+      : null;
+    const creditsAvailable = getSpendableCredits(myPlayer);
+    return ((planet.ships || 0) + creditsAvailable) >= cost;
+  }
+
   function getSelectedCruiserUpgradeQualifiers() {
     if (!serverState || !localPlayer) return null;
     if (selectedShips.length !== 1) return null;
@@ -11480,47 +11568,7 @@ function getPlanetTradeIncomePerMin(planet) {
     
     if (minCost === Infinity) return null;
 
-    const myPlayer = serverState.players.find(pl => pl.id === localPlayer.id);
-    const creditsAvailable = getCreditsAvailableForConfig(myPlayer);
-
-    let closestPlanet = null;
-    let closestDistSq = Infinity;
-
-    for (const p of serverState.planets) {
-      if (p.ownerId === localPlayer.id && (p.ships + creditsAvailable) >= minCost) {
-        const techBonus = 0.01 * Math.sqrt(localPlayer.techScore || 0);
-        const expBonus = 0.01 * Math.sqrt(localPlayer.expScore || 0);
-        let baseRadius = p.maxShips * 1.5;
-        if (p.isMilitary && p.ships >= p.maxShips) {
-          baseRadius *= 1.5;
-        }
-        if (p.focusMode === 'garrison' && p.ships >= p.maxShips) {
-          baseRadius += (p.ships / 2);
-        }
-        const gravityRadius = baseRadius * (1 + techBonus + expBonus);
-        const pct = hazardSensorReductionPct(p.x, p.y, p.ownerId);
-        const effGravity = Math.max(10, gravityRadius * pct);
-
-        const dx = ship.x - p.x;
-        const dy = ship.y - p.y;
-        const distSq = dx * dx + dy * dy;
-        if (distSq <= effGravity * effGravity) {
-          // Rule: Limit such a garrison world from paying upgrade costs unless the upgrading ship is within 25px of the garrison world.
-          // Exception: If the player has enough credits to cover the cost of the upgrade.
-          const isSuchGarrisonWorld = (p.isMilitary || p.focusMode === 'garrison') && (p.ships >= p.maxShips * 2 - 10);
-          const hasEnoughCredits = creditsAvailable >= minCost;
-          if (isSuchGarrisonWorld && distSq > 25 * 25 && !hasEnoughCredits) {
-            continue;
-          }
-          
-          if (distSq < closestDistSq) {
-            closestDistSq = distSq;
-            closestPlanet = p;
-          }
-        }
-      }
-    }
-
+    const closestPlanet = findCruiserUpgradeFinancingPlanet(ship, minCost);
     if (closestPlanet) {
       return { ship, planet: closestPlanet };
     }
@@ -13375,20 +13423,8 @@ function getPlanetTradeIncomePerMin(planet) {
           } else if (isPlanet) {
             if (creditsPay < uCost) return;
           } else {
-            // Cruiser upgrades draw ships from a nearby friendly dock when available
-            let dockShips = 0;
-            if (serverState && serverState.planets && localPlayer) {
-              for (const p of serverState.planets) {
-                if (!p || p.ownerId !== localPlayer.id) continue;
-                const gr = (p.radius || 20) + 80;
-                const dx = (p.x || 0) - (entity.x || 0);
-                const dy = (p.y || 0) - (entity.y || 0);
-                if (dx * dx + dy * dy <= gr * gr) {
-                  dockShips = Math.max(dockShips, p.ships || 0);
-                }
-              }
-            }
-            if (dockShips + creditsPay < uCost) return;
+            // Match server: finance from gravity-well planet ships + spendable credits
+            if (!canAffordCruiserUpgrade(entity, uCost)) return;
           }
           if (isPlanet) {
             socket.emit('upgradePlanet', { planetId: entity.id, type });
@@ -14167,7 +14203,20 @@ function getPlanetTradeIncomePerMin(planet) {
 
   const btnCreditsDisplay = document.getElementById('player-credits-display');
   if (btnCreditsDisplay) {
+    btnCreditsDisplay.style.cursor = 'pointer';
+    btnCreditsDisplay.style.pointerEvents = 'auto';
     bindActionClick(btnCreditsDisplay, (e) => {
+      // Optimistic flip so the button reacts even before the next packet
+      if (serverState && localPlayer && serverState.players) {
+        const p = serverState.players.find(pl => pl.id === localPlayer.id);
+        if (p) {
+          p.useCredits = p.useCredits === false;
+          // Refresh HUD chrome immediately
+          if (typeof updateUI === 'function') {
+            try { updateUI(); } catch (_) { /* updateUI may not be ready yet */ }
+          }
+        }
+      }
       socket.emit('toggleUseCredits');
     });
 
@@ -14361,17 +14410,11 @@ function getPlanetTradeIncomePerMin(planet) {
         const uCostClick = isPlanet ? getUpgradeCostForShip(entity, type) * 3 : getUpgradeCostForShip(entity, type);
         const myPlayerClick = (serverState && localPlayer) ? serverState.players.find(p => p.id === localPlayer.id) : null;
         const creditsAvailClick = getSpendableCredits(myPlayerClick);
-        const entityShipsClick = isPlanet
-          ? 0
-          : (() => {
-              const dock = (serverState && serverState.planets)
-                ? serverState.planets.find(p => p && entity && Math.hypot((p.x || 0) - (entity.x || 0), (p.y || 0) - (entity.y || 0)) < (p.radius || 0) + 60 && p.ownerId === localPlayer.id)
-                : null;
-              return dock ? (dock.ships || 0) : 0;
-            })();
+        // Cruisers: same financing rule as server (gravity-well planet + spendable credits).
+        // Do not use a tight dock radius — that silently blocked upgrades at the edge of a well.
         const canAffordClick = isPlanet
           ? (creditsAvailClick >= uCostClick)
-          : ((entityShipsClick + creditsAvailClick) >= uCostClick);
+          : canAffordCruiserUpgrade(entity, uCostClick);
 
         if (currentVal < 5 && nextLevel <= maxIndividualLevel && (totalUpgrades + 1) <= maxTotalUpgrades && shieldCheck && typeCapCheck && canAffordClick) {
           const socketType = upgradeToSocketTypeMap[type] || type;
@@ -14383,6 +14426,19 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         } else {
           console.log(`[Upgrade Click Rejected] Limits failed. type: ${type}, currentVal: ${currentVal}, nextLevel: ${nextLevel}, maxLevel: ${maxIndividualLevel}, totalUpgrades: ${totalUpgrades}, maxTotalUpgrades: ${maxTotalUpgrades}, typeCapCheck: ${typeCapCheck}, canAfford: ${canAffordClick}`);
+          if (!canAffordClick && !isPlanet) {
+            floatingAnimations.push({
+              text: 'Cannot afford upgrade (ships + credits)',
+              type: 'upgrade_fail',
+              age: 0,
+              duration: 2.5,
+              x: entity.x,
+              y: entity.y,
+              startX: entity.x,
+              startY: entity.y,
+              color: '#ff6666'
+            });
+          }
         }
         upgradeModeActive = false;
       }
@@ -15076,6 +15132,50 @@ function getPlanetTradeIncomePerMin(planet) {
     return lines;
   }
 
+  /** Race bomb resource for special-bomb bonuses (matches Ship.getBombResourceKey). */
+  function getBombResourceKeyClient(hs) {
+    const style = hs.cruiserStyle || (hs.ownerId && serverState && serverState.players
+      ? (serverState.players.find(pl => pl.id === hs.ownerId)?.cruiserStyle)
+      : null);
+    if (style === 'Romulan' || style === 'Gorn') return 'antimatter';
+    if (style === 'Tholian' || style === 'Lyran') return 'dilithium';
+    return 'merculite';
+  }
+
+  /**
+   * Special bomb attack/range bonus while specialbombs > 0.
+   * 3 + 3√(player stockpile of race bomb resource). Was flat 10.
+   */
+  function getSpecialBombBonusClient(hs) {
+    if (!hs || !(hs.specialbombs > 0) || !serverState) return 0;
+    const owner = hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
+    const key = getBombResourceKeyClient(hs);
+    const stock = owner && owner.resources ? Math.max(0, owner.resources[key] || 0) : 0;
+    return 3 + 3 * Math.sqrt(stock);
+  }
+
+  /**
+   * Special fuel speed bonus while specialfuel > 0.
+   * 3 + 3√(player deuterium stockpile). Was flat 10.
+   */
+  function getSpecialFuelSpeedBonusClient(hs) {
+    if (!hs || !(hs.specialfuel > 0) || !serverState) return 0;
+    const owner = hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
+    const stock = owner && owner.resources ? Math.max(0, owner.resources.deuterium || 0) : 0;
+    return 3 + 3 * Math.sqrt(stock);
+  }
+
+  /**
+   * Special duranium deflection bonus while specialduranium > 0.
+   * 3 + 3√(player duranium stockpile). Was flat 10.
+   */
+  function getSpecialDuraniumBonusClient(hs) {
+    if (!hs || !(hs.specialduranium > 0) || !serverState) return 0;
+    const owner = hs.ownerId ? serverState.players.find(pl => pl.id === hs.ownerId) : null;
+    const stock = owner && owner.resources ? Math.max(0, owner.resources.duranium || 0) : 0;
+    return 3 + 3 * Math.sqrt(stock);
+  }
+
   function getCruiserCloseupStatLines(hs) {
     if (!hs || !serverState) return [];
     const lines = [];
@@ -15143,8 +15243,8 @@ function getPlanetTradeIncomePerMin(planet) {
     const shipExpBonus = Math.sqrt(shipExp) + (hs.commandPoints || 0);
     let shrugChance = Math.floor(hs.maxHealth + (techBonus + expBonus + shipExpBonus));
     if ((hs.bombs || 0) < 1) shrugChance = Math.floor(shrugChance / 2);
-    if (hs.specialduranium && hs.specialduranium > 0) shrugChance += 10;
-    shrugChance = Math.min(90, shrugChance);
+    if (hs.specialduranium && hs.specialduranium > 0) shrugChance += getSpecialDuraniumBonusClient(hs);
+    shrugChance = Math.min(90, Math.floor(shrugChance));
     const maxBombs = getMaxBombs(hs);
     lines.push({
       text: `Muni ${(hs.bombs || 0).toFixed(1)}/${maxBombs.toFixed(1)}  Defl ${shrugChance}%`,
@@ -15160,7 +15260,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (hs.bombs > 0) effectiveRange += baseDogfightRange * 0.10;
     effectiveRange = Math.floor(effectiveRange * (1 + targetingRangeBonus));
     if (hs.supply_ship && hs.supply_ship > 0) effectiveRange = Math.max(5, effectiveRange - hs.supply_ship * 5);
-    if (hs.specialbombs && hs.specialbombs > 0) effectiveRange += 10;
+    if (hs.specialbombs && hs.specialbombs > 0) effectiveRange += getSpecialBombBonusClient(hs);
     if (hs.package === 'brute') effectiveRange *= 0.5;
     else if (hs.package === 'sniper') effectiveRange *= 1.5;
     effectiveRange = Math.floor(effectiveRange);
@@ -15179,7 +15279,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
     let hitChanceValue = 10 + targetingBonus + bombAccuracyBonus + techBonus + expBonus + shipExpBonus;
     if (hs.supply_ship && hs.supply_ship > 0) hitChanceValue -= hs.supply_ship * 5;
-    if (hs.specialbombs && hs.specialbombs > 0) hitChanceValue += 10;
+    if (hs.specialbombs && hs.specialbombs > 0) hitChanceValue += getSpecialBombBonusClient(hs);
     const hitChance = Math.round(Math.max(10.0, hitChanceValue));
     let volleySizeVal = Math.max(1, Math.floor((hs.maxHealth + hs.health) / 6));
     const cap = Math.floor(hs.health - 2);
@@ -15506,14 +15606,11 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           const creditsForPayment = getSpendableCredits(myPlayer);
-          // Planet upgrades are credit-only; cruisers can pay with docked/resource ships + credits
-          const entityResourceShips = isPlanet
-            ? 0
-            : (upgradeQual && upgradeQual.planet ? (upgradeQual.planet.ships || 0) : (entity.ships || 0));
-          // When credits are off: no credit payment (and no debt). Unaffordable → disabled.
+          // Planet upgrades are credit-only; cruisers finance from gravity-well planet ships + spendable credits
+          // (same rule as server / click handler — not a tight dock radius).
           const canAfford = hasTokens || (isPlanet
             ? (creditsForPayment >= uCost)
-            : ((entityResourceShips + creditsForPayment) >= uCost));
+            : canAffordCruiserUpgrade(entity, uCost));
           
           // Gray out unavailable upgrades (galaxy type cap, capacity, cost, etc.)
           if (!canAfford || !displayUpgrade) {
@@ -16004,19 +16101,26 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (isNaN(cameraPanX) || !isFinite(cameraPanX)) cameraPanX = 0;
     if (isNaN(cameraPanY) || !isFinite(cameraPanY)) cameraPanY = 0;
-    if (isNaN(cameraZoom) || !isFinite(cameraZoom)) cameraZoom = 1;
+    if (isNaN(cameraZoom) || !isFinite(cameraZoom) || cameraZoom <= 0) cameraZoom = 1;
 
-    const mapWidth = serverState ? (serverState.width || 1920) : 1920;
-    const mapHeight = serverState ? (serverState.height || 1620) : 1620;
-    const scaleX = canvas.width / mapWidth;
-    const scaleY = canvas.height / mapHeight;
-    const baseScale = Math.min(scaleX, scaleY);
-    const finalScale = baseScale * cameraZoom;
+    // Guard map dims — 0/NaN width makes baseScale Infinite and blows up the camera transform
+    let mapWidth = serverState ? (serverState.width || 1920) : 1920;
+    let mapHeight = serverState ? (serverState.height || 1620) : 1620;
+    if (!isFinite(mapWidth) || mapWidth <= 0) mapWidth = 1920;
+    if (!isFinite(mapHeight) || mapHeight <= 0) mapHeight = 1620;
+    const canvasW = (canvas.width > 0 && isFinite(canvas.width)) ? canvas.width : 1;
+    const canvasH = (canvas.height > 0 && isFinite(canvas.height)) ? canvas.height : 1;
+    const scaleX = canvasW / mapWidth;
+    const scaleY = canvasH / mapHeight;
+    let baseScale = Math.min(scaleX, scaleY);
+    if (!isFinite(baseScale) || baseScale <= 0) baseScale = 1;
+    let finalScale = baseScale * cameraZoom;
+    if (!isFinite(finalScale) || finalScale <= 0) finalScale = baseScale;
     const centerServerX = mapWidth / 2 - cameraPanX;
     const centerServerY = mapHeight / 2 - cameraPanY;
 
-    const viewW = canvas.width / finalScale;
-    const viewH = canvas.height / finalScale;
+    const viewW = canvasW / finalScale;
+    const viewH = canvasH / finalScale;
     const viewMinX = centerServerX - viewW / 2 - 50;
     const viewMaxX = centerServerX + viewW / 2 + 50;
     const viewMinY = centerServerY - viewH / 2 - 50;
@@ -16029,9 +16133,19 @@ function getPlanetTradeIncomePerMin(planet) {
     const strategicView = finalScale < 0.28;     // multi-system view
     const detailView = finalScale >= 0.45;      // labels, wells, full ship art
 
+    /** Skip createLinearGradient when any endpoint is non-finite (throws TypeError). */
+    function safeLinearGradient(c, x0, y0, x1, y1) {
+      if (![x0, y0, x1, y1].every(v => typeof v === 'number' && isFinite(v))) return null;
+      return c.createLinearGradient(x0, y0, x1, y1);
+    }
+
     ctx.save();
     try {
-      ctx.translate(canvas.width / 2, canvas.height / 2);
+      if (!isFinite(centerServerX) || !isFinite(centerServerY) || !isFinite(finalScale)) {
+        ctx.restore();
+        return;
+      }
+      ctx.translate(canvasW / 2, canvasH / 2);
       ctx.scale(finalScale, finalScale);
       ctx.translate(-centerServerX, -centerServerY);
 
@@ -16364,28 +16478,32 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.lineTo(tx2, ty2);
             ctx.closePath();
             
-            const grad = ctx.createLinearGradient(sx, sy, tx, ty);
-            grad.addColorStop(0, `rgba(255, 235, 59, 0.05)`);
-            grad.addColorStop(0.3, `rgba(255, 235, 59, ${alpha * 0.7})`);
-            grad.addColorStop(1, `rgba(255, 235, 59, ${alpha})`);
-            ctx.fillStyle = grad;
-            ctx.fill();
-            
-            ctx.strokeStyle = `rgba(255, 255, 200, ${alpha * 0.8})`;
-            ctx.lineWidth = 1 + Math.random() * 1.5;
-            ctx.beginPath();
-            ctx.moveTo(sx, sy);
-            ctx.lineTo(tx, ty);
-            ctx.stroke();
-            
-            ctx.strokeStyle = `rgba(255, 235, 59, ${alpha * 0.4})`;
-            ctx.lineWidth = 0.8;
-            ctx.beginPath();
-            ctx.moveTo(sx, sy);
-            ctx.lineTo(tx1, ty1);
-            ctx.moveTo(sx, sy);
-            ctx.lineTo(tx2, ty2);
-            ctx.stroke();
+            if ([sx, sy, tx, ty].every(v => typeof v === 'number' && isFinite(v))) {
+              const grad = safeLinearGradient(ctx, sx, sy, tx, ty);
+              if (grad) {
+                grad.addColorStop(0, `rgba(255, 235, 59, 0.05)`);
+                grad.addColorStop(0.3, `rgba(255, 235, 59, ${alpha * 0.7})`);
+                grad.addColorStop(1, `rgba(255, 235, 59, ${alpha})`);
+                ctx.fillStyle = grad;
+                ctx.fill();
+              }
+              
+              ctx.strokeStyle = `rgba(255, 255, 200, ${alpha * 0.8})`;
+              ctx.lineWidth = 1 + Math.random() * 1.5;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx, ty);
+              ctx.stroke();
+              
+              ctx.strokeStyle = `rgba(255, 235, 59, ${alpha * 0.4})`;
+              ctx.lineWidth = 0.8;
+              ctx.beginPath();
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx1, ty1);
+              ctx.moveTo(sx, sy);
+              ctx.lineTo(tx2, ty2);
+              ctx.stroke();
+            }
             
             ctx.restore();
           }
@@ -16413,16 +16531,26 @@ function getPlanetTradeIncomePerMin(planet) {
             let source = findServerShip(shipId);
             if (!source) source = findServerPlanet(shipId);
             if (source) {
+              // Prefer anomaly coords; fall back to planet (post-completion / sticky stubs can drop x,y)
+              let tx = (p.anomaly.x != null && isFinite(p.anomaly.x)) ? p.anomaly.x : p.x;
+              let ty = (p.anomaly.y != null && isFinite(p.anomaly.y)) ? p.anomaly.y : p.y;
+              let sx = source.x;
+              let sy = source.y;
+              // Prefer display pose for cruisers so beam matches what the player sees
+              if (source.isCruiser || source.isAmoeba) {
+                const dpos = getShipDisplayPos(source);
+                if (dpos && isFinite(dpos.x) && isFinite(dpos.y)) {
+                  sx = dpos.x;
+                  sy = dpos.y;
+                }
+              }
+              if (![sx, sy, tx, ty].every(v => typeof v === 'number' && isFinite(v))) {
+                continue; // incomplete packet / removed deep-space anomaly
+              }
               anyBeingResearched = true;
               if (p.anomaly.completing) {
                 anyCompleting = true;
               }
-              // Target coordinates (anomaly center)
-              const tx = p.anomaly.x;
-              const ty = p.anomaly.y;
-              // Source coordinates (cruiser or planet center)
-              const sx = source.x;
-              const sy = source.y;
               
               // Angle from source to anomaly
               const angle = Math.atan2(ty - sy, tx - sx);
@@ -16450,12 +16578,14 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(tx2, ty2);
               ctx.closePath();
               
-              const grad = ctx.createLinearGradient(sx, sy, tx, ty);
-              grad.addColorStop(0, `rgba(0, 255, 100, 0.05)`);
-              grad.addColorStop(0.3, `rgba(0, 255, 100, ${alpha * 0.7})`);
-              grad.addColorStop(1, `rgba(0, 255, 100, ${alpha})`);
-              ctx.fillStyle = grad;
-              ctx.fill();
+              const grad = safeLinearGradient(ctx, sx, sy, tx, ty);
+              if (grad) {
+                grad.addColorStop(0, `rgba(0, 255, 100, 0.05)`);
+                grad.addColorStop(0.3, `rgba(0, 255, 100, ${alpha * 0.7})`);
+                grad.addColorStop(1, `rgba(0, 255, 100, ${alpha})`);
+                ctx.fillStyle = grad;
+                ctx.fill();
+              }
               
               // Draw some shimmery lines/particles inside the cone
               ctx.strokeStyle = `rgba(100, 255, 180, ${alpha * 0.8})`;
@@ -16516,28 +16646,32 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(tx2, ty2);
               ctx.closePath();
               
-              const grad = ctx.createLinearGradient(sx, sy, tx, ty);
-              grad.addColorStop(0, `rgba(0, 255, 100, 0.05)`);
-              grad.addColorStop(0.3, `rgba(0, 255, 100, ${alpha * 0.7})`);
-              grad.addColorStop(1, `rgba(0, 255, 100, ${alpha})`);
-              ctx.fillStyle = grad;
-              ctx.fill();
-              
-              ctx.strokeStyle = `rgba(100, 255, 180, ${alpha * 0.8})`;
-              ctx.lineWidth = 1 + Math.random() * 1.5;
-              ctx.beginPath();
-              ctx.moveTo(sx, sy);
-              ctx.lineTo(tx, ty);
-              ctx.stroke();
-              
-              ctx.strokeStyle = `rgba(0, 255, 100, ${alpha * 0.4})`;
-              ctx.lineWidth = 0.8;
-              ctx.beginPath();
-              ctx.moveTo(sx, sy);
-              ctx.lineTo(tx1, ty1);
-              ctx.moveTo(sx, sy);
-              ctx.lineTo(tx2, ty2);
-              ctx.stroke();
+              if ([sx, sy, tx, ty].every(v => typeof v === 'number' && isFinite(v))) {
+                const grad = safeLinearGradient(ctx, sx, sy, tx, ty);
+                if (grad) {
+                  grad.addColorStop(0, `rgba(0, 255, 100, 0.05)`);
+                  grad.addColorStop(0.3, `rgba(0, 255, 100, ${alpha * 0.7})`);
+                  grad.addColorStop(1, `rgba(0, 255, 100, ${alpha})`);
+                  ctx.fillStyle = grad;
+                  ctx.fill();
+                }
+                
+                ctx.strokeStyle = `rgba(100, 255, 180, ${alpha * 0.8})`;
+                ctx.lineWidth = 1 + Math.random() * 1.5;
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(tx, ty);
+                ctx.stroke();
+                
+                ctx.strokeStyle = `rgba(0, 255, 100, ${alpha * 0.4})`;
+                ctx.lineWidth = 0.8;
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(tx1, ty1);
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(tx2, ty2);
+                ctx.stroke();
+              }
               
               ctx.restore();
             }
@@ -16578,12 +16712,17 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(tx1, ty1);
               ctx.lineTo(tx2, ty2);
               ctx.closePath();
-              const grad = ctx.createLinearGradient(sx, sy, tx, ty);
-              grad.addColorStop(0, `rgba(10, 60, 20, 0.05)`);
-              grad.addColorStop(0.3, `rgba(20, 100, 35, ${alpha * 0.7})`);
-              grad.addColorStop(1, `rgba(15, 80, 25, ${alpha})`);
-              ctx.fillStyle = grad;
-              ctx.fill();
+              const grad = safeLinearGradient(ctx, sx, sy, tx, ty);
+
+              if (grad) {
+  
+                grad.addColorStop(0, `rgba(10, 60, 20, 0.05)`);
+                grad.addColorStop(0.3, `rgba(20, 100, 35, ${alpha * 0.7})`);
+                grad.addColorStop(1, `rgba(15, 80, 25, ${alpha})`);
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+              }
               ctx.strokeStyle = `rgba(160, 220, 150, ${alpha * 0.8})`;
               ctx.lineWidth = 1 + Math.random() * 1.5;
               ctx.beginPath();
@@ -16644,12 +16783,17 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(tx2, ty2);
               ctx.closePath();
 
-              const grad = ctx.createLinearGradient(sx, sy, tx, ty);
-              grad.addColorStop(0, `rgba(186, 85, 211, 0.05)`);
-              grad.addColorStop(0.3, `rgba(186, 85, 211, ${alpha * 0.7})`);
-              grad.addColorStop(1, `rgba(186, 85, 211, ${alpha})`);
-              ctx.fillStyle = grad;
-              ctx.fill();
+              const grad = safeLinearGradient(ctx, sx, sy, tx, ty);
+
+              if (grad) {
+  
+                grad.addColorStop(0, `rgba(186, 85, 211, 0.05)`);
+                grad.addColorStop(0.3, `rgba(186, 85, 211, ${alpha * 0.7})`);
+                grad.addColorStop(1, `rgba(186, 85, 211, ${alpha})`);
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+              }
 
               // Core beam line
               ctx.strokeStyle = `rgba(224, 176, 255, ${alpha * 0.8})`;
@@ -16699,12 +16843,17 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.lineTo(tx2, ty2);
               ctx.closePath();
 
-              const grad = ctx.createLinearGradient(sx, sy, tx, ty);
-              grad.addColorStop(0, `rgba(255, 140, 0, 0.05)`);
-              grad.addColorStop(0.3, `rgba(255, 140, 0, ${alpha * 0.7})`);
-              grad.addColorStop(1, `rgba(255, 140, 0, ${alpha})`);
-              ctx.fillStyle = grad;
-              ctx.fill();
+              const grad = safeLinearGradient(ctx, sx, sy, tx, ty);
+
+              if (grad) {
+  
+                grad.addColorStop(0, `rgba(255, 140, 0, 0.05)`);
+                grad.addColorStop(0.3, `rgba(255, 140, 0, ${alpha * 0.7})`);
+                grad.addColorStop(1, `rgba(255, 140, 0, ${alpha})`);
+                ctx.fillStyle = grad;
+                ctx.fill();
+
+              }
 
               // Core beam line
               ctx.strokeStyle = `rgba(255, 165, 0, ${alpha * 0.8})`;
@@ -16764,12 +16913,17 @@ function getPlanetTradeIncomePerMin(planet) {
                 ctx.lineTo(tx2, ty2);
                 ctx.closePath();
 
-                const grad = ctx.createLinearGradient(sx, sy, tx, ty);
-                grad.addColorStop(0, `rgba(0, 255, 255, 0.05)`);
-                grad.addColorStop(0.3, `rgba(0, 255, 255, ${alpha * 0.7})`);
-                grad.addColorStop(1, `rgba(0, 255, 255, ${alpha})`);
-                ctx.fillStyle = grad;
-                ctx.fill();
+                const grad = safeLinearGradient(ctx, sx, sy, tx, ty);
+
+                if (grad) {
+  
+                  grad.addColorStop(0, `rgba(0, 255, 255, 0.05)`);
+                  grad.addColorStop(0.3, `rgba(0, 255, 255, ${alpha * 0.7})`);
+                  grad.addColorStop(1, `rgba(0, 255, 255, ${alpha})`);
+                  ctx.fillStyle = grad;
+                  ctx.fill();
+
+                }
 
                 // Core beam line
                 ctx.strokeStyle = `rgba(200, 255, 255, ${alpha * 0.8})`;
@@ -17532,10 +17686,19 @@ function getPlanetTradeIncomePerMin(planet) {
         }
 
         if (p.anomaly && !p.anomaly.researched) {
-          const diff = p.anomaly.difficulty;
+          // Sticky FoW / partial packets can omit difficulty — never call .toString() on undefined
+          const diffRaw = p.anomaly.difficulty;
+          const diff = (typeof diffRaw === 'number' && isFinite(diffRaw) && diffRaw > 0)
+            ? diffRaw
+            : 1;
+          const ax0 = (p.anomaly.x != null && isFinite(p.anomaly.x)) ? p.anomaly.x : p.x;
+          const ay0 = (p.anomaly.y != null && isFinite(p.anomaly.y)) ? p.anomaly.y : p.y;
+          if (ax0 == null || ay0 == null || !isFinite(ax0) || !isFinite(ay0)) {
+            // Cannot draw anomaly without a position
+          } else {
           
           // Occasional twinkle: every 4 seconds, flash brightly for 250ms, offset by planet ID
-          const cycleTime = (Date.now() + (p.id ? p.id.toString().charCodeAt(0) * 100 : 0)) % 4000;
+          const cycleTime = (Date.now() + (p.id != null ? String(p.id).charCodeAt(0) * 100 : 0)) % 4000;
           let twinkle = 1.0;
           if (cycleTime < 250) {
             twinkle = 1.0 + Math.sin(cycleTime * Math.PI / 250) * 0.8;
@@ -17566,10 +17729,10 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.lineWidth = 0.8;
             
             ctx.beginPath();
-            ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
-            ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
-            ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
-            ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+            ctx.moveTo(ax0 - lineLength, ay0);
+            ctx.lineTo(ax0 + lineLength, ay0);
+            ctx.moveTo(ax0, ay0 - lineLength);
+            ctx.lineTo(ax0, ay0 + lineLength);
             ctx.stroke();
           } else if (diff < 8) {
             // Tier 2: Glowing Core (Yellow, Medium Pulse + static center dot)
@@ -17581,16 +17744,16 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.lineWidth = 1.0;
             
             ctx.beginPath();
-            ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
-            ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
-            ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
-            ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+            ctx.moveTo(ax0 - lineLength, ay0);
+            ctx.lineTo(ax0 + lineLength, ay0);
+            ctx.moveTo(ax0, ay0 - lineLength);
+            ctx.lineTo(ax0, ay0 + lineLength);
             ctx.stroke();
             
             // Draw center dot
             ctx.fillStyle = anomalyColor;
             ctx.beginPath();
-            ctx.arc(p.anomaly.x, p.anomaly.y, 0.75 * twinkle, 0, Math.PI * 2);
+            ctx.arc(ax0, ay0, 0.75 * twinkle, 0, Math.PI * 2);
             ctx.fill();
           } else if (diff < 13) {
             // Tier 3: Pulsing Nova (Cyan, Medium Pulse + slight rotation over time)
@@ -17602,7 +17765,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.lineWidth = 1.2;
             
             // Apply slight rotation around anomaly center
-            ctx.translate(p.anomaly.x, p.anomaly.y);
+            ctx.translate(ax0, ay0);
             const rotAngle = (Date.now() / 1000) % (Math.PI * 2);
             ctx.rotate(rotAngle * 0.2); // Slow rotation
             
@@ -17622,16 +17785,16 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.lineWidth = 1.4;
             
             ctx.beginPath();
-            ctx.moveTo(p.anomaly.x - lineLength, p.anomaly.y);
-            ctx.lineTo(p.anomaly.x + lineLength, p.anomaly.y);
-            ctx.moveTo(p.anomaly.x, p.anomaly.y - lineLength);
-            ctx.lineTo(p.anomaly.x, p.anomaly.y + lineLength);
+            ctx.moveTo(ax0 - lineLength, ay0);
+            ctx.lineTo(ax0 + lineLength, ay0);
+            ctx.moveTo(ax0, ay0 - lineLength);
+            ctx.lineTo(ax0, ay0 + lineLength);
             ctx.stroke();
             
             // Outer ring
             ctx.strokeStyle = `rgba(255, 109, 0, ${0.4 * twinkle})`;
             ctx.beginPath();
-            ctx.arc(p.anomaly.x, p.anomaly.y, lineLength * 1.5, 0, Math.PI * 2);
+            ctx.arc(ax0, ay0, lineLength * 1.5, 0, Math.PI * 2);
             ctx.stroke();
           } else {
             // Tier 5: Quantum Rift (Magenta, Jittery + electric sparks)
@@ -17640,8 +17803,8 @@ function getPlanetTradeIncomePerMin(planet) {
             const scale = 1.0 + Math.sin(Date.now() / 50) * 0.45;
             const lineLength = 3.5 * scale * twinkle;
             
-            const ax = p.anomaly.x + jitterX;
-            const ay = p.anomaly.y + jitterY;
+            const ax = ax0 + jitterX;
+            const ay = ay0 + jitterY;
             
             ctx.strokeStyle = anomalyColor;
             ctx.shadowColor = anomalyColor;
@@ -17670,14 +17833,21 @@ function getPlanetTradeIncomePerMin(planet) {
           
           ctx.restore();
           
-          if (p.anomaly.difficulty > 0 && p.anomaly.progress > 0) {
-            const progressRatio = Math.max(0, Math.min(1.0, p.anomaly.progress / p.anomaly.difficulty));
+          // progress may be a number or per-player object { playerId: n }
+          let progressVal = 0;
+          if (typeof p.anomaly.progress === 'number' && isFinite(p.anomaly.progress)) {
+            progressVal = p.anomaly.progress;
+          } else if (p.anomaly.progress && typeof p.anomaly.progress === 'object' && localPlayer) {
+            progressVal = p.anomaly.progress[localPlayer.id] || 0;
+          }
+          if (diff > 0 && progressVal > 0) {
+            const progressRatio = Math.max(0, Math.min(1.0, progressVal / diff));
             ctx.save();
             ctx.strokeStyle = anomalyColor;
             ctx.lineWidth = 0.5; // very thin
             ctx.shadowBlur = 0;
             ctx.beginPath();
-            ctx.arc(p.anomaly.x, p.anomaly.y, 7.5, -Math.PI / 2, -Math.PI / 2 + progressRatio * Math.PI * 2);
+            ctx.arc(ax0, ay0, 7.5, -Math.PI / 2, -Math.PI / 2 + progressRatio * Math.PI * 2);
             ctx.stroke();
             ctx.restore();
           }
@@ -17689,8 +17859,9 @@ function getPlanetTradeIncomePerMin(planet) {
           ctx.textAlign = 'left';
           ctx.textBaseline = 'top';
           ctx.shadowBlur = 0;
-          ctx.fillText(diff.toString(), p.anomaly.x + 8, p.anomaly.y + 2);
+          ctx.fillText(String(diff), ax0 + 8, ay0 + 2);
           ctx.restore();
+          } // end valid anomaly position
         }
 
         ctx.shadowBlur = 0;
@@ -19159,9 +19330,9 @@ function getPlanetTradeIncomePerMin(planet) {
               shrugChance = Math.floor(shrugChance / 2);
             }
             if (hs.specialduranium && hs.specialduranium > 0) {
-              shrugChance += 10;
+              shrugChance += getSpecialDuraniumBonusClient(hs);
             }
-            shrugChance = Math.min(90, shrugChance);
+            shrugChance = Math.min(90, Math.floor(shrugChance));
             let deflectionLabel = 'Deflection';
             if (hs.specialduranium && hs.specialduranium > 0) {
               deflectionLabel += '*';
@@ -19197,7 +19368,7 @@ function getPlanetTradeIncomePerMin(planet) {
               effectiveRange = Math.max(5, effectiveRange - hs.supply_ship * 5);
             }
             if (hs.specialbombs && hs.specialbombs > 0) {
-              effectiveRange += 10;
+              effectiveRange += getSpecialBombBonusClient(hs);
             }
             if (hs.package === 'brute') {
               effectiveRange *= 0.5;
@@ -19232,7 +19403,7 @@ function getPlanetTradeIncomePerMin(planet) {
               hitChanceValue -= hs.supply_ship * 5;
             }
             if (hs.specialbombs && hs.specialbombs > 0) {
-              hitChanceValue += 10;
+              hitChanceValue += getSpecialBombBonusClient(hs);
             }
             
             let friendlyGrav = 0;
@@ -22066,12 +22237,17 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.lineTo(tx1, ty1);
             ctx.lineTo(tx2, ty2);
             ctx.closePath();
-            const grad = ctx.createLinearGradient(sx, sy, tx, ty);
-            grad.addColorStop(0, `rgba(10, 60, 20, 0.05)`);
-            grad.addColorStop(0.3, `rgba(20, 100, 35, ${alpha * 0.7})`);
-            grad.addColorStop(1, `rgba(15, 80, 25, ${alpha})`);
-            ctx.fillStyle = grad;
-            ctx.fill();
+            const grad = safeLinearGradient(ctx, sx, sy, tx, ty);
+
+            if (grad) {
+  
+              grad.addColorStop(0, `rgba(10, 60, 20, 0.05)`);
+              grad.addColorStop(0.3, `rgba(20, 100, 35, ${alpha * 0.7})`);
+              grad.addColorStop(1, `rgba(15, 80, 25, ${alpha})`);
+              ctx.fillStyle = grad;
+              ctx.fill();
+
+            }
             ctx.strokeStyle = `rgba(160, 220, 150, ${alpha * 0.85})`;
             ctx.lineWidth = 1.2;
             ctx.beginPath();

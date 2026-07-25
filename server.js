@@ -2096,10 +2096,21 @@ async function bootstrap() {
     });
 
     socket.on('toggleUseCredits', () => {
-      const player = connectedClients.get(socket.id);
-      if (player) {
-        player.useCredits = player.useCredits !== false ? false : true;
+      let player = connectedClients.get(socket.id);
+      // Prefer live game roster (connectedClients can lag after restart rebind)
+      if (player && game && game.allPlayers) {
+        const live = game.allPlayers.find(p => p && p.id === player.id);
+        if (live) {
+          player = live;
+          connectedClients.set(socket.id, live);
+        }
       }
+      if (!player) return;
+      player.useCredits = player.useCredits === false;
+      // Force an immediate full/priority packet so the client button updates promptly
+      socket.needsFullState = true;
+      socket.priorityState = true;
+      console.log(`[toggleUseCredits] ${player.name || player.id} useCredits=${player.useCredits}`);
     });
 
     socket.on('resetAFK', () => {
@@ -2273,7 +2284,7 @@ async function bootstrap() {
           financialVictoryTarget: options && options.financialVictoryTarget !== undefined ? options.financialVictoryTarget : "none",
           graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
           enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false,
-          recordGameReplay: options && options.recordGameReplay !== undefined ? !!options.recordGameReplay : false,
+          recordGameReplay: options && options.recordGameReplay !== undefined ? !!options.recordGameReplay : true,
           aiEntry: options && options.aiEntry !== undefined ? options.aiEntry : 'mid',
           customAiEntryMin: options && options.customAiEntryMin !== undefined ? parseFloat(options.customAiEntryMin) : 5
         };
@@ -2356,7 +2367,7 @@ async function bootstrap() {
           financialVictoryTarget: options && options.financialVictoryTarget !== undefined ? options.financialVictoryTarget : "none",
           graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
           enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false,
-          recordGameReplay: options && options.recordGameReplay !== undefined ? !!options.recordGameReplay : false,
+          recordGameReplay: options && options.recordGameReplay !== undefined ? !!options.recordGameReplay : true,
           aiEntry: options && options.aiEntry !== undefined ? options.aiEntry : 'mid',
           customAiEntryMin: options && options.customAiEntryMin !== undefined ? parseFloat(options.customAiEntryMin) : 5
       };

@@ -442,6 +442,45 @@ export class Ship {
     return Math.max(10, baseSpeed);
   }
 
+  /** Race bomb stockpile resource for special-bomb bonuses. */
+  getBombResourceKey() {
+    const style = this.cruiserStyle || (this.owner ? this.owner.cruiserStyle : null);
+    if (style === 'Romulan' || style === 'Gorn') return 'antimatter';
+    if (style === 'Tholian' || style === 'Lyran') return 'dilithium';
+    return 'merculite';
+  }
+
+  /**
+   * Special bomb attack/range bonus while specialbombs > 0.
+   * Formula: 3 + 3√(player stockpile of race bomb resource). Was flat 10.
+   */
+  getSpecialBombBonus() {
+    if (!(this.specialbombs > 0)) return 0;
+    const key = this.getBombResourceKey();
+    const stock = (this.owner && this.owner.resources) ? Math.max(0, this.owner.resources[key] || 0) : 0;
+    return 3 + 3 * Math.sqrt(stock);
+  }
+
+  /**
+   * Special fuel speed bonus while specialfuel > 0.
+   * Formula: 3 + 3√(player deuterium stockpile). Was flat 10.
+   */
+  getSpecialFuelSpeedBonus() {
+    if (!(this.specialfuel > 0)) return 0;
+    const stock = (this.owner && this.owner.resources) ? Math.max(0, this.owner.resources.deuterium || 0) : 0;
+    return 3 + 3 * Math.sqrt(stock);
+  }
+
+  /**
+   * Special duranium deflection (shrug) bonus while specialduranium > 0.
+   * Formula: 3 + 3√(player duranium stockpile). Was flat 10.
+   */
+  getSpecialDuraniumBonus() {
+    if (!(this.specialduranium > 0)) return 0;
+    const stock = (this.owner && this.owner.resources) ? Math.max(0, this.owner.resources.duranium || 0) : 0;
+    return 3 + 3 * Math.sqrt(stock);
+  }
+
   getMaxSpeed() {
     const speedTechBonus = this.owner ? (0.01 * Math.sqrt(this.owner.techScore || 0)) : 0;
     let maxSp = this.speed * (1 + speedTechBonus);
@@ -455,7 +494,7 @@ export class Ship {
       maxSp = Math.max(5, maxSp - this.supply_ship * 3);
     }
     if (this.specialfuel && this.specialfuel > 0) {
-      maxSp += 10;
+      maxSp += this.getSpecialFuelSpeedBonus();
     }
     if (this.speedModifier) {
       maxSp *= this.speedModifier;
@@ -499,7 +538,7 @@ export class Ship {
       effectiveSpeed = Math.max(5, effectiveSpeed - this.supply_ship * 3);
     }
     if (this.specialfuel && this.specialfuel > 0) {
-      effectiveSpeed += 10;
+      effectiveSpeed += this.getSpecialFuelSpeedBonus();
     }
     const finalSpeedModifier = speedModifier !== null ? speedModifier : this.speedModifier;
     if (finalSpeedModifier) {
@@ -731,7 +770,7 @@ export class Ship {
         hitChance -= this.supply_ship * 0.05;
       }
       if (this.specialbombs && this.specialbombs > 0) {
-        hitChance += 0.10;
+        hitChance += this.getSpecialBombBonus() / 100;
       }
       if (this.bombs <= 0 && this.fuel <= 0) {
         hitChance *= 0.5;
@@ -771,7 +810,7 @@ export class Ship {
         effectiveRange = Math.max(5, effectiveRange - this.supply_ship * 5);
       }
       if (this.specialbombs && this.specialbombs > 0) {
-        effectiveRange += 10;
+        effectiveRange += this.getSpecialBombBonus();
       }
       if (this.package === 'brute') {
         effectiveRange *= 0.5;
@@ -2100,12 +2139,16 @@ export class Ship {
         const minAllowedCredits = this.owner
           ? -Math.floor(this.owner.totalTradeShips || 0)
           : 0;
-        const creditsAvailable = (this.owner && this.owner.credits !== undefined) ? (this.owner.credits - minAllowedCredits) : 0;
+        // Respect Use Credits: when off, finance upgrades with ships only
+        const useCredits = !!(this.owner && this.owner.useCredits !== false);
+        const creditsAvailable = (useCredits && this.owner && this.owner.credits !== undefined)
+          ? (this.owner.credits - minAllowedCredits)
+          : 0;
         if (planet && planet.owner && this.owner && planet.owner.id === this.owner.id && (planet.ships >= 1 || creditsAvailable >= 1)) {
           this.upgradeAccumulator += deltaTime / 1000;
           while (this.upgradeAccumulator >= 0.2 && this.upgradeTimer > 0) {
-            const currentCredits = this.owner.credits || 0;
-            const currentCreditsAvailable = currentCredits - minAllowedCredits;
+            const currentCredits = useCredits ? (this.owner.credits || 0) : 0;
+            const currentCreditsAvailable = useCredits ? (currentCredits - minAllowedCredits) : 0;
             if (currentCreditsAvailable >= 1) {
               this.owner.credits -= 1;
               this.upgradeShipsPaid += 1;
@@ -2432,7 +2475,7 @@ export class Ship {
         effectiveRange = Math.max(5, effectiveRange - this.supply_ship * 5);
       }
       if (this.specialbombs && this.specialbombs > 0) {
-        effectiveRange += 10;
+        effectiveRange += this.getSpecialBombBonus();
       }
       if (this.package === 'brute') {
         effectiveRange *= 0.5;
@@ -2467,7 +2510,7 @@ export class Ship {
         hitChance -= this.supply_ship * 0.05;
       }
       if (this.specialbombs && this.specialbombs > 0) {
-        hitChance += 0.10;
+        hitChance += this.getSpecialBombBonus() / 100;
       }
     } else {
       const bombBonus = (this.bombs && this.bombs > 0) ? (this.bombs * 3) : 0;
@@ -5875,7 +5918,7 @@ export class Ship {
       effectiveSpeed = Math.max(5, effectiveSpeed - this.supply_ship * 3);
     }
     if (this.specialfuel && this.specialfuel > 0) {
-      effectiveSpeed += 10;
+      effectiveSpeed += this.getSpecialFuelSpeedBonus();
     }
     if (this.speedModifier) {
       effectiveSpeed *= this.speedModifier;
@@ -6609,7 +6652,8 @@ export class Ship {
             shrugChance /= 2;
           }
           if (this.specialduranium && this.specialduranium > 0) {
-            shrugChance += 0.10;
+            // Percent points → probability (same formula as bomb/fuel specials)
+            shrugChance += this.getSpecialDuraniumBonus() / 100;
           }
           shrugChance = Math.min(0.90, shrugChance);
           if (attacker && attacker.isAmoeba) {

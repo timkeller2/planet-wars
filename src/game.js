@@ -8854,9 +8854,11 @@ export class Game {
           const atkTech = Math.sqrt(attackerPlayer.techScore || 0);
 
           // ── Resource boarding bonuses ─────────────────────────────────────
-          // Dilithium: if stock > units×0.01, +10 KR and consume units×0.01 (heavy lasers)
-          // Tritanium: if stock ≥ units×0.01, −10 enemy KR (min 5) and consume (silver armor)
+          // Dilithium: if stock > units×0.01, +KR from stockpile and consume units×0.01 (heavy lasers)
+          // Tritanium: if stock ≥ units×0.01, −opp KR from stockpile (min 5) and consume (silver armor)
+          // Formula: 3 + 3√(stockpile before spend). Was flat 10.
           // Merculite: 25% chance per shot to grenade (+30 KR that attack), 0.01 per grenade
+          const resourceStockBonus = (stock) => 3 + 3 * Math.sqrt(Math.max(0, stock || 0));
           const ensureRes = (player) => {
             if (!player || player.isMonster || player.id === 'monsters') return null;
             if (!player.resources) player.resources = {};
@@ -8876,33 +8878,37 @@ export class Game {
 
           if (defRes && defUnitCount > 0) {
             const dilCost = defUnitCount * 0.01;
-            if ((defRes.dilithium || 0) > dilCost) {
+            const dilStock = defRes.dilithium || 0;
+            if (dilStock > dilCost) {
+              defDilithiumBonus = resourceStockBonus(dilStock);
               defRes.dilithium -= dilCost;
-              defDilithiumBonus = 10;
               defUsesDilithium = true;
             }
             const triCost = defUnitCount * 0.01;
-            if ((defRes.tritanium || 0) >= triCost) {
-              defRes.tritanium -= triCost;
+            const triStock = defRes.tritanium || 0;
+            if (triStock >= triCost) {
+              // Applies to attacker's KR as opp armor (set below)
               defUsesTritanium = true;
+              atkOppArmor = resourceStockBonus(triStock);
+              defRes.tritanium -= triCost;
             }
           }
           if (atkRes && atkUnitCount > 0) {
             const dilCost = atkUnitCount * 0.01;
-            if ((atkRes.dilithium || 0) > dilCost) {
+            const dilStock = atkRes.dilithium || 0;
+            if (dilStock > dilCost) {
+              atkDilithiumBonus = resourceStockBonus(dilStock);
               atkRes.dilithium -= dilCost;
-              atkDilithiumBonus = 10;
               atkUsesDilithium = true;
             }
             const triCost = atkUnitCount * 0.01;
-            if ((atkRes.tritanium || 0) >= triCost) {
-              atkRes.tritanium -= triCost;
+            const triStock = atkRes.tritanium || 0;
+            if (triStock >= triCost) {
               atkUsesTritanium = true;
+              defOppArmor = resourceStockBonus(triStock);
+              atkRes.tritanium -= triCost;
             }
           }
-          // Tritanium armor reduces the *other* side's kill rate (floor 5)
-          if (defUsesTritanium) atkOppArmor = 10;
-          if (atkUsesTritanium) defOppArmor = 10;
 
           const buildKrBreakdown = (base, xp, tech, dilithium, oppArmor) => {
             let total = base + xp + tech + dilithium - oppArmor;
@@ -8912,8 +8918,8 @@ export class Game {
               base,
               xp: Math.round(xp * 10) / 10,
               tech: Math.round(tech * 10) / 10,
-              dilithium,
-              oppArmor,
+              dilithium: Math.round(dilithium * 10) / 10,
+              oppArmor: Math.round(oppArmor * 10) / 10,
               total: Math.round(total * 10) / 10
             };
           };
