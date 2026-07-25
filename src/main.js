@@ -629,6 +629,8 @@ function getPlanetTradeIncomePerMin(planet) {
   let controlGroups = {}; // RTS control groups for fleets/cruisers
   let lastKnownPlanets = {}; // Cache of last-known states for planets under Fog of War
   let lastKnownHazards = {}; // Cache of last-known states for hazards (nebulae, minefields, storms) under Fog of War
+  /** Once the player has seen an unresearched anomaly, keep drawing it even if a bad FoW delta drops it. */
+  let knownAnomaliesByPlanetId = new Map();
 
 
   function resetClientModeFlags() {
@@ -2661,7 +2663,7 @@ function getPlanetTradeIncomePerMin(planet) {
               const planet = serverState ? findServerPlanet(id) : null;
               if (planet) {
                 selectedPlanets = [planet];
-                selectedShips = [];
+                assignSelectedShips([]);
                 const mapWidth = serverState.width || 1920;
                 const mapHeight = serverState.height || 1620;
                 cameraPanX = mapWidth / 2 - planet.x;
@@ -2670,7 +2672,7 @@ function getPlanetTradeIncomePerMin(planet) {
             } else if (type === 'ship') {
               const ship = serverState ? findServerShip(id) : null;
               if (ship) {
-                selectedShips = [ship];
+                assignSelectedShips([ship]);
                 selectedPlanets = [];
                 const mapWidth = serverState.width || 1920;
                 const mapHeight = serverState.height || 1620;
@@ -5087,6 +5089,7 @@ function getPlanetTradeIncomePerMin(planet) {
       clearServerStateMaps();
       lastKnownPlanets = {};
       lastKnownHazards = {};
+      knownAnomaliesByPlanetId = new Map();
       visualProjectiles.clear();
       socket.emit('restartGame', payload);
     } else {
@@ -5400,6 +5403,7 @@ function getPlanetTradeIncomePerMin(planet) {
     clearServerStateMaps();
     lastKnownPlanets = {};
     lastKnownHazards = {};
+    knownAnomaliesByPlanetId = new Map();
     visualProjectiles.clear();
   });
 
@@ -6697,6 +6701,39 @@ function getPlanetTradeIncomePerMin(planet) {
     if (delta === '__DEL__') return undefined;
     if (delta === null || typeof delta !== 'object') return delta;
     
+    // Id-stable entity arrays (planets/ships) from server computeIdArrayDelta
+    if (delta.__byId) {
+      const map = new Map();
+      if (Array.isArray(state)) {
+        for (let i = 0; i < state.length; i++) {
+          const o = state[i];
+          if (o && o.id !== undefined && o.id !== null) map.set(String(o.id), o);
+        }
+      }
+      if (delta.del && delta.del.length) {
+        for (let i = 0; i < delta.del.length; i++) {
+          map.delete(String(delta.del[i]));
+        }
+      }
+      if (delta.set) {
+        for (const idKey of Object.keys(delta.set)) {
+          const patch = delta.set[idKey];
+          const existing = map.get(idKey);
+          if (!existing) {
+            const next = applyDelta({}, patch);
+            if (next && (next.id === undefined || next.id === null)) {
+              const asNum = Number(idKey);
+              next.id = (String(asNum) === idKey && !Number.isNaN(asNum)) ? asNum : idKey;
+            }
+            map.set(idKey, next);
+          } else {
+            map.set(idKey, applyDelta(existing, patch));
+          }
+        }
+      }
+      return Array.from(map.values());
+    }
+
     if (Array.isArray(delta)) {
       if (!Array.isArray(state)) state = [];
       for (let i = 0; i < delta.length; i++) {
@@ -6784,6 +6821,7 @@ function getPlanetTradeIncomePerMin(planet) {
       resetClientModeFlags();
       lastKnownPlanets = {};
       lastKnownHazards = {};
+      knownAnomaliesByPlanetId = new Map();
       clientPlanetOwners = {};
       // Drop any stale FoW tile map until this packet's exploredCells is applied
       if (serverState && serverState !== state) {
@@ -6799,7 +6837,9 @@ function getPlanetTradeIncomePerMin(planet) {
       const myPlayer = state.players.find(p => p.id === localPlayer.id);
       if (myPlayer) {
         if (myPlayer.lastKnownPlanets) {
-          lastKnownPlanets = { ...myPlayer.lastKnownPlanets };
+          // Merge — never replace wholesale. Server lastKnown only tracks currently
+          // fully-visible worlds; replacing wiped anomaly memory for fogged planets.
+          lastKnownPlanets = { ...lastKnownPlanets, ...myPlayer.lastKnownPlanets };
         }
         if (myPlayer.lastBundleSaleTime !== undefined) {
           if (clientLastBundleSaleTime !== -1 && myPlayer.lastBundleSaleTime !== clientLastBundleSaleTime) {
@@ -7126,8 +7166,63 @@ function getPlanetTradeIncomePerMin(planet) {
 
     if (state.planets) {
       for (const p of state.planets) {
+        if (!p) continue;
         if (!p.inFog || p.permanentlyTracked) {
           lastKnownPlanets[p.id] = { ...p };
+        }
+        // Remember anomalies the moment we see them; clear when researched
+        if (p.anomaly && !p.anomaly.researched) {
+          knownAnomaliesByPlanetId.set(String(p.id), {
+            id: p.id,
+            x: p.x,
+            y: p.y,
+            radius: p.radius || 0,
+            name: p.name,
+            isDeepSpaceAnomaly: !!p.isDeepSpaceAnomaly,
+            anomaly: { ...p.anomaly }
+          });
+          // Fogged discovered worlds with anomalies stay in last-known for tooltips
+          if (p.inFog && !lastKnownPlanets[p.id]) {
+            lastKnownPlanets[p.id] = { ...p };
+          } else if (p.inFog && lastKnownPlanets[p.id] && !lastKnownPlanets[p.id].anomaly) {
+            lastKnownPlanets[p.id] = { ...lastKnownPlanets[p.id], anomaly: { ...p.anomaly } };
+          }
+        } else if (p.anomaly && p.anomaly.researched) {
+          knownAnomaliesByPlanetId.delete(String(p.id));
+        }
+      }
+
+      // Re-inject any known unresearched anomalies missing from this packet
+      // (index-delta corruption or accidental FoW drop). Mutating state.planets is OK
+      // after id-based deltas — membership is by id, not array index.
+      if (knownAnomaliesByPlanetId.size > 0) {
+        const have = new Set();
+        for (const p of state.planets) {
+          if (p && p.id != null) have.add(String(p.id));
+        }
+        for (const [idKey, cached] of knownAnomaliesByPlanetId) {
+          if (have.has(idKey)) {
+            const live = state.planets.find(pl => pl && String(pl.id) === idKey);
+            if (live && (!live.anomaly || live.anomaly.researched === true) && cached.anomaly && !cached.anomaly.researched) {
+              live.anomaly = { ...cached.anomaly };
+              if (cached.isDeepSpaceAnomaly) live.isDeepSpaceAnomaly = true;
+            }
+            continue;
+          }
+          state.planets.push({
+            id: cached.id,
+            x: cached.x,
+            y: cached.y,
+            radius: cached.radius || 0,
+            name: cached.name || (cached.isDeepSpaceAnomaly ? 'Deep Space Anomaly' : 'Unknown'),
+            ownerId: null,
+            ships: 0,
+            maxShips: 0,
+            inFog: true,
+            dead: false,
+            isDeepSpaceAnomaly: !!cached.isDeepSpaceAnomaly,
+            anomaly: { ...cached.anomaly }
+          });
         }
       }
     }
@@ -7609,14 +7704,13 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
 
-    // Rebind selection by stable ids (not object refs). Index-based network deltas
-    // can rewrite ships[i] in place when an amoeba enters vision; object refs may
-    // briefly point at the wrong unit, but selectedShipIds stay correct.
+    // Rebind selection by stable ids (not object refs). Network deltas often replace
+    // ship objects (id-keyed merge), so requiring the same reference made a fresh
+    // fleet click lose to the previous cruiser id on the next tick.
     if (state.ships) {
-      // Click handlers may assign selectedShips directly. If the set of ids on
-      // those objects differs from selectedShipIds, treat selectedShips as the
-      // user's new selection (ids on live objects are trustworthy pre-corruption;
-      // post-corruption we rely on selectedShipIds + applyDelta id-clone fix).
+      // Click handlers may assign selectedShips directly. If those objects carry a
+      // different id set than selectedShipIds, adopt the objects when each id is a
+      // live active ship (do NOT require live === s — refs are replaced every packet).
       const idsFromObjects = selectedShips
         .map(s => (s && s.id != null ? s.id : null))
         .filter(id => id != null);
@@ -7624,18 +7718,17 @@ function getPlanetTradeIncomePerMin(planet) {
         const same = idsFromObjects.length === selectedShipIds.length
           && idsFromObjects.every((id, i) => id === selectedShipIds[i]);
         if (!same) {
-          // Prefer objects when each id still maps to a live active ship (fresh click)
           const objectsLookLive = selectedShips.every(s => {
             if (!s || s.id == null) return false;
             const live = findServerShip(s.id);
-            return live && live.active !== false && live === s;
+            return !!(live && live.active !== false);
           });
           if (objectsLookLive || selectedShipIds.length === 0) {
             selectedShipIds = idsFromObjects.slice();
           }
         }
       } else if (selectedShips.length === 0 && selectedShipIds.length > 0) {
-        // Explicit clear via selectedShips = []
+        // Explicit clear via selectedShips = [] / assignSelectedShips([])
         selectedShipIds = [];
       }
 
@@ -7650,7 +7743,7 @@ function getPlanetTradeIncomePerMin(planet) {
           nextIds.push(id);
           continue;
         }
-        // Sticky: keep prior handle matching this id if present
+        // Sticky: keep prior handle matching this id if present (FoW flicker)
         const sticky = selectedShips.find(s => s && s.id === id);
         if (sticky && sticky.active !== false) {
           nextSelected.push(sticky);
@@ -11029,12 +11122,12 @@ function getPlanetTradeIncomePerMin(planet) {
         if (isShift) {
           const isAlreadySelected = selectedShips.some(s => s.id === clickedShip.id);
           if (isAlreadySelected) {
-            selectedShips = selectedShips.filter(s => s.id !== clickedShip.id);
+            assignSelectedShips(selectedShips.filter(s => s.id !== clickedShip.id));
           } else {
-            selectedShips.push(clickedShip);
+            assignSelectedShips([...selectedShips, clickedShip]);
           }
         } else {
-          selectedShips = [clickedShip];
+          assignSelectedShips([clickedShip]);
           selectedPlanets = [];
         }
         return;
@@ -11047,12 +11140,12 @@ function getPlanetTradeIncomePerMin(planet) {
         if (isShift) {
           const isAlreadySelected = selectedShips.some(s => s.id === clickedShip.id);
           if (isAlreadySelected) {
-            selectedShips = selectedShips.filter(s => s.id !== clickedShip.id);
+            assignSelectedShips(selectedShips.filter(s => s.id !== clickedShip.id));
           } else {
-            selectedShips.push(clickedShip);
+            assignSelectedShips([...selectedShips, clickedShip]);
           }
         } else {
-          selectedShips = [clickedShip];
+          assignSelectedShips([clickedShip]);
           selectedPlanets = [];
         }
         return;
@@ -11080,7 +11173,7 @@ function getPlanetTradeIncomePerMin(planet) {
               focusModeActive = false;
             } else {
               selectedPlanets = [p];
-              selectedShips = [];
+              assignSelectedShips([]);
               focusModeActive = true;
             }
             return;
@@ -11122,7 +11215,7 @@ function getPlanetTradeIncomePerMin(planet) {
               cruiserBuildModeActive = !cruiserBuildModeActive;
             } else {
               selectedPlanets = [p];
-              selectedShips = [];
+              assignSelectedShips([]);
               cruiserBuildModeActive = true;
             }
             return;
@@ -11143,13 +11236,13 @@ function getPlanetTradeIncomePerMin(planet) {
               selectedPlanets.push(clickedPlanet);
             } else {
               selectedPlanets = [clickedPlanet];
-              selectedShips = [];
+              assignSelectedShips([]);
             }
           }
         } else {
           if (!isShift) {
             selectedPlanets = [];
-            selectedShips = [];
+            assignSelectedShips([]);
           }
         }
         return;
@@ -11502,17 +11595,21 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     pendingEmptyDeselect = false;
-    selectedShips = [];
-    if (!serverState || !localPlayer) return;
+    const lassoShips = [];
+    if (!serverState || !localPlayer) {
+      assignSelectedShips([]);
+      return;
+    }
 
     for (const ship of serverState.ships) {
       if (ship.ownerId === localPlayer.id && ship.active) {
         const dpos = getShipDisplayPos(ship);
         if (dpos.x >= minX && dpos.x <= maxX && dpos.y >= minY && dpos.y <= maxY) {
-          selectedShips.push(ship);
+          lassoShips.push(ship);
         }
       }
     }
+    assignSelectedShips(lassoShips);
 
     selectedPlanets = [];
     for (const planet of serverState.planets) {
@@ -11549,7 +11646,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (clickedShip) {
       // If friendly cruiser, also select nearby cruisers
       if (clickedShip.ownerId === localPlayer.id && clickedShip.isCruiser) {
-        selectedShips = [];
+        assignSelectedShips([]);
         selectedPlanets = [];
         const origin = getShipDisplayPos(clickedShip);
         for (const ship of serverState.ships) {
@@ -11570,7 +11667,7 @@ function getPlanetTradeIncomePerMin(planet) {
     const clickedPlanet = getPlanetAt(x, y);
     if (clickedPlanet && clickedPlanet.ownerId === localPlayer.id) {
       selectedPlanets = [];
-      selectedShips = [];
+      assignSelectedShips([]);
       for (const planet of serverState.planets) {
         if (planet.ownerId === localPlayer.id) {
           const dx = planet.x - clickedPlanet.x;
@@ -12323,7 +12420,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (e.key === 'Shift') {
       if (isShiftSelectingInHUD) {
         selectedPlanets = selectedPlanets.filter(p => hudSelectedSet.has(`planet-${p.id}`));
-        selectedShips = selectedShips.filter(s => hudSelectedSet.has(`ship-${s.id}`));
+        assignSelectedShips(selectedShips.filter(s => hudSelectedSet.has(`ship-${s.id}`)));
         isShiftSelectingInHUD = false;
         hudSelectedSet.clear();
         updateSelectionTiles();
@@ -12406,13 +12503,13 @@ function getPlanetTradeIncomePerMin(planet) {
           // Set selection based on the area's type
           if (target.type === 'audio') {
             selectedPlanets = [];
-            selectedShips = [];
+            assignSelectedShips([]);
           } else if (target.type === 'planet') {
             selectedPlanets = myPlanets.filter(p => Math.hypot(p.x - target.x, p.y - target.y) <= 600);
-            selectedShips = [];
+            assignSelectedShips([]);
           } else if (target.type === 'ship') {
             selectedPlanets = [];
-            selectedShips = myShips.filter(s => Math.hypot(s.x - target.x, s.y - target.y) <= 600);
+            assignSelectedShips(myShips.filter(s => Math.hypot(s.x - target.x, s.y - target.y) <= 600));
           }
 
           // Pan camera to center on the focused area
@@ -12450,7 +12547,7 @@ function getPlanetTradeIncomePerMin(planet) {
           window.lastFocusedCruiserId = targetShip.id;
           
           selectedPlanets = [];
-          selectedShips = [targetShip];
+          assignSelectedShips([targetShip]);
 
           const mapWidth = serverState.width || 1920;
           const mapHeight = serverState.height || 1620;
@@ -12744,7 +12841,7 @@ function getPlanetTradeIncomePerMin(planet) {
         const group = controlGroups[numKey];
         if (group && ((group.shipIds && group.shipIds.length > 0) || (group.planetIds && group.planetIds.length > 0))) {
           event.preventDefault();
-          selectedShips = [];
+          assignSelectedShips([]);
           selectedPlanets = [];
           
           if (group.shipIds && group.shipIds.length > 0 && serverState && serverState.ships) {

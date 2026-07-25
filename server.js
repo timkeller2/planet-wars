@@ -145,20 +145,85 @@ async function bootstrap() {
     process.exit(0);
   });
 
+  /** True if arr looks like a list of entities with stable `id` (planets, ships, …). */
+  function isIdObjectArray(arr) {
+    if (!Array.isArray(arr) || arr.length === 0) return false;
+    let seen = 0;
+    for (let i = 0; i < arr.length && seen < 3; i++) {
+      const el = arr[i];
+      if (el == null) continue;
+      if (typeof el !== 'object' || el.id === undefined || el.id === null) return false;
+      seen++;
+    }
+    return seen > 0;
+  }
+
+  /**
+   * Delta for id-keyed entity arrays. Index-based deltas corrupt planets/ships whenever
+   * FoW membership changes (insertion shifts indices → anomalies morph/vanish until resync).
+   */
+  function computeIdArrayDelta(oldArr, newArr) {
+    const oldMap = new Map();
+    if (Array.isArray(oldArr)) {
+      for (let i = 0; i < oldArr.length; i++) {
+        const o = oldArr[i];
+        if (o && o.id !== undefined && o.id !== null) oldMap.set(String(o.id), o);
+      }
+    }
+    const set = {};
+    const del = [];
+    const newIds = new Set();
+    let changed = false;
+    for (let i = 0; i < newArr.length; i++) {
+      const n = newArr[i];
+      if (!n || n.id === undefined || n.id === null) continue;
+      const idKey = String(n.id);
+      newIds.add(idKey);
+      const o = oldMap.get(idKey);
+      if (!o) {
+        set[idKey] = n;
+        changed = true;
+      } else {
+        const d = computeDelta(o, n);
+        if (d !== undefined) {
+          set[idKey] = d;
+          changed = true;
+        }
+      }
+    }
+    for (const idKey of oldMap.keys()) {
+      if (!newIds.has(idKey)) {
+        del.push(idKey);
+        changed = true;
+      }
+    }
+    if (!changed) return undefined;
+    const out = { __byId: true };
+    if (Object.keys(set).length) out.set = set;
+    if (del.length) out.del = del;
+    return out;
+  }
+
   function computeDelta(oldObj, newObj) {
     if (oldObj === newObj) return undefined;
     if (oldObj === null || newObj === null || typeof oldObj !== 'object' || typeof newObj !== 'object') {
       return newObj;
     }
-    
+
     if (Array.isArray(newObj)) {
+      // Prefer id-stable deltas for planet/ship-like arrays so FoW membership changes
+      // do not re-map entity slots (discovered anomalies were flickering off the map).
+      if (isIdObjectArray(newObj) || isIdObjectArray(oldObj)) {
+        return computeIdArrayDelta(Array.isArray(oldObj) ? oldObj : [], newObj);
+      }
       const delta = [];
       let changed = false;
-      for (let i = 0; i < Math.max(oldObj.length, newObj.length); i++) {
+      const oldLen = Array.isArray(oldObj) ? oldObj.length : 0;
+      for (let i = 0; i < Math.max(oldLen, newObj.length); i++) {
         if (i >= newObj.length) {
           delta.push('__DEL__');
           changed = true;
-        } else if (i >= oldObj.length) {
+        } else if (i >= oldLen) {
           delta.push(newObj[i]);
           changed = true;
         } else {
@@ -194,6 +259,7 @@ async function bootstrap() {
     }
     return changed ? delta : undefined;
   }
+
 
   if (isProd) {
     app.use(express.static(path.join(__dirname, 'dist')));
@@ -3380,6 +3446,15 @@ async function bootstrap() {
               };
               player._fogPlanetCache.set(p.id, { sig: fogSig, obj: fogObj });
               visiblePlanets.push(fogObj);
+            }
+          }
+          // Keep last-known (including anomalies) for anything permanently discovered in fog
+          // so clients/reconnects do not lose anomaly icons when sensors leave.
+          const fogKept = player._fogPlanetCache.get(p.id);
+          if (fogKept && fogKept.obj) {
+            player.lastKnownPlanets = player.lastKnownPlanets || {};
+            if (fogKept.obj.anomaly || fogKept.obj.isDeepSpaceAnomaly) {
+              player.lastKnownPlanets[p.id] = fogKept.obj;
             }
           }
         }

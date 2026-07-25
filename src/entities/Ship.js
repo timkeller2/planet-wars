@@ -2635,7 +2635,8 @@ export class Ship {
         this.fireCooldown = 1.0;
         this.combatCooldown = 1.1;
 
-        let totalShots = this.count;
+        // Swarm fire rate scales with √count (not linear) so huge fleets don't delete stacks 1:1 each second
+        let totalShots = Math.max(1, Math.floor(Math.sqrt(this.count)));
         let lasersDrawn = 0;
         const friendlyPlanetBoost = this.getGravityWellBonusAt(this.x, this.y, this.owner, allPlanets);
         const hazardPenalty = this.getHazardAccuracyReduction(ionStorms);
