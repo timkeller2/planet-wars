@@ -414,9 +414,14 @@ function getPlanetTradeIncomePerMin(planet) {
 
 
 // Run initialization immediately as an ES Module
-  console.log('[PlanetWars] Code version: RAF-loop-v1');
+  console.log('[PlanetWars] Code version: RAF-loop-v2-inputfix');
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
+  // Ensure map always receives pointer hits even if a parent ever sets pointer-events:none
+  if (canvas && canvas.style) {
+    canvas.style.pointerEvents = 'auto';
+    canvas.style.touchAction = 'none';
+  }
 
   function resizeCanvas() {
     canvas.width = window.innerWidth;
@@ -509,8 +514,33 @@ function getPlanetTradeIncomePerMin(planet) {
   let boardingDefenderColor = '#ffffff';
   let boardingDefenderHitChance = 10;
   let boardingAttackerHitChance = 10;
+  let boardingDefKrBreakdown = null;
+  let boardingAtkKrBreakdown = null;
+  let boardingDefUsesDilithium = false;
+  let boardingAtkUsesDilithium = false;
+  let boardingDefUsesTritanium = false;
+  let boardingAtkUsesTritanium = false;
+
+  /** Format boarding KR: "KR: 10 + 5 xp + 7 tech + 10 dilithium - 10 opp armor = 22%" */
+  function formatBoardingKrLabel(breakdown, fallbackTotal) {
+    const r = (n) => Math.round(Number(n) || 0);
+    if (!breakdown) {
+      return `KR: ${r(fallbackTotal)}%`;
+    }
+    const parts = [`${r(breakdown.base != null ? breakdown.base : 10)}`];
+    if ((breakdown.xp || 0) > 0.05) parts.push(`${r(breakdown.xp)} xp`);
+    if ((breakdown.tech || 0) > 0.05) parts.push(`${r(breakdown.tech)} tech`);
+    if ((breakdown.dilithium || 0) > 0) parts.push(`${r(breakdown.dilithium)} dilithium`);
+    let expr = parts.join(' + ');
+    if ((breakdown.oppArmor || 0) > 0) {
+      expr += ` - ${r(breakdown.oppArmor)} opp armor`;
+    }
+    const total = breakdown.total != null ? breakdown.total : fallbackTotal;
+    return `KR: ${expr} = ${r(total)}%`;
+  }
   let boardingAttackerCount = 0;
   let boardingDefenderCount = 0;
+  let boardingGrenades = [];
   let boardingCombatStartTime = 0;
   let cachedLastCruiserState = null;
   let startingDefenderCount = 0;
@@ -2267,6 +2297,7 @@ function getPlanetTradeIncomePerMin(planet) {
           if ((s.diplomat || 0) > 0) activeUpgrades.push({ symbol: '🤝', count: s.diplomat });
           if ((s.marines || 0) > 0) activeUpgrades.push({ symbol: '🪖', count: s.marines });
           if ((s.command || 0) > 0) activeUpgrades.push({ symbol: '👑', count: s.command });
+          if ((s.terraforming || 0) > 0) activeUpgrades.push({ symbol: '🌱', count: s.terraforming });
 
           let reactorHeight = 0;
           if (s.reactor && s.reactor > 0) {
@@ -2839,6 +2870,7 @@ function getPlanetTradeIncomePerMin(planet) {
   let touchStartedOnCanvas = false;
   let touchStartedOnHud = false;
   let lastHudTouchTime = 0;
+  const HUD_TOUCH_BLOCK_MS = 400;
 
   function cancelCameraDragFromUi() {
     // Stop any in-progress map pan so HUD presses cannot move the viewport
@@ -2848,8 +2880,27 @@ function getPlanetTradeIncomePerMin(planet) {
     lastHudTouchTime = Date.now();
   }
 
-  function recentlyTouchedHud(ms = 400) {
-    return touchStartedOnHud || (Date.now() - lastHudTouchTime < ms);
+  function clearHudTouchBlock() {
+    touchStartedOnHud = false;
+    lastHudTouchTime = 0;
+  }
+
+  /** True only for a short window after a HUD touch — never sticks forever if touchend is missed. */
+  function recentlyTouchedHud(ms = HUD_TOUCH_BLOCK_MS) {
+    if (!lastHudTouchTime && !touchStartedOnHud) return false;
+    const age = lastHudTouchTime ? (Date.now() - lastHudTouchTime) : ms + 1;
+    if (age < ms) return true;
+    // Expire sticky flag once the window has passed (missed touchend / mouse-only cancelCameraDragFromUi)
+    if (touchStartedOnHud) touchStartedOnHud = false;
+    return false;
+  }
+
+  /** Ghost mouse events synthesized after a touch; real mouse/pen must never be blocked permanently. */
+  function isTouchGeneratedMouseEvent(event) {
+    if (!event) return false;
+    if (event.pointerType === 'touch') return true;
+    if (event.sourceCapabilities && event.sourceCapabilities.firesTouchEvents) return true;
+    return false;
   }
 
   document.addEventListener('touchstart', (e) => {
@@ -2883,6 +2934,7 @@ function getPlanetTradeIncomePerMin(planet) {
   document.addEventListener('touchcancel', () => {
     touchStartedOnCanvas = false;
     touchStartedOnHud = false;
+    lastHudTouchTime = 0;
     isDraggingCamera = false;
   }, { capture: true });
 
@@ -5035,6 +5087,7 @@ function getPlanetTradeIncomePerMin(planet) {
       clearServerStateMaps();
       lastKnownPlanets = {};
       lastKnownHazards = {};
+      visualProjectiles.clear();
       socket.emit('restartGame', payload);
     } else {
       socket.emit('enterGame', payload);
@@ -5347,6 +5400,7 @@ function getPlanetTradeIncomePerMin(planet) {
     clearServerStateMaps();
     lastKnownPlanets = {};
     lastKnownHazards = {};
+    visualProjectiles.clear();
   });
 
   socket.on('spectator', () => {
@@ -5429,8 +5483,110 @@ function getPlanetTradeIncomePerMin(planet) {
   let floatingAnimations = [];
   let lastPlanetSpyRooted = {};
   let visualShips = new Map();
+  /** Client-side ballistic projectile tracks — monotonic age + frozen endpoints (anti-jitter). */
+  let visualProjectiles = new Map();
   let lastNetworkUpdateMs = 0;
   let lastShipSmoothMs = 0;
+
+  function getLaserVisualKey(laser) {
+    if (!laser) return 'null';
+    const kind = laser.isBombAttack ? 'bomb'
+      : (laser.color === 'cruiser-projectile' ? 'proj'
+        : (laser.isAmoebaAttack || laser.color === 'amoeba' || laser.color === 'golden-amoeba' || laser.isGoldenAmoebaAttack) ? 'amoeba'
+          : (laser.color || 'beam'));
+    const src = laser.sourceId != null ? laser.sourceId : (laser.sourceShipId != null ? laser.sourceShipId : 'x');
+    const tgt = laser.targetId != null ? laser.targetId : (laser.targetPlanetId != null ? laser.targetPlanetId : 'x');
+    const idx = laser.index || 0;
+    // Coarse start so packet noise doesn't spawn a new track mid-flight
+    const sx = Math.round((laser.startX || 0) / 3);
+    const sy = Math.round((laser.startY || 0) / 3);
+    return `${kind}_${src}_${tgt}_${idx}_${sx}_${sy}`;
+  }
+
+  function isBallisticLaser(laser) {
+    if (!laser) return false;
+    if (laser.isBombAttack) return true;
+    if (laser.color === 'cruiser-projectile') return true;
+    if (laser.isAmoebaAttack || laser.isGoldenAmoebaAttack) return true;
+    if (laser.color === 'amoeba' || laser.color === 'golden-amoeba') return true;
+    return false;
+  }
+
+  function getBallisticTravelSec(laser) {
+    if (!laser) return 1.2;
+    if (laser.isBombAttack) {
+      const style = laser.cruiserStyle || 'Klingon';
+      // Distance-scaled flight so long shots read as travel, short shots aren't sluggish
+      const dist = Math.hypot((laser.endX || 0) - (laser.startX || 0), (laser.endY || 0) - (laser.startY || 0));
+      const base = style === 'Romulan' ? 1.85 : 1.35;
+      const byDist = Math.min(2.4, Math.max(base, dist / 280));
+      return style === 'Romulan' ? Math.max(1.85, byDist) : byDist;
+    }
+    if (laser.color === 'cruiser-projectile') {
+      const dist = Math.hypot((laser.endX || 0) - (laser.startX || 0), (laser.endY || 0) - (laser.startY || 0));
+      return Math.min(1.8, Math.max(0.95, dist / 320));
+    }
+    // Amoeba spray
+    return Math.min(1.1, Math.max(0.55, (laser.duration || 0.8) * 0.85));
+  }
+
+  function getBallisticDelaySec(laser) {
+    if (!laser) return 0;
+    const idx = laser.index || 0;
+    if (laser.isBombAttack) {
+      const style = laser.cruiserStyle || 'Klingon';
+      return idx * (style === 'Romulan' ? 0.36 : 0.22);
+    }
+    if (laser.color === 'cruiser-projectile') return idx * 0.12;
+    return idx * 0.05;
+  }
+
+  /** Resolve start/end once at birth so packet endpoint jitter doesn't teleport the bolt. */
+  function resolveLaserEndpoints(laser) {
+    let startPtX = laser.startX;
+    let startPtY = laser.startY;
+    let endPtX = laser.endX;
+    let endPtY = laser.endY;
+    const seed = Math.sin((laser.startX || 0) * 12.9898 + (laser.startY || 0) * 78.233 + (laser.index || 0)) * 43758.5453;
+    const randVal = seed - Math.floor(seed);
+    const randVal2 = (seed * 10) - Math.floor(seed * 10);
+
+    if (laser.sourceIsCruiser || laser.isBombAttack || laser.color === 'cruiser-projectile') {
+      startPtX = laser.startX;
+      startPtY = laser.startY;
+    } else if (laser.sourceCount > 1 && !laser.sourceIsAmoeba) {
+      const sourceRenderCount = Math.min(50, laser.sourceCount);
+      const sourceIndex = Math.floor(randVal * sourceRenderCount);
+      const sourceMaxSpread = laser.sourceIsBomber ? 10 : Math.min(60, 10 + Math.sqrt(laser.sourceCount) * 2.5);
+      // Formation helper may not exist yet at parse time — endpoints for ballistic fleets use raw coords
+      startPtX = laser.startX;
+      startPtY = laser.startY;
+    }
+
+    if (laser.targetIsCruiser) {
+      const size = (6 + (laser.targetMaxHealth || 6) * 1.0) / 3.0;
+      const rotAngle = (laser.targetAngle || 0) + Math.PI / 2;
+      let localX = 0;
+      let localY = 0;
+      const targetPointSeed = Math.floor(randVal * 4);
+      if (targetPointSeed === 0) { localX = 0; localY = -size * 0.7; }
+      else if (targetPointSeed === 1) { localX = -size * 0.6; localY = size * 0.1; }
+      else if (targetPointSeed === 2) { localX = size * 0.6; localY = size * 0.1; }
+      else { localX = 0; localY = size * 0.4; }
+      const gx = localX * Math.cos(rotAngle) - localY * Math.sin(rotAngle);
+      const gy = localX * Math.sin(rotAngle) + localY * Math.cos(rotAngle);
+      endPtX = laser.endX + gx;
+      endPtY = laser.endY + gy;
+    } else if (laser.targetIsPlanet) {
+      endPtX = laser.endX + (randVal - 0.5) * 40;
+      endPtY = laser.endY + (randVal2 - 0.5) * 40;
+    } else if (laser.targetIsAmoeba) {
+      const size = 6 + (laser.targetMaxHealth || 6) * 1.5;
+      endPtX = laser.endX + (randVal - 0.5) * size;
+      endPtY = laser.endY + (randVal2 - 0.5) * size;
+    }
+    return { startPtX, startPtY, endPtX, endPtY, randVal, randVal2 };
+  }
 
   // ── Adaptive client prediction ──────────────────────────────────────────
   // Server simulates at 20 Hz, but the client typically receives full state ~8 Hz
@@ -5643,6 +5799,37 @@ function getPlanetTradeIncomePerMin(planet) {
     return { destX, destY, held };
   }
 
+  /**
+   * Align client turn lock with server intent when clearly turning toward dest.
+   * Only commits/clears at thresholds matching Ship.js (12° clear, 15° commit).
+   */
+  function syncTurnDirFromServer(vis, s, destX, destY) {
+    if (!vis || !s || destX == null || destY == null) return;
+    const desired = Math.atan2(destY - s.y, destX - s.x);
+    const diff = shortestAngleDiff(s.angle || 0, desired);
+    const abs = Math.abs(diff);
+    if (abs < 12 * Math.PI / 180) {
+      vis.turnDir = 0;
+      if (vis.heldCruise) vis.heldCruise.turnDir = 0;
+      if (vis.opt) vis.opt.turnDir = 0;
+      return;
+    }
+    if (abs < 15 * Math.PI / 180) return; // hysteresis band — keep existing lock
+    const serverDir = Math.sign(diff) || 1;
+    if (!vis.turnDir) {
+      vis.turnDir = serverDir;
+    } else if (vis.turnDir !== serverDir) {
+      // Client locked opposite of server: adopt server when disagreement is clear
+      const clientDesired = Math.atan2(destY - vis.y, destX - vis.x);
+      const clientDiff = shortestAngleDiff(vis.angle || 0, clientDesired);
+      if (Math.sign(clientDiff) === serverDir || abs > 40 * Math.PI / 180) {
+        vis.turnDir = serverDir;
+      }
+    }
+    if (vis.heldCruise && vis.turnDir) vis.heldCruise.turnDir = vis.turnDir;
+    if (vis.opt && vis.turnDir) vis.opt.turnDir = vis.turnDir;
+  }
+
   /** Optimistic-move TTL (ms): short when healthy so server takes over quickly. */
   function getOptimisticMoveTtlMs() {
     return Math.round(850 + 2150 * predictionStrength);
@@ -5684,11 +5871,13 @@ function getPlanetTradeIncomePerMin(planet) {
   // (also kept in window._predDesyncLog). Toggle: window.PRED_DESYNC_LOG = false
   window.PRED_DESYNC_LOG = true;
   window._predDesyncLog = [];
-  const PRED_DESYNC_POS_PX = 16;           // world units — significant position error
-  const PRED_DESYNC_HEADING_DEG = 22;      // significant heading error
-  const PRED_DESYNC_LOG_COOLDOWN_MS = 700; // per-ship rate limit
+  const PRED_DESYNC_POS_PX = 16;              // move/cruise: significant position error
+  const PRED_DESYNC_HEADING_DEG = 28;         // move/cruise: significant heading error
+  const PRED_DESYNC_COMBAT_POS_PX = 12;       // combat: still care about position drift
+  const PRED_DESYNC_COMBAT_HEADING_DEG = 90;  // combat: face-target makes moderate head err normal
+  const PRED_DESYNC_LOG_COOLDOWN_MS = 700;    // per-ship rate limit
   const PRED_DESYNC_MAX_SAMPLES = 250;
-  const PRED_DESYNC_MAX_PACKET_GAP_MS = 380; // skip after long gaps (FoW / tab)
+  const PRED_DESYNC_MAX_PACKET_GAP_MS = 380;  // skip after long gaps (FoW / tab)
   const predDesyncLastLogMs = new Map();
 
   function angleDiffDeg(a, b) {
@@ -5759,7 +5948,13 @@ function getPlanetTradeIncomePerMin(planet) {
     const posErr = Math.hypot(clientX - authX, clientY - authY);
     const headErr = angleDiffDeg(clientAngle, authAngle || 0);
 
-    if (posErr < PRED_DESYNC_POS_PX && headErr < PRED_DESYNC_HEADING_DEG) return;
+    const inCombat = isShipNearEnemyForPredLog(ship);
+    // Split thresholds: combat face-target makes moderate heading error expected
+    const posThresh = inCombat ? PRED_DESYNC_COMBAT_POS_PX : PRED_DESYNC_POS_PX;
+    const headThresh = inCombat ? PRED_DESYNC_COMBAT_HEADING_DEG : PRED_DESYNC_HEADING_DEG;
+    if (posErr < posThresh && headErr < headThresh) return;
+    // Combat with good position + sub-90° head is face-target noise — drop it
+    if (inCombat && posErr < 8 && headErr < 90) return;
 
     // Arrived / idle-hold: skip mild heading-only noise (arrival latch handles this)
     if (vis.arrivedLatch || vis.idleHoldHeading) {
@@ -5769,7 +5964,6 @@ function getPlanetTradeIncomePerMin(planet) {
     const opt = vis.opt;
     const optLive = !!(opt && now < opt.expiresAt);
     const heldLive = !!(vis.heldCruise && heldCruiseStillValid(ship, vis.heldCruise));
-    const inCombat = isShipNearEnemyForPredLog(ship);
     const hasDest = (vis.auth && vis.auth.destX != null) ||
       (ship.targetX != null && ship.targetY != null) ||
       !!ship.targetPlanet ||
@@ -7327,6 +7521,8 @@ function getPlanetTradeIncomePerMin(planet) {
           if (resolved.held && resolved.held.turnDir && !vis.turnDir) {
             vis.turnDir = resolved.held.turnDir;
           }
+          // Prefer server's CW/CCW when clearly turning toward dest
+          syncTurnDirFromServer(vis, s, destX, destY);
         }
 
         let authSpeed = s.currentSpeed || 0;
@@ -7815,6 +8011,7 @@ function getPlanetTradeIncomePerMin(planet) {
     boardingTroops = [];
     boardingLasers = [];
     boardingBlastParticles = [];
+    boardingGrenades = [];
     
     const defender = serverState.players.find(p => p.id === cruiser.ownerId) || { color: '#ffffff' };
     const attacker = serverState.players.find(p => p.id === cruiser.boardingPlayerId) || { color: '#ff3366' };
@@ -7829,6 +8026,12 @@ function getPlanetTradeIncomePerMin(planet) {
     boardingAttackerColor = attacker.color || '#ff3366';
     boardingDefenderHitChance = cruiser.boardingDefHitChance !== undefined ? cruiser.boardingDefHitChance : 10;
     boardingAttackerHitChance = cruiser.boardingAtkHitChance !== undefined ? cruiser.boardingAtkHitChance : 10;
+    boardingDefKrBreakdown = cruiser.boardingDefKrBreakdown || null;
+    boardingAtkKrBreakdown = cruiser.boardingAtkKrBreakdown || null;
+    boardingDefUsesDilithium = !!cruiser.boardingDefUsesDilithium;
+    boardingAtkUsesDilithium = !!cruiser.boardingAtkUsesDilithium;
+    boardingDefUsesTritanium = !!cruiser.boardingDefUsesTritanium;
+    boardingAtkUsesTritanium = !!cruiser.boardingAtkUsesTritanium;
     
     startingDefenderCount = M_def + C_def;
     startingAttackerCount = M_atk;
@@ -7843,15 +8046,21 @@ function getPlanetTradeIncomePerMin(planet) {
     
     let troopId = 0;
     for (let i = 0; i < visualM_def; i++) {
-      boardingTroops.push(createVisualTroop(troopId++, 'left', 'marine', defender.color));
+      const t = createVisualTroop(troopId++, 'left', 'marine', defender.color);
+      t.hasSilverArmor = boardingDefUsesTritanium;
+      boardingTroops.push(t);
     }
     for (let i = 0; i < visualC_def; i++) {
-      boardingTroops.push(createVisualTroop(troopId++, 'left', 'crew', defender.color));
+      const t = createVisualTroop(troopId++, 'left', 'crew', defender.color);
+      t.hasSilverArmor = boardingDefUsesTritanium;
+      boardingTroops.push(t);
     }
     
     let visualM_atk = Math.min(maxTroopsPerSide, M_atk);
     for (let i = 0; i < visualM_atk; i++) {
-      boardingTroops.push(createVisualTroop(troopId++, 'right', 'marine', attacker.color));
+      const t = createVisualTroop(troopId++, 'right', 'marine', attacker.color);
+      t.hasSilverArmor = boardingAtkUsesTritanium;
+      boardingTroops.push(t);
     }
     
     layoutVisualTroops();
@@ -7973,6 +8182,20 @@ function getPlanetTradeIncomePerMin(planet) {
     ctx.beginPath();
     ctx.roundRect(-3, -12, 6, 12, 3);
     ctx.fill();
+
+    // Tritanium silver armor overlay (partial plating)
+    if (t.hasSilverArmor) {
+      ctx.fillStyle = 'rgba(192, 200, 210, 0.72)';
+      ctx.beginPath();
+      ctx.roundRect(-3, -12, 6, 7, 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(230, 235, 240, 0.9)';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(-2.5, -9);
+      ctx.lineTo(2.5, -9);
+      ctx.stroke();
+    }
     
     ctx.fillStyle = '#ffcc99';
     ctx.beginPath();
@@ -7980,18 +8203,18 @@ function getPlanetTradeIncomePerMin(planet) {
     ctx.fill();
     
     if (t.type === 'marine') {
-      ctx.fillStyle = t.color;
+      ctx.fillStyle = t.hasSilverArmor ? '#c0c8d0' : t.color;
       ctx.beginPath();
       ctx.arc(0, -16, 4.2, Math.PI, 0);
       ctx.fill();
-      ctx.strokeStyle = '#000';
+      ctx.strokeStyle = t.hasSilverArmor ? '#e8eef4' : '#000';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(-3, -15);
       ctx.lineTo(3, -15);
       ctx.stroke();
     } else {
-      ctx.fillStyle = '#78909c';
+      ctx.fillStyle = t.hasSilverArmor ? '#a8b0b8' : '#78909c';
       ctx.beginPath();
       ctx.arc(0, -16, 3.5, Math.PI * 1.1, Math.PI * 1.9);
       ctx.fill();
@@ -8011,12 +8234,30 @@ function getPlanetTradeIncomePerMin(planet) {
     ctx.restore();
   }
 
-  function fireLaser(fromTroop, toTroop) {
+  /**
+   * @param {object} fromTroop
+   * @param {object} toTroop
+   * @param {{ heavyLaser?: boolean, isGrenade?: boolean }} [opts]
+   */
+  function fireLaser(fromTroop, toTroop, opts = {}) {
     fromTroop.lastFired = Date.now();
     const sx = fromTroop.cx + (fromTroop.side === 'left' ? 5 : -5);
     const sy = fromTroop.cy - 8;
     const tx = toTroop.cx;
     const ty = toTroop.cy - 8;
+    const heavy = !!opts.heavyLaser;
+    const grenade = !!opts.isGrenade;
+
+    if (grenade) {
+      boardingGrenades.push({
+        sx, sy, tx, ty,
+        color: fromTroop.color,
+        age: 0,
+        duration: 0.38,
+        exploded: false
+      });
+      return;
+    }
     
     boardingLasers.push({
       sx: sx,
@@ -8025,18 +8266,21 @@ function getPlanetTradeIncomePerMin(planet) {
       ty: ty,
       color: fromTroop.color,
       age: 0,
-      duration: 10
+      duration: heavy ? 14 : 10,
+      heavyLaser: heavy
     });
     
-    for (let i = 0; i < 5; i++) {
+    const particleN = heavy ? 9 : 5;
+    for (let i = 0; i < particleN; i++) {
       boardingBlastParticles.push({
         x: tx,
         y: ty,
-        vx: (Math.random() - 0.5) * 60 - (fromTroop.side === 'left' ? -20 : 20),
-        vy: (Math.random() - 0.5) * 60 - 20,
-        color: fromTroop.color,
+        vx: (Math.random() - 0.5) * (heavy ? 90 : 60) - (fromTroop.side === 'left' ? -20 : 20),
+        vy: (Math.random() - 0.5) * (heavy ? 90 : 60) - 20,
+        color: heavy ? '#7ecbff' : fromTroop.color,
         age: 0,
-        duration: 0.2 + Math.random() * 0.2
+        duration: 0.2 + Math.random() * 0.25,
+        size: heavy ? 3.2 : 2
       });
     }
     
@@ -8045,6 +8289,113 @@ function getPlanetTradeIncomePerMin(planet) {
       playSound('laser');
       lastLaserSoundTime = now;
     }
+  }
+
+  function drawBoardingProjectiles(ctx, dt) {
+    // Grenades first so their explosion particles are drawn this frame
+    boardingGrenades = boardingGrenades.filter(g => {
+      g.age += dt;
+      const t = Math.min(1, g.age / g.duration);
+      const arc = Math.sin(t * Math.PI) * 28;
+      const gx = g.sx + (g.tx - g.sx) * t;
+      const gy = g.sy + (g.ty - g.sy) * t - arc;
+      if (t < 1) {
+        ctx.save();
+        ctx.fillStyle = '#4a5a3a';
+        ctx.strokeStyle = '#8a9a6a';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(gx, gy, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#c44';
+        ctx.beginPath();
+        ctx.arc(gx + 1, gy - 1.5, 1.1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return true;
+      }
+      if (!g.exploded) {
+        g.exploded = true;
+        playSound('explosion');
+        for (let i = 0; i < 14; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const sp = 40 + Math.random() * 90;
+          boardingBlastParticles.push({
+            x: g.tx,
+            y: g.ty,
+            vx: Math.cos(ang) * sp,
+            vy: Math.sin(ang) * sp - 30,
+            color: i % 2 === 0 ? '#ff8800' : '#ffee55',
+            age: 0,
+            duration: 0.35 + Math.random() * 0.25,
+            size: 3.5
+          });
+        }
+        boardingBlastParticles.push({
+          x: g.tx, y: g.ty, vx: 0, vy: 0,
+          color: 'rgba(255,180,40,0.9)',
+          age: 0, duration: 0.22, size: 10, isRing: true
+        });
+      }
+      return false;
+    });
+
+    boardingBlastParticles = boardingBlastParticles.filter(p => {
+      p.age += dt;
+      if (p.age >= p.duration) return false;
+      const progress = p.age / p.duration;
+      if (p.isRing) {
+        ctx.strokeStyle = `rgba(255, 160, 40, ${1 - progress})`;
+        ctx.lineWidth = 2.5 * (1 - progress);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4 + progress * 22, 0, Math.PI * 2);
+        ctx.stroke();
+        return true;
+      }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 80 * dt;
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = 1 - progress;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, (p.size || 2) * (1 - progress), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+      return true;
+    });
+
+    boardingLasers = boardingLasers.filter(l => {
+      l.age += dt;
+      const progress = l.age / (l.duration / 60);
+      if (progress >= 1) return false;
+      const heavy = !!l.heavyLaser;
+      ctx.strokeStyle = heavy ? '#5eb8ff' : l.color;
+      ctx.lineWidth = (heavy ? 6.5 : 3) * (1 - progress);
+      ctx.shadowBlur = heavy ? 18 : 10;
+      ctx.shadowColor = heavy ? '#9fd4ff' : l.color;
+      ctx.beginPath();
+      ctx.moveTo(l.sx, l.sy);
+      ctx.lineTo(l.tx, l.ty);
+      ctx.stroke();
+      if (heavy) {
+        ctx.strokeStyle = 'rgba(180, 230, 255, 0.85)';
+        ctx.lineWidth = 3.2 * (1 - progress);
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.moveTo(l.sx, l.sy);
+        ctx.lineTo(l.tx, l.ty);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = (heavy ? 1.8 : 1) * (1 - progress);
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.moveTo(l.sx, l.sy);
+      ctx.lineTo(l.tx, l.ty);
+      ctx.stroke();
+      return true;
+    });
   }
 
   function animateBoardingCombat() {
@@ -8103,11 +8454,16 @@ function getPlanetTradeIncomePerMin(planet) {
     ctx.fillText(boardingDefenderName.toUpperCase(), 15, 15);
     
      // Shadow for troop count
-     ctx.font = '10px Orbitron, sans-serif';
+     const defKrLine = formatBoardingKrLabel(boardingDefKrBreakdown, boardingDefenderHitChance);
+     const atkKrLine = formatBoardingKrLabel(boardingAtkKrBreakdown, boardingAttackerHitChance);
+     ctx.font = '9px Orbitron, sans-serif';
      ctx.fillStyle = '#000000';
-     ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)} | KR: ${boardingDefenderHitChance.toFixed(1)}%`, 16, 31);
+     ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 16, 31);
+     ctx.fillText(defKrLine, 16, 44);
      ctx.fillStyle = '#b0bec5';
-     ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)} | KR: ${boardingDefenderHitChance.toFixed(1)}%`, 15, 30);
+     ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 15, 30);
+     ctx.fillStyle = '#90caf9';
+     ctx.fillText(defKrLine, 15, 43);
      
      // Draw Attacker Stats (Right)
      ctx.font = 'bold 11px Orbitron, sans-serif';
@@ -8120,54 +8476,18 @@ function getPlanetTradeIncomePerMin(planet) {
      ctx.fillText(boardingAttackerName.toUpperCase(), canvas.width - 15, 15);
      
      // Shadow for troop count
-     ctx.font = '10px Orbitron, sans-serif';
+     ctx.font = '9px Orbitron, sans-serif';
      ctx.fillStyle = '#000000';
-     ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)} | KR: ${boardingAttackerHitChance.toFixed(1)}%`, canvas.width - 14, 31);
+     ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 14, 31);
+     ctx.fillText(atkKrLine, canvas.width - 14, 44);
      ctx.fillStyle = '#b0bec5';
-     ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)} | KR: ${boardingAttackerHitChance.toFixed(1)}%`, canvas.width - 15, 30);
+     ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 15, 30);
+     ctx.fillStyle = '#90caf9';
+     ctx.fillText(atkKrLine, canvas.width - 15, 43);
     
     ctx.restore();
-    
-    boardingBlastParticles = boardingBlastParticles.filter(p => {
-      p.age += dt;
-      if (p.age >= p.duration) return false;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vy += 80 * dt;
-      
-      const progress = p.age / p.duration;
-      ctx.fillStyle = p.color;
-      ctx.globalAlpha = 1 - progress;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 2 * (1 - progress), 0, Math.PI * 2);
-      ctx.fill();
-      return true;
-    });
-    ctx.globalAlpha = 1.0;
-    
-    boardingLasers = boardingLasers.filter(l => {
-      l.age += dt;
-      const progress = l.age / (l.duration / 60);
-      if (progress >= 1) return false;
-      
-      ctx.strokeStyle = l.color;
-      ctx.lineWidth = 3 * (1 - progress);
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = l.color;
-      ctx.beginPath();
-      ctx.moveTo(l.sx, l.sy);
-      ctx.lineTo(l.tx, l.ty);
-      ctx.stroke();
-      
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1 * (1 - progress);
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.moveTo(l.sx, l.sy);
-      ctx.lineTo(l.tx, l.ty);
-      ctx.stroke();
-      return true;
-    });
+
+    drawBoardingProjectiles(ctx, dt);
     
     boardingTroops.forEach(t => {
       t.cx += (t.x - t.cx) * 0.1;
@@ -8209,7 +8529,11 @@ function getPlanetTradeIncomePerMin(planet) {
           const shooter = aliveLeft[Math.floor(Math.random() * aliveLeft.length)];
           const target = aliveRight[Math.floor(Math.random() * aliveRight.length)];
           if (now - shooter.lastFired > 800) {
-            fireLaser(shooter, target);
+            const isGrenade = Math.random() < 0.12;
+            fireLaser(shooter, target, {
+              heavyLaser: boardingDefUsesDilithium && !isGrenade,
+              isGrenade
+            });
           }
         }
         
@@ -8217,7 +8541,11 @@ function getPlanetTradeIncomePerMin(planet) {
           const shooter = aliveRight[Math.floor(Math.random() * aliveRight.length)];
           const target = aliveLeft[Math.floor(Math.random() * aliveLeft.length)];
           if (now - shooter.lastFired > 800) {
-            fireLaser(shooter, target);
+            const isGrenade = Math.random() < 0.12;
+            fireLaser(shooter, target, {
+              heavyLaser: boardingAtkUsesDilithium && !isGrenade,
+              isGrenade
+            });
           }
         }
       }
@@ -8230,6 +8558,7 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   }
 
+  // Replay state declared early (before ensureBoardingCombatWindowExists closures use them)
   const deletedReplayIds = new Set();
   const viewedReplayIds = new Set();
   let activeReplay = null;
@@ -8490,6 +8819,7 @@ function getPlanetTradeIncomePerMin(planet) {
       boardingTroops = [];
       boardingLasers = [];
       boardingBlastParticles = [];
+      boardingGrenades = [];
 
       boardingDefenderName = replay.leftSide.name;
       boardingDefenderColor = replay.leftSide.color;
@@ -8497,6 +8827,12 @@ function getPlanetTradeIncomePerMin(planet) {
       boardingAttackerColor = replay.rightSide.color;
       boardingDefenderHitChance = replay.leftSide.hitChance !== undefined ? replay.leftSide.hitChance : 10;
       boardingAttackerHitChance = replay.rightSide.hitChance !== undefined ? replay.rightSide.hitChance : 10;
+      boardingDefKrBreakdown = replay.leftSide.krBreakdown || null;
+      boardingAtkKrBreakdown = replay.rightSide.krBreakdown || null;
+      boardingDefUsesDilithium = !!replay.leftSide.usesDilithium;
+      boardingAtkUsesDilithium = !!replay.rightSide.usesDilithium;
+      boardingDefUsesTritanium = !!replay.leftSide.usesTritanium;
+      boardingAtkUsesTritanium = !!replay.rightSide.usesTritanium;
 
       startingDefenderCount = replay.leftSide.units.length;
       startingAttackerCount = replay.rightSide.units.length;
@@ -8505,11 +8841,15 @@ function getPlanetTradeIncomePerMin(planet) {
       boardingAttackerCount = startingAttackerCount;
 
       replay.leftSide.units.forEach(u => {
-        boardingTroops.push(createReplayVisualTroop(u, 'left', replay.leftSide.color));
+        const t = createReplayVisualTroop(u, 'left', replay.leftSide.color);
+        t.hasSilverArmor = boardingDefUsesTritanium;
+        boardingTroops.push(t);
       });
 
       replay.rightSide.units.forEach(u => {
-        boardingTroops.push(createReplayVisualTroop(u, 'right', replay.rightSide.color));
+        const t = createReplayVisualTroop(u, 'right', replay.rightSide.color);
+        t.hasSilverArmor = boardingAtkUsesTritanium;
+        boardingTroops.push(t);
       });
 
       layoutReplayVisualTroops(0, replay.totalDuration);
@@ -8585,15 +8925,16 @@ function getPlanetTradeIncomePerMin(planet) {
         const target = boardingTroops.find(t => t.id === ev.targetId);
         
         if (shooter && target && shooter.state === 'alive' && target.state === 'alive') {
-          fireLaser(shooter, target);
+          fireLaser(shooter, target, {
+            isGrenade: !!ev.isGrenade,
+            heavyLaser: !ev.isGrenade && (
+              !!ev.heavyLaser
+              || (shooter.side === 'left' ? boardingDefUsesDilithium : boardingAtkUsesDilithium)
+            )
+          });
           target.state = 'dying';
           target.fallProgress = 0;
           target.fallAngle = 0;
-
-          if (now - lastLaserSoundTime > 150) {
-            playSound('laser');
-            lastLaserSoundTime = now;
-          }
 
           if (target.side === 'left') {
             boardingDefenderCount = Math.max(0, boardingDefenderCount - 1);
@@ -8616,11 +8957,16 @@ function getPlanetTradeIncomePerMin(planet) {
     ctx.fillStyle = boardingDefenderColor;
     ctx.fillText(boardingDefenderName.toUpperCase(), 15, 15);
     
-    ctx.font = '10px Orbitron, sans-serif';
+    const defKrLineR = formatBoardingKrLabel(boardingDefKrBreakdown, boardingDefenderHitChance);
+    const atkKrLineR = formatBoardingKrLabel(boardingAtkKrBreakdown, boardingAttackerHitChance);
+    ctx.font = '9px Orbitron, sans-serif';
     ctx.fillStyle = '#000000';
-    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)} | KR: ${boardingDefenderHitChance.toFixed(1)}%`, 16, 31);
+    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 16, 31);
+    ctx.fillText(defKrLineR, 16, 44);
     ctx.fillStyle = '#b0bec5';
-    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)} | KR: ${boardingDefenderHitChance.toFixed(1)}%`, 15, 30);
+    ctx.fillText(`TROOPS: ${Math.round(boardingDefenderCount)}`, 15, 30);
+    ctx.fillStyle = '#90caf9';
+    ctx.fillText(defKrLineR, 15, 43);
     
     ctx.font = 'bold 11px Orbitron, sans-serif';
     ctx.textAlign = 'right';
@@ -8630,54 +8976,18 @@ function getPlanetTradeIncomePerMin(planet) {
     ctx.fillStyle = boardingAttackerColor;
     ctx.fillText(boardingAttackerName.toUpperCase(), canvas.width - 15, 15);
     
-    ctx.font = '10px Orbitron, sans-serif';
+    ctx.font = '9px Orbitron, sans-serif';
     ctx.fillStyle = '#000000';
-    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)} | KR: ${boardingAttackerHitChance.toFixed(1)}%`, canvas.width - 14, 31);
+    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 14, 31);
+    ctx.fillText(atkKrLineR, canvas.width - 14, 44);
     ctx.fillStyle = '#b0bec5';
-    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)} | KR: ${boardingAttackerHitChance.toFixed(1)}%`, canvas.width - 15, 30);
+    ctx.fillText(`TROOPS: ${Math.round(boardingAttackerCount)}`, canvas.width - 15, 30);
+    ctx.fillStyle = '#90caf9';
+    ctx.fillText(atkKrLineR, canvas.width - 15, 43);
     
     ctx.restore();
 
-    boardingBlastParticles = boardingBlastParticles.filter(p => {
-      p.age += dt;
-      if (p.age >= p.duration) return false;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vy += 80 * dt;
-      
-      const progress = p.age / p.duration;
-      ctx.fillStyle = p.color;
-      ctx.globalAlpha = 1 - progress;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 2 * (1 - progress), 0, Math.PI * 2);
-      ctx.fill();
-      return true;
-    });
-    ctx.globalAlpha = 1.0;
-    
-    boardingLasers = boardingLasers.filter(l => {
-      l.age += dt;
-      const progress = l.age / (l.duration / 60);
-      if (progress >= 1) return false;
-      
-      ctx.strokeStyle = l.color;
-      ctx.lineWidth = 3 * (1 - progress);
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = l.color;
-      ctx.beginPath();
-      ctx.moveTo(l.sx, l.sy);
-      ctx.lineTo(l.tx, l.ty);
-      ctx.stroke();
-      
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1 * (1 - progress);
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.moveTo(l.sx, l.sy);
-      ctx.lineTo(l.tx, l.ty);
-      ctx.stroke();
-      return true;
-    });
+    drawBoardingProjectiles(ctx, dt);
     
     boardingTroops.forEach(t => {
       t.cx += (t.x - t.cx) * 0.15;
@@ -9009,6 +9319,7 @@ function getPlanetTradeIncomePerMin(planet) {
         if ((s1.damagecontrol || 0) > 0) activeUpgrades.push({ symbol: '🔧', count: s1.damagecontrol });
         if ((s1.supply_ship || 0) > 0) activeUpgrades.push({ symbol: '📦', count: s1.supply_ship });
         if ((s1.extended_fuel || 0) > 0) activeUpgrades.push({ symbol: '⛽', count: s1.extended_fuel });
+        if ((s1.terraforming || 0) > 0) activeUpgrades.push({ symbol: '🌱', count: s1.terraforming });
 
         if (activeUpgrades.length > 0) {
           ctx.font = `${Math.max(8, 10 * shipScale)}px Arial`;
@@ -10185,6 +10496,7 @@ function getPlanetTradeIncomePerMin(planet) {
               upgrades: config.upgrades,
               configName: config.name
             });
+            cruiserBuildModeActive = false;
             activeConfigClassType = null;
           }
         });
@@ -10192,7 +10504,12 @@ function getPlanetTradeIncomePerMin(planet) {
         let pressTimer = null;
         const startPress = (e) => {
           if (e.button !== undefined && e.button !== 0) return;
-          cancelCameraDragFromUi();
+          // Only mark HUD-touch for actual touches; mouse long-press must not sticky-block map input
+          if (e.type === 'touchstart' || isTouchGeneratedMouseEvent(e)) {
+            cancelCameraDragFromUi();
+          } else {
+            isDraggingCamera = false;
+          }
           pressTimer = setTimeout(() => {
             deleteConfig(idx);
           }, 500);
@@ -11281,12 +11598,23 @@ function getPlanetTradeIncomePerMin(planet) {
 
 
   canvas.addEventListener('mousedown', (event) => {
-    console.log('[DIAG] mousedown', { button: event.button, shift: event.shiftKey, hasServerState: !!serverState, hasLocalPlayer: !!localPlayer });
-    // Ignore synthetic mouse events that follow a HUD touch (would pan the map)
-    if (recentlyTouchedHud()) {
+    const fromTouch = isTouchGeneratedMouseEvent(event);
+    const hudBlock = recentlyTouchedHud();
+    console.log('[DIAG] mousedown', {
+      button: event.button,
+      shift: event.shiftKey,
+      fromTouch,
+      hudBlock,
+      hasServerState: !!serverState,
+      hasLocalPlayer: !!localPlayer
+    });
+    // Only ignore *synthetic* mouse events after a HUD touch. Real mouse must always work —
+    // cancelCameraDragFromUi used to set a sticky flag that permanently blocked pan/select.
+    if (fromTouch && hudBlock) {
       isDraggingCamera = false;
       return;
     }
+    clearHudTouchBlock();
     const cPos = getCanvasPos(event.clientX, event.clientY);
     const posX = cPos.x;
     const posY = cPos.y;
@@ -11384,10 +11712,12 @@ function getPlanetTradeIncomePerMin(planet) {
     const cssToCanvasX = canvas.width / rect.width;
     const cssToCanvasY = canvas.height / rect.height;
 
-    // Never pan from mouse-compat events that follow a HUD touch
-    if (recentlyTouchedHud()) {
+    // Never pan from touch-generated mouse-compat events that follow a HUD touch.
+    // Real mouse always pans when dragging.
+    if (isTouchGeneratedMouseEvent(event) && recentlyTouchedHud()) {
       isDraggingCamera = false;
     } else if (isDraggingCamera) {
+      if (!isTouchGeneratedMouseEvent(event)) clearHudTouchBlock();
       const dx = event.clientX - lastCameraDragX;
       const dy = event.clientY - lastCameraDragY;
       lastCameraDragX = event.clientX;
@@ -12689,6 +13019,11 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   });
   bindActionClick('btn-cruiser', () => { cruiserBuildModeActive = !cruiserBuildModeActive; });
+  const exitCruiserBuildMode = () => {
+    cruiserBuildModeActive = false;
+    activeConfigClassType = null;
+  };
+
   const handleClassBuildTrigger = (classType, selectedPlanetBuild) => {
     if (!selectedPlanetBuild) return;
 
@@ -12754,10 +13089,14 @@ function getPlanetTradeIncomePerMin(planet) {
           if ((selectedPlanetBuild.maxShips - cfg.costCap) < 5) canAfford = false;
           if (canAfford) {
             socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
+            exitCruiserBuildMode();
+            return;
           }
         }
       } else {
         socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
+        exitCruiserBuildMode();
+        return;
       }
       activeConfigClassType = null;
     } else {
@@ -12818,10 +13157,14 @@ function getPlanetTradeIncomePerMin(planet) {
             if ((selectedPlanetBuild.maxShips - cfg.costCap) < 5) canAfford = false;
             if (canAfford) {
               socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
+              exitCruiserBuildMode();
+              return;
             }
           }
         } else {
           socket.emit('buildCapitalShip', { planetId: selectedPlanetBuild.id, classType });
+          exitCruiserBuildMode();
+          return;
         }
         activeConfigClassType = null;
       } else {
@@ -18577,7 +18920,11 @@ function getPlanetTradeIncomePerMin(planet) {
        * heading change. Client used to slow on any big turn, which made the cruiser
        * "stop and pivot" while the server kept arcing forward → later position shift.
        */
-      function extrapolatePose(x, y, angle, speed, destX, destY, turnRateRad, totalDt, inventCruise, circleState, turnDirLock) {
+      /**
+       * @param {boolean} [steerToDest=true] When false (combat), coast on current heading —
+       *   server faces targets; steering toward move dest causes 100°+ head desync.
+       */
+      function extrapolatePose(x, y, angle, speed, destX, destY, turnRateRad, totalDt, inventCruise, circleState, turnDirLock, steerToDest = true) {
         if (totalDt <= 0) {
           return {
             x, y, angle, speed,
@@ -18600,18 +18947,25 @@ function getPlanetTradeIncomePerMin(planet) {
 
         for (let i = 0; i < steps; i++) {
           let moveSpd = sp;
-          if (destX != null && destY != null) {
-            // New destination resets circling latch (matches Ship.js circlingDest change)
-            if (circleDestX !== destX || circleDestY !== destY) {
+          if (steerToDest && destX != null && destY != null) {
+            // Rounded dest key (matches Ship.js) — avoid float noise resetting the turn lock
+            const destKeyX = Math.round(destX * 10) / 10;
+            const destKeyY = Math.round(destY * 10) / 10;
+            if (circleDestX == null || circleDestY == null
+                || Math.hypot(destKeyX - circleDestX, destKeyY - circleDestY) > 8) {
               circling = false;
-              circleDestX = destX;
-              circleDestY = destY;
-              turnDir = 0; // new dest: re-evaluate lock
+              circleDestX = destKeyX;
+              circleDestY = destKeyY;
+              turnDir = 0; // meaningful new dest: re-evaluate lock
+            } else {
+              circleDestX = destKeyX;
+              circleDestY = destKeyY;
             }
             const desired = Math.atan2(destY - y, destX - x);
             let diff = shortestAngleDiff(angle, desired);
 
             // Commit turn direction (same rule as server) — stops CW/CCW desync on large turns
+            // Clear only when roughly aligned; never flip lock mid-arc
             if (Math.abs(diff) < 12 * Math.PI / 180) {
               turnDir = 0;
             } else if (!turnDir) {
@@ -18685,16 +19039,17 @@ function getPlanetTradeIncomePerMin(planet) {
         if (err <= deadzone) {
           // Stopped ships: freeze heading. Soft-correcting angle to each server
           // packet after combat caused continuous nose-wiggle.
-          if (vis.idleHoldHeading) return;
-          // Mid-order turn: never yank heading while locked to a turn direction
-          if (vis.turnDir && destX != null && destY != null) {
+          if (vis.idleHoldHeading && !combatMode) return;
+          // Mid-order turn (non-combat): never yank heading while locked to a turn direction
+          if (!combatMode && vis.turnDir && destX != null && destY != null) {
             const toDesired = Math.abs(shortestAngleDiff(vis.angle, Math.atan2(destY - vis.y, destX - vis.x)));
             if (toDesired > 12 * Math.PI / 180) return;
           }
           let adiff = shortestAngleDiff(vis.angle, serverPred.angle);
-          if (Math.abs(adiff) < 3 * Math.PI / 180) return;
-          const angAlpha = 1 - Math.exp(-(combatMode ? 10 : 5) * smoothDt);
-          vis.angle += adiff * angAlpha * (combatMode ? 0.75 : 0.4);
+          if (Math.abs(adiff) < (combatMode ? 1.5 : 3) * Math.PI / 180) return;
+          // Combat: trust server face-target heading aggressively
+          const angAlpha = 1 - Math.exp(-(combatMode ? 14 : 5) * smoothDt);
+          vis.angle += adiff * angAlpha * (combatMode ? 1.0 : 0.4);
           return;
         }
 
@@ -18781,10 +19136,12 @@ function getPlanetTradeIncomePerMin(planet) {
         vis.x += pullX * alpha;
         vis.y += pullY * alpha;
 
-        // Heading: trust local turn when mid-course / locked turn direction.
-        // Soft-pulling the other way was a top cause of "client turns left, server right".
+        // Heading: in combat always trust server (face-target). Out of combat, trust local
+        // turn when mid-course / locked turn direction (avoids left/right flip-flops).
         let applyAngleCorr = true;
-        if (vis.idleHoldHeading) {
+        if (combatMode) {
+          applyAngleCorr = true; // always pull nose toward server in dogfights
+        } else if (vis.idleHoldHeading) {
           applyAngleCorr = false;
         } else if (vis.opt && performance.now() < vis.opt.expiresAt) {
           // Optimistic move: never fight local turn with server heading
@@ -18796,7 +19153,7 @@ function getPlanetTradeIncomePerMin(planet) {
           // Actively turning toward dest — keep our arc
           if (localErr > 12 * Math.PI / 180) {
             applyAngleCorr = false;
-          } else if (!combatMode && localErr < serverErr - 0.02) {
+          } else if (localErr < serverErr - 0.02) {
             applyAngleCorr = false;
           }
           // If server is turning the opposite way from our lock, don't snap across
@@ -18809,8 +19166,12 @@ function getPlanetTradeIncomePerMin(planet) {
         }
         if (applyAngleCorr) {
           let adiff = shortestAngleDiff(vis.angle, serverPred.angle);
-          if (Math.abs(adiff) >= 2.5 * Math.PI / 180) {
-            const angAlpha = Math.min(1, alpha * (combatMode ? 0.85 : 0.48));
+          const minAd = combatMode ? 1.2 : 2.5;
+          if (Math.abs(adiff) >= minAd * Math.PI / 180) {
+            // Combat: strong, fast blend to server nose; cruise: gentler
+            const angAlpha = combatMode
+              ? Math.min(1, 1 - Math.exp(-smoothDt / 0.07))
+              : Math.min(1, alpha * 0.48);
             vis.angle += adiff * angAlpha;
           }
         }
@@ -18941,8 +19302,9 @@ function getPlanetTradeIncomePerMin(planet) {
             s.targetY = opt.targetY;
             // Keep post-opt authority in lockstep while optimistic window is live
             setHeldCruise(vis, destX, destY, opt.turnDir || vis.turnDir, spd, turnRate);
+            syncTurnDirFromServer(vis, s, destX, destY);
           } else if (optLive && inCombat) {
-            // Brief optimistic move still allowed, but damped and no invent-cruise stretch
+            // Brief optimistic translation only — do not dest-steer (server faces targets)
             destX = opt.targetX;
             destY = opt.targetY;
             spd = Math.min(opt.speed || predictedSpd, predictedSpd) * 0.45;
@@ -18950,6 +19312,7 @@ function getPlanetTradeIncomePerMin(planet) {
             inventCruise = false;
             s.targetX = opt.targetX;
             s.targetY = opt.targetY;
+            vis.turnDir = 0; // combat: no dest turn lock
           } else {
             // Opt expired: promote to held-cruise authority (dest + turn lock) until arrival
             if (opt && smoothNow >= opt.expiresAt) {
@@ -18962,11 +19325,17 @@ function getPlanetTradeIncomePerMin(planet) {
             const resolved = resolvePostOptDest(s, vis, auth);
             destX = resolved.destX;
             destY = resolved.destY;
-            if (resolved.held && resolved.held.turnDir && !vis.turnDir) {
-              vis.turnDir = resolved.held.turnDir;
-            }
-            if (resolved.held && resolved.held.turnRateRad) {
-              turnRate = resolved.held.turnRateRad;
+            if (!inCombat) {
+              if (resolved.held && resolved.held.turnDir && !vis.turnDir) {
+                vis.turnDir = resolved.held.turnDir;
+              }
+              if (resolved.held && resolved.held.turnRateRad) {
+                turnRate = resolved.held.turnRateRad;
+              }
+              syncTurnDirFromServer(vis, s, destX, destY);
+            } else {
+              // Combat: drop dest turn lock; position may still use dest for soft-corr along-track
+              vis.turnDir = 0;
             }
             // Arrival latch: server on/near dest → clear dest, kill turn invent, hold heading.
             // Critical when dist≈0: atan2(0,0) is garbage and caused free-spin heading desync.
@@ -19089,8 +19458,9 @@ function getPlanetTradeIncomePerMin(planet) {
 
           // 1) Full-rate local integration every frame (never under-drive ambient DR —
           //    that was a top source of "chug then snap" when traffic was healthy).
-          //    Combat still damps extrap so furballs don't slide.
+          //    Combat: damp translation and do NOT steer toward move dest (face-target on server).
           const combatExtrapScale = inCombat ? 0.35 : 1.0;
+          const steerToDest = !inCombat;
           if ((useSpd > 0.5 || inventCruise || optLive) && !(inCombat && (s.currentSpeed || 0) < 0.5 && !optLive)) {
             const circleState = {
               circling: !!vis.predCircling,
@@ -19104,22 +19474,29 @@ function getPlanetTradeIncomePerMin(planet) {
             const pose = extrapolatePose(
               vis.x, vis.y, vis.angle, floorSpd,
               destX, destY, turnRate, smoothDt, inventCruise || (optLive && !inCombat), circleState,
-              vis.turnDir || (opt && opt.turnDir) || 0
+              steerToDest ? (vis.turnDir || (opt && opt.turnDir) || 0) : 0,
+              steerToDest
             );
             vis.x = pose.x;
             vis.y = pose.y;
-            vis.angle = pose.angle;
-            vis.turnDir = pose.turnDir || 0;
-            if (opt && pose.turnDir) opt.turnDir = pose.turnDir;
-            vis.predCircling = pose.circling;
-            vis.predCircleDestX = pose.destX;
-            vis.predCircleDestY = pose.destY;
+            if (steerToDest) {
+              vis.angle = pose.angle;
+              vis.turnDir = pose.turnDir || 0;
+              if (opt && pose.turnDir) opt.turnDir = pose.turnDir;
+              vis.predCircling = pose.circling;
+              vis.predCircleDestX = pose.destX;
+              vis.predCircleDestY = pose.destY;
+            } else {
+              // Combat: keep coasting translation; heading comes from server soft-corr below
+              vis.turnDir = 0;
+              vis.predCircling = false;
+            }
             if (pose.speed > 0.5 && !inCombat) {
               vis.lastCruiseSpeed = Math.min(pose.speed, predictedSpd);
             } else if (!inventCruise && !optLive && useSpd < 0.5) {
               vis.lastCruiseSpeed = 0;
             }
-            if (optLive) {
+            if (optLive && !inCombat) {
               s.currentSpeed = pose.speed;
               s.angle = vis.angle;
               if (Math.hypot(opt.targetX - vis.x, opt.targetY - vis.y) < 3) vis.opt = null;
@@ -19186,21 +19563,38 @@ function getPlanetTradeIncomePerMin(planet) {
                 authSpd = useSpd * 0.35 + authSpd * 0.65;
               }
             }
+            // Combat: extrapolate auth without dest-steering so serverPred.angle stays face-target
             const serverPred = extrapolatePose(
               auth.x, auth.y, auth.angle, authSpd,
               destX, destY, turnRate, cappedAge,
-              inventCruise && !inCombat && predictionStrength >= 0.4, null
+              inventCruise && !inCombat && predictionStrength >= 0.4, null,
+              0,
+              !inCombat
             );
-            if (inCombat && (s.currentSpeed || 0) < 0.5) {
-              serverPred.x = auth.x;
-              serverPred.y = auth.y;
-              serverPred.angle = auth.angle;
+            if (inCombat) {
+              // Always use live server nose in combat (face-target / frenzied turns)
+              serverPred.angle = s.angle || auth.angle || 0;
+              if ((s.currentSpeed || 0) < 0.5) {
+                serverPred.x = auth.x;
+                serverPred.y = auth.y;
+              }
             }
             applySoftCorrection(
-              vis, serverPred, destX, destY,
+              vis, serverPred,
+              inCombat ? null : destX,
+              inCombat ? null : destY,
               Math.max(useSpd, authSpd, inCombat ? 8 : predictedSpd, 8),
               inCombat
             );
+            // Extra combat heading latch: blend hard to live server angle every frame
+            if (inCombat) {
+              let ad = shortestAngleDiff(vis.angle, s.angle || auth.angle || 0);
+              if (Math.abs(ad) > 1 * Math.PI / 180) {
+                const aAlpha = 1 - Math.exp(-smoothDt / 0.065);
+                vis.angle += ad * aAlpha;
+              }
+              vis.turnDir = 0;
+            }
           }
           // Mark that this ship received a real prediction integrate this frame
           // (used by desync logs to filter unsimulated / off-screen noise)
@@ -20188,6 +20582,7 @@ function getPlanetTradeIncomePerMin(planet) {
           if ((s.diplomat || 0) > 0) activeUpgrades.push({ symbol: '🤝', count: s.diplomat });
           if ((s.marines || 0) > 0) activeUpgrades.push({ symbol: '🪖', count: s.marines });
           if ((s.command || 0) > 0) activeUpgrades.push({ symbol: '👑', count: s.command });
+          if ((s.terraforming || 0) > 0) activeUpgrades.push({ symbol: '🌱', count: s.terraforming });
 
           let reactorHeight = 0;
           if (s.reactor && s.reactor > 0) {
@@ -20574,223 +20969,216 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       if (serverState.lasers) {
-        // Advance laser ages between network packets (~20 Hz) so projectiles
-        // move every animation frame instead of stuttering at tick rate.
+        // ── Smooth projectile VFX ───────────────────────────────────────────
+        // Network packets re-stamp laser.age and endpoints at ~8 Hz, which made
+        // torpedoes/missiles jitter and sometimes spawn already at the target.
+        // Ballistic shots get a client track: frozen endpoints + wall-clock age.
+        const laserNow = performance.now();
         const laserExtrapSec = lastNetworkUpdateMs
-          ? Math.max(0, Math.min(0.25, (performance.now() - lastNetworkUpdateMs) / 1000))
+          ? Math.max(0, Math.min(0.25, (laserNow - lastNetworkUpdateMs) / 1000))
           : 0;
 
         for (const laser of serverState.lasers) {
-          // Frustum culling for lasers: skip if both endpoints are way off-screen
+          if (!isBallisticLaser(laser)) continue;
+          const key = getLaserVisualKey(laser);
+          let track = visualProjectiles.get(key);
+          if (!track) {
+            const travel = getBallisticTravelSec(laser);
+            const delay = getBallisticDelaySec(laser);
+            const serverAge = laser.age || 0;
+            // Late packet already mid-flight: still play a full cosmetic arc (looks like
+            // launch+hit at once if we keep serverAge near the end).
+            let localAge0 = 0;
+            if (serverAge < delay + travel * 0.35) {
+              localAge0 = serverAge; // only adopt early server age
+            }
+            const ends = resolveLaserEndpoints(laser);
+            track = {
+              key,
+              ballistic: true,
+              style: laser.cruiserStyle || 'Klingon',
+              color: laser.color,
+              isBombAttack: !!laser.isBombAttack,
+              isAmoeba: !!(laser.isAmoebaAttack || laser.isGoldenAmoebaAttack
+                || laser.color === 'amoeba' || laser.color === 'golden-amoeba'),
+              isGoldenAmoeba: !!(laser.isGoldenAmoebaAttack || laser.color === 'golden-amoeba' || laser.color === '#b8860b'),
+              index: laser.index || 0,
+              startX: ends.startPtX,
+              startY: ends.startPtY,
+              endX: ends.endPtX,
+              endY: ends.endPtY,
+              travel,
+              delay,
+              localAge0,
+              birthMs: laserNow,
+              lastSeenMs: laserNow
+            };
+            visualProjectiles.set(key, track);
+          } else {
+            track.lastSeenMs = laserNow;
+            // Never re-bind endpoints or age from server — that was the jitter source
+          }
+        }
+
+        // Draw ballistic tracks (including ones server dropped mid-flight)
+        for (const [key, track] of visualProjectiles) {
+          const age = track.localAge0 + (laserNow - track.birthMs) / 1000;
+          const lifeEnd = track.delay + track.travel + 0.08;
+          const unseenMs = laserNow - track.lastSeenMs;
+          // Keep flying after packet drop until the arc finishes; prune leftovers
+          if (age > lifeEnd || (unseenMs > 400 && age > track.delay + track.travel * 0.5)) {
+            visualProjectiles.delete(key);
+            continue;
+          }
+          if (age < track.delay) continue;
+
+          // Frustum cull
           const buffer = 150;
-          const startOff = laser.startX < viewMinX - buffer || laser.startX > viewMaxX + buffer || laser.startY < viewMinY - buffer || laser.startY > viewMaxY + buffer;
-          const endOff = laser.endX < viewMinX - buffer || laser.endX > viewMaxX + buffer || laser.endY < viewMinY - buffer || laser.endY > viewMaxY + buffer;
-          if (startOff && endOff) {
-            continue;
-          }
+          const startOff = track.startX < viewMinX - buffer || track.startX > viewMaxX + buffer
+            || track.startY < viewMinY - buffer || track.startY > viewMaxY + buffer;
+          const endOff = track.endX < viewMinX - buffer || track.endX > viewMaxX + buffer
+            || track.endY < viewMinY - buffer || track.endY > viewMaxY + buffer;
+          if (startOff && endOff) continue;
 
-          const laserAge = (laser.age || 0) + laserExtrapSec;
-          const laserDuration = laser.duration || 0.8;
-          // Bomb / plasma flights self-cull by delay + travelDuration; don't truncate them here
-          // (Romulan plasma in particular is intentionally slower than default bomb duration floors).
-          if (!laser.isBombAttack && laserAge > laserDuration + 0.05) continue;
+          let t = (age - track.delay) / Math.max(0.05, track.travel);
+          t = Math.min(1, Math.max(0, t));
+          // Smoothstep — silk flight without packet steps
+          const progress = t * t * (3 - 2 * t);
 
-          // Ease progress slightly so motion doesn't look stepped when packets cluster
-          let progress = Math.min(1, Math.max(0, laserAge / laserDuration));
-          
-          if (laser.isBombAttack) {
-            const style = laser.cruiserStyle || 'Klingon';
-            // Romulan plasma balls read better when they drift slower across the arc
-            const delay = (laser.index || 0) * (style === 'Romulan' ? 0.36 : 0.24);
-            if (laserAge < delay) {
-              continue;
-            }
-            const travelDuration = style === 'Romulan' ? 1.9 : 1.05;
-            if (laserAge > delay + travelDuration) {
-              continue;
-            }
-            // Smoothstep for plasma flight — large red balls look much silkier
-            let t = (laserAge - delay) / travelDuration;
-            t = Math.min(1, Math.max(0, t));
-            progress = t * t * (3 - 2 * t);
-
-            let startPtX = laser.startX;
-            let startPtY = laser.startY;
-            let endPtX = laser.endX;
-            let endPtY = laser.endY;
-            
-            const seed = Math.sin(laser.startX * 12.9898 + laser.startY * 78.233 + (laser.index || 0)) * 43758.5453;
-            const randVal = seed - Math.floor(seed);
-            const randVal2 = (seed * 10) - Math.floor(seed * 10);
-            
-            if (laser.sourceIsCruiser) {
-              // Server sets the bomb origin exactly at the center (this.x, this.y)
-              startPtX = laser.startX;
-              startPtY = laser.startY;
-            }
-            
-            if (laser.targetIsCruiser) {
-              const size = (6 + (laser.targetMaxHealth || 6) * 1.0) / 3.0;
-              const rotAngle = (laser.targetAngle || 0) + Math.PI / 2;
-              let localX = 0;
-              let localY = 0;
-              const targetPointSeed = Math.floor(randVal * 4);
-              if (targetPointSeed === 0) {
-                localX = 0;
-                localY = -size * 0.7;
-              } else if (targetPointSeed === 1) {
-                localX = -size * 0.6;
-                localY = size * 0.1;
-              } else if (targetPointSeed === 2) {
-                localX = size * 0.6;
-                localY = size * 0.1;
-              } else {
-                localX = 0;
-                localY = size * 0.4;
-              }
-              const gx = localX * Math.cos(rotAngle) - localY * Math.sin(rotAngle);
-              const gy = localX * Math.sin(rotAngle) + localY * Math.cos(rotAngle);
-              endPtX = laser.endX + gx;
-              endPtY = laser.endY + gy;
-            } else if (laser.targetIsPlanet) {
-              endPtX = laser.endX + (randVal - 0.5) * 40;
-              endPtY = laser.endY + (randVal2 - 0.5) * 40;
-            }
-            
-            if (style === 'Lyran') {
-              ctx.save();
-              ctx.beginPath();
-              ctx.moveTo(startPtX, startPtY);
-              ctx.lineTo(endPtX, endPtY);
-              ctx.strokeStyle = '#00ff00';
-              ctx.lineWidth = 3.0;
-              ctx.globalAlpha = Math.max(0, 1.0 - progress);
-              ctx.stroke();
-              ctx.restore();
-            } else {
-              const curX = startPtX + (endPtX - startPtX) * progress;
-              const curY = startPtY + (endPtY - startPtY) * progress;
-              
-              ctx.save();
-              ctx.translate(curX, curY);
-              
-              if (style === 'Federation') {
-                ctx.beginPath();
-                ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
-                ctx.fillStyle = '#ffff00';
-                ctx.shadowColor = '#ffff00';
-                ctx.shadowBlur = 8;
-                ctx.fill();
-              } else if (style === 'Tholian') {
-                ctx.beginPath();
-                ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
-                ctx.fillStyle = '#ff0000';
-                ctx.shadowColor = '#ff0000';
-                ctx.shadowBlur = 8;
-                ctx.fill();
-              } else if (style === 'Gorn') {
-                ctx.beginPath();
-                ctx.arc(0, 0, 4.0, 0, Math.PI * 2);
-                ctx.fillStyle = '#ff3300';
-                ctx.shadowColor = '#ff3300';
-                ctx.shadowBlur = 10;
-                ctx.fill();
-              } else if (style === 'Romulan') {
-                ctx.beginPath();
-                ctx.arc(0, 0, 6.0, 0, Math.PI * 2);
-                ctx.fillStyle = '#ff0000';
-                ctx.shadowColor = '#ff0000';
-                ctx.shadowBlur = 12;
-                ctx.fill();
-              } else {
-                // Klingon / default plasma-style bolt + flame (deterministic flicker)
-                const angle = Math.atan2(endPtY - startPtY, endPtX - startPtX);
-                ctx.rotate(angle + Math.PI / 2);
-                ctx.beginPath();
-                ctx.moveTo(0, -3);
-                ctx.lineTo(1, -1);
-                ctx.lineTo(1, 2);
-                ctx.lineTo(1.5, 3);
-                ctx.lineTo(-1.5, 3);
-                ctx.lineTo(-1, 2);
-                ctx.lineTo(-1, -1);
-                ctx.closePath();
-                ctx.fillStyle = '#ff1100';
-                ctx.shadowColor = '#ff1100';
-                ctx.shadowBlur = 6;
-                ctx.fill();
-                
-                // Seeded flame length — Math.random() every frame made the trail shimmer/stutter
-                const flameSeed = Math.sin(laser.startX * 9.1 + laser.startY * 4.7 + (laser.index || 0) * 3.1 + laserAge * 18) * 43758.5453;
-                const flameFlicker = (flameSeed - Math.floor(flameSeed));
-                ctx.beginPath();
-                ctx.moveTo(0.5, 3);
-                ctx.lineTo(0, 4.5 + flameFlicker * 1.5);
-                ctx.lineTo(-0.5, 3);
-                ctx.closePath();
-                ctx.fillStyle = '#ffaa00';
-                ctx.fill();
-              }
-              ctx.restore();
-            }
-            continue;
-          }
-          
-          if (laser.isAmoebaAttack || laser.color === 'amoeba' || laser.color === 'golden-amoeba' || laser.isGoldenAmoebaAttack) {
+          if (track.isAmoeba) {
             const numParticles = 8;
-            const angle = Math.atan2(laser.endY - laser.startY, laser.endX - laser.startX);
-            const dist = Math.sqrt((laser.endX - laser.startX)**2 + (laser.endY - laser.startY)**2);
+            const angle = Math.atan2(track.endY - track.startY, track.endX - track.startX);
+            const dist = Math.hypot(track.endX - track.startX, track.endY - track.startY);
             const perpAngle = angle + Math.PI / 2;
-            const isGoldenShot = !!laser.isGoldenAmoebaAttack || laser.color === 'golden-amoeba' || laser.color === '#b8860b';
-
             for (let i = 0; i < numParticles; i++) {
-              // Deterministic pseudo-random seed based on coordinates and index
-              const seed = Math.sin(laser.startX * 12.9898 + laser.startY * 78.233 + i) * 43758.5453;
+              const seed = Math.sin(track.startX * 12.9898 + track.startY * 78.233 + i) * 43758.5453;
               const randX = seed - Math.floor(seed);
               const randY = (seed * 10) - Math.floor(seed * 10);
               const randSize = (seed * 100) - Math.floor(seed * 100);
-
-              // Vary speed per particle
               const pSpeed = 0.75 + randX * 0.5;
               const pProgress = Math.min(1.0, progress * pSpeed);
-
-              // Spread expands outwards perpendicular to travel path
               const maxSpread = 15 + dist * 0.12;
               const spreadOffset = (randY - 0.5) * maxSpread * Math.sin(pProgress * Math.PI);
-
-              // Position
-              const px = laser.startX + (laser.endX - laser.startX) * pProgress + Math.cos(perpAngle) * spreadOffset;
-              const py = laser.startY + (laser.endY - laser.startY) * pProgress + Math.sin(perpAngle) * spreadOffset;
-
-              // Size and opacity scaling
+              const px = track.startX + (track.endX - track.startX) * pProgress + Math.cos(perpAngle) * spreadOffset;
+              const py = track.startY + (track.endY - track.startY) * pProgress + Math.sin(perpAngle) * spreadOffset;
               const pRadius = 1.0 + randSize * 2.0;
               const opacity = Math.max(0, 1.0 - pProgress);
-
-              // Golden amoeba attacks: darker gold (body is brighter #ffd700)
-              ctx.fillStyle = isGoldenShot
+              ctx.fillStyle = track.isGoldenAmoeba
                 ? `rgba(140, 100, 18, ${opacity * 0.92})`
                 : `rgba(30, 110, 40, ${opacity * 0.90})`;
               ctx.beginPath();
               ctx.arc(px, py, pRadius * 1.5, 0, Math.PI * 2);
               ctx.fill();
             }
-          } else if (laser.color === 'cruiser-projectile') {
-            // Non-bomb cruiser projectiles also use extrapolated age (via progress)
-            const t = progress;
-            const ease = t * t * (3 - 2 * t);
-            const curX = laser.startX + (laser.endX - laser.startX) * ease;
-            const curY = laser.startY + (laser.endY - laser.startY) * ease;
+            continue;
+          }
+
+          if (track.color === 'cruiser-projectile' && !track.isBombAttack) {
+            const curX = track.startX + (track.endX - track.startX) * progress;
+            const curY = track.startY + (track.endY - track.startY) * progress;
             ctx.beginPath();
-            ctx.arc(curX, curY, 1, 0, Math.PI * 2);
-            ctx.fillStyle = "#ff5500";
-            ctx.strokeStyle = "#ffff00";
-            ctx.lineWidth = 0.4;
+            ctx.arc(curX, curY, 1.6, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff5500';
+            ctx.strokeStyle = '#ffff00';
+            ctx.lineWidth = 0.45;
             ctx.fill();
             ctx.stroke();
-          } else if (laser.color === 'refuel-beam' || laser.color === 'resupply-beam') {
-            // Removed in favor of continuous rays
-          } else if (laser.color === 'terraform-beam') {
-            // Pulse beam on +1 hab: dark-green diplomacy-style cone
+            continue;
+          }
+
+          // Bomb / race plasma / torpedo style
+          const style = track.style || 'Klingon';
+          if (style === 'Lyran') {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(track.startX, track.startY);
+            ctx.lineTo(track.endX, track.endY);
+            ctx.strokeStyle = '#00ff00';
+            ctx.lineWidth = 3.0;
+            ctx.globalAlpha = Math.max(0, 1.0 - progress);
+            ctx.stroke();
+            ctx.restore();
+          } else {
+            const curX = track.startX + (track.endX - track.startX) * progress;
+            const curY = track.startY + (track.endY - track.startY) * progress;
+            ctx.save();
+            ctx.translate(curX, curY);
+            if (style === 'Federation') {
+              ctx.beginPath();
+              ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+              ctx.fillStyle = '#ffff00';
+              ctx.shadowColor = '#ffff00';
+              ctx.shadowBlur = 8;
+              ctx.fill();
+            } else if (style === 'Tholian') {
+              ctx.beginPath();
+              ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+              ctx.fillStyle = '#ff0000';
+              ctx.shadowColor = '#ff0000';
+              ctx.shadowBlur = 8;
+              ctx.fill();
+            } else if (style === 'Gorn') {
+              ctx.beginPath();
+              ctx.arc(0, 0, 4.0, 0, Math.PI * 2);
+              ctx.fillStyle = '#ff3300';
+              ctx.shadowColor = '#ff3300';
+              ctx.shadowBlur = 10;
+              ctx.fill();
+            } else if (style === 'Romulan') {
+              ctx.beginPath();
+              ctx.arc(0, 0, 6.0, 0, Math.PI * 2);
+              ctx.fillStyle = '#ff0000';
+              ctx.shadowColor = '#ff0000';
+              ctx.shadowBlur = 12;
+              ctx.fill();
+            } else {
+              // Klingon / default plasma-style bolt + flame (deterministic flicker)
+              const angle = Math.atan2(track.endY - track.startY, track.endX - track.startX);
+              ctx.rotate(angle + Math.PI / 2);
+              ctx.beginPath();
+              ctx.moveTo(0, -3);
+              ctx.lineTo(1, -1);
+              ctx.lineTo(1, 2);
+              ctx.lineTo(1.5, 3);
+              ctx.lineTo(-1.5, 3);
+              ctx.lineTo(-1, 2);
+              ctx.lineTo(-1, -1);
+              ctx.closePath();
+              ctx.fillStyle = '#ff1100';
+              ctx.shadowColor = '#ff1100';
+              ctx.shadowBlur = 6;
+              ctx.fill();
+              // Time-stable flame (age-based, not Math.random)
+              const flameSeed = Math.sin(track.startX * 9.1 + track.startY * 4.7 + track.index * 3.1 + age * 18) * 43758.5453;
+              const flameFlicker = (flameSeed - Math.floor(flameSeed));
+              ctx.beginPath();
+              ctx.moveTo(0.5, 3);
+              ctx.lineTo(0, 4.5 + flameFlicker * 1.5);
+              ctx.lineTo(-0.5, 3);
+              ctx.closePath();
+              ctx.fillStyle = '#ffaa00';
+              ctx.fill();
+            }
+            ctx.restore();
+          }
+        }
+
+        // Beam / pulse VFX (non-ballistic) — still use packet age + light extrap
+        for (const laser of serverState.lasers) {
+          if (isBallisticLaser(laser)) continue;
+          if (laser.color === 'refuel-beam' || laser.color === 'resupply-beam') continue;
+
+          const buffer = 150;
+          const startOff = laser.startX < viewMinX - buffer || laser.startX > viewMaxX + buffer || laser.startY < viewMinY - buffer || laser.startY > viewMaxY + buffer;
+          const endOff = laser.endX < viewMinX - buffer || laser.endX > viewMaxX + buffer || laser.endY < viewMinY - buffer || laser.endY > viewMaxY + buffer;
+          if (startOff && endOff) continue;
+
+          const laserAge = (laser.age || 0) + laserExtrapSec;
+          const laserDuration = laser.duration || 0.8;
+          if (laserAge > laserDuration + 0.05) continue;
+          let progress = Math.min(1, Math.max(0, laserAge / laserDuration));
+
+          if (laser.color === 'terraform-beam') {
             const fade = 1 - progress;
             const sx = laser.startX;
             const sy = laser.startY;
@@ -20832,26 +21220,22 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.stroke();
             ctx.restore();
           } else {
-            // Cinematic staggered normal lasers
-            const totalDuration = laser.duration || 0.8;
-            const delay = (laser.index || 0) * 0.08; // Staggered by 80ms per laser!
-            const laserDuration = 0.25; // Each blast lasts 250ms
+            // Cinematic staggered normal lasers (beam flashes)
+            const delay = (laser.index || 0) * 0.08;
+            const beamDuration = 0.25;
 
-            if (laserAge >= delay && laserAge <= delay + laserDuration) {
-              const activeProgress = (laserAge - delay) / laserDuration;
+            if (laserAge >= delay && laserAge <= delay + beamDuration) {
+              const activeProgress = (laserAge - delay) / beamDuration;
 
-              // Find exact start and end coordinates based on ship positions
               let startPtX = laser.startX;
               let startPtY = laser.startY;
               let endPtX = laser.endX;
               let endPtY = laser.endY;
 
-              // Seeded pseudo-random function to choose stable ship offsets
               const seed = Math.sin(laser.startX * 12.9898 + laser.startY * 78.233 + (laser.index || 0)) * 43758.5453;
               const randVal = seed - Math.floor(seed);
               const randVal2 = (seed * 10) - Math.floor(seed * 10);
 
-              // 1. Source Offset (Fleet/Cruiser/Amoeba/Planet)
               if (laser.sourceCount > 1 && !laser.sourceIsCruiser && !laser.sourceIsAmoeba) {
                 const sourceRenderCount = Math.min(50, laser.sourceCount);
                 const sourceIndex = Math.floor(randVal * sourceRenderCount);
@@ -20869,17 +21253,13 @@ function getPlanetTradeIncomePerMin(planet) {
                 startPtX = laser.startX + lx * cos - ly * sin;
                 startPtY = laser.startY + lx * sin + ly * cos;
               } else if (laser.sourceIsCruiser) {
-                // The server already calculates the exact alternating left/right wing tip positions (or center for bombs)
-                // in startX and startY! So we do not need to add any offset here.
                 startPtX = laser.startX;
                 startPtY = laser.startY;
               } else if (laser.sourceIsPlanet) {
-                // Originate from random spot within planet radius
                 startPtX = laser.startX + (randVal - 0.5) * 40;
                 startPtY = laser.startY + (randVal2 - 0.5) * 40;
               }
 
-              // 2. Target Offset (Fleet/Cruiser/Amoeba/Planet)
               if (laser.targetCount > 1 && !laser.targetIsCruiser && !laser.targetIsAmoeba) {
                 const targetRenderCount = Math.min(50, laser.targetCount);
                 const targetIndex = Math.floor(randVal2 * targetRenderCount);
@@ -20899,28 +21279,13 @@ function getPlanetTradeIncomePerMin(planet) {
               } else if (laser.targetIsCruiser) {
                 const size = (6 + (laser.targetMaxHealth || 6) * 1.0) / 3.0;
                 const rotAngle = (laser.targetAngle || 0) + Math.PI / 2;
-                
                 let localX = 0;
                 let localY = 0;
                 const targetPointSeed = Math.floor(randVal * 4);
-                if (targetPointSeed === 0) {
-                  // Tip/Bridge impact
-                  localX = 0;
-                  localY = -size * 0.7;
-                } else if (targetPointSeed === 1) {
-                  // Left Wing impact
-                  localX = -size * 0.6;
-                  localY = size * 0.1;
-                } else if (targetPointSeed === 2) {
-                  // Right Wing impact
-                  localX = size * 0.6;
-                  localY = size * 0.1;
-                } else {
-                  // Tail/Engineering impact
-                  localX = 0;
-                  localY = size * 0.4;
-                }
-                
+                if (targetPointSeed === 0) { localX = 0; localY = -size * 0.7; }
+                else if (targetPointSeed === 1) { localX = -size * 0.6; localY = size * 0.1; }
+                else if (targetPointSeed === 2) { localX = size * 0.6; localY = size * 0.1; }
+                else { localX = 0; localY = size * 0.4; }
                 const gx = localX * Math.cos(rotAngle) - localY * Math.sin(rotAngle);
                 const gy = localX * Math.sin(rotAngle) + localY * Math.cos(rotAngle);
                 endPtX = laser.endX + gx;
@@ -20930,7 +21295,6 @@ function getPlanetTradeIncomePerMin(planet) {
                 endPtX = laser.endX + (randVal - 0.5) * size;
                 endPtY = laser.endY + (randVal2 - 0.5) * size;
               } else if (laser.targetIsPlanet) {
-                // Target a random spot within planet radius
                 endPtX = laser.endX + (randVal - 0.5) * 40;
                 endPtY = laser.endY + (randVal2 - 0.5) * 40;
               }
@@ -20940,16 +21304,16 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.moveTo(startPtX, startPtY);
               ctx.lineTo(endPtX, endPtY);
               ctx.strokeStyle = laser.cruiserStyle === 'Tholian' ? '#ffff00' : laser.color;
-              // Vary brightness: multiply fading opacity by a random factor between 0.6 and 1.0
               const brightnessFactor = 0.6 + randVal * 0.4;
               ctx.globalAlpha = Math.max(0, 1.0 - activeProgress) * brightnessFactor;
-              // Keep it a thin beam (1.5px) instead of randomized widths
               ctx.lineWidth = 1.5;
               ctx.stroke();
               ctx.restore();
             }
           }
         }
+      } else if (visualProjectiles.size > 0) {
+        visualProjectiles.clear();
       }
 
       if (serverState.explosions) {

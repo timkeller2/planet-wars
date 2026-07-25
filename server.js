@@ -2862,26 +2862,63 @@ async function bootstrap() {
           boardingSourceId: s.boardingSourceId || null,
           boardingSourceContributions: s.boardingSourceContributions || null,
           boardingTimer: s.boardingTimer || 0,
-          boardingDefHitChance: (function() {
-            if (!s.isUnderBoarding) return 10;
-            const defenderPlayer = s.owner || { techScore: 0, expScore: 0 };
+          // Preview boarding KR breakdown (consume happens at resolution)
+          ...((function() {
+            if (!s.isUnderBoarding) {
+              return {
+                boardingDefHitChance: 10,
+                boardingAtkHitChance: 10,
+                boardingDefKrBreakdown: null,
+                boardingAtkKrBreakdown: null,
+                boardingDefUsesDilithium: false,
+                boardingAtkUsesDilithium: false,
+                boardingDefUsesTritanium: false,
+                boardingAtkUsesTritanium: false
+              };
+            }
+            const defenderPlayer = s.owner || { techScore: 0, expScore: 0, resources: {} };
+            const attackerPlayer = s.boardingPlayer || { techScore: 0, expScore: 0, resources: {} };
             const defTech = Math.sqrt(defenderPlayer.techScore || 0);
             const defXp = Math.sqrt(s.expScore || 0);
-            return 10 + defTech + defXp;
-          })(),
-          boardingAtkHitChance: (function() {
-            if (!s.isUnderBoarding) return 10;
-            const attackerPlayer = s.boardingPlayer || { techScore: 0, expScore: 0 };
             const atkTech = Math.sqrt(attackerPlayer.techScore || 0);
             let atkXp = 0;
             if (s.boardingSourceContributions && s.boardingSourceContributions.length > 0) {
               const launcher = game.ships.find(shipObj => shipObj.id === s.boardingSourceContributions[0].shipId && shipObj.active);
-              if (launcher) {
-                atkXp = Math.sqrt(launcher.expScore || 0);
-              }
+              if (launcher) atkXp = Math.sqrt(launcher.expScore || 0);
             }
-            return 10 + atkTech + atkXp;
-          })(),
+            const defUnits = Math.max(0, Math.floor(s.marineCount || 0)) + Math.max(0, Math.floor(s.crew || 0));
+            const atkUnits = Math.max(0, Math.floor(s.boardingMarines || 0));
+            const defRes = defenderPlayer.resources || {};
+            const atkRes = attackerPlayer.resources || {};
+            const defUsesDilithium = defUnits > 0 && (defRes.dilithium || 0) > defUnits * 0.01;
+            const atkUsesDilithium = atkUnits > 0 && (atkRes.dilithium || 0) > atkUnits * 0.01;
+            const defUsesTritanium = defUnits > 0 && (defRes.tritanium || 0) >= defUnits * 0.01;
+            const atkUsesTritanium = atkUnits > 0 && (atkRes.tritanium || 0) >= atkUnits * 0.01;
+            const build = (xp, tech, dil, oppArmor) => {
+              let total = 10 + xp + tech + dil - oppArmor;
+              total = oppArmor > 0 ? Math.max(5, total) : Math.max(1, total);
+              return {
+                base: 10,
+                xp: Math.round(xp * 10) / 10,
+                tech: Math.round(tech * 10) / 10,
+                dilithium: dil,
+                oppArmor,
+                total: Math.round(total * 10) / 10
+              };
+            };
+            const defKr = build(defXp, defTech, defUsesDilithium ? 10 : 0, atkUsesTritanium ? 10 : 0);
+            const atkKr = build(atkXp, atkTech, atkUsesDilithium ? 10 : 0, defUsesTritanium ? 10 : 0);
+            return {
+              boardingDefHitChance: defKr.total,
+              boardingAtkHitChance: atkKr.total,
+              boardingDefKrBreakdown: defKr,
+              boardingAtkKrBreakdown: atkKr,
+              boardingDefUsesDilithium: defUsesDilithium,
+              boardingAtkUsesDilithium: atkUsesDilithium,
+              boardingDefUsesTritanium: defUsesTritanium,
+              boardingAtkUsesTritanium: atkUsesTritanium
+            };
+          })()),
           isBoardingFleet: s.isBoardingFleet || false,
           isReturnPod: s.isReturnPod || false,
           isUpgrading: s.isUpgrading || false,

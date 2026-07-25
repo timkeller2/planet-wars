@@ -8627,14 +8627,15 @@ export class Game {
           let M_atk = Math.max(0, Math.floor(ship.boardingMarines || 0));
           let M_def = Math.max(0, Math.floor(ship.marineCount || 0));
           let C_def = Math.max(0, Math.floor(ship.crew || 0));
+          const defUnitCount = M_def + C_def;
+          const atkUnitCount = M_atk;
 
-          // Calculate tech/XP bonuses
+          // Calculate tech/XP bonuses + resource modifiers (with breakdown for UI)
           const defenderPlayer = ship.owner || { id: 'monsters', techScore: 0, expScore: 0 };
           const attackerPlayer = ship.boardingPlayer || { id: 'unknown', techScore: 0, expScore: 0 };
 
           const defTech = Math.sqrt(defenderPlayer.techScore || 0);
           const defXp = Math.sqrt(ship.expScore || 0);
-          const defHitChance = Math.max(1, 10 + defTech + defXp);
 
           let atkXp = 0;
           if (ship.boardingSourceContributions && ship.boardingSourceContributions.length > 0) {
@@ -8644,7 +8645,75 @@ export class Game {
             }
           }
           const atkTech = Math.sqrt(attackerPlayer.techScore || 0);
-          const atkHitChance = Math.max(1, 10 + atkTech + atkXp);
+
+          // ── Resource boarding bonuses ─────────────────────────────────────
+          // Dilithium: if stock > units×0.01, +10 KR and consume units×0.01 (heavy lasers)
+          // Tritanium: if stock ≥ units×0.01, −10 enemy KR (min 5) and consume (silver armor)
+          // Merculite: 25% chance per shot to grenade (+30 KR that attack), 0.01 per grenade
+          const ensureRes = (player) => {
+            if (!player || player.isMonster || player.id === 'monsters') return null;
+            if (!player.resources) player.resources = {};
+            return player.resources;
+          };
+          const defRes = ensureRes(defenderPlayer);
+          const atkRes = ensureRes(attackerPlayer);
+
+          let defUsesDilithium = false;
+          let atkUsesDilithium = false;
+          let defUsesTritanium = false;
+          let atkUsesTritanium = false;
+          let defDilithiumBonus = 0;
+          let atkDilithiumBonus = 0;
+          let defOppArmor = 0;
+          let atkOppArmor = 0;
+
+          if (defRes && defUnitCount > 0) {
+            const dilCost = defUnitCount * 0.01;
+            if ((defRes.dilithium || 0) > dilCost) {
+              defRes.dilithium -= dilCost;
+              defDilithiumBonus = 10;
+              defUsesDilithium = true;
+            }
+            const triCost = defUnitCount * 0.01;
+            if ((defRes.tritanium || 0) >= triCost) {
+              defRes.tritanium -= triCost;
+              defUsesTritanium = true;
+            }
+          }
+          if (atkRes && atkUnitCount > 0) {
+            const dilCost = atkUnitCount * 0.01;
+            if ((atkRes.dilithium || 0) > dilCost) {
+              atkRes.dilithium -= dilCost;
+              atkDilithiumBonus = 10;
+              atkUsesDilithium = true;
+            }
+            const triCost = atkUnitCount * 0.01;
+            if ((atkRes.tritanium || 0) >= triCost) {
+              atkRes.tritanium -= triCost;
+              atkUsesTritanium = true;
+            }
+          }
+          // Tritanium armor reduces the *other* side's kill rate (floor 5)
+          if (defUsesTritanium) atkOppArmor = 10;
+          if (atkUsesTritanium) defOppArmor = 10;
+
+          const buildKrBreakdown = (base, xp, tech, dilithium, oppArmor) => {
+            let total = base + xp + tech + dilithium - oppArmor;
+            if (oppArmor > 0) total = Math.max(5, total);
+            else total = Math.max(1, total);
+            return {
+              base,
+              xp: Math.round(xp * 10) / 10,
+              tech: Math.round(tech * 10) / 10,
+              dilithium,
+              oppArmor,
+              total: Math.round(total * 10) / 10
+            };
+          };
+          const defKrBreakdown = buildKrBreakdown(10, defXp, defTech, defDilithiumBonus, defOppArmor);
+          const atkKrBreakdown = buildKrBreakdown(10, atkXp, atkTech, atkDilithiumBonus, atkOppArmor);
+          const defHitChance = defKrBreakdown.total;
+          const atkHitChance = atkKrBreakdown.total;
 
           const leftUnits = [];
           for (let i = 0; i < M_def; i++) {
@@ -8671,13 +8740,27 @@ export class Game {
             
             leftUnits.forEach(u => {
               if (u.alive) {
-                roundShots.push({ shooter: u, time: currentTime + Math.random() * 3.0, enemyUnits: rightUnits, hitChance: defHitChance });
+                roundShots.push({
+                  shooter: u,
+                  time: currentTime + Math.random() * 3.0,
+                  enemyUnits: rightUnits,
+                  baseHitChance: defHitChance,
+                  side: 'left',
+                  heavyLaser: defUsesDilithium
+                });
               }
             });
 
             rightUnits.forEach(u => {
               if (u.alive) {
-                roundShots.push({ shooter: u, time: currentTime + Math.random() * 3.0, enemyUnits: leftUnits, hitChance: atkHitChance });
+                roundShots.push({
+                  shooter: u,
+                  time: currentTime + Math.random() * 3.0,
+                  enemyUnits: leftUnits,
+                  baseHitChance: atkHitChance,
+                  side: 'right',
+                  heavyLaser: atkUsesDilithium
+                });
               }
             });
 
@@ -8691,13 +8774,28 @@ export class Game {
               const aliveEnemies = shot.enemyUnits.filter(u => u.alive);
               if (aliveEnemies.length === 0) break;
 
-              if (Math.random() * 100 < shot.hitChance) {
+              // Merculite grenade: 25% chance if stock remains (0.01 per grenade)
+              let isGrenade = false;
+              let hitChance = shot.baseHitChance;
+              if (shot.side === 'left' && defRes && (defRes.merculite || 0) >= 0.01 && Math.random() < 0.25) {
+                isGrenade = true;
+                hitChance += 30;
+                defRes.merculite = Math.max(0, (defRes.merculite || 0) - 0.01);
+              } else if (shot.side === 'right' && atkRes && (atkRes.merculite || 0) >= 0.01 && Math.random() < 0.25) {
+                isGrenade = true;
+                hitChance += 30;
+                atkRes.merculite = Math.max(0, (atkRes.merculite || 0) - 0.01);
+              }
+
+              if (Math.random() * 100 < hitChance) {
                 const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
                 target.alive = false;
                 events.push({
                   time: shot.time,
                   shooterId: shot.shooter.id,
-                  targetId: target.id
+                  targetId: target.id,
+                  isGrenade,
+                  heavyLaser: !!shot.heavyLaser && !isGrenade
                 });
               }
             }
@@ -8736,13 +8834,19 @@ export class Game {
               name: ship.owner && ship.owner.id === 'monsters' ? 'MONSTERS' : (ship.owner ? (ship.owner.name || ship.owner.id) : 'Defender'),
               color: ship.owner ? (ship.owner.color || '#ffffff') : '#ffffff',
               units: leftUnits.map((u, idx) => ({ id: u.id, type: u.type, side: u.side, index: idx })),
-              hitChance: defHitChance
+              hitChance: defHitChance,
+              krBreakdown: defKrBreakdown,
+              usesDilithium: defUsesDilithium,
+              usesTritanium: defUsesTritanium
             },
             rightSide: {
               name: ship.boardingPlayer ? (ship.boardingPlayer.name || ship.boardingPlayer.id) : 'Attacker',
               color: ship.boardingPlayer ? (ship.boardingPlayer.color || '#ff3366') : '#ff3366',
               units: rightUnits.map((u, idx) => ({ id: u.id, type: u.type, side: u.side, index: idx })),
-              hitChance: atkHitChance
+              hitChance: atkHitChance,
+              krBreakdown: atkKrBreakdown,
+              usesDilithium: atkUsesDilithium,
+              usesTritanium: atkUsesTritanium
             },
             events: events,
             winner: leftSurvivors.length > 0 ? 'Defender' : 'Attacker',

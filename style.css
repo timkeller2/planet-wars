@@ -29,6 +29,12 @@ canvas {
   left: 0;
   z-index: 1;
   touch-action: none;
+  pointer-events: auto;
+}
+
+#gameCanvas {
+  pointer-events: auto !important;
+  touch-action: none;
 }
 
 /* HUD controls: allow taps, block browser pan/zoom that can fight the map */
