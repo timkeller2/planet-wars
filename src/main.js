@@ -10464,7 +10464,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           if (res === 'latinum' && serverState && serverState.bundleValue) {
-            card.title = `Latinum - High-value trade resource. 4 latinum, 5 trade options and 1 of every other resource may be sold for ${serverState.bundleValue} credits if your trade options are at capacity.`;
+            card.title = `Latinum — High-value trade resource. Bundle sale (when trade options are at capacity): 4 Latinum + 1 of every other resource for ${serverState.bundleValue} credits (spends 5 trade options). Bundle value rises over time.`;
           }
 
           if (!card._hasMarketListeners) {
@@ -14322,22 +14322,100 @@ function getPlanetTradeIncomePerMin(planet) {
   if (commandLimitDisplayBtn) {
     commandLimitDisplayBtn.style.cursor = 'pointer';
     commandLimitDisplayBtn.style.pointerEvents = 'auto';
+
+    /** Live command-limit breakdown matching game.js economy tick. */
+    function buildCommandLimitTooltipHtml() {
+      const myP = (serverState && serverState.players && localPlayer)
+        ? (serverState.players.find(p => p.id === localPlayer.id) || localPlayer)
+        : localPlayer;
+      if (!myP) {
+        return `
+          <div style="font-weight: bold; font-size: 0.85rem; color: #00e5ff; border-bottom: 1px solid rgba(0, 229, 255, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Command Limit</div>
+          <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa;">No player data.</div>
+        `;
+      }
+
+      let garrisonWorlds = 0;
+      let fullGarrisonWorlds = 0;
+      let controlledHomeworlds = 0;
+      let controlsOwnHomeworld = false;
+      let ownedPlanetCount = 0;
+
+      if (serverState && serverState.planets) {
+        for (const planet of serverState.planets) {
+          if (planet.dead) continue;
+          if (planet.ownerId !== myP.id) continue;
+          ownedPlanetCount++;
+          if (planet.focusMode === 'garrison') {
+            garrisonWorlds++;
+            // Server: ships > maxShips * 2 - 10
+            if ((planet.ships || 0) > (planet.maxShips || 0) * 2 - 10) {
+              fullGarrisonWorlds++;
+            }
+          }
+          if (planet.homeworldOf) {
+            controlledHomeworlds++;
+            if (planet.homeworldOf === myP.id) {
+              controlsOwnHomeworld = true;
+            }
+          }
+        }
+      }
+
+      // Prefer server planetCount when present (authoritative)
+      const planetCount = (myP.planetCount !== undefined && myP.planetCount !== null)
+        ? myP.planetCount
+        : ownedPlanetCount;
+
+      const base = 5;
+      const fromPlanets = planetCount || 0;
+      const fromGarrison = garrisonWorlds * 2;
+      const fromFullGarrison = fullGarrisonWorlds * 2;
+      const fromHomeworlds = controlledHomeworlds * 2;
+      const fromOwnHw = controlsOwnHomeworld ? 3 : 0;
+      const computedLimit = base + fromPlanets + fromGarrison + fromFullGarrison + fromHomeworlds + fromOwnHw;
+      const serverLimit = myP.commandLimit !== undefined ? myP.commandLimit : computedLimit;
+      const commandCount = myP.commandCount || 0;
+      const mismatchNote = (myP.commandLimit !== undefined && computedLimit !== serverLimit)
+        ? `<div style="margin-top:6px; color:#ff9800; font-size:0.82rem;">Client sum ${computedLimit} vs server limit ${serverLimit} (server wins; planet data may lag).</div>`
+        : '';
+
+      const row = (label, val, color = '#ccc') =>
+        `<div style="display:flex; justify-content:space-between; gap:16px;"><span>${label}</span><span style="color:${color}; font-weight:bold;">${val}</span></div>`;
+
+      return `
+        <div style="font-weight: bold; font-size: 0.85rem; color: #00e5ff; border-bottom: 1px solid rgba(0, 229, 255, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Command Limit</div>
+        <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.45; min-width: 260px;">
+          Cap on cruiser command weight. Usage is <strong style="color:#fff;">⌊maxHealth / 10⌋</strong> per active cruiser (display: ⚓ used / limit).<br><br>
+          <span style="color: #00e5ff; font-weight: bold;">Your breakdown</span>
+          ${row('Base', `+${base}`, '#00e5ff')}
+          ${row(`Planets owned (${fromPlanets})`, `+${fromPlanets}`, '#fff')}
+          ${row(`Garrison focus (${garrisonWorlds} × 2)`, `+${fromGarrison}`, garrisonWorlds ? '#8bc34a' : '#666')}
+          ${row(`Near-full garrison (${fullGarrisonWorlds} × 2)`, `+${fromFullGarrison}`, fullGarrisonWorlds ? '#8bc34a' : '#666')}
+          ${row(`Homeworlds held (${controlledHomeworlds} × 2)`, `+${fromHomeworlds}`, controlledHomeworlds ? '#ffeb3b' : '#666')}
+          ${row('Own homeworld held', controlsOwnHomeworld ? '+3' : '+0', controlsOwnHomeworld ? '#ffeb3b' : '#666')}
+          <div style="border-top: 1px solid rgba(0,229,255,0.25); margin-top: 6px; padding-top: 6px; display:flex; justify-content:space-between; gap:16px;">
+            <span style="color:#00e5ff; font-weight:bold;">Limit</span>
+            <span style="color:#00e5ff; font-weight:bold;">${serverLimit}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; gap:16px;">
+            <span>In use (cruisers)</span>
+            <span style="color:${commandCount > serverLimit ? '#ff3333' : '#fff'}; font-weight:bold;">${commandCount} / ${serverLimit}</span>
+          </div>
+          ${mismatchNote}
+          <div style="margin-top: 8px; font-size: 0.82rem; color: #777; line-height: 1.35;">
+            Formula: <code style="color:#99c;">5 + planets + 2×garrison + 2×near-full garrison + 2×homeworlds + (3 if own HW)</code><br>
+            Near-full garrison: focus Garrison and ships &gt; max×2 − 10. Excess command costs fleet upkeep.
+          </div>
+        </div>
+      `;
+    }
+
     commandLimitDisplayBtn.addEventListener('mouseenter', () => {
       const tooltipPanel = document.getElementById('credits-tooltip-panel');
       if (tooltipPanel) {
         tooltipPanel.dataset.source = 'command';
-        tooltipPanel.innerHTML = `
-          <div style="font-weight: bold; font-size: 0.85rem; color: #00e5ff; border-bottom: 1px solid rgba(0, 229, 255, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Command Limit</div>
-          <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.4;">
-            Command capacity. Homeworlds + Garrison planets.<br><br>
-            <span style="color: #00e5ff; font-weight: bold;">Calculation:</span><br>
-            • Base: 1 + ceil(Planet Count / 3)<br>
-            • Garrison Focus: +1 per Garrison planet<br>
-            • Full Garrison: +1 per fully garrisoned planet<br>
-            • Controlled Homeworlds: +1 per controlled Homeworld<br>
-            • Own Homeworld: +1 if controlling own Homeworld
-          </div>
-        `;
+        tooltipPanel.innerHTML = buildCommandLimitTooltipHtml();
         const rect = commandLimitDisplayBtn.getBoundingClientRect();
         tooltipPanel.style.left = `${rect.left + window.scrollX}px`;
         tooltipPanel.style.top = `${rect.bottom + window.scrollY + 5}px`;
@@ -14543,6 +14621,7 @@ function getPlanetTradeIncomePerMin(planet) {
         <ul>
           <li>Armor points absorb damage <strong>before hull HP</strong>.</li>
           <li>If you have <strong>Duranium</strong> stockpiled, consuming it can boost the armor capacity bonus by about <strong>+50%</strong>.</li>
+          <li>While <strong>special Duranium</strong> is charged (Use Resources), shrug/deflection gains <code>3 + 3√(duranium stockpile)</code> percentage points (cap 90%).</li>
           <li>Critical for surviving bombardments, dogfights, and amoeba pressure.</li>
         </ul>
         <p class="ut-note">Armor regenerates/refills according to repair rules when you return to friendly support.</p>
@@ -14589,6 +14668,7 @@ function getPlanetTradeIncomePerMin(planet) {
           <li>More planetary/ship <strong>bombardment</strong> magazine depth.</li>
           <li>Splash destroys extra fleet ships or chips extra HP on cruisers/amoebas (capped vs target size, ~1/50th).</li>
           <li>Pairs with Scout Attack / bomb orders for sieges and clearing escorts.</li>
+          <li>Race bomb specials (Antimatter / Merculite / Dilithium) add accuracy and range of <code>3 + 3√(stockpile)</code> while special bombs are charged.</li>
         </ul>
       `
     },
@@ -14643,6 +14723,7 @@ function getPlanetTradeIncomePerMin(planet) {
         <ul>
           <li>Greatly expands the cruiser’s fuel tank for long-range operations.</li>
           <li>Enables long scouting, patrol, and distant anomaly runs without constant docking.</li>
+          <li><strong>Special Deuterium fuel</strong> (Use Resources) adds speed of <code>3 + 3√(deuterium stockpile)</code> while charged.</li>
         </ul>
         <p class="ut-note">Dilithium Reactor charging is part of the <strong>Engine</strong> upgrade, not Extended Fuel.</p>
       `
@@ -14672,7 +14753,13 @@ function getPlanetTradeIncomePerMin(planet) {
           <li><strong>On + over enemy planet</strong> (within radius+15): invade if more than half capacity is loaded (after bombard hold rules).</li>
           <li><strong>Board disabled enemy cruisers</strong> (health &lt; 2) when not Hold Fire, with whole marines loaded and target isolated from its friends.</li>
         </ul>
-        <p class="ut-note">Tritanium can boost launched marine fleets (+400 Exp, speed 35).</p>
+        <div class="ut-section">Resources in boarding</div>
+        <ul>
+          <li><strong>Dilithium:</strong> +KR of <code>3+3√stockpile</code> (heavy lasers).</li>
+          <li><strong>Tritanium:</strong> opp armor −KR of <code>3+3√stockpile</code>.</li>
+          <li><strong>Merculite:</strong> 25% grenade chance (+30 KR that attack).</li>
+        </ul>
+        <p class="ut-note">Marine fleets travel at speed 35. Tritanium (0.01 per 3 marines) raises starting Exp from +100 to +400 when Use Resources is on.</p>
       `
     },
     command: {
@@ -15886,7 +15973,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           const hasTokens = upgradeQual.ship.upgradeTokens > 0;
           const displayCost = hasTokens ? '1 Token' : (minCost === Infinity ? 0 : minCost);
-          btnUpgradeMode.setAttribute('title', `Upgrade Mode (U) (Cost: ${displayCost})`);
+          btnUpgradeMode.setAttribute('title', `Upgrade Mode (G) (Cost: ${displayCost})`);
           const costSpan = btnUpgradeMode.querySelector('.btn-cost');
           if (costSpan) {
             costSpan.textContent = hasTokens ? '1 Token' : displayCost;
@@ -15904,7 +15991,7 @@ function getPlanetTradeIncomePerMin(planet) {
           btnUpgradeMode.removeAttribute('aria-disabled');
         } else if (showPlanetUpgrade) {
           btnUpgradeMode.style.display = 'inline-flex';
-          btnUpgradeMode.setAttribute('title', `Upgrade Planet (U) (Cost: ${planetUpgradeCost})`);
+          btnUpgradeMode.setAttribute('title', `Upgrade Planet (G) (Cost: ${planetUpgradeCost})`);
           const costSpan = btnUpgradeMode.querySelector('.btn-cost');
           if (costSpan) {
             costSpan.textContent = planetUpgradeCost;

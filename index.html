@@ -214,37 +214,37 @@
             </div>
             <div id="resources-hud" style="display: none; align-items: center; gap: 6px; pointer-events: auto; font-family: 'Orbitron', sans-serif; font-size: 0.8rem; color: #fff; background: rgba(0, 20, 30, 0.7); border: 1px solid rgba(0, 229, 255, 0.35); padding: 4px 10px; border-radius: 6px; backdrop-filter: blur(5px); box-shadow: 0 0 10px rgba(0, 229, 255, 0.15); user-select: none;">
               <!-- Antimatter 🌀 -->
-              <div id="res-card-antimatter" title="Antimatter - Rearms bombs, improves accuracy and range for Romulan and Gorn vessels" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+              <div id="res-card-antimatter" title="Antimatter — Romulan/Gorn bomb resource. Rearms special bombs. While special bombs are active, accuracy and range gain 3+3√(stockpile)." style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
                 <span><span class="res-qty" id="res-qty-antimatter">0</span>🌀</span>
               </div>
 
               <!-- Tritanium 🔩 -->
-              <div id="res-card-tritanium" title="Tritanium - Pays for fleet launch costs (0.01 per ship; gives +100 XP) and boosts marine fleet XP (+400 XP, costing 0.01 per 3 marines)" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+              <div id="res-card-tritanium" title="Tritanium — With Use Resources: fleet launches cost 0.01/ship for +400 Exp and speed 35; marine fleets cost 0.01 per 3 marines for +400 Exp (else +100). Boarding: silver armor reduces opponent kill rate by 3+3√(stockpile)." style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
                 <span><span class="res-qty" id="res-qty-tritanium">0</span>🔩</span>
               </div>
 
               <!-- Merculite ☄️ -->
-              <div id="res-card-merculite" title="Merculite - Rearms bombs, improves accuracy and range for Klingon and Federation vessels" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+              <div id="res-card-merculite" title="Merculite — Klingon/Federation bomb resource. Rearms special bombs. While special bombs are active, accuracy and range gain 3+3√(stockpile). Boarding: 25% chance per shot to grenade (+30 KR) for 0.01 each." style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
                 <span><span class="res-qty" id="res-qty-merculite">0</span>☄️</span>
               </div>
 
               <!-- Dilithium 💎 -->
-              <div id="res-card-dilithium" title="Dilithium - Rearms bombs, improves accuracy and range for Tholian and Lyran vessels" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+              <div id="res-card-dilithium" title="Dilithium — Tholian/Lyran bomb resource. Rearms special bombs (accuracy/range 3+3√stockpile). Powers Engine Dilithium Reactor. Boarding: heavy lasers +KR of 3+3√(stockpile)." style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
                 <span><span class="res-qty" id="res-qty-dilithium">0</span>💎</span>
               </div>
 
               <!-- Duranium 🔲 -->
-              <div id="res-card-duranium" title="Duranium - Repairs cruiser hulls. Trade resource. Used to boost cruiser armor upgrades" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+              <div id="res-card-duranium" title="Duranium — Repairs cruiser hulls; boosts Armor upgrades (~+50% capacity). Special Duranium adds deflection of 3+3√(stockpile) while active (capped at 90%). Trade resource." style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
                 <span><span class="res-qty" id="res-qty-duranium">0</span>🔲</span>
               </div>
 
               <!-- Deuterium 💧 -->
-              <div id="res-card-deuterium" title="Deuterium - Refuels cruisers, increases speed when used as special fuel" style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+              <div id="res-card-deuterium" title="Deuterium — Refuels cruisers. Special fuel adds speed of 3+3√(stockpile) while active. Trade resource." style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
                 <span><span class="res-qty" id="res-qty-deuterium">0</span>💧</span>
               </div>
 
               <!-- Latinum 🏺 -->
-              <div id="res-card-latinum" title="Latinum - High-value trade resource. 4 latinum, 5 trade options and 1 of every other resource may be sold for 200 credits if your trade options are at capacity." style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+              <div id="res-card-latinum" title="Latinum — High-value trade resource. Bundle sale (when trade options are at capacity): 4 Latinum + 1 of every other resource for ~200+ credits (spends 5 trade options). Bundle value rises over time." style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
                 <span><span class="res-qty" id="res-qty-latinum">0</span>🏺</span>
               </div>
             </div>
@@ -430,6 +430,7 @@
               <button class="help-topic-btn" data-topic="controls">🎮 Controls</button>
               <button class="help-topic-btn" data-topic="planets">🪐 Planets &amp; Economy</button>
               <button class="help-topic-btn" data-topic="focus">👁️ Focus Modes</button>
+              <button class="help-topic-btn" data-topic="resources">💎 Resources &amp; Specials</button>
               <button class="help-topic-btn" data-topic="ships">🚀 Ships &amp; Combat</button>
               <button class="help-topic-btn" data-topic="cruisers">🛸 Cruisers</button>
               <button class="help-topic-btn" data-topic="diplomacy">🤝 Diplomacy &amp; Sympathy</button>
@@ -450,7 +451,8 @@
               <li><strong>Happiness Victory:</strong> Lead the 2nd place player by at least <strong>11 + 1/30 of the game duration in minutes</strong> (or <strong>15</strong> for an unlimited game) Happiness Bonus points (√Happiness). Human players must have non-negative credits (&ge; 0) to win.</li>
               <li><strong>Score Victory:</strong> Lead the 2nd place player by at least <strong>1.5 &times; requiredLead</strong> (rounded up) Victory Points (VP = √Tech + √Exp + √Happiness). Human players must have non-negative credits (&ge; 0) to win.</li>
               <li><strong>Economic Domination:</strong> Control more than <strong>75%</strong> of the galaxy's total planet capacity. Human players must have non-negative credits (&ge; 0) to win.</li>
-              <li><strong>Timed Game Victory:</strong> When the clock runs out, the player with the highest combined Victory Points wins. If no players survive, it's a draw.</li>
+              <li><strong>Financial Victory:</strong> Optional setting. First player whose credits reach the configured target (e.g. Short 1000, Standard 5000, Custom) wins. Human players must still have non-negative credits (&ge; 0). Disabled when set to None.</li>
+              <li><strong>Timed Game Victory:</strong> When the clock runs out, the player with the highest Victory Points wins (<code>VP = √Tech + √Exp + √Happiness</code>). Humans in debt (credits &lt; 0) are skipped in favor of the next eligible scorer. If no players survive or all remaining humans are in debt, it's a draw.</li>
               <li><strong>Player Elimination:</strong> Capturing a player's last planet eliminates them, awarding the conqueror <strong>+100 Exp</strong>. Destroying a Homeworld also awards <strong>+100 Exp</strong>.</li>
               <li><strong>Leaderboard Scoring:</strong> The leaderboard ranks all players by Victory Points = √Tech + √Exp + √Happiness. Players with a 🎯 bullseye are dominant threats meeting at least <strong>75%</strong> of any victory condition (e.g. at least 75% of the required lead in Tech, Exp, or Happiness, a ≥1.75× VP ratio over 2nd place with at least 75% of the minimum score threshold, or controlling ≥56.25% of galactic capacity) — AIs will gang up on them! Note: The Monsters faction is excluded from all non-elimination victories, never receives a 🎯 bullseye, and AIs do not gang up on them.</li>
             </ul>
@@ -521,6 +523,7 @@
               </li>
               <li><strong>Credits 💲:</strong> Earned mainly from <strong>passive galactic trade</strong>: your empire's <em>effective ships</em> (boosted heavily by Commerce worlds) plus visible non-war partners' effective ships generate credits over time. Commerce multiplies a world's ship weight for this system (see Focus Modes). Credits also pay for cruiser builds, upgrades, and focus transitions (when enabled). Neutral trade is limited by sympathy — counted ships on a neutral world cap at <strong>20 &times; Effective Sympathy</strong> (and by ships actually there).</li>
               <li><strong>Planetary Upgrades 🛠️:</strong> Planets can be upgraded using Credits (up to <strong>1 upgrade per planet</strong>). Building a planetary upgrade has a <strong>30-second delay</strong> and transition animation. Upgrading a planet with a module (e.g. Armor, Sensors, Shields, etc.) grants a global <strong>20% discount</strong> (up to 100% discount, making upgrades free) on that upgrade category for ALL of the player's cruisers in the galaxy. Note: The number of upgrades of any single type across all planets is capped globally at <strong>1/5 of the number of human players (rounded up)</strong>.</li>
+              <li><strong>Command Limit ⚓:</strong> Cap on cruiser command weight (HUD shows used/limit). Usage = sum of <code>⌊maxHealth / 10⌋</code> across your active cruisers. Limit = <code>5 + owned planets + 2×garrison focus worlds + 2×near-full garrison worlds (ships &gt; max×2 − 10) + 2×controlled homeworlds + 3 if you hold your own homeworld</code>. Exceeding the limit costs fleet upkeep. Hover the ⚓ HUD for a live breakdown.</li>
               <li><strong>Resource Stockpile Capacity 📦:</strong> Caps the amount of resources you can stockpile before incurring storage fees. Capacity = Command Capacity + Trade Capacity.</li>
               <li><strong>Gravity Fields:</strong> Planets project gravity wells (radius = maxShips × 1.5, expanded by Tech/Exp). Military planets at full capacity get <strong>1.5× gravity radius</strong>. Garrison-focused planets at full capacity extend gravity by <strong>+ships/2</strong>. Friendly wells protect ships from attrition, allow cruiser healing/rearming, and grant starting experience bonuses.</li>
               <li><strong>Orbital Bombardment:</strong> Each defending ship killed has an <strong>8%</strong> chance to reduce max capacity by 1. Below 55 max capacity = <strong>planet destroyed!</strong></li>
@@ -558,6 +561,28 @@
               <li><strong>📦 Supply Production (S):</strong> Multiplies planetary supply regeneration by <strong>×4</strong> while the planet is below full capacity. When the planet is full of ships (<code>ships ≥ maxShips</code>), supply regeneration is <strong>×8</strong> instead. Supplies still cap at max capacity.</li>
               <li><strong>🕵️ Root Out Spies (P):</strong> Only available when enemy sympathy exists on the planet. When the planet is at full capacity, its overflow production converts into espionage defense. Every <strong>3 phantom ships</strong> produced reduces the highest enemy sympathy on the planet by 1. Once all enemy sympathy is eliminated, the planet will automatically switch to Commerce mode.</li>
               <li><strong>🏠 Homeworld (H):</strong> Declares this planet your homeworld (only one allowed). Grants homeworld production/combat benefits and command-limit bonuses while you hold it.</li>
+            </ul>
+          </div>
+
+          <!-- RESOURCES & SPECIALS -->
+          <div id="help-topic-resources" class="help-page hidden">
+            <ul>
+              <li><strong>Stockpile &amp; Capacity:</strong> Resources accumulate in your empire stockpile. Capacity = Command Capacity + Trade Capacity. Exceeding capacity incurs storage fees. Toggle <em>Use Resources</em> (<strong>R</strong>) on planets/cruisers to spend stockpile for combat and logistics bonuses.</li>
+              <li><strong>Special Charge Formula:</strong> Several “special” bonuses scale with how much of that resource you hold: <code>3 + 3√(stockpile)</code> (replaces the old flat +10). Higher stockpiles mean stronger active specials.</li>
+              <li><strong>🌀 Antimatter (Romulan / Gorn):</strong> Race bomb resource. Rearms special bombs. While special bombs are charged, accuracy and weapon range each gain <code>3+3√(antimatter)</code>.</li>
+              <li><strong>☄️ Merculite (Klingon / Federation):</strong> Race bomb resource with the same special-bomb accuracy/range formula. In boarding combat, each shot has a <strong>25%</strong> chance to grenade for <strong>+30 kill rate</strong> (costs 0.01 merculite per grenade).</li>
+              <li><strong>💎 Dilithium (Tholian / Lyran):</strong> Race bomb resource (same special-bomb formula). Powers the Engine <strong>Dilithium Reactor</strong> (charges inside friendly wells). Boarding: if stockpile covers units×0.01, heavy lasers add <code>3+3√(dilithium)</code> kill rate and spend that cost.</li>
+              <li><strong>🔩 Tritanium:</strong>
+                <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
+                  <li><strong>Fleet launches</strong> (Use Resources on): 0.01 per ship → fleet speed <strong>35</strong> and <strong>+400 Exp</strong>.</li>
+                  <li><strong>Marine fleets:</strong> 0.01 per 3 marines → <strong>+400 Exp</strong> (without Tritanium, marine fleets still get <strong>+100 Exp</strong>).</li>
+                  <li><strong>Boarding:</strong> silver armor reduces the opponent’s kill rate by <code>3+3√(tritanium)</code> when you can afford units×0.01 (opponent KR floors at 5 while armor applies).</li>
+                </ul>
+              </li>
+              <li><strong>🔲 Duranium:</strong> Repairs cruiser hulls and boosts Armor upgrade capacity (~+50%). While special Duranium is active, shrug/deflection gains <code>3+3√(duranium)</code> percentage points (still capped at 90%).</li>
+              <li><strong>💧 Deuterium:</strong> Refuels cruisers. While special fuel is active, speed gains <code>3+3√(deuterium)</code>.</li>
+              <li><strong>🏺 Latinum:</strong> High-value trade good. When trade options are full, auto-bundle sales can convert 4 Latinum + 1 of every other resource (spending 5 trade options) into credits; payout starts around 200 and rises as the galactic bundle value climbs.</li>
+              <li><strong>Credits Interest:</strong> Positive balances earn <strong>1%/min</strong>. Debt interest scales with how deep you are under the debt limit (based on effective trade ships). Toggle Use Credits on the credits HUD to pay with ships instead of credits.</li>
             </ul>
           </div>
 
@@ -612,11 +637,11 @@
               <li><strong>Fuel Transfer:</strong> Friendly cruisers within sensor range autonomously share fuel — if one has fuel &gt;1, it donates 1 to a stranded ally.</li>
               <li><strong>Multi-shot Weapons &amp; Range:</strong> Cruisers fire laser shots per second equal to their current health, targeting enemy ships, amoebas, and planets. <strong>Weapon range is determined by the cruiser class base range, upgraded via Sensor Array (+25%/level) and Targeting Computer (+5%/level), plus a tech bonus (+1/tech) and experience bonus (+0.01 per XP point).</strong></li>
               <li><strong>Bomb Sacs:</strong> Carry bombs = maxHealth/5 (increased by Munitions). Each bombardment volley on planets uses 1 bomb. Bombs reload inside friendly gravity wells.</li>
-              <li><strong>Armor Deflection:</strong> Base shrug chance = <strong>(MaxHealth + √Tech + √Exp + √ShipExp)%</strong>, capped at <strong>90%</strong>. Carrying Duranium resource adds a flat <strong>+10%</strong> shrug chance. If out of bombs (0), deflection is <strong>halved</strong> — keep them loaded!</li>
+              <li><strong>Armor Deflection:</strong> Base shrug chance = <strong>(MaxHealth + √Tech + √Exp + √ShipExp)%</strong>, capped at <strong>90%</strong>. While special Duranium is active, add <code>3 + 3√(duranium stockpile)</code> percentage points (same stockpile formula as other specials). If out of bombs (0), deflection is <strong>halved</strong> — keep them loaded!</li>
               <li><strong>Crew System:</strong> Cruisers have crew (up to 2× current health). Crew restores at 1/sec inside friendly wells when no enemies are within <strong>100px</strong>. Crew is consumed during boarding combat.</li>
               <li><strong>Patrol Mode (P):</strong> Toggled via <strong>P</strong> key or button. Cruiser attacks enemies in sensor range, flies to a nearby friendly well to rearm, then returns to its patrol station. Target-locking a planet automatically deactivates patrol mode. Note: Auto-retreat to refuel, rearm, or heal is restricted to cruisers in <em>Patrol</em> or <em>Scout</em> modes; manually ordered/attacking cruisers will not auto-retreat.</li>
               <li><strong>Bombardment Threat Safety:</strong> Cruisers automatically <strong>suspend bombardment</strong> when any enemy ship or Amoeba is within sensor range, switching to defensive engagement.</li>
-              <li><strong>Marine Boarding &amp; Replays:</strong> Cruisers with Marines can board disabled enemy cruisers (health &lt; 2) when Scout Attack is <em>not Hold Fire</em> (On or Off). Friend with marines nearby also cease fire so the crippled ship can be captured. When boarding is initiated, a <strong>9-second custom animated overlay replay</strong> shows names, troop counts, and calculated kill rates (based on tech and XP bonuses). Subsequent boarding attempts on the same cruiser are appended with a <em>"Round [N]"</em> tag. Victory captures the enemy cruiser!</li>
+              <li><strong>Marine Boarding &amp; Replays:</strong> Cruisers with Marines can board disabled enemy cruisers (health &lt; 2) when Scout Attack is <em>not Hold Fire</em> (On or Off). Friends with marines nearby also cease fire so the crippled ship can be captured. When boarding is initiated, a <strong>9-second custom animated overlay replay</strong> shows names, troop counts, and calculated kill rates (tech, XP, and resource stockpile bonuses: Dilithium +KR, Tritanium opp-armor, Merculite grenades — all using <code>3+3√stockpile</code> where applicable). Subsequent boarding attempts on the same cruiser are appended with a <em>"Round [N]"</em> tag. Victory captures the enemy cruiser!</li>
               <li><strong>Order Queueing (Shift+Right-click):</strong> Queue movement and targeting orders. Cruisers execute them sequentially, advancing to the next waypoint automatically.</li>
               <li><strong>Cruiser Bomb Toggle (B):</strong> When cruiser(s) are selected, <strong>B</strong> toggles auto-planet-bombardment on/off for those cruisers.</li>
             </ul>
@@ -697,7 +722,7 @@
               <li><strong>Overpopulation:</strong> AI planets with <strong>&gt;160 ships</strong> have a <strong>10% chance/10s</strong> to auto-attack the weakest enemy.</li>
               <li><strong>Dominant Player Targeting 🎯:</strong> AIs gang up on players exceeding <strong>4,500 capacity</strong>, leading tech by <strong>200+</strong>, or holding <strong>2× capacity</strong> of 2nd place.</li>
               <li><strong>Homeworld Priority:</strong> AIs fiercely retake their lost homeworld (<strong>75% chance</strong> to immediately attack if in top targets).</li>
-              <li><strong>Rampage Events:</strong> Starts at <strong>30 minutes</strong> (on normal 1600px maps, scaling shorter on larger maps) and accelerates by decaying 6 minutes each time down to a <strong>12-minute minimum</strong>. Selects a neutral planet (preferring max capacity &gt; 110) to undergo a <strong>3-minute incubation phase</strong> before awakening:
+              <li><strong>Rampage Events:</strong> Starts at <strong>30 minutes</strong> (on normal ~3000px maps; scales shorter on larger maps) and accelerates by decaying 6 minutes each time down to a <strong>12-minute minimum</strong>. Selects a neutral planet (preferring max capacity &gt; 110) to undergo a <strong>3-minute incubation phase</strong> before awakening:
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
                   <li><strong>Garrison:</strong> +300% of max capacity instantly.</li>
                   <li><strong>Production:</strong> 3× rate.</li>
@@ -712,10 +737,10 @@
           <!-- OTHER -->
           <div id="help-topic-other" class="help-page hidden">
             <ul>
-              <li><strong>Fog of War:</strong> Optional. You can only see within your gravity wells and ship radar. Previously discovered planets appear as silhouettes with cached info.</li>
+              <li><strong>Fog of War:</strong> Optional. You can only see within your gravity wells and ship radar. Previously discovered planets appear as silhouettes with cached info. Any sympathy on a world also pierces fog for that planet’s well.</li>
               <li><strong>AFK Protection:</strong> The game automatically pauses after <strong>5 minutes</strong> of global inactivity (no human player actions). Any player command/action will resume the game.</li>
-              <li><strong>Timed Games:</strong> Configurable game clock (30 min to unlimited). When time expires, victory is awarded by combined score: √Tech + √Exp + Capacity%.</li>
-              <li><strong>Map Layout &amp; Pioneer Spacing:</strong> Default 50 planets (scales with map size). Normal sizes are determined by a size class of 60–150 weighted toward the middle. Homeworlds start at size 120 (480 capacity), while Super Planets/Mega-Supers can reach 200–300 capacity. <strong>Pioneer Mode Spawn Spacing: When starting a game on Pioneer mode, players and AI homeworlds are spawned with enhanced spacing, avoiding other players' active ships, pending spawns, and existing homeworlds.</strong></li>
+              <li><strong>Timed Games:</strong> Configurable game clock (30 min to unlimited). When time expires, victory is awarded by highest VP: √Tech + √Exp + √Happiness (humans in debt are ineligible).</li>
+              <li><strong>Map Layout &amp; Pioneer Spacing:</strong> Default 50 planets (scales with map size). Default map is <strong>Normal: 3000</strong>. Planet size classes are 60–150 weighted toward the middle. Homeworlds start at size 120 (480 capacity), while Super Planets/Mega-Supers can reach 200–300 capacity. <strong>Pioneer Mode:</strong> homeworlds spawn with enhanced spacing away from other players’ ships, pending spawns, and existing homeworlds.</li>
               <li><strong>Configurable Settings:</strong>
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
                   <li><strong>AI Count:</strong> 0–50 AI players (default 5). Auto-scales with planet count.</li>
@@ -726,15 +751,19 @@
                   <li><strong>Star Field:</strong> Toggle the cosmetic background star field.</li>
                   <li><strong>Production Speed:</strong> 0.5× (Grand Strategy) to 3× (Blitz) or custom.</li>
                   <li><strong>Hazard Level:</strong> 0 (none) to 4× (lots) or custom.</li>
-                  <li><strong>Map Size:</strong> Skirmish (1000) through Galactic (50000), plus Custom (500–50000) for arbitrary square maps.</li>
+                  <li><strong>Map Size:</strong> Skirmish (1000) through Galactic (50000); default Normal (3000). Custom 500–50000 square maps.</li>
                   <li><strong>Planet Count:</strong> 10–1000+ (default scales with map; large maps can use hundreds of worlds).</li>
                   <li><strong>Timed Game:</strong> 30 min to 3 hours, custom, or unlimited.</li>
+                  <li><strong>Starting Credits:</strong> Optional starting bank (including custom values).</li>
+                  <li><strong>Financial Victory:</strong> Optional credit-target win condition (None / Short–Epic / Custom).</li>
+                  <li><strong>Record Game Replay:</strong> On by default. Records a compact full-game replay (2–5 Hz, fog off); keeps the last 10 on the server for in-game playback.</li>
                 </ul>
               </li>
-              <li><strong>Leaderboard (L):</strong> Ranks all players by Victory Score (√Tech + √Exp + √Happiness). Columns: 🧪 Tech, 🎯 Exp, 💖 Happiness, 🏆 Total. Dominant threats get a 🎯 bullseye.</li>
-              <li><strong>Chat &amp; Naming:</strong> Press <strong>Enter</strong> to chat. Type <code>N &lt;name&gt;</code> to rename a selected cruiser or owned planet (max 16 characters). Chat commands <code>battle time!</code> and <code>meg!</code> play special music tracks.</li>
+              <li><strong>Leaderboard (L):</strong> Ranks all players by Victory Score (√Tech + √Exp + √Happiness). Columns: 🧪 Tech, 🎯 Exp, 💖 Happiness, 🏆 Total. Dominant threats get a 🎯 bullseye. Inactive AI roster names are filtered during full-game replay review.</li>
+              <li><strong>Post-Game VIEW MAP:</strong> After victory/defeat, open the map for free review before starting a new game. Full-game replays can be opened from the Recordings menu (<strong>V</strong>).</li>
+              <li><strong>Chat &amp; Naming:</strong> Press <strong>Enter</strong> to chat. Type <code>N &lt;name&gt;</code> to rename a selected cruiser or owned planet (max 16 characters). Chat commands <code>battle time!</code> and <code>meg!</code> play special music tracks. Ask the AI assistant rules questions in chat when available.</li>
               <li><strong>Player Name:</strong> Your name is saved locally and remembered between sessions.</li>
-              <li><strong>Mobile:</strong> Fully responsive for portrait/landscape. Action buttons stack into compact rows. Leaderboard and menus are scrollable.</li>
+              <li><strong>Mobile:</strong> Fully responsive for portrait/landscape. Action buttons stack into compact rows. Leaderboard and menus are scrollable. Upgrade buttons support rich hover/light-touch tooltips.</li>
             </ul>
           </div>
 
