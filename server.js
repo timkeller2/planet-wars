@@ -3140,10 +3140,21 @@ async function bootstrap() {
             const atkUnits = Math.max(0, Math.floor(s.boardingMarines || 0));
             const defRes = defenderPlayer.resources || {};
             const atkRes = attackerPlayer.resources || {};
-            const defUsesDilithium = defUnits > 0 && (defRes.dilithium || 0) > defUnits * 0.01;
-            const atkUsesDilithium = atkUnits > 0 && (atkRes.dilithium || 0) > atkUnits * 0.01;
-            const defUsesTritanium = defUnits > 0 && (defRes.tritanium || 0) >= defUnits * 0.01;
-            const atkUsesTritanium = atkUnits > 0 && (atkRes.tritanium || 0) >= atkUnits * 0.01;
+            // Match combat resolution: 3 + 3√(stockpile) while cost can be paid
+            const resourceStockBonus = (stock) => 3 + 3 * Math.sqrt(Math.max(0, stock || 0));
+            const defDilStock = defRes.dilithium || 0;
+            const atkDilStock = atkRes.dilithium || 0;
+            const defTriStock = defRes.tritanium || 0;
+            const atkTriStock = atkRes.tritanium || 0;
+            const defUsesDilithium = defUnits > 0 && defDilStock > defUnits * 0.01;
+            const atkUsesDilithium = atkUnits > 0 && atkDilStock > atkUnits * 0.01;
+            const defUsesTritanium = defUnits > 0 && defTriStock >= defUnits * 0.01;
+            const atkUsesTritanium = atkUnits > 0 && atkTriStock >= atkUnits * 0.01;
+            const defDilBonus = defUsesDilithium ? resourceStockBonus(defDilStock) : 0;
+            const atkDilBonus = atkUsesDilithium ? resourceStockBonus(atkDilStock) : 0;
+            // Tritanium reduces the *other* side's KR
+            const atkOppArmor = defUsesTritanium ? resourceStockBonus(defTriStock) : 0;
+            const defOppArmor = atkUsesTritanium ? resourceStockBonus(atkTriStock) : 0;
             const build = (xp, tech, dil, oppArmor) => {
               let total = 10 + xp + tech + dil - oppArmor;
               total = oppArmor > 0 ? Math.max(5, total) : Math.max(1, total);
@@ -3151,13 +3162,13 @@ async function bootstrap() {
                 base: 10,
                 xp: Math.round(xp * 10) / 10,
                 tech: Math.round(tech * 10) / 10,
-                dilithium: dil,
-                oppArmor,
+                dilithium: Math.round(dil * 10) / 10,
+                oppArmor: Math.round(oppArmor * 10) / 10,
                 total: Math.round(total * 10) / 10
               };
             };
-            const defKr = build(defXp, defTech, defUsesDilithium ? 10 : 0, atkUsesTritanium ? 10 : 0);
-            const atkKr = build(atkXp, atkTech, atkUsesDilithium ? 10 : 0, defUsesTritanium ? 10 : 0);
+            const defKr = build(defXp, defTech, defDilBonus, defOppArmor);
+            const atkKr = build(atkXp, atkTech, atkDilBonus, atkOppArmor);
             return {
               boardingDefHitChance: defKr.total,
               boardingAtkHitChance: atkKr.total,

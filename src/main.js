@@ -531,18 +531,25 @@ function getPlanetTradeIncomePerMin(planet) {
   let boardingDefUsesTritanium = false;
   let boardingAtkUsesTritanium = false;
 
-  /** Format boarding KR: "KR: 10 + 5 xp + 7 tech + 10 dilithium - 10 opp armor = 22%" */
+  /**
+   * Format boarding KR breakdown for the combat screen.
+   * Dilithium / opp armor use 3+3√(stockpile) and may be fractional — show 1 decimal.
+   * Example: "KR: 10 + 5.2 xp + 7 tech + 12 dilithium - 9 opp armor = 25.2%"
+   */
   function formatBoardingKrLabel(breakdown, fallbackTotal) {
-    const r = (n) => Math.round(Number(n) || 0);
+    const r = (n) => {
+      const v = Math.round((Number(n) || 0) * 10) / 10;
+      return Number.isInteger(v) ? String(v) : v.toFixed(1);
+    };
     if (!breakdown) {
       return `KR: ${r(fallbackTotal)}%`;
     }
     const parts = [`${r(breakdown.base != null ? breakdown.base : 10)}`];
     if ((breakdown.xp || 0) > 0.05) parts.push(`${r(breakdown.xp)} xp`);
     if ((breakdown.tech || 0) > 0.05) parts.push(`${r(breakdown.tech)} tech`);
-    if ((breakdown.dilithium || 0) > 0) parts.push(`${r(breakdown.dilithium)} dilithium`);
+    if ((breakdown.dilithium || 0) > 0.05) parts.push(`${r(breakdown.dilithium)} dilithium`);
     let expr = parts.join(' + ');
-    if ((breakdown.oppArmor || 0) > 0) {
+    if ((breakdown.oppArmor || 0) > 0.05) {
       expr += ` - ${r(breakdown.oppArmor)} opp armor`;
     }
     const total = breakdown.total != null ? breakdown.total : fallbackTotal;
@@ -2071,10 +2078,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctxTile.fill();
             ctxTile.restore();
           } else if (s.isBomber) {
-            let angle = 0;
-            if (s.targetX !== undefined && s.targetY !== undefined) {
-              angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
-            }
+            let angle = getShipDrawAngle(s);
             const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
             const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
             if (sheet) {
@@ -2092,10 +2096,7 @@ function getPlanetTradeIncomePerMin(planet) {
               ctxTile.restore();
             }
           } else if (s.isInterceptor) {
-            let angle = 0;
-            if (s.targetX !== undefined && s.targetY !== undefined) {
-              angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
-            }
+            let angle = getShipDrawAngle(s);
             const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
             const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
             if (sheet) {
@@ -2113,13 +2114,19 @@ function getPlanetTradeIncomePerMin(planet) {
               ctxTile.restore();
             }
           } else {
+            const angle = getShipDrawAngle(s);
+            const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
             const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
             if (sheet) {
-              ctxTile.drawImage(sheet, 0, 0, 16, 16, drawX - 8, drawY - 8, 16, 16);
+              ctxTile.drawImage(sheet, angleDeg * 16, 0, 16, 16, drawX - 8, drawY - 8, 16, 16);
             } else {
+              ctxTile.save();
+              ctxTile.translate(drawX, drawY);
+              ctxTile.rotate(angle + Math.PI / 2);
               ctxTile.beginPath();
-              ctxTile.arc(drawX, drawY, 1.5, 0, Math.PI * 2);
+              ctxTile.arc(0, 0, 1.5, 0, Math.PI * 2);
               ctxTile.fill();
+              ctxTile.restore();
             }
           }
         }
@@ -2141,10 +2148,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       } else {
         if (s.isBomber) {
-          let angle = 0;
-          if (s.targetX !== undefined && s.targetY !== undefined) {
-            angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
-          }
+          let angle = getShipDrawAngle(s);
           const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
           const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
           if (sheet) {
@@ -2162,10 +2166,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctxTile.restore();
           }
         } else if (s.isInterceptor) {
-          let angle = 0;
-          if (s.targetX !== undefined && s.targetY !== undefined) {
-            angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
-          }
+          let angle = getShipDrawAngle(s);
           const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
           const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
           if (sheet) {
@@ -2514,10 +2515,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
           ctxTile.restore();
         } else {
-          let angle = s.angle || 0;
-          if (s.targetX !== undefined && s.targetY !== undefined) {
-            angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
-          }
+          const angle = getShipDrawAngle(s);
           const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
           if (sheet) {
             ctxTile.save();
@@ -2875,6 +2873,7 @@ function getPlanetTradeIncomePerMin(planet) {
       '#selection-tiles-container, #score-board, #chat-container, #player-names-container, ' +
       '#credits-tooltip-panel, #upgrade-tooltip-panel, #touch-context-menu, #info-panel-modal, #info-panel-container, ' +
       '#help-modal, #recordings-modal, #ai-chat-modal, #boarding-combat-overlay, ' +
+      '#game-replay-bar, #game-replays-modal, ' +
       '[id^="res-card-"], #player-credits-display, #player-trade-options-display, ' +
       '#game-timer, #config-build-buttons, .cruiser-build-btn, .selection-tile'
     );
@@ -6320,6 +6319,20 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   /**
+   * Fleet/cruiser draw heading: prefer travel direction when a real destination exists,
+   * otherwise use recorded ship.angle (needed for game replays where targets are absent).
+   */
+  function getShipDrawAngle(s) {
+    if (!s) return 0;
+    if (s.targetX != null && s.targetY != null) {
+      const tdx = s.targetX - s.x;
+      const tdy = s.targetY - s.y;
+      if (tdx * tdx + tdy * tdy > 1) return Math.atan2(tdy, tdx);
+    }
+    return s.angle || 0;
+  }
+
+  /**
    * Find the ship under a server-space point using display positions.
    * Prefers cruisers over fleets when both hit.
    */
@@ -7698,8 +7711,8 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
         if (!hasTarget) {
-          tx = null;
-          ty = null;
+          tx = undefined;
+          ty = undefined;
         }
         state.ships.push({
           _isFlatShip: true,
@@ -9150,6 +9163,39 @@ function getPlanetTradeIncomePerMin(planet) {
     if (serverState) {
       serverState.isPaused = !gameReplayPlaying;
       serverState.isGameReplay = true;
+      // Snap predicted poses to the frame so headings/positions match the recording
+      if (serverState.ships) {
+        for (const s of serverState.ships) {
+          if (!s || !s.active) continue;
+          let vis = visualShips.get(s.id);
+          if (!vis) {
+            vis = {
+              x: s.x, y: s.y, angle: s.angle || 0,
+              serverX: s.x, serverY: s.y, serverAngle: s.angle || 0,
+              serverSpeed: 0, netTime: performance.now(), opt: null
+            };
+            visualShips.set(s.id, vis);
+          } else {
+            vis.x = s.x;
+            vis.y = s.y;
+            vis.angle = s.angle || 0;
+            vis.serverX = s.x;
+            vis.serverY = s.y;
+            vis.serverAngle = s.angle || 0;
+            vis.serverSpeed = 0;
+            vis.opt = null;
+            vis.lastCruiseSpeed = 0;
+            vis.smoothSpeed = 0;
+          }
+        }
+      }
+      // Full hazard vision every frame (god's eye)
+      if (serverState.storms) {
+        lastKnownHazards = {};
+        for (const storm of serverState.storms) {
+          if (storm && storm.id != null) lastKnownHazards[storm.id] = { ...storm };
+        }
+      }
     }
     updateGameReplayBarUI();
   }
@@ -21244,10 +21290,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
               ctx.restore();
             } else if (s.isBomber) {
-              let angle = 0;
-              if (s.targetX !== undefined && s.targetY !== undefined) {
-                angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
-              }
+              let angle = getShipDrawAngle(s);
               const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
               const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
               if (sheet) {
@@ -21265,10 +21308,7 @@ function getPlanetTradeIncomePerMin(planet) {
                 ctx.restore();
               }
             } else if (s.isInterceptor) {
-              let angle = 0;
-              if (s.targetX !== undefined && s.targetY !== undefined) {
-                angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
-              }
+              let angle = getShipDrawAngle(s);
               const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
               const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
               if (sheet) {
@@ -21286,13 +21326,19 @@ function getPlanetTradeIncomePerMin(planet) {
                 ctx.restore();
               }
             } else {
+              const angle = getShipDrawAngle(s);
+              const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
               const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
               if (sheet) {
-                ctx.drawImage(sheet, 0, 0, 16, 16, drawX - 8, drawY - 8, 16, 16);
+                ctx.drawImage(sheet, angleDeg * 16, 0, 16, 16, drawX - 8, drawY - 8, 16, 16);
               } else {
+                ctx.save();
+                ctx.translate(drawX, drawY);
+                ctx.rotate(angle + Math.PI / 2);
                 ctx.beginPath();
-                ctx.arc(drawX, drawY, 1.5, 0, Math.PI * 2);
+                ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.restore();
               }
             }
           }
@@ -21321,10 +21367,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
         ctx.beginPath();
         if (s.isBomber) {
-          let angle = 0;
-          if (s.targetX !== undefined && s.targetY !== undefined) {
-            angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
-          }
+          let angle = getShipDrawAngle(s);
           const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
           const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
           if (sheet) {
@@ -21341,10 +21384,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.closePath();
           }
         } else if (s.isInterceptor) {
-          let angle = 0;
-          if (s.targetX !== undefined && s.targetY !== undefined) {
-            angle = Math.atan2(s.targetY - s.y, s.targetX - s.x);
-          }
+          let angle = getShipDrawAngle(s);
           const angleDeg = Math.round(((angle + Math.PI * 2) % (Math.PI * 2)) * 180 / Math.PI) % 360;
           const sheet = spriteSheets[s.ownerId] || spriteSheets['neutral'];
           if (sheet) {

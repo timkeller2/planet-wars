@@ -96,6 +96,21 @@ canvas {
   z-index: 10;
 }
 
+/* Full-game replay transport — must receive clicks despite #ui-layer pointer-events:none */
+#game-replay-bar {
+  pointer-events: auto !important;
+  z-index: 5000 !important;
+  touch-action: manipulation;
+}
+#game-replay-bar:not(.hidden) {
+  display: flex !important;
+}
+#game-replay-bar button,
+#game-replay-bar input {
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+
 .screen {
   position: absolute;
   top: 0;

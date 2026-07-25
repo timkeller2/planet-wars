@@ -13,6 +13,42 @@ function classTypeFromKind(kind) {
   }
 }
 
+function stormTypeFromCode(code) {
+  if (code === 2) return 'minefield';
+  if (code === 1) return 'nebula';
+  return 'storm';
+}
+
+/**
+ * Infer which player indices are "in the game" for older replays without isAlive flags.
+ */
+function collectActiveOwnerIndices(frame) {
+  const active = new Set();
+  for (const row of (frame.P || [])) {
+    if (row && row[1] != null && row[1] >= 0) active.add(row[1]);
+  }
+  for (const c of (frame.C || [])) {
+    if (c && c[3] != null && c[3] >= 0) active.add(c[3]);
+  }
+  const S = frame.S || [];
+  for (let i = 0; i < S.length; i += 7) {
+    const oi = S[i + 3];
+    if (oi != null && oi >= 0) active.add(oi);
+  }
+  for (const row of (frame.pl || [])) {
+    if (!row) continue;
+    const oi = row[0];
+    // Explicit isAlive flag (v2+)
+    if (row[5] !== undefined) {
+      if (row[5]) active.add(oi);
+      continue;
+    }
+    // Legacy: any non-zero score implies they entered
+    if ((row[1] || 0) > 0 || (row[2] || 0) > 0 || (row[3] || 0) > 0) active.add(oi);
+  }
+  return active;
+}
+
 /**
  * Expand a compact replay document + frame index into a client-friendly game state.
  */
@@ -20,8 +56,24 @@ export function expandGameReplayFrame(doc, frameIndex) {
   if (!doc || !doc.frames || !doc.frames.length) return null;
   const idx = Math.max(0, Math.min(doc.frames.length - 1, frameIndex | 0));
   const frame = doc.frames[idx];
+  const activeOwners = collectActiveOwnerIndices(frame);
+
   const players = (doc.players || []).map((p, i) => {
     const score = (frame.pl || []).find(row => row[0] === i) || null;
+    let isAlive;
+    if (score && score[5] !== undefined) {
+      isAlive = !!score[5];
+    } else if (p && (p.id === 'monsters' || p.id === 'monster')) {
+      isAlive = true;
+    } else if (p && p.isAlive !== undefined && score && score[5] === undefined && doc.v >= 2) {
+      isAlive = !!p.isAlive;
+    } else {
+      // Old replays: only show empires that own something or have scores this frame
+      isAlive = activeOwners.has(i) || !!(p && !p.isAI);
+    }
+    // Humans always show if they were the human player id in the doc (legacy)
+    if (p && !p.isAI && p.id !== 'monsters') isAlive = true;
+
     return {
       id: p.id,
       name: p.name,
@@ -33,7 +85,7 @@ export function expandGameReplayFrame(doc, frameIndex) {
       credits: score ? score[4] : 0,
       resources: {},
       atWarWith: {},
-      isAlive: true
+      isAlive
     };
   });
   const playerByIdx = (oi) => {
@@ -92,7 +144,11 @@ export function expandGameReplayFrame(doc, frameIndex) {
       armorPoints: armorPts || 0,
       shieldPoints: shieldPts || 0,
       cruiserStyle: cruiserStyle || null,
-      count: 1
+      count: 1,
+      // No synthetic target — drawing uses angle when target is absent
+      targetX: undefined,
+      targetY: undefined,
+      currentSpeed: 0
     });
   }
   const S = frame.S || [];
@@ -104,6 +160,8 @@ export function expandGameReplayFrame(doc, frameIndex) {
     const kind = S[i + 4];
     const ang = S[i + 5];
     const count = S[i + 6];
+    // Flat stride 21 matching live packets. hasTarget=0 so processGameState does not
+    // invent flight; angle is authoritative for heading.
     flatShips.push(
       id, x, y, count || 1, oi, 1,
       kind === 1 ? 1 : 0,
@@ -111,10 +169,10 @@ export function expandGameReplayFrame(doc, frameIndex) {
       kind === 3 ? 1 : 0,
       kind === 4 ? 1 : 0,
       ang || 0,
-      x, y,
+      x, y, // dest = self (ignored when hasTarget=0)
       0, 0, 0, 0,
       kind === 5 ? 1 : 0,
-      0, 15, 0
+      0, 15, 0 // hasTarget = 0
     );
   }
 
@@ -126,6 +184,23 @@ export function expandGameReplayFrame(doc, frameIndex) {
     color: l[4], age: l[5], duration: l[6]
   }));
 
+  const storms = (frame.H || []).map((h, hi) => {
+    // [id, x, y, radius, intensity, typeCode, heading, name?]
+    const type = stormTypeFromCode(h[5]);
+    return {
+      id: h[0] != null ? h[0] : `replay-storm-${hi}`,
+      x: h[1] || 0,
+      y: h[2] || 0,
+      radius: h[3] || 50,
+      intensity: h[4] || 0,
+      type,
+      heading: h[6] || 0,
+      name: h[7] || '',
+      knowledge: 999, // fully known in god's-eye replay
+      mines: type === 'minefield' ? 1 : 0
+    };
+  });
+
   return {
     planets,
     ships,
@@ -133,7 +208,7 @@ export function expandGameReplayFrame(doc, frameIndex) {
     fleets: [],
     explosions,
     lasers,
-    storms: [],
+    storms,
     wreckages: [],
     chunks: [],
     players,

@@ -395,13 +395,13 @@
         </div>
       </div>
 
-      <div id="game-replay-bar" class="hidden" style="position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 400; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; background: rgba(0, 10, 20, 0.92); border: 1px solid #0ff; border-radius: 8px; padding: 10px 14px; box-shadow: 0 0 20px rgba(0, 255, 255, 0.25); max-width: 96vw; font-family: Orbitron, sans-serif; color: #0ff;">
-        <span id="game-replay-title" style="font-size: 0.75rem; color: #fff; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
-        <button id="game-replay-play" class="cyber-btn" style="padding: 6px 12px; font-size: 0.8rem;">❚❚</button>
-        <button id="game-replay-speed" class="cyber-btn" style="padding: 6px 12px; font-size: 0.8rem;">1×</button>
-        <input id="game-replay-scrub" type="range" min="0" max="1000" value="0" style="width: min(280px, 40vw); accent-color: #0ff;" />
-        <span id="game-replay-time" style="font-size: 0.75rem; color: #aaa; min-width: 90px;">0:00 / 0:00</span>
-        <button id="game-replay-exit" class="cyber-btn" style="padding: 6px 12px; font-size: 0.8rem; border-color: #f0f; color: #f0f;">EXIT</button>
+      <div id="game-replay-bar" class="hidden" style="position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 5000; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; background: rgba(0, 10, 20, 0.92); border: 1px solid #0ff; border-radius: 8px; padding: 10px 14px; box-shadow: 0 0 20px rgba(0, 255, 255, 0.25); max-width: 96vw; font-family: Orbitron, sans-serif; color: #0ff; pointer-events: auto !important; touch-action: manipulation;">
+        <span id="game-replay-title" style="font-size: 0.75rem; color: #fff; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none;"></span>
+        <button type="button" id="game-replay-play" class="cyber-btn" style="padding: 6px 12px; font-size: 0.8rem; pointer-events: auto; cursor: pointer;">❚❚</button>
+        <button type="button" id="game-replay-speed" class="cyber-btn" style="padding: 6px 12px; font-size: 0.8rem; pointer-events: auto; cursor: pointer;">1×</button>
+        <input id="game-replay-scrub" type="range" min="0" max="1000" value="0" style="width: min(280px, 40vw); accent-color: #0ff; pointer-events: auto; cursor: pointer;" />
+        <span id="game-replay-time" style="font-size: 0.75rem; color: #aaa; min-width: 90px; pointer-events: none;">0:00 / 0:00</span>
+        <button type="button" id="game-replay-exit" class="cyber-btn" style="padding: 6px 12px; font-size: 0.8rem; border-color: #f0f; color: #f0f; pointer-events: auto; cursor: pointer;">EXIT</button>
       </div>
 
       <div id="ai-chat-modal" class="modal hidden">

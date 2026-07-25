@@ -122,7 +122,9 @@ export class GameReplayRecorder {
         id: p.id,
         name: p.name || p.id,
         color: p.color || '#888',
-        isAI: !!p.isAI
+        isAI: !!p.isAI,
+        // Roster has ~46 AI slots; only spawned empires should show on LB
+        isAlive: p.id === 'monsters' || p.id === 'monster' ? true : !!p.isAlive
       });
     }
   }
@@ -137,7 +139,8 @@ export class GameReplayRecorder {
       id: owner.id,
       name: owner.name || owner.id,
       color: owner.color || '#888',
-      isAI: !!owner.isAI
+      isAI: !!owner.isAI,
+      isAlive: owner.id === 'monsters' || owner.id === 'monster' ? true : !!owner.isAlive
     });
     return i;
   }
@@ -155,7 +158,7 @@ export class GameReplayRecorder {
     if (!force && gt - this.lastSampleGameTime < this.sampleIntervalMs) return;
     this.lastSampleGameTime = gt;
 
-    // Refresh player list lightly (names/colors may change)
+    // Refresh player list lightly (names/colors/alive may change as AIs enter)
     if (game.allPlayers && game.allPlayers.length !== this.players.length) {
       this._rebuildPlayerIndex(game);
     } else if (game.allPlayers) {
@@ -165,6 +168,7 @@ export class GameReplayRecorder {
           this.players[idx].name = p.name || p.id;
           this.players[idx].color = p.color || this.players[idx].color;
           this.players[idx].isAI = !!p.isAI;
+          this.players[idx].isAlive = (p.id === 'monsters' || p.id === 'monster') ? true : !!p.isAlive;
         }
       }
     }
@@ -281,21 +285,46 @@ export class GameReplayRecorder {
       }
     }
 
-    // Player scores every frame (small)
+    // Player scores every frame (small). Index 5 = isAlive (1/0).
     const pl = [];
     if (game.allPlayers) {
       for (const p of game.allPlayers) {
+        const alive = p.id === 'monsters' || p.id === 'monster'
+          ? 1
+          : (p.isAlive ? 1 : 0);
         pl.push([
           this._ownerIdx(p),
           Math.round(p.techScore || 0),
           Math.round(p.expScore || 0),
           Math.round(p.happinessScore || 0),
-          Math.round(p.credits || 0)
+          Math.round(p.credits || 0),
+          alive
         ]);
       }
     }
 
-    this.frames.push({ t: Math.round(gt), P, S, C, E, L, pl });
+    // Hazards (ion storms / nebulae / minefields) — compact for god's-eye replay
+    const H = [];
+    if (game.ionStorms) {
+      let n = 0;
+      for (const storm of game.ionStorms) {
+        if (!storm || n >= 80) break;
+        const typeCode = storm.type === 'minefield' ? 2 : storm.type === 'nebula' ? 1 : 0;
+        H.push([
+          storm.id != null ? storm.id : n,
+          Math.round(storm.x || 0),
+          Math.round(storm.y || 0),
+          Math.round(storm.radius || 50),
+          Math.round(storm.intensity || 0),
+          typeCode,
+          Math.round(storm.heading || 0),
+          storm.name || ''
+        ]);
+        n++;
+      }
+    }
+
+    this.frames.push({ t: Math.round(gt), P, S, C, E, L, pl, H });
 
     if (this.frames.length > MAX_FRAMES_SOFT) {
       // Thin: drop every other frame in the older half
@@ -339,7 +368,7 @@ export class GameReplayRecorder {
 
     const durationMs = this.frames[this.frames.length - 1].t - this.frames[0].t;
     const doc = {
-      v: 1,
+      v: 2, // v2: isAlive in pl[5], hazard frames H, reliable headings
       hz: Math.round(1000 / ((this.sampleIntervalMs || SAMPLE_MS_FAST))),
       width: this.width,
       height: this.height,
