@@ -4521,8 +4521,9 @@ export class Ship {
     destX = finalDestX + px * (this.bomberOffsetMag || 0) * spreadFactor;
     destY = finalDestY + py * (this.bomberOffsetMag || 0) * spreadFactor;
     
-    const dx = destX - this.x;
-    const dy = destY - this.y;
+    // let: post-arrival reorient path zeroes dy/dx when holding station while turning
+    let dx = destX - this.x;
+    let dy = destY - this.y;
     let moveDistanceToDest = Math.sqrt(dx * dx + dy * dy);
     
     // For collision detection, we use actual distance to target planet center (or coordinate target)
@@ -4636,6 +4637,7 @@ export class Ship {
       }
       // Skip normal move/turn toward destination this frame
       moveDistanceToDest = 0;
+      dx = 0;
       dy = 0;
       // fall through with moveDistanceToDest 0 so we don't double-turn below incorrectly
     }
