@@ -109,6 +109,8 @@ export class Player {
     this.tradeOptions = undefined;
     this.tradeRegenAccumulator = 0;
     this.discoveredPlanets = new Set();
+    /** Planet ids whose anomaly this player has seen (sticky until researched). */
+    this.knownAnomalyPlanetIds = new Set();
     this.attackedPlanets = new Map();
     this.lastKnownPlanets = {};
     this.spyRootedEvents = new Set();

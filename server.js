@@ -2196,6 +2196,7 @@ async function bootstrap() {
           p.lastCommandTime = Date.now();
           p.disconnectTime = null;
           p.discoveredPlanets = new Set();
+          p.knownAnomalyPlanetIds = new Set();
           p.attackedPlanets = new Map();
           p.lastKnownPlanets = {};
           p._exploredCellsCache = null;
@@ -2281,6 +2282,8 @@ async function bootstrap() {
         p.lastCommandTime = now;
         p.disconnectTime = null;
         p.discoveredPlanets = new Set();
+        // Sticky anomaly memory reuses deep-space planet ids (20000+) across maps
+        p.knownAnomalyPlanetIds = new Set();
         p.attackedPlanets = new Map();
         p.lastKnownPlanets = {};
         // Wipe FoW tile cache so new maps start fully fogged
@@ -2581,14 +2584,22 @@ async function bootstrap() {
     if (!game._planetMapCache) game._planetMapCache = new Map();
     const planetMapCache = game._planetMapCache;
 
-    const mapAnomaly = (a) => a ? {
-      id: a.id, x: a.x, y: a.y, difficulty: a.difficulty,
-      progress: a.progress, researched: a.researched,
-      beingResearched: a.beingResearched || false, rewardType: a.rewardType,
-      completing: a.completing || false, completingTimeLeft: a.completingTimeLeft || 0,
-      completingShipId: a.completingShipId || null, completingPlayerId: a.completingPlayerId || null,
-      researchingShipId: a.researchingShipId || null, researchingShipIds: a.researchingShipIds || []
-    } : null;
+    const mapAnomaly = (a) => {
+      if (!a) return null;
+      Game.ensureAnomalyRewardSpec(a, game);
+      return {
+        id: a.id, x: a.x, y: a.y, difficulty: a.difficulty,
+        progress: a.progress, researched: a.researched,
+        beingResearched: a.beingResearched || false,
+        rewardType: a.rewardType,
+        rewardFactor: a.rewardFactor,
+        rewardResource: a.rewardResource || null,
+        rewardDiscountCategories: a.rewardDiscountCategories || null,
+        completing: a.completing || false, completingTimeLeft: a.completingTimeLeft || 0,
+        completingShipId: a.completingShipId || null, completingPlayerId: a.completingPlayerId || null,
+        researchingShipId: a.researchingShipId || null, researchingShipIds: a.researchingShipIds || []
+      };
+    };
 
     const allPlanetsMapped = game.planets.map(p => {
         if (p.isDeepSpaceAnomaly) {
@@ -3065,7 +3076,10 @@ async function bootstrap() {
       if (!player.discoveredPlanets) {
         player.discoveredPlanets = new Set();
       }
-      
+      if (!player.knownAnomalyPlanetIds) {
+        player.knownAnomalyPlanetIds = new Set();
+      }
+
       let visiblePlanets = [];
       let visibleShips = [];
       let visibleExplosions = [];
@@ -3216,9 +3230,18 @@ async function bootstrap() {
         }
       }
 
+      // Default FoW ON when settings are missing (lobby / pre-start). Treating null as
+      // "FoW off" permanently marked every anomaly as known for sticky tracking.
+      const fogOfWarEnabled = !game.settings || game.settings.fogOfWar !== false;
+      // Full map vision this tick: AI, spectators/pre-start (no entities), or FoW disabled
+      const fullVision = !fogOfWarEnabled || player.isAI || !hasEntities;
+      // Only permanently record discoveries when the player has a real foothold under FoW,
+      // or when FoW is off (everything is legitimately known). Spectators / pre-start
+      // full-vision must not fill discoveredPlanets / spawn map-wide anomalies.
+      const recordPermanentDiscovery = !fogOfWarEnabled || (hasEntities && !player.isAI);
+
       const isVisible = (x, y) => {
-        if (!game.settings?.fogOfWar) return true;
-        if (player.isAI || !hasEntities) return true; // AI and spectators see all
+        if (fullVision) return true;
         
         for (let i = 0; i < visiblePlanetZones.length; i++) {
           const z = visiblePlanetZones[i];
@@ -3237,8 +3260,7 @@ async function bootstrap() {
       };
 
       const isSilhouetteVisible = (x, y) => {
-        if (!game.settings?.fogOfWar) return true;
-        if (player.isAI || !hasEntities) return true;
+        if (fullVision) return true;
         
         for (let i = 0; i < silhouettePlanetZones.length; i++) {
           const z = silhouettePlanetZones[i];
@@ -3304,8 +3326,8 @@ async function bootstrap() {
               const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
               const difficulty = Math.max(1, Math.floor((Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff) / 2));
               
-              const rewardType = Game.getRandomAnomalyRewardType();
-              
+              const rewardSpec = Game.buildAnomalyRewardSpec(difficulty, game);
+
               p.anomaly = {
                 id: Math.random().toString(36).substr(2, 9),
                 x: ax,
@@ -3314,19 +3336,24 @@ async function bootstrap() {
                 progress: {},
                 researched: false,
                 beingResearched: false,
-                rewardType: rewardType
+                rewardType: rewardSpec.rewardType,
+                rewardFactor: rewardSpec.rewardFactor,
+                rewardResource: rewardSpec.rewardResource,
+                rewardDiscountCategories: rewardSpec.rewardDiscountCategories
               };
             }
           }
         };
 
         if ((p.owner && p.owner.id === player.id) || isVisible(p.x, p.y) || hasSympathy) {
-          if (!player.discoveredPlanets.has(p.id)) {
-            isDiscoveredNow = true;
-          }
-          player.discoveredPlanets.add(p.id);
-          if (isDiscoveredNow) {
-            spawnAnomalyForPlanet();
+          if (recordPermanentDiscovery) {
+            if (!player.discoveredPlanets.has(p.id)) {
+              isDiscoveredNow = true;
+            }
+            player.discoveredPlanets.add(p.id);
+            if (isDiscoveredNow) {
+              spawnAnomalyForPlanet();
+            }
           }
           if (!player._visPlanetCache) player._visPlanetCache = new Map();
           const baseVis = allPlanetsMapped[i];
@@ -3349,10 +3376,12 @@ async function bootstrap() {
           }
           visiblePlanets.push(mappedPlanet);
 
-          player.lastKnownPlanets = player.lastKnownPlanets || {};
-          player.lastKnownPlanets[p.id] = mappedPlanet;
+          if (recordPermanentDiscovery) {
+            player.lastKnownPlanets = player.lastKnownPlanets || {};
+            player.lastKnownPlanets[p.id] = mappedPlanet;
+          }
         } else if (isSilhouetteVisible(p.x, p.y) || player.discoveredPlanets.has(p.id) || p.rampageEvent) {
-          if (isSilhouetteVisible(p.x, p.y)) {
+          if (isSilhouetteVisible(p.x, p.y) && recordPermanentDiscovery) {
             if (!player.discoveredPlanets.has(p.id)) {
               isDiscoveredNow = true;
             }
@@ -3436,6 +3465,9 @@ async function bootstrap() {
                   researched: an.researched,
                   beingResearched: an.beingResearched || false,
                   rewardType: an.rewardType,
+                  rewardFactor: an.rewardFactor,
+                  rewardResource: an.rewardResource || null,
+                  rewardDiscountCategories: an.rewardDiscountCategories || null,
                   completing: an.completing || false,
                   completingTimeLeft: an.completingTimeLeft || 0,
                   completingShipId: an.completingShipId || null,
@@ -3457,6 +3489,78 @@ async function bootstrap() {
               player.lastKnownPlanets[p.id] = fogKept.obj;
             }
           }
+        }
+      }
+
+
+      // Sticky anomaly tracking: once a player has seen an unresearched anomaly on a
+      // planet under real FoW, keep that planet in their FoW payload until resolved.
+      // Never sticky-learn while on full vision (spectators / FoW off / pre-start) —
+      // that would reveal every deep-space anomaly for the rest of the match/restart.
+      if (fogOfWarEnabled && hasEntities && !player.isAI) {
+        for (let vi = 0; vi < visiblePlanets.length; vi++) {
+          const vp = visiblePlanets[vi];
+          if (vp && vp.anomaly && !vp.anomaly.researched) {
+            player.knownAnomalyPlanetIds.add(vp.id);
+          }
+        }
+      }
+      if (fogOfWarEnabled && hasEntities && !player.isAI &&
+          player.knownAnomalyPlanetIds && player.knownAnomalyPlanetIds.size > 0) {
+        const already = new Set();
+        for (let vi = 0; vi < visiblePlanets.length; vi++) {
+          const vp = visiblePlanets[vi];
+          if (vp && vp.id != null) {
+            already.add(vp.id);
+            already.add(String(vp.id));
+          }
+        }
+        for (const rawId of Array.from(player.knownAnomalyPlanetIds)) {
+          const p = game.planets.find(pl => pl && (pl.id === rawId || String(pl.id) === String(rawId)));
+          if (!p || !p.anomaly || p.anomaly.researched) {
+            player.knownAnomalyPlanetIds.delete(rawId);
+            continue;
+          }
+          if (already.has(p.id) || already.has(String(p.id))) continue;
+          const an = p.anomaly;
+          const anProg = (an.progress && typeof an.progress === 'object')
+            ? (an.progress[player.id] || 0)
+            : (typeof an.progress === 'number' ? an.progress : 0);
+          player.discoveredPlanets.add(p.id);
+          visiblePlanets.push({
+            id: p.id,
+            x: p.x,
+            y: p.y,
+            radius: p.radius,
+            ownerId: p.owner ? p.owner.id : null,
+            ships: 0,
+            maxShips: Math.round(p.maxShips || 0),
+            inFog: true,
+            dead: p.dead || false,
+            isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false,
+            name: p.name,
+            anomaly: {
+              id: an.id,
+              x: an.x,
+              y: an.y,
+              difficulty: an.difficulty,
+              progress: anProg,
+              researched: false,
+              beingResearched: an.beingResearched || false,
+              rewardType: an.rewardType,
+                  rewardFactor: an.rewardFactor,
+                  rewardResource: an.rewardResource || null,
+                  rewardDiscountCategories: an.rewardDiscountCategories || null,
+              completing: an.completing || false,
+              completingTimeLeft: an.completingTimeLeft || 0,
+              completingShipId: an.completingShipId || null,
+              completingPlayerId: an.completingPlayerId || null,
+              researchingShipId: an.researchingShipId || null,
+              researchingShipIds: an.researchingShipIds || []
+            }
+          });
+          already.add(p.id);
+          already.add(String(p.id));
         }
       }
 
@@ -3521,7 +3625,7 @@ async function bootstrap() {
       let visibleStorms = [];
       for (const storm of game.ionStorms) {
         let stormVisible = false;
-        if (!game.settings?.fogOfWar || player.isAI || !hasEntities) {
+        if (fullVision) {
           stormVisible = true;
         } else {
           for (const p of game.planets) {

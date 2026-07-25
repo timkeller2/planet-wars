@@ -241,6 +241,79 @@ export class Game {
     }
   }
 
+  /**
+   * Freeze the full anomaly payout at creation so tooltip/preview always matches
+   * completion (type, amount factor, specific resource / discount categories).
+   */
+  static buildAnomalyRewardSpec(difficulty = 1, game = null) {
+    const rewardType = Game.getRandomAnomalyRewardType();
+    const rewardFactor = 1.0 + Math.random();
+    const spec = {
+      rewardType,
+      rewardFactor,
+      rewardResource: null,
+      rewardDiscountCategories: null
+    };
+
+    if (rewardType === 'rare_resource_cache') {
+      const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+      let pool = resourcesList;
+      if (game && game.resourceRarities) {
+        const rare = resourcesList.filter(r => game.resourceRarities[r] === 'rare' || game.resourceRarities[r] === 'exotic');
+        const normal = resourcesList.filter(r => game.resourceRarities[r] === 'normal');
+        if (rare.length > 0) pool = rare;
+        else if (normal.length > 0) pool = normal;
+      }
+      spec.rewardResource = pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    if (rewardType === 'discount') {
+      const numDiscounts = Math.max(1, 1 + Math.floor((difficulty || 1) / 20));
+      const categories = ['sensorarray', 'lab', 'armor', 'shield', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supplyship', 'extendedfuel', 'diplomat', 'marines'];
+      const remaining = categories.slice();
+      const applied = [];
+      for (let d = 0; d < numDiscounts && remaining.length > 0; d++) {
+        const i = Math.floor(Math.random() * remaining.length);
+        applied.push(remaining.splice(i, 1)[0]);
+      }
+      spec.rewardDiscountCategories = applied;
+    }
+
+    return spec;
+  }
+
+  /** Fill missing reward fields once; never change an already-set rewardType. */
+  static ensureAnomalyRewardSpec(anomaly, game = null) {
+    if (!anomaly) return anomaly;
+    if (!anomaly.rewardType) {
+      const spec = Game.buildAnomalyRewardSpec(anomaly.difficulty || 1, game);
+      anomaly.rewardType = spec.rewardType;
+      anomaly.rewardFactor = spec.rewardFactor;
+      anomaly.rewardResource = spec.rewardResource;
+      anomaly.rewardDiscountCategories = spec.rewardDiscountCategories;
+      return anomaly;
+    }
+    if (anomaly.rewardFactor == null || !(anomaly.rewardFactor > 0)) {
+      anomaly.rewardFactor = 1.0 + Math.random();
+    }
+    if (anomaly.rewardType === 'rare_resource_cache' && !anomaly.rewardResource) {
+      const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
+      anomaly.rewardResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
+    }
+    if (anomaly.rewardType === 'discount' && (!anomaly.rewardDiscountCategories || !anomaly.rewardDiscountCategories.length)) {
+      const numDiscounts = Math.max(1, 1 + Math.floor((anomaly.difficulty || 1) / 20));
+      const categories = ['sensorarray', 'lab', 'armor', 'shield', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supplyship', 'extendedfuel', 'diplomat', 'marines'];
+      const remaining = categories.slice();
+      const applied = [];
+      for (let d = 0; d < numDiscounts && remaining.length > 0; d++) {
+        const i = Math.floor(Math.random() * remaining.length);
+        applied.push(remaining.splice(i, 1)[0]);
+      }
+      anomaly.rewardDiscountCategories = applied;
+    }
+    return anomaly;
+  }
+
   registerBattleActivity(x, y, timeNow) {
     if (!this.ongoingBattles) return;
     let found = false;
@@ -1799,6 +1872,7 @@ export class Game {
         sellToggled: p.sellToggled,
         tradeLimitToggle: p.tradeLimitToggle,
         discoveredPlanets: p.discoveredPlanets ? Array.from(p.discoveredPlanets) : [],
+        knownAnomalyPlanetIds: p.knownAnomalyPlanetIds ? Array.from(p.knownAnomalyPlanetIds) : [],
         attackedPlanets: p.attackedPlanets ? Array.from(p.attackedPlanets.entries()) : [],
         spyRootedEvents: p.spyRootedEvents ? Array.from(p.spyRootedEvents) : [],
         lastKnownPlanets: p.lastKnownPlanets || {},
@@ -1881,6 +1955,9 @@ export class Game {
           researchingShipId: p.anomaly.researchingShipId || null,
           researchingShipIds: p.anomaly.researchingShipIds || [],
           rewardType: p.anomaly.rewardType,
+          rewardFactor: p.anomaly.rewardFactor,
+          rewardResource: p.anomaly.rewardResource || null,
+          rewardDiscountCategories: p.anomaly.rewardDiscountCategories || null,
           researched: p.anomaly.researched || false
         } : null
       })),
@@ -1996,6 +2073,7 @@ export class Game {
       p.sellToggled = pData.sellToggled || p.sellToggled;
       p.tradeLimitToggle = pData.tradeLimitToggle !== undefined ? pData.tradeLimitToggle : p.tradeLimitToggle;
       p.discoveredPlanets = new Set(pData.discoveredPlanets || []);
+      p.knownAnomalyPlanetIds = new Set(pData.knownAnomalyPlanetIds || []);
       p.attackedPlanets = new Map(pData.attackedPlanets || []);
       p.spyRootedEvents = new Set(pData.spyRootedEvents || []);
       p.lastKnownPlanets = pData.lastKnownPlanets || {};
@@ -2077,8 +2155,12 @@ export class Game {
         researchingShipId: pData.anomaly.researchingShipId || null,
         researchingShipIds: pData.anomaly.researchingShipIds || [],
         rewardType: pData.anomaly.rewardType,
+        rewardFactor: pData.anomaly.rewardFactor,
+        rewardResource: pData.anomaly.rewardResource || null,
+        rewardDiscountCategories: pData.anomaly.rewardDiscountCategories || null,
         researched: pData.anomaly.researched || false
       } : null;
+      if (p.anomaly) Game.ensureAnomalyRewardSpec(p.anomaly, this);
 
       planetsMap.set(p.id, p);
       return p;
@@ -2264,6 +2346,8 @@ export class Game {
       player.aiPhantomShipBank = 0;
       player.aiPhantomBuyTimer = 0;
       player.discoveredPlanets = new Set();
+      // Deep-space anomaly ids (20000+) are reused each map — sticky FoW memory must not survive restarts
+      player.knownAnomalyPlanetIds = new Set();
       player.attackedPlanets = new Map();
       player.spyRootedEvents = new Set();
       player.disconnectTime = null;
@@ -2356,6 +2440,7 @@ export class Game {
       player.tradeRegenAccumulator = 0;
       player.sellPriceSetting = 1;
       player.discoveredPlanets = new Set();
+      player.knownAnomalyPlanetIds = new Set();
       player.attackedPlanets = new Map();
       player.lastKnownPlanets = {};
       player.spyRootedEvents = new Set();
@@ -2679,6 +2764,7 @@ export class Game {
     // Clear discovered/attacked planets for all players
     for (const player of this.allPlayers) {
       player.discoveredPlanets = new Set();
+      player.knownAnomalyPlanetIds = new Set();
       player.attackedPlanets = new Map();
       player.spyRootedEvents = new Set();
       player.lastBundleSaleTime = null;
@@ -2800,7 +2886,7 @@ export class Game {
       const timedLimitSecs = !isUnlimited ? parseFloat(this.settings.timedGameLimit) : null;
       const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
       const difficulty = Math.max(1, Math.floor((Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff) / 2));
-      const rewardType = Game.getRandomAnomalyRewardType();
+      const rewardSpec = Game.buildAnomalyRewardSpec(difficulty, this);
 
       const planetId = 20000 + i;
       const deepSpacePlanet = new Planet(planetId, ax, ay, 0, null, 0, this.width, this.height);
@@ -2818,7 +2904,10 @@ export class Game {
         progress: {},
         researched: false,
         beingResearched: false,
-        rewardType: rewardType
+        rewardType: rewardSpec.rewardType,
+        rewardFactor: rewardSpec.rewardFactor,
+        rewardResource: rewardSpec.rewardResource,
+        rewardDiscountCategories: rewardSpec.rewardDiscountCategories
       };
       this.addPlanet(deepSpacePlanet);
     }
@@ -7796,7 +7885,7 @@ export class Game {
     const maxDiff = isUnlimited ? 100 : Math.min(Math.floor((timedLimitSecs / 60) / 2), 100);
     const difficulty = customDifficulty !== null ? customDifficulty : Math.max(1, Math.floor((Math.floor(Math.pow(Math.random(), 2) * (maxDiff - minDiff + 1)) + minDiff) / 2));
 
-    const rewardType = Game.getRandomAnomalyRewardType();
+    const rewardSpec = Game.buildAnomalyRewardSpec(difficulty, this);
 
     const planetId = 30000 + this.planets.length;
     const deepSpacePlanet = new Planet(planetId, x, y, 0, null, 0, this.width, this.height);
@@ -7814,7 +7903,10 @@ export class Game {
       progress: {},
       researched: false,
       beingResearched: false,
-      rewardType: rewardType
+      rewardType: rewardSpec.rewardType,
+      rewardFactor: rewardSpec.rewardFactor,
+      rewardResource: rewardSpec.rewardResource,
+      rewardDiscountCategories: rewardSpec.rewardDiscountCategories
     };
     this.addPlanet(deepSpacePlanet);
 
@@ -7844,30 +7936,25 @@ export class Game {
   triggerAnomalyCompletion(planet, player) {
     const difficulty = planet.anomaly ? planet.anomaly.difficulty : 0;
     
-    // Always grant the type shown on the tooltip (fixed at anomaly creation).
-    // If missing (legacy/save), assign once and store so it cannot change.
-    if (planet.anomaly && !planet.anomaly.rewardType) {
-      planet.anomaly.rewardType = Game.getRandomAnomalyRewardType();
-    }
+    // Grant exactly the reward frozen on the anomaly at creation (tooltip must match).
+    if (planet.anomaly) Game.ensureAnomalyRewardSpec(planet.anomaly, this);
     const rewardType = (planet.anomaly && planet.anomaly.rewardType)
       ? planet.anomaly.rewardType
       : 'credits';
-    
+
     let text = '';
     let floatText = '';
-    
+
     const baseVal = Math.max(15, 40 + difficulty * 3);
-    const factor = 1.0 + Math.random(); // 100% to 200%
+    const factor = (planet.anomaly && planet.anomaly.rewardFactor > 0)
+      ? planet.anomaly.rewardFactor
+      : 1.5;
     const creditsValueEquivalent = Math.max(30, baseVal * factor);
-    
+
     const locationName = planet.isDeepSpaceAnomaly ? 'Deep Space' : planet.name;
     const preposition = planet.isDeepSpaceAnomaly ? 'in' : 'on';
 
-    this.recalculateResourceRarities();
-
     if (rewardType === 'discount') {
-      const numDiscounts = Math.max(1, 1 + Math.floor(difficulty / 20));
-      const categories = ['sensorarray', 'lab', 'armor', 'shield', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supplyship', 'extendedfuel', 'diplomat', 'marines'];
       const categoryNames = {
         sensorarray: 'Sensor Array',
         lab: 'Science Lab',
@@ -7882,14 +7969,15 @@ export class Game {
         diplomat: 'Diplomat',
         marines: 'Marines'
       };
+      const planned = (planet.anomaly && Array.isArray(planet.anomaly.rewardDiscountCategories) && planet.anomaly.rewardDiscountCategories.length)
+        ? planet.anomaly.rewardDiscountCategories.slice()
+        : ['lab'];
       const applied = [];
-      for (let d = 0; d < numDiscounts; d++) {
-        const eligible = categories.filter(cat => (player.upgradeModifiers[cat] || 0) > -0.75);
-        if (eligible.length > 0) {
-          const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+      for (const chosen of planned) {
+        if ((player.upgradeModifiers[chosen] || 0) > -0.75) {
           player.upgradeModifiers[chosen] = Math.max(-0.75, (player.upgradeModifiers[chosen] || 0) - 0.15);
-          applied.push(chosen);
         }
+        applied.push(chosen);
       }
       const appliedNames = applied.map(cat => categoryNames[cat] || cat);
       text = `ANOMALY RESOLVED ${preposition} ${locationName}: Received upgrade discount(s) for ${appliedNames.join(', ')}!`;
@@ -7942,15 +8030,12 @@ export class Game {
       }
     } else if (rewardType === 'rare_resource_cache') {
       const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
-      let rareResources = resourcesList.filter(r => this.resourceRarities && (this.resourceRarities[r] === 'rare' || this.resourceRarities[r] === 'exotic'));
-      if (rareResources.length === 0) {
-        rareResources = resourcesList.filter(r => this.resourceRarities && this.resourceRarities[r] === 'normal');
+      let chosenRes = (planet.anomaly && planet.anomaly.rewardResource) || null;
+      if (!chosenRes || !resourcesList.includes(chosenRes)) {
+        chosenRes = resourcesList[Math.floor(Math.random() * resourcesList.length)];
+        if (planet.anomaly) planet.anomaly.rewardResource = chosenRes;
       }
-      if (rareResources.length === 0) {
-        rareResources = resourcesList;
-      }
-      const chosenRes = rareResources[Math.floor(Math.random() * rareResources.length)];
-      const qty = (Math.floor(Math.random() * 6) + 1) + Math.floor(creditsValueEquivalent / 20);
+      const qty = (1 + Math.floor(((planet.anomaly && planet.anomaly.rewardFactor) || 1.5) * 3)) + Math.floor(creditsValueEquivalent / 20);
       
       player.resources = player.resources || {};
       player.resources[chosenRes] = (player.resources[chosenRes] || 0) + qty;
@@ -7999,10 +8084,35 @@ export class Game {
     this.pendingAnomalyCompletions = this.pendingAnomalyCompletions || [];
     this.pendingAnomalyCompletions.push({
       playerId: player.id,
+      planetId: planet.id,
+      isDeepSpaceAnomaly: !!planet.isDeepSpaceAnomaly,
       x: planet.anomaly ? planet.anomaly.x : planet.x,
       y: planet.anomaly ? planet.anomaly.y : planet.y,
       text: floatText
     });
+
+    // Drop sticky "seen anomaly" tracking for everyone once resolved
+    for (const pl of (this.allPlayers || [])) {
+      if (!pl) continue;
+      if (pl.knownAnomalyPlanetIds) {
+        pl.knownAnomalyPlanetIds.delete(planet.id);
+        pl.knownAnomalyPlanetIds.delete(String(planet.id));
+      }
+      if (planet.isDeepSpaceAnomaly && pl.discoveredPlanets) {
+        pl.discoveredPlanets.delete(planet.id);
+        pl.discoveredPlanets.delete(String(planet.id));
+      }
+      if (pl.lastKnownPlanets && pl.lastKnownPlanets[planet.id]) {
+        if (planet.isDeepSpaceAnomaly) {
+          delete pl.lastKnownPlanets[planet.id];
+        } else if (pl.lastKnownPlanets[planet.id].anomaly) {
+          pl.lastKnownPlanets[planet.id] = {
+            ...pl.lastKnownPlanets[planet.id],
+            anomaly: { ...pl.lastKnownPlanets[planet.id].anomaly, researched: true }
+          };
+        }
+      }
+    }
 
     if (planet.isDeepSpaceAnomaly) {
       this.planets = this.planets.filter(p => p !== planet);

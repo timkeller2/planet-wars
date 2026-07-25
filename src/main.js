@@ -3376,12 +3376,24 @@ function getPlanetTradeIncomePerMin(planet) {
         credits: 'Credits Reward',
         tech: 'Tech Score Reward',
         xp: 'Player XP Reward',
-        hab: 'Habitability Increase',
+        hab: 'Terraforming Charges',
         rare_resource_cache: 'Rare Resource Cache',
         upgrade_token: 'Upgrade Tokens'
       };
       // Never invent a type the server did not send — matches completion grants
-      const displayLabel = trueType ? (rewardLabels[trueType] || trueType) : 'Scanning…';
+      let displayLabel = trueType ? (rewardLabels[trueType] || trueType) : 'Scanning…';
+      if (trueType === 'rare_resource_cache' && p.anomaly.rewardResource) {
+        const rn = p.anomaly.rewardResource;
+        displayLabel = 'Rare Resource Cache (' + rn.charAt(0).toUpperCase() + rn.slice(1) + ')';
+      } else if (trueType === 'discount' && Array.isArray(p.anomaly.rewardDiscountCategories) && p.anomaly.rewardDiscountCategories.length) {
+        const catNames = {
+          sensorarray: 'Sensor Array', lab: 'Science Lab', armor: 'Armor', shield: 'Shields',
+          engine: 'Engine', munitions: 'Munitions', targeting: 'Targeting', damagecontrol: 'Damage Control',
+          supplyship: 'Supply Ship', extendedfuel: 'Extended Fuel', diplomat: 'Diplomat', marines: 'Marines'
+        };
+        const names = p.anomaly.rewardDiscountCategories.map(c => catNames[c] || c);
+        displayLabel = 'Upgrade Discount (' + names.join(', ') + ')';
+      }
       lines.push({ label: 'Reward', value: displayLabel, color: '#00e5ff' });
 
       for (const line of lines) {
@@ -5444,6 +5456,55 @@ function getPlanetTradeIncomePerMin(planet) {
       age: 0,
       duration: 2.0
     });
+
+    // Clear sticky anomaly memory so resolved icons leave the map immediately
+    const clearKnown = (idKey) => {
+      knownAnomaliesByPlanetId.delete(String(idKey));
+      const tryKeys = [idKey, String(idKey), Number(idKey)];
+      for (const k of tryKeys) {
+        if (k == null || Number.isNaN(k)) continue;
+        if (!lastKnownPlanets[k]) continue;
+        if (data && data.isDeepSpaceAnomaly) {
+          delete lastKnownPlanets[k];
+        } else if (lastKnownPlanets[k].anomaly) {
+          lastKnownPlanets[k] = {
+            ...lastKnownPlanets[k],
+            anomaly: { ...lastKnownPlanets[k].anomaly, researched: true }
+          };
+        }
+      }
+    };
+
+    if (data && data.planetId != null) {
+      clearKnown(data.planetId);
+      if (serverState && serverState.planets) {
+        const idx = serverState.planets.findIndex(p => p && String(p.id) === String(data.planetId));
+        if (idx >= 0) {
+          const p = serverState.planets[idx];
+          if (data.isDeepSpaceAnomaly || p.isDeepSpaceAnomaly) {
+            serverState.planets.splice(idx, 1);
+          } else if (p.anomaly) {
+            p.anomaly.researched = true;
+          }
+        }
+      }
+    } else if (data && data.x != null && data.y != null) {
+      for (const [idKey, cached] of Array.from(knownAnomaliesByPlanetId.entries())) {
+        const ax = (cached.anomaly && cached.anomaly.x != null) ? cached.anomaly.x : cached.x;
+        const ay = (cached.anomaly && cached.anomaly.y != null) ? cached.anomaly.y : cached.y;
+        if (Math.hypot(ax - data.x, ay - data.y) < 8) {
+          clearKnown(idKey);
+          if (serverState && serverState.planets) {
+            const idx = serverState.planets.findIndex(p => p && String(p.id) === String(idKey));
+            if (idx >= 0) {
+              const p = serverState.planets[idx];
+              if (p.isDeepSpaceAnomaly) serverState.planets.splice(idx, 1);
+              else if (p.anomaly) p.anomaly.researched = true;
+            }
+          }
+        }
+      }
+    }
   });
 
   socket.on('replayDataResponse', (replayData) => {
@@ -7170,8 +7231,16 @@ function getPlanetTradeIncomePerMin(planet) {
         if (!p.inFog || p.permanentlyTracked) {
           lastKnownPlanets[p.id] = { ...p };
         }
-        // Remember anomalies the moment we see them; clear when researched
-        if (p.anomaly && !p.anomaly.researched) {
+        // Remember unresearched anomalies; clear when researched/resolved
+        if (p.anomaly && p.anomaly.researched) {
+          knownAnomaliesByPlanetId.delete(String(p.id));
+          if (lastKnownPlanets[p.id] && lastKnownPlanets[p.id].anomaly) {
+            lastKnownPlanets[p.id] = {
+              ...lastKnownPlanets[p.id],
+              anomaly: { ...lastKnownPlanets[p.id].anomaly, researched: true }
+            };
+          }
+        } else if (p.anomaly && !p.anomaly.researched) {
           knownAnomaliesByPlanetId.set(String(p.id), {
             id: p.id,
             x: p.x,
@@ -7181,32 +7250,32 @@ function getPlanetTradeIncomePerMin(planet) {
             isDeepSpaceAnomaly: !!p.isDeepSpaceAnomaly,
             anomaly: { ...p.anomaly }
           });
-          // Fogged discovered worlds with anomalies stay in last-known for tooltips
           if (p.inFog && !lastKnownPlanets[p.id]) {
             lastKnownPlanets[p.id] = { ...p };
           } else if (p.inFog && lastKnownPlanets[p.id] && !lastKnownPlanets[p.id].anomaly) {
             lastKnownPlanets[p.id] = { ...lastKnownPlanets[p.id], anomaly: { ...p.anomaly } };
           }
-        } else if (p.anomaly && p.anomaly.researched) {
-          knownAnomaliesByPlanetId.delete(String(p.id));
         }
       }
 
-      // Re-inject any known unresearched anomalies missing from this packet
-      // (index-delta corruption or accidental FoW drop). Mutating state.planets is OK
-      // after id-based deltas — membership is by id, not array index.
+      // Re-inject ONLY when an unresearched anomaly's planet is entirely missing.
+      // Never overwrite a live researched anomaly (that kept completed DSA icons alive).
       if (knownAnomaliesByPlanetId.size > 0) {
         const have = new Set();
         for (const p of state.planets) {
           if (p && p.id != null) have.add(String(p.id));
         }
-        for (const [idKey, cached] of knownAnomaliesByPlanetId) {
+        for (const [idKey, cached] of Array.from(knownAnomaliesByPlanetId.entries())) {
+          if (!cached.anomaly || cached.anomaly.researched) {
+            knownAnomaliesByPlanetId.delete(idKey);
+            continue;
+          }
           if (have.has(idKey)) {
             const live = state.planets.find(pl => pl && String(pl.id) === idKey);
-            if (live && (!live.anomaly || live.anomaly.researched === true) && cached.anomaly && !cached.anomaly.researched) {
-              live.anomaly = { ...cached.anomaly };
-              if (cached.isDeepSpaceAnomaly) live.isDeepSpaceAnomaly = true;
+            if (live && live.anomaly && live.anomaly.researched) {
+              knownAnomaliesByPlanetId.delete(idKey);
             }
+            // Planet present in packet: trust server (do not resurrect anomaly)
             continue;
           }
           state.planets.push({
@@ -7221,7 +7290,7 @@ function getPlanetTradeIncomePerMin(planet) {
             inFog: true,
             dead: false,
             isDeepSpaceAnomaly: !!cached.isDeepSpaceAnomaly,
-            anomaly: { ...cached.anomaly }
+            anomaly: { ...cached.anomaly, researched: false }
           });
         }
       }
