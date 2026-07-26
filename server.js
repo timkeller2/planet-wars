@@ -742,6 +742,21 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (player) {
         player.lastCommandTime = Date.now();
+        // Any live packet means they are online — never treat as offline/AI-takeover candidate
+        if (player.disconnectTime) {
+          player.disconnectTime = null;
+        }
+        if (player.isAI) {
+          // Reclaim control if they were wrongly converted while still connected
+          player.isAI = false;
+          console.log(`[Reconnect/Activity] Player ${player.id} sent packets while marked AI — restoring human control.`);
+          io.emit('chatMessage', {
+            sender: 'System',
+            color: '#39ff14',
+            text: `Player ${player.name || player.id} is back online. Restoring control.`
+          });
+          socket.emit('assignedPlayer', player);
+        }
       }
       if (game.isPaused && game.pausedForAFK && !game.gameOverMessage) {
         game.isPaused = false;
@@ -2453,11 +2468,27 @@ async function bootstrap() {
     socket.on('disconnect', () => {
       lastHumanActivityTime = Date.now();
       const player = connectedClients.get(socket.id);
-      if (player) {
-        player.disconnectTime = Date.now();
-        console.log(`Player ${player.id} disconnected. 5-minute AI takeover cooldown started.`);
-      }
       connectedClients.delete(socket.id);
+      if (player) {
+        // Reconnect races (refresh / transport swap) often leave a brief second socket
+        // still mapped to the same player. Only start the offline countdown when no
+        // remaining sockets own this player — otherwise a closed tab/socket would arm
+        // AI takeover while they are still playing, which also full-reveals FoW (isAI).
+        let stillConnected = false;
+        for (const other of connectedClients.values()) {
+          if (other && other.id === player.id) {
+            stillConnected = true;
+            break;
+          }
+        }
+        if (stillConnected) {
+          player.disconnectTime = null;
+          console.log(`Player ${player.id} socket closed but still has an active connection — offline timer not started.`);
+        } else {
+          player.disconnectTime = Date.now();
+          console.log(`Player ${player.id} disconnected. 5-minute AI takeover cooldown started.`);
+        }
+      }
     });
   });
 
@@ -2517,6 +2548,18 @@ async function bootstrap() {
       // Check if any disconnected players have exceeded the 5-minute cooldown
       for (const p of game.allPlayers) {
         if (!p.isAI && p.disconnectTime && (currentTime - p.disconnectTime >= 300000)) { // 5 minutes
+          // Never convert a player who still has a live socket (stale disconnectTime)
+          let isConnected = false;
+          for (const activePlayer of connectedClients.values()) {
+            if (activePlayer && activePlayer.id === p.id) {
+              isConnected = true;
+              break;
+            }
+          }
+          if (isConnected) {
+            p.disconnectTime = null;
+            continue;
+          }
           p.isAI = true;
           p.disconnectTime = null;
           console.log(`[Disconnect AI Takeover] Player ${p.id} disconnected for 5 minutes. Converting to AI.`);
