@@ -116,6 +116,7 @@
           </label>
           <label style="cursor: pointer; display: flex; align-items: center;">
             <select id="timed-game-select" style="margin-right: 10px; background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 2px 5px; font-family: 'Orbitron', sans-serif;">
+              <option value="900">15 minutes</option>
               <option value="1800">30 - 60 minutes</option>
               <option value="3600" selected>1 - 2 hours</option>
               <option value="5400">1.5 - 3 hours</option>
@@ -739,7 +740,7 @@
             <ul>
               <li><strong>Fog of War:</strong> Optional. You can only see within your gravity wells and ship radar. Previously discovered planets appear as silhouettes with cached info. Any sympathy on a world also pierces fog for that planet’s well.</li>
               <li><strong>AFK Protection:</strong> The game automatically pauses after <strong>5 minutes</strong> of global inactivity (no human player actions). Any player command/action will resume the game.</li>
-              <li><strong>Timed Games:</strong> Configurable game clock (30 min to unlimited). When time expires, victory is awarded by highest VP: √Tech + √Exp + √Happiness (humans in debt are ineligible).</li>
+              <li><strong>Timed Games:</strong> Configurable game clock (15 min to unlimited). When time expires, victory is awarded by highest VP: √Tech + √Exp + √Happiness (humans in debt are ineligible).</li>
               <li><strong>Map Layout &amp; Pioneer Spacing:</strong> Default 50 planets (scales with map size). Default map is <strong>Normal: 3000</strong>. Planet size classes are 60–150 weighted toward the middle. Homeworlds start at size 120 (480 capacity), while Super Planets/Mega-Supers can reach 200–300 capacity. <strong>Pioneer Mode:</strong> homeworlds spawn with enhanced spacing away from other players’ ships, pending spawns, and existing homeworlds.</li>
               <li><strong>Configurable Settings:</strong>
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
@@ -753,7 +754,7 @@
                   <li><strong>Hazard Level:</strong> 0 (none) to 4× (lots) or custom.</li>
                   <li><strong>Map Size:</strong> Skirmish (1000) through Galactic (50000); default Normal (3000). Custom 500–50000 square maps.</li>
                   <li><strong>Planet Count:</strong> 10–1000+ (default scales with map; large maps can use hundreds of worlds).</li>
-                  <li><strong>Timed Game:</strong> 30 min to 3 hours, custom, or unlimited.</li>
+                  <li><strong>Timed Game:</strong> 15 min to 6 hours, custom, or unlimited.</li>
                   <li><strong>Starting Credits:</strong> Optional starting bank (including custom values).</li>
                   <li><strong>Financial Victory:</strong> Optional credit-target win condition (None / Short–Epic / Custom).</li>
                   <li><strong>Record Game Replay:</strong> On by default. Records a compact full-game replay (2–5 Hz, fog off); keeps the last 10 on the server for in-game playback.</li>

@@ -6587,25 +6587,34 @@ export class Game {
         }
       }
 
+      const tradeCap = Math.max(0, player.tradeCapacity || 0);
+      // Soft cap = tradeCapacity (full regen). Hard cap = 2× capacity (over-cap at 1/4 rate).
+      const tradeOptionsHardCap = tradeCap * 2;
       if (player.tradeOptions === undefined) {
-        player.tradeOptions = player.tradeCapacity;
+        player.tradeOptions = tradeCap;
       } else {
-        player.tradeOptions = Math.min(player.tradeCapacity, player.tradeOptions);
+        player.tradeOptions = Math.min(tradeOptionsHardCap, player.tradeOptions);
       }
 
-      // Handle Trade Options Regeneration at decreasing intervals
-      const myTradeOptions = player.tradeOptions || 0;
-      const penaltyDelay = myTradeOptions < 0 ? Math.abs(myTradeOptions) * 30000 : 0;
-      let baseRegenSeconds = 180;
-      if (player.tradeCapacity > 0) {
-        baseRegenSeconds = 180 / player.tradeCapacity;
-      }
-      const tradeRegenInterval = (baseRegenSeconds * 1000) + penaltyDelay;
-      player.tradeRegenInterval = tradeRegenInterval;
+      // Trade options regen: full rate below soft cap; 1/4 rate while over soft cap up to hard cap
       player.tradeRegenAccumulator = (player.tradeRegenAccumulator || 0) + deltaTime;
-      while (player.tradeRegenAccumulator >= tradeRegenInterval) {
+      while (true) {
+        const opts = player.tradeOptions || 0;
+        if (opts >= tradeOptionsHardCap) {
+          player.tradeRegenAccumulator = 0;
+          player.tradeRegenInterval = 0;
+          break;
+        }
+        let baseRegenSeconds = tradeCap > 0 ? (180 / tradeCap) : 180;
+        if (opts >= tradeCap && tradeCap > 0) {
+          baseRegenSeconds *= 4; // 1/4 rate above soft cap
+        }
+        const penaltyDelay = opts < 0 ? Math.abs(opts) * 30000 : 0;
+        const tradeRegenInterval = (baseRegenSeconds * 1000) + penaltyDelay;
+        player.tradeRegenInterval = tradeRegenInterval;
+        if (player.tradeRegenAccumulator < tradeRegenInterval) break;
         player.tradeRegenAccumulator -= tradeRegenInterval;
-        player.tradeOptions = Math.min(player.tradeCapacity, (player.tradeOptions || 0) + 1);
+        player.tradeOptions = Math.min(tradeOptionsHardCap, opts + 1);
       }
 
       // Auto Bundle Sale

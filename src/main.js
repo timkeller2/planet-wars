@@ -2874,7 +2874,7 @@ function getPlanetTradeIncomePerMin(planet) {
       '#credits-tooltip-panel, #upgrade-tooltip-panel, #touch-context-menu, #info-panel-modal, #info-panel-container, ' +
       '#help-modal, #recordings-modal, #ai-chat-modal, #boarding-combat-overlay, ' +
       '#game-replay-bar, #game-replays-modal, ' +
-      '[id^="res-card-"], #player-credits-display, #player-trade-options-display, ' +
+      '[id^="res-card-"], #player-credits-display, #player-trade-options-display, #player-command-limit-display, ' +
       '#game-timer, #config-build-buttons, .cruiser-build-btn, .selection-tile'
     );
   }
@@ -10343,18 +10343,30 @@ function getPlanetTradeIncomePerMin(planet) {
     if (tradeOptionsDisplay) {
       const tradeOptions = myPlayer.tradeOptions !== undefined ? Math.floor(myPlayer.tradeOptions) : 5;
       const tradeCapacity = myPlayer.tradeCapacity !== undefined ? Math.floor(myPlayer.tradeCapacity) : 5;
+      const tradeHardCap = tradeCapacity * 2;
       tradeOptionsDisplay.style.display = 'inline-flex';
       tradeOptionsDisplay.innerHTML = `⚖️${tradeOptions}/${tradeCapacity}`;
-      if (myPlayer.tradeRegenAccumulator !== undefined && myPlayer.tradeRegenInterval !== undefined && tradeOptions < tradeCapacity) {
+      // Progress while under hard cap (2× soft capacity); over soft cap still regens at 1/4 rate
+      if (myPlayer.tradeRegenAccumulator !== undefined && myPlayer.tradeRegenInterval !== undefined
+          && myPlayer.tradeRegenInterval > 0 && tradeOptions < tradeHardCap) {
         const pct = Math.floor((myPlayer.tradeRegenAccumulator / myPlayer.tradeRegenInterval) * 100);
-        tradeOptionsDisplay.innerHTML += `<sup style="margin-left: 4px; font-size: 0.75rem;">${Math.min(99, Math.max(0, pct))}%</sup>`;
+        const overSoft = tradeOptions >= tradeCapacity;
+        tradeOptionsDisplay.innerHTML += `<sup style="margin-left: 4px; font-size: 0.75rem;${overSoft ? ' color: #ffeb3b;' : ''}">${Math.min(99, Math.max(0, pct))}%</sup>`;
       }
       
       if (myPlayer.tradeLimitToggle === true) {
-        tradeOptionsDisplay.style.color = '#ff9800';
-        tradeOptionsDisplay.style.textShadow = '0 0 5px #ff9800';
-        tradeOptionsDisplay.style.background = 'rgba(255, 152, 0, 0.15)';
-        tradeOptionsDisplay.style.borderColor = '#ff9800';
+        // Slightly brighter when banked above soft cap
+        if (tradeOptions > tradeCapacity) {
+          tradeOptionsDisplay.style.color = '#ffc107';
+          tradeOptionsDisplay.style.textShadow = '0 0 6px #ffc107';
+          tradeOptionsDisplay.style.background = 'rgba(255, 193, 7, 0.18)';
+          tradeOptionsDisplay.style.borderColor = '#ffc107';
+        } else {
+          tradeOptionsDisplay.style.color = '#ff9800';
+          tradeOptionsDisplay.style.textShadow = '0 0 5px #ff9800';
+          tradeOptionsDisplay.style.background = 'rgba(255, 152, 0, 0.15)';
+          tradeOptionsDisplay.style.borderColor = '#ff9800';
+        }
       } else {
         tradeOptionsDisplay.style.color = '#888';
         tradeOptionsDisplay.style.textShadow = 'none';
@@ -10599,7 +10611,7 @@ function getPlanetTradeIncomePerMin(planet) {
       if (leaderboardHeader) {
         const titleSpan = leaderboardHeader.querySelector('span');
         if (titleSpan) {
-          titleSpan.textContent = `LEADERBOARD (lead by ${requiredLead};${Math.ceil(requiredLead * 1.5)})`;
+          titleSpan.textContent = `LEADERBOARD (lead by ${Math.round(requiredLead)};${Math.ceil(requiredLead * 1.5)})`;
         }
       }
 
@@ -14247,82 +14259,334 @@ function getPlanetTradeIncomePerMin(planet) {
   };
 
 
-  const btnCreditsDisplay = document.getElementById('player-credits-display');
-  if (btnCreditsDisplay) {
-    btnCreditsDisplay.style.cursor = 'pointer';
-    btnCreditsDisplay.style.pointerEvents = 'auto';
-    bindActionClick(btnCreditsDisplay, (e) => {
-      // Optimistic flip so the button reacts even before the next packet
-      if (serverState && localPlayer && serverState.players) {
-        const p = serverState.players.find(pl => pl.id === localPlayer.id);
-        if (p) {
-          p.useCredits = p.useCredits === false;
-          // Refresh HUD chrome immediately
-          if (typeof updateUI === 'function') {
-            try { updateUI(); } catch (_) { /* updateUI may not be ready yet */ }
+  // ── Shared HUD stats tooltips (credits / trade / command): hover + short-hold ──
+  let hudStatsTooltipFromTouch = false;
+  let hudStatsTooltipTouchTimer = null;
+  let hudStatsTooltipHideTimer = null;
+
+  function getHudStatsTooltipPanel() {
+    return document.getElementById('credits-tooltip-panel');
+  }
+
+  function showHudStatsTooltip(source, html, anchorEl) {
+    const panel = getHudStatsTooltipPanel();
+    if (!panel || !anchorEl) return;
+    if (hudStatsTooltipHideTimer) {
+      clearTimeout(hudStatsTooltipHideTimer);
+      hudStatsTooltipHideTimer = null;
+    }
+    panel.dataset.source = source;
+    if (html != null && html !== '') {
+      panel.innerHTML = html;
+    }
+    const rect = anchorEl.getBoundingClientRect();
+    panel.style.left = `${rect.left + window.scrollX}px`;
+    panel.style.top = `${rect.bottom + window.scrollY + 5}px`;
+    panel.style.display = 'block';
+    // Credits content is rebuilt each updateUI tick when source === 'credits'
+    if (source === 'credits' && typeof updateUI === 'function') {
+      try { updateUI(); } catch (_) { /* ignore */ }
+    }
+  }
+
+  function hideHudStatsTooltip(immediate = false) {
+    const panel = getHudStatsTooltipPanel();
+    if (!panel) return;
+    if (hudStatsTooltipHideTimer) {
+      clearTimeout(hudStatsTooltipHideTimer);
+      hudStatsTooltipHideTimer = null;
+    }
+    const doHide = () => {
+      panel.dataset.source = '';
+      panel.style.display = 'none';
+      hudStatsTooltipFromTouch = false;
+    };
+    if (immediate) doHide();
+    else hudStatsTooltipHideTimer = setTimeout(doHide, 120);
+  }
+
+  /**
+   * Desktop hover + short-hold (~280ms) touch tooltips.
+   * Quick tap (no hold / little move) runs onTap when provided; hold shows tooltip without toggling.
+   */
+  function wireHudStatsTooltip(el, source, buildHtml, onTap = null) {
+    if (!el) return;
+    el.style.cursor = 'pointer';
+    el.style.pointerEvents = 'auto';
+
+    el.addEventListener('mouseenter', () => {
+      if (hudStatsTooltipFromTouch) return;
+      const html = typeof buildHtml === 'function' ? buildHtml() : '';
+      showHudStatsTooltip(source, html, el);
+    });
+    el.addEventListener('mouseleave', () => {
+      if (!hudStatsTooltipFromTouch) hideHudStatsTooltip(false);
+    });
+
+    let ignoreClickUntil = 0;
+    if (onTap) {
+      el.addEventListener('click', (e) => {
+        if (Date.now() < ignoreClickUntil) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        e.stopPropagation();
+        onTap(e);
+      });
+    }
+
+    el.addEventListener('touchstart', (e) => {
+      if (!e.touches || e.touches.length !== 1) return;
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      if (typeof cancelCameraDragFromUi === 'function') cancelCameraDragFromUi();
+      ignoreClickUntil = Date.now() + 450;
+
+      const t0 = e.touches[0];
+      const startX = t0.clientX;
+      const startY = t0.clientY;
+      let holdFired = false;
+      let cancelledByMove = false;
+
+      if (hudStatsTooltipTouchTimer) {
+        clearTimeout(hudStatsTooltipTouchTimer);
+        hudStatsTooltipTouchTimer = null;
+      }
+      hudStatsTooltipTouchTimer = setTimeout(() => {
+        holdFired = true;
+        hudStatsTooltipFromTouch = true;
+        const html = typeof buildHtml === 'function' ? buildHtml() : '';
+        showHudStatsTooltip(source, html, el);
+        // Auto-hide so it does not block the HUD forever
+        if (hudStatsTooltipHideTimer) clearTimeout(hudStatsTooltipHideTimer);
+        hudStatsTooltipHideTimer = setTimeout(() => hideHudStatsTooltip(true), 4500);
+      }, 280);
+
+      const onMove = (ev) => {
+        if (!ev.touches || !ev.touches[0]) return;
+        const dx = Math.abs(ev.touches[0].clientX - startX);
+        const dy = Math.abs(ev.touches[0].clientY - startY);
+        if (dx > 12 || dy > 12) {
+          cancelledByMove = true;
+          if (hudStatsTooltipTouchTimer) {
+            clearTimeout(hudStatsTooltipTouchTimer);
+            hudStatsTooltipTouchTimer = null;
           }
         }
-      }
-      socket.emit('toggleUseCredits');
-    });
+      };
+      const onEnd = () => {
+        if (hudStatsTooltipTouchTimer) {
+          clearTimeout(hudStatsTooltipTouchTimer);
+          hudStatsTooltipTouchTimer = null;
+        }
+        el.removeEventListener('touchmove', onMove);
+        el.removeEventListener('touchend', onEnd);
+        el.removeEventListener('touchcancel', onEnd);
+        // Short tap without hold → action (toggle); hold already showed tooltip
+        if (!holdFired && !cancelledByMove && typeof onTap === 'function') {
+          onTap();
+        }
+      };
+      el.addEventListener('touchmove', onMove, { passive: true });
+      el.addEventListener('touchend', onEnd);
+      el.addEventListener('touchcancel', onEnd);
+    }, { passive: false });
+  }
 
-    btnCreditsDisplay.addEventListener('mouseenter', () => {
-      const tooltipPanel = document.getElementById('credits-tooltip-panel');
-      if (tooltipPanel) {
-        tooltipPanel.dataset.source = 'credits';
-        const rect = btnCreditsDisplay.getBoundingClientRect();
-        tooltipPanel.style.left = `${rect.left + window.scrollX}px`;
-        tooltipPanel.style.top = `${rect.bottom + window.scrollY + 5}px`;
-        tooltipPanel.style.display = 'block';
-      }
-    });
+  // Tap outside dismisses a touch-opened HUD stats tooltip
+  document.addEventListener('pointerdown', (e) => {
+    const panel = getHudStatsTooltipPanel();
+    if (!panel || panel.style.display === 'none' || !hudStatsTooltipFromTouch) return;
+    const t = e.target;
+    if (t && t.closest && (
+      t.closest('#player-credits-display') ||
+      t.closest('#player-trade-options-display') ||
+      t.closest('#player-command-limit-display') ||
+      t.closest('#credits-tooltip-panel')
+    )) return;
+    hideHudStatsTooltip(true);
+  }, true);
 
-    btnCreditsDisplay.addEventListener('mouseleave', () => {
-      const tooltipPanel = document.getElementById('credits-tooltip-panel');
-      if (tooltipPanel) {
-        tooltipPanel.dataset.source = '';
-        tooltipPanel.style.display = 'none';
+  const btnCreditsDisplay = document.getElementById('player-credits-display');
+  if (btnCreditsDisplay) {
+    wireHudStatsTooltip(
+      btnCreditsDisplay,
+      'credits',
+      () => '', // content filled live by updateUI while source === 'credits'
+      () => {
+        // Optimistic flip so the button reacts even before the next packet
+        if (serverState && localPlayer && serverState.players) {
+          const p = serverState.players.find(pl => pl.id === localPlayer.id);
+          if (p) {
+            p.useCredits = p.useCredits === false;
+            if (typeof updateUI === 'function') {
+              try { updateUI(); } catch (_) { /* updateUI may not be ready yet */ }
+            }
+          }
+        }
+        socket.emit('toggleUseCredits');
       }
-    });
+    );
   }
 
   const tradeOptionsDisplayBtn = document.getElementById('player-trade-options-display');
   if (tradeOptionsDisplayBtn) {
-    tradeOptionsDisplayBtn.style.cursor = 'pointer';
-    tradeOptionsDisplayBtn.style.pointerEvents = 'auto';
-    bindActionClick(tradeOptionsDisplayBtn, (e) => {
-      socket.emit('toggleTradeLimit');
-    });
-    tradeOptionsDisplayBtn.addEventListener('mouseenter', () => {
-      const tooltipPanel = document.getElementById('credits-tooltip-panel');
-      if (tooltipPanel) {
-        tooltipPanel.dataset.source = 'trade';
-        tooltipPanel.innerHTML = `
+    /** Live trade options / capacity / regen breakdown matching game.js economy tick. */
+    function buildTradeOptionsTooltipHtml() {
+      const myP = (serverState && serverState.players && localPlayer)
+        ? (serverState.players.find(p => p.id === localPlayer.id) || localPlayer)
+        : localPlayer;
+      if (!myP) {
+        return `
           <div style="font-weight: bold; font-size: 0.85rem; color: #ff9800; border-bottom: 1px solid rgba(255, 152, 0, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Trade Options</div>
-          <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.3;">
-            Toggles auto-resource usage for cruisers. Must be ON to automatically consume resources for special bonuses/costs.
-          </div>
+          <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa;">No player data.</div>
         `;
-        const rect = tradeOptionsDisplayBtn.getBoundingClientRect();
-        tooltipPanel.style.left = `${rect.left + window.scrollX}px`;
-        tooltipPanel.style.top = `${rect.bottom + window.scrollY + 5}px`;
-        tooltipPanel.style.display = 'block';
       }
-    });
-    tradeOptionsDisplayBtn.addEventListener('mouseleave', () => {
-      const tooltipPanel = document.getElementById('credits-tooltip-panel');
-      if (tooltipPanel) {
-        tooltipPanel.dataset.source = '';
-        tooltipPanel.style.display = 'none';
+
+      let rawShips = 0;
+      let effectiveShips = 0;
+      let ownedPlanets = 0;
+      let commerceWorlds = 0;
+      let commerceFull = 0;
+      let commercePartial = 0;
+      let mineralBoostedCommerce = 0;
+      let nonCommerceEff = 0;
+      let commerceEff = 0;
+
+      if (serverState && serverState.planets) {
+        for (const planet of serverState.planets) {
+          if (planet.dead) continue;
+          if (planet.ownerId !== myP.id) continue;
+          ownedPlanets++;
+          const ships = planet.ships || 0;
+          rawShips += ships;
+          let eff = ships;
+          if (planet.focusMode === 'commerce') {
+            commerceWorlds++;
+            const isFull = ships >= (planet.maxShips || 0);
+            if (isFull) {
+              commerceFull++;
+              eff = ships * 2;
+            } else {
+              commercePartial++;
+              eff = ships * 1.5;
+            }
+            if (planet.minerals && planet.minerals > 4) {
+              mineralBoostedCommerce++;
+              eff *= (planet.minerals / 4);
+            }
+            commerceEff += eff;
+          } else {
+            nonCommerceEff += eff;
+          }
+          effectiveShips += eff;
+        }
       }
-    });
+
+      // Prefer server effective ships for the total when present (matches capacity tick)
+      const serverEff = (myP.effectiveShips !== undefined && myP.effectiveShips !== null)
+        ? myP.effectiveShips
+        : null;
+      const displayEff = serverEff !== null ? serverEff : effectiveShips;
+      const serverCap = myP.tradeCapacity !== undefined ? Math.max(0, myP.tradeCapacity) : null;
+      const computedCap = Math.ceil(Math.max(0, displayEff) / 400);
+      const tradeCap = serverCap !== null ? serverCap : computedCap;
+      const tradeOptions = myP.tradeOptions !== undefined ? myP.tradeOptions : tradeCap;
+      const tradeOptsFloor = Math.floor(tradeOptions);
+
+      // Soft cap = capacity (full rate). Hard cap = 2× capacity (over soft cap at 1/4 rate).
+      const hardCap = tradeCap * 2;
+      let baseRegenSeconds = 180;
+      if (tradeCap > 0) baseRegenSeconds = 180 / tradeCap;
+      const overSoftCap = tradeOptsFloor >= tradeCap && tradeCap > 0;
+      if (overSoftCap) baseRegenSeconds *= 4;
+      const debtOpts = tradeOptions < 0 ? Math.abs(tradeOptions) : 0;
+      const penaltySeconds = debtOpts * 30;
+      const regenIntervalSec = baseRegenSeconds + penaltySeconds;
+      const serverIntervalMs = myP.tradeRegenInterval;
+      const intervalSec = (serverIntervalMs !== undefined && serverIntervalMs > 0)
+        ? (serverIntervalMs / 1000)
+        : regenIntervalSec;
+      const optionsPerMin = intervalSec > 0 ? (60 / intervalSec) : 0;
+      const atHardCap = tradeOptsFloor >= hardCap;
+      const accum = myP.tradeRegenAccumulator || 0;
+      const intervalMs = intervalSec * 1000;
+      const progressPct = (!atHardCap && intervalMs > 0)
+        ? Math.min(99, Math.max(0, Math.floor((accum / intervalMs) * 100)))
+        : null;
+      const secsToNext = (!atHardCap && intervalMs > 0)
+        ? Math.max(0, (intervalMs - accum) / 1000)
+        : null;
+
+      // Next capacity when ceil(eff/400) increases → need eff > tradeCap*400
+      const remainingToNext = Math.max(0, tradeCap * 400 - displayEff + 0.001);
+
+      const autoOn = myP.tradeLimitToggle === true;
+      const fmt1 = (n) => (Math.abs(n - Math.round(n)) < 0.05 ? String(Math.round(n)) : Number(n).toFixed(1));
+      const fmtSec = (s) => (s >= 60 ? `${fmt1(s / 60)}m` : `${fmt1(s)}s`);
+      const mismatchNote = (serverCap !== null && computedCap !== serverCap)
+        ? `<div style="margin-top:6px; color:#ff9800; font-size:0.82rem;">Client capacity ${computedCap} vs server ${serverCap} (server wins; data may lag).</div>`
+        : '';
+      // If server total differs from local factor sum, still show local factors as approximate
+      const factorNote = (serverEff !== null && Math.abs(serverEff - effectiveShips) > 0.5)
+        ? `<div style="font-size:0.78rem; color:#666; margin-top:2px;">Planet factors sum ${fmt1(effectiveShips)}; server total ${fmt1(serverEff)} used for capacity.</div>`
+        : '';
+
+      const row = (label, val, color = '#ccc') =>
+        `<div style="display:flex; justify-content:space-between; gap:16px;"><span>${label}</span><span style="color:${color}; font-weight:bold;">${val}</span></div>`;
+
+      return `
+        <div style="font-weight: bold; font-size: 0.85rem; color: #ff9800; border-bottom: 1px solid rgba(255, 152, 0, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Trade Options</div>
+        <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.45; min-width: 290px;">
+          Market buy/sell charges (LMB buy / RMB sell on resource cards). Each trade costs <strong style="color:#fff;">1 option</strong>. Can go negative down to <strong style="color:#fff;">−capacity</strong> (worse prices while in debt). Options can bank up to <strong style="color:#ffc107;">2× capacity</strong> at reduced regen.<br><br>
+
+          <span style="color: #ff9800; font-weight: bold;">Capacity (effective ships)</span>
+          ${row('Owned planets', ownedPlanets, '#fff')}
+          ${row('Raw garrison ships', fmt1(rawShips), '#fff')}
+          ${row('Non-commerce effective', fmt1(nonCommerceEff), nonCommerceEff ? '#ccc' : '#666')}
+          ${row(`Commerce (${commerceWorlds}: ${commercePartial}×1.5 / ${commerceFull}×2)`, fmt1(commerceEff), commerceWorlds ? '#8bc34a' : '#666')}
+          ${mineralBoostedCommerce ? row(`Mineral-boosted commerce worlds (×minerals/4)`, mineralBoostedCommerce, '#ffeb3b') : ''}
+          ${row('Total effective ships', fmt1(displayEff), '#ff9800')}
+          ${factorNote}
+          ${row('Formula', 'ceil(effective / 400)', '#777')}
+          <div style="border-top: 1px solid rgba(255,152,0,0.25); margin-top: 6px; padding-top: 6px; display:flex; justify-content:space-between; gap:16px;">
+            <span style="color:#ff9800; font-weight:bold;">Soft capacity</span>
+            <span style="color:#ff9800; font-weight:bold;">${tradeCap}</span>
+          </div>
+          ${row('Hard bank cap (2×)', hardCap, '#ffc107')}
+          ${row('Options (now)', `${tradeOptsFloor} / ${tradeCap} (max ${hardCap})`, tradeOptsFloor < 0 ? '#ff3333' : (tradeOptsFloor > tradeCap ? '#ffc107' : '#fff'))}
+          ${tradeCap > 0 ? row('Eff. ships to next +1 soft cap', `~${fmt1(remainingToNext)} more`, remainingToNext < 50 ? '#8bc34a' : '#777') : ''}
+          ${mismatchNote}
+
+          <div style="margin-top: 10px;"><span style="color: #ff9800; font-weight: bold;">Refresh rate</span></div>
+          ${row('Full-rate interval (&lt; soft cap)', tradeCap > 0 ? `${fmt1(tradeCap > 0 ? 180 / tradeCap : 180)}s  (180 ÷ capacity)` : '180s', '#fff')}
+          ${row('Over soft cap', '1/4 rate (interval ×4) up to 2×', overSoftCap ? '#ffc107' : '#666')}
+          ${debtOpts > 0 ? row(`Debt penalty (${fmt1(debtOpts)} neg. × 30s)`, `+${fmt1(penaltySeconds)}s`, '#ff3333') : row('Debt penalty', 'none', '#666')}
+          ${row('Current interval', atHardCap ? '—' : fmtSec(intervalSec), '#ff9800')}
+          ${row('Regen rate', atHardCap ? 'full hard cap (paused)' : `${fmt1(optionsPerMin)} / min${overSoftCap ? ' (¼)' : ''}`, atHardCap ? '#8bc34a' : (overSoftCap ? '#ffc107' : '#fff'))}
+          ${progressPct !== null ? row('Progress to next option', `${progressPct}%${secsToNext !== null ? ` (~${fmtSec(secsToNext)})` : ''}`, '#ffeb3b') : ''}
+
+          <div style="margin-top: 10px; font-size: 0.82rem; color: #777; line-height: 1.35;">
+            <strong style="color:${autoOn ? '#ff9800' : '#888'};">Click:</strong> empire auto-resource usage is
+            <strong style="color:${autoOn ? '#ff9800' : '#888'};">${autoOn ? 'ON' : 'OFF'}</strong>
+            (special bombs/fuel/duranium &amp; related spends). Orange = ON; gold tint when options &gt; soft cap.<br>
+            At soft cap or above, auto-bundle sales can fire (4 Latinum + 1 of each other resource, −5 options) every 5 minutes when stocked.
+          </div>
+        </div>
+      `;
+    }
+
+    wireHudStatsTooltip(
+      tradeOptionsDisplayBtn,
+      'trade',
+      () => buildTradeOptionsTooltipHtml(),
+      () => { socket.emit('toggleTradeLimit'); }
+    );
   }
 
   const commandLimitDisplayBtn = document.getElementById('player-command-limit-display');
   if (commandLimitDisplayBtn) {
-    commandLimitDisplayBtn.style.cursor = 'pointer';
-    commandLimitDisplayBtn.style.pointerEvents = 'auto';
-
     /** Live command-limit breakdown matching game.js economy tick. */
     function buildCommandLimitTooltipHtml() {
       const myP = (serverState && serverState.players && localPlayer)
@@ -14411,24 +14675,12 @@ function getPlanetTradeIncomePerMin(planet) {
       `;
     }
 
-    commandLimitDisplayBtn.addEventListener('mouseenter', () => {
-      const tooltipPanel = document.getElementById('credits-tooltip-panel');
-      if (tooltipPanel) {
-        tooltipPanel.dataset.source = 'command';
-        tooltipPanel.innerHTML = buildCommandLimitTooltipHtml();
-        const rect = commandLimitDisplayBtn.getBoundingClientRect();
-        tooltipPanel.style.left = `${rect.left + window.scrollX}px`;
-        tooltipPanel.style.top = `${rect.bottom + window.scrollY + 5}px`;
-        tooltipPanel.style.display = 'block';
-      }
-    });
-    commandLimitDisplayBtn.addEventListener('mouseleave', () => {
-      const tooltipPanel = document.getElementById('credits-tooltip-panel');
-      if (tooltipPanel) {
-        tooltipPanel.dataset.source = '';
-        tooltipPanel.style.display = 'none';
-      }
-    });
+    wireHudStatsTooltip(
+      commandLimitDisplayBtn,
+      'command',
+      () => buildCommandLimitTooltipHtml(),
+      null // no tap action — hold/hover only
+    );
   }
 
 
