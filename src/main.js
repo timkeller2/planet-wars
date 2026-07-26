@@ -7411,13 +7411,23 @@ function getPlanetTradeIncomePerMin(planet) {
           const live = byId.get(idKey);
           if (live) {
             // Resolved on server — drop sticky memory
-            if (live.anomaly && live.anomaly.researched) {
+            if (live.anomaly && live.anomaly.researched === true) {
               knownAnomaliesByPlanetId.delete(idKey);
               continue;
             }
-            // Planet present but anomaly stripped/null — restore so it never blinks out
-            if (!live.anomaly || live.anomaly.researched) {
-              live.anomaly = { ...cached.anomaly, researched: false };
+            // Planet present but anomaly stripped/null/incomplete after FoW→sensor transition
+            const liveAn = live.anomaly;
+            const incomplete = !liveAn || liveAn.researched === true ||
+              liveAn.x == null || liveAn.y == null || liveAn.difficulty == null;
+            if (incomplete) {
+              const restored = { ...cached.anomaly, researched: false };
+              // Prefer any live coords that exist; fill gaps from sticky memory
+              if (liveAn && liveAn.x != null) restored.x = liveAn.x;
+              if (liveAn && liveAn.y != null) restored.y = liveAn.y;
+              if (liveAn && liveAn.difficulty != null) restored.difficulty = liveAn.difficulty;
+              if (liveAn && liveAn.progress != null) restored.progress = liveAn.progress;
+              if (liveAn && liveAn.id) restored.id = liveAn.id;
+              live.anomaly = restored;
               if (cached.isDeepSpaceAnomaly) live.isDeepSpaceAnomaly = true;
               if (live.x == null && cached.x != null) live.x = cached.x;
               if (live.y == null && cached.y != null) live.y = cached.y;
@@ -17635,8 +17645,15 @@ function getPlanetTradeIncomePerMin(planet) {
             
             ctx.restore();
             
-            if (p.anomaly.difficulty > 0 && p.anomaly.progress > 0) {
-              const progressRatio = Math.max(0, Math.min(1.0, p.anomaly.progress / p.anomaly.difficulty));
+            // progress may be a number or per-player object when fully in sensor range
+            let dsaProgressVal = 0;
+            if (typeof p.anomaly.progress === 'number' && isFinite(p.anomaly.progress)) {
+              dsaProgressVal = p.anomaly.progress;
+            } else if (p.anomaly.progress && typeof p.anomaly.progress === 'object' && localPlayer) {
+              dsaProgressVal = p.anomaly.progress[localPlayer.id] || 0;
+            }
+            if (p.anomaly.difficulty > 0 && dsaProgressVal > 0) {
+              const progressRatio = Math.max(0, Math.min(1.0, dsaProgressVal / p.anomaly.difficulty));
               ctx.save();
               ctx.strokeStyle = anomalyColor;
               ctx.lineWidth = 0.5;

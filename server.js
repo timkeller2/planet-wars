@@ -3581,23 +3581,40 @@ async function bootstrap() {
             player.discoveredPlanets.add(p.id);
             if (isDiscoveredNow) {
               spawnAnomalyForPlanet();
+              // Spawn happens after allPlanetsMapped — drop stale cache so anomaly is not omitted
+              if (p.anomaly) planetMapCache.delete(p.id);
             }
           }
           if (!player._visPlanetCache) player._visPlanetCache = new Map();
-          const baseVis = allPlanetsMapped[i];
+          let baseVis = allPlanetsMapped[i];
+          // Live anomaly always wins over pre-spawn / stale mapped stubs (sensor-enter flicker)
           const progVis = (p.anomaly && p.anomaly.progress && typeof p.anomaly.progress === 'object')
-            ? (p.anomaly.progress[player.id] || 0) : 0;
+            ? (p.anomaly.progress[player.id] || 0)
+            : ((p.anomaly && typeof p.anomaly.progress === 'number') ? p.anomaly.progress : 0);
+          const liveAnId = (p.anomaly && !p.anomaly.researched) ? (p.anomaly.id || '1') : '0';
           const spyVis = !!(player.spyRootedEvents && player.spyRootedEvents.has(p.id));
-          // Reuse prior per-player view when base mapped object + progress unchanged
-          const visSig = (baseVis && planetMapCache.get(p.id) ? planetMapCache.get(p.id).sig : '') + '|' + progVis + '|' + (spyVis ? 1 : 0);
+          // Include live anomaly id so cache cannot reuse a pre-anomaly view when sensors enter
+          const visSig = (baseVis && planetMapCache.get(p.id) ? planetMapCache.get(p.id).sig : '') +
+            '|' + progVis + '|' + (spyVis ? 1 : 0) + '|an:' + liveAnId;
           const prevVis = player._visPlanetCache.get(p.id);
           let mappedPlanet;
-          if (prevVis && prevVis.sig === visSig) {
+          if (prevVis && prevVis.sig === visSig && prevVis.obj &&
+              (!!prevVis.obj.anomaly === !!(p.anomaly && !p.anomaly.researched))) {
             mappedPlanet = prevVis.obj;
           } else {
-            mappedPlanet = Object.assign({}, baseVis);
-            if (mappedPlanet.anomaly) {
-              mappedPlanet.anomaly = Object.assign({}, mappedPlanet.anomaly, { progress: progVis });
+            mappedPlanet = Object.assign({}, baseVis || {
+              id: p.id, x: p.x, y: p.y, radius: p.radius, ownerId: p.owner ? p.owner.id : null,
+              ships: p.ships, maxShips: p.maxShips, dead: p.dead || false,
+              isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false
+            });
+            if (p.anomaly && !p.anomaly.researched) {
+              mappedPlanet.anomaly = Object.assign({}, mapAnomaly(p.anomaly), { progress: progVis });
+              if (p.isDeepSpaceAnomaly) mappedPlanet.isDeepSpaceAnomaly = true;
+            } else {
+              // Explicit null so client sticky can restore if this was a known anomaly
+              mappedPlanet.anomaly = (p.anomaly && p.anomaly.researched)
+                ? Object.assign({}, mapAnomaly(p.anomaly), { progress: progVis })
+                : null;
             }
             if (spyVis) mappedPlanet.spyRootedOutEvent = true;
             player._visPlanetCache.set(p.id, { sig: visSig, obj: mappedPlanet });
@@ -3616,6 +3633,7 @@ async function bootstrap() {
             player.discoveredPlanets.add(p.id);
             if (isDiscoveredNow) {
               spawnAnomalyForPlanet();
+              if (p.anomaly) planetMapCache.delete(p.id);
             }
           }
           const hasAttacked = player.attackedPlanets && player.attackedPlanets.has(p.id) && player.attackedPlanets.get(p.id) > 0;
@@ -3779,11 +3797,24 @@ async function bootstrap() {
 
           const existing = byVisId.get(p.id) || byVisId.get(String(p.id));
           if (existing) {
-            // Ensure anomaly data is never stripped from a known discovery
-            if (!existing.anomaly || existing.anomaly.researched) {
+            // Always re-attach live anomaly onto sensor/full-vis views. Cache reuse or
+            // spawn-after-map races were stripping anomaly when a cruiser entered range.
+            const needsAnomaly = !existing.anomaly || existing.anomaly.researched ||
+              existing.anomaly.id !== an.id ||
+              existing.anomaly.x == null || existing.anomaly.y == null;
+            if (needsAnomaly) {
               existing.anomaly = mapStickyAnomaly(an, anProg);
-              if (p.isDeepSpaceAnomaly) existing.isDeepSpaceAnomaly = true;
+            } else {
+              // Keep coords/progress fresh without dropping the icon
+              existing.anomaly.progress = anProg;
+              existing.anomaly.beingResearched = an.beingResearched || false;
+              existing.anomaly.completing = an.completing || false;
+              existing.anomaly.x = an.x;
+              existing.anomaly.y = an.y;
+              existing.anomaly.difficulty = an.difficulty;
+              existing.anomaly.researched = false;
             }
+            if (p.isDeepSpaceAnomaly) existing.isDeepSpaceAnomaly = true;
             player.lastKnownPlanets[p.id] = existing;
             continue;
           }
