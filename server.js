@@ -1324,12 +1324,46 @@ async function bootstrap() {
     });
 
     // Client prediction desync diagnostics → logs/pred-desync.jsonl (readable by tools)
+    // Rotates when the file grows past PRED_DESYNC_MAX_LINES to keep tooling snappy.
+    const PRED_DESYNC_MAX_LINES = 2000;
+    let predDesyncLineCount = null; // lazy-init from file
     socket.on('predDesyncLog', (sample) => {
       try {
         if (!sample || typeof sample !== 'object') return;
+        // Drop combat heading-only noise if an old client still sends it
+        if (sample.headingOnly && sample.inCombat) return;
+        if (sample.posErr != null && sample.posErr < 12 && sample.headErrDeg != null
+            && sample.headErrDeg < 55 && !sample.trackRole) return;
+
         const player = connectedClients.get(socket.id);
         const logsDir = path.join(__dirname, 'logs');
         if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
+        const logPath = path.join(logsDir, 'pred-desync.jsonl');
+        if (predDesyncLineCount == null) {
+          try {
+            if (fs.existsSync(logPath)) {
+              const txt = fs.readFileSync(logPath, 'utf8');
+              predDesyncLineCount = txt ? txt.split('\n').filter(Boolean).length : 0;
+            } else {
+              predDesyncLineCount = 0;
+            }
+          } catch (_) {
+            predDesyncLineCount = 0;
+          }
+        }
+        if (predDesyncLineCount >= PRED_DESYNC_MAX_LINES) {
+          // Keep the newest half so recent sessions stay for analysis
+          try {
+            const txt = fs.readFileSync(logPath, 'utf8');
+            const lines = txt.split('\n').filter(Boolean);
+            const keep = lines.slice(-Math.floor(PRED_DESYNC_MAX_LINES / 2));
+            fs.writeFileSync(logPath, keep.join('\n') + (keep.length ? '\n' : ''), 'utf8');
+            predDesyncLineCount = keep.length;
+          } catch (_) {
+            fs.writeFileSync(logPath, '', 'utf8');
+            predDesyncLineCount = 0;
+          }
+        }
         const line = JSON.stringify({
           ...sample,
           playerId: player ? player.id : null,
@@ -1337,7 +1371,8 @@ async function bootstrap() {
           socketId: socket.id,
           serverRecvAt: Date.now()
         }) + '\n';
-        fs.appendFileSync(path.join(logsDir, 'pred-desync.jsonl'), line, 'utf8');
+        fs.appendFileSync(logPath, line, 'utf8');
+        predDesyncLineCount++;
       } catch (e) {
         // Never break the game for logging failures
         if (!(socket._predLogErrLogged)) {

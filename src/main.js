@@ -6063,17 +6063,17 @@ function getPlanetTradeIncomePerMin(planet) {
 
   // ── Prediction desync diagnostics ───────────────────────────────────────
   // Logs when local client pose diverges from server authority in world space
-  // (zoom-independent). Focus: battles + move orders, not FoW re-entry noise.
-  // Samples are sent to the server and appended to logs/pred-desync.jsonl
-  // (also kept in window._predDesyncLog). Toggle: window.PRED_DESYNC_LOG = false
+  // (zoom-independent). Focus: real lag / inverted heading — not face-target noise.
+  // Samples → logs/pred-desync.jsonl (+ window._predDesyncLog). Toggle: PRED_DESYNC_LOG=false
   window.PRED_DESYNC_LOG = true;
   window._predDesyncLog = [];
-  const PRED_DESYNC_POS_PX = 16;              // move/cruise: significant position error
-  const PRED_DESYNC_HEADING_DEG = 28;         // move/cruise: significant heading error
-  const PRED_DESYNC_COMBAT_POS_PX = 12;       // combat: still care about position drift
-  const PRED_DESYNC_COMBAT_HEADING_DEG = 90;  // combat: face-target makes moderate head err normal
-  const PRED_DESYNC_LOG_COOLDOWN_MS = 700;    // per-ship rate limit
-  const PRED_DESYNC_MAX_SAMPLES = 250;
+  const PRED_DESYNC_POS_PX = 22;              // move/cruise: meaningful position error
+  const PRED_DESYNC_HEADING_DEG = 55;         // move/cruise: ignore mild turn lag
+  const PRED_DESYNC_COMBAT_POS_PX = 14;       // combat position drift
+  const PRED_DESYNC_COMBAT_HEADING_DEG = 120; // combat: face-target heading is noisy
+  const PRED_DESYNC_LOG_COOLDOWN_MS = 900;    // per-ship rate limit (position samples)
+  const PRED_DESYNC_HEAD_ONLY_COOLDOWN_MS = 1800; // heading-only is cheaper but spammier
+  const PRED_DESYNC_MAX_SAMPLES = 200;
   const PRED_DESYNC_MAX_PACKET_GAP_MS = 380;  // skip after long gaps (FoW / tab)
   const predDesyncLastLogMs = new Map();
 
@@ -6123,7 +6123,7 @@ function getPlanetTradeIncomePerMin(planet) {
     if (!simulated) {
       // Allow rare catastrophic unsimulated samples for debugging freezes, tagged clearly
       const peQuick = Math.hypot((vis.x || 0) - authX, (vis.y || 0) - authY);
-      if (peQuick < 80) return;
+      if (peQuick < 100) return;
     }
 
     const clientX = vis.x;
@@ -6137,12 +6137,12 @@ function getPlanetTradeIncomePerMin(planet) {
     const posThresh = inCombat ? PRED_DESYNC_COMBAT_POS_PX : PRED_DESYNC_POS_PX;
     const headThresh = inCombat ? PRED_DESYNC_COMBAT_HEADING_DEG : PRED_DESYNC_HEADING_DEG;
     if (posErr < posThresh && headErr < headThresh) return;
-    // Combat with good position + sub-90° head is face-target noise — drop it
-    if (inCombat && posErr < 8 && headErr < 90) return;
+    // Combat with good position + sub-100° head is face-target noise — drop it
+    if (inCombat && posErr < 10 && headErr < 100) return;
 
     // Arrived / idle-hold: skip mild heading-only noise (arrival latch handles this)
     if (vis.arrivedLatch || vis.idleHoldHeading) {
-      if (posErr < 24 && headErr < 55) return;
+      if (posErr < 28 && headErr < 70) return;
     }
 
     const opt = vis.opt;
@@ -6168,12 +6168,8 @@ function getPlanetTradeIncomePerMin(planet) {
     }
 
     // Idle desync only if large (possible bug); mild idle skip above
-    if (context === 'idle' && posErr < 40) return;
-    if (context === 'other' && !inCombat && !hasDest && posErr < 50) return;
-
-    const last = predDesyncLastLogMs.get(ship.id) || 0;
-    if (now - last < PRED_DESYNC_LOG_COOLDOWN_MS) return;
-    predDesyncLastLogMs.set(ship.id, now);
+    if (context === 'idle' && posErr < 50) return;
+    if (context === 'other' && !inCombat && !hasDest && posErr < 60) return;
 
     const destX = optLive ? opt.targetX
       : (vis.heldCruise && vis.heldCruise.destX != null ? vis.heldCruise.destX
@@ -6186,27 +6182,46 @@ function getPlanetTradeIncomePerMin(planet) {
           : (ship.targetY != null ? ship.targetY
             : (ship.targetPlanet ? ship.targetPlanet.y : null))));
 
-    // serverTurnDir only meaningful when not nearly aligned / not on the pin
+    // Dest-relative diagnostics (also used to drop "client is better than server" heading noise)
     let serverTurnDir = 0;
     let headingToDestDeg = null;
+    let clientHeadingToDestDeg = null;
+    let clientBetterToDest = false;
     if (destX != null && destY != null) {
-      const toDx = destX - authX;
-      const toDy = destY - authY;
-      const toDist = Math.hypot(toDx, toDy);
-      if (toDist > 12) {
-        const desired = Math.atan2(toDy, toDx);
-        const diff = shortestAngleDiff(authAngle || 0, desired);
-        headingToDestDeg = Math.round(Math.abs(diff) * 180 / Math.PI * 10) / 10;
-        // Sign noise near alignment polluted 60%+ of old logs
-        if (Math.abs(diff) > 15 * Math.PI / 180) {
-          serverTurnDir = Math.sign(diff) || 0;
+      const toDxS = destX - authX;
+      const toDyS = destY - authY;
+      const toDistS = Math.hypot(toDxS, toDyS);
+      if (toDistS > 12) {
+        const desiredS = Math.atan2(toDyS, toDxS);
+        const diffS = shortestAngleDiff(authAngle || 0, desiredS);
+        headingToDestDeg = Math.round(Math.abs(diffS) * 180 / Math.PI * 10) / 10;
+        if (Math.abs(diffS) > 15 * Math.PI / 180) {
+          serverTurnDir = Math.sign(diffS) || 0;
+        }
+      }
+      const toDxC = destX - clientX;
+      const toDyC = destY - clientY;
+      const toDistC = Math.hypot(toDxC, toDyC);
+      if (toDistC > 12) {
+        const desiredC = Math.atan2(toDyC, toDxC);
+        const diffC = shortestAngleDiff(clientAngle, desiredC);
+        clientHeadingToDestDeg = Math.round(Math.abs(diffC) * 180 / Math.PI * 10) / 10;
+        if (headingToDestDeg != null && clientHeadingToDestDeg + 18 < headingToDestDeg) {
+          clientBetterToDest = true;
         }
       }
     }
 
+    // Pure heading sample where client faces dest better than server = prediction win, not a bug
+    if (posErr < 18 && headErr >= headThresh && clientBetterToDest) return;
+    // Heading-only without a destination is rarely actionable
+    if (posErr < posThresh && destX == null && headErr < 140) return;
+
     // Along-track / lateral error for diagnosis
+    // alongTrackErr > 0 ⇒ server is further toward dest than client ⇒ client behind
     let alongTrackErr = null;
     let lateralErr = null;
+    let trackRole = null; // 'behind' | 'ahead' | 'lateral'
     if (destX != null && destY != null) {
       const tdx = destX - clientX;
       const tdy = destY - clientY;
@@ -6218,8 +6233,30 @@ function getPlanetTradeIncomePerMin(planet) {
         const ey = authY - clientY;
         alongTrackErr = Math.round((ex * ux + ey * uy) * 10) / 10;
         lateralErr = Math.round((ex * -uy + ey * ux) * 10) / 10;
+        if (Math.abs(alongTrackErr) >= Math.abs(lateralErr) || Math.abs(alongTrackErr) > 12) {
+          trackRole = alongTrackErr > 4 ? 'behind' : (alongTrackErr < -4 ? 'ahead' : 'aligned');
+        } else {
+          trackRole = 'lateral';
+        }
       }
     }
+
+    // Heading-only samples: require inverted/large error relative to dest, not mild lag
+    const headingOnly = posErr < posThresh && headErr >= headThresh;
+    if (headingOnly) {
+      if (inCombat) return; // combat nose noise — never log heading-only
+      if (clientHeadingToDestDeg != null && clientHeadingToDestDeg < 45 && headErr > 90) {
+        // Client on-track, server elsewhere — skip
+        return;
+      }
+      if (headErr < 100 && (clientHeadingToDestDeg == null || clientHeadingToDestDeg < 90)) return;
+    }
+
+    // Rate limit: heading-only less frequent; position issues keep normal cadence
+    const last = predDesyncLastLogMs.get(ship.id) || 0;
+    const cd = headingOnly ? PRED_DESYNC_HEAD_ONLY_COOLDOWN_MS : PRED_DESYNC_LOG_COOLDOWN_MS;
+    if (now - last < cd) return;
+    predDesyncLastLogMs.set(ship.id, now);
 
     const sample = {
       t: Date.now(),
@@ -6230,6 +6267,9 @@ function getPlanetTradeIncomePerMin(planet) {
       classType: ship.classType || null,
       posErr: Math.round(posErr * 10) / 10,
       headErrDeg: Math.round(headErr * 10) / 10,
+      headingOnly,
+      trackRole,
+      clientBetterToDest,
       simulated,
       simAgeMs: simulated ? Math.round(simAge) : (Number.isFinite(simAge) ? Math.round(simAge) : null),
       heldCruise: heldLive,
@@ -6237,6 +6277,7 @@ function getPlanetTradeIncomePerMin(planet) {
       alongTrackErr,
       lateralErr,
       headingToDestDeg,
+      clientHeadingToDestDeg,
       client: {
         x: Math.round(clientX * 10) / 10,
         y: Math.round(clientY * 10) / 10,
@@ -6294,6 +6335,9 @@ function getPlanetTradeIncomePerMin(planet) {
       name: s.name,
       posErr: s.posErr,
       headErr: s.headErrDeg,
+      headOnly: s.headingOnly,
+      track: s.trackRole,
+      betterHead: s.clientBetterToDest,
       sim: s.simulated,
       held: s.heldCruise,
       along: s.alongTrackErr,
@@ -20405,9 +20449,23 @@ function getPlanetTradeIncomePerMin(planet) {
         let errY = serverPred.y - vis.y;
         let err = Math.hypot(errX, errY);
         const corrBoost = getSoftCorrectionBoost();
-        const headMatch = Math.abs(shortestAngleDiff(vis.angle, serverPred.angle)) < 18 * Math.PI / 180;
-        // Large lag + matching heading: recover hard along-track (freeze residual / packet gap)
-        const alongTrackBoost = !combatMode && headMatch && err > 35;
+        const headMatch = Math.abs(shortestAngleDiff(vis.angle, serverPred.angle)) < 22 * Math.PI / 180;
+        // How far client is behind server along the path to dest (positive = behind)
+        let alongToDest = 0;
+        if (!combatMode && destX != null && destY != null) {
+          const tdx = destX - vis.x;
+          const tdy = destY - vis.y;
+          const tlen = Math.hypot(tdx, tdy);
+          if (tlen > 8) {
+            const ux = tdx / tlen;
+            const uy = tdy / tlen;
+            alongToDest = errX * ux + errY * uy;
+          }
+        }
+        // Large lag + matching heading: recover hard along-track (client behind server on cruise)
+        // Logs showed 100–500px same-heading lag on long flights — old cap was too gentle.
+        const clientBehind = alongToDest > 18;
+        const alongTrackBoost = !combatMode && headMatch && (err > 28 || clientBehind);
 
         // Deadzone: do not chase packet noise (major silk win)
         const deadzone = combatMode ? 0.4 : 1.35;
@@ -20427,6 +20485,17 @@ function getPlanetTradeIncomePerMin(planet) {
           if (combatMode && Math.abs(adiff) > 40 * Math.PI / 180) {
             vis.angle += adiff * Math.min(1, 1 - Math.exp(-smoothDt / 0.035));
             return;
+          }
+          // Client inverted vs dest while server is aligned — snap nose (180° flip bugs)
+          if (!combatMode && destX != null && destY != null) {
+            const desired = Math.atan2(destY - vis.y, destX - vis.x);
+            const localErr = Math.abs(shortestAngleDiff(vis.angle, desired));
+            const serverErr = Math.abs(shortestAngleDiff(serverPred.angle, desired));
+            if (localErr > 100 * Math.PI / 180 && serverErr < 45 * Math.PI / 180) {
+              vis.angle += adiff * Math.min(1, 1 - Math.exp(-smoothDt / 0.05));
+              vis.turnDir = 0;
+              return;
+            }
           }
           const angAlpha = 1 - Math.exp(-(combatMode ? 18 : 5) * smoothDt);
           vis.angle += adiff * angAlpha * (combatMode ? 1.0 : 0.4);
@@ -20449,10 +20518,11 @@ function getPlanetTradeIncomePerMin(planet) {
             const along = pullX * ux + pullY * uy;
             const latX = pullX - along * ux;
             const latY = pullY - along * uy;
-            // Tighter lateral when heading agrees and we're catching up a freeze
-            const latScale = alongTrackBoost ? 0.18 : 0.42;
-            pullX = along * ux + latX * latScale;
-            pullY = along * uy + latY * latScale;
+            // Client behind: pull almost fully along-track; client ahead: damp catch-up (less rubber-band)
+            const latScale = alongTrackBoost ? (clientBehind ? 0.12 : 0.22) : 0.42;
+            const alongScale = clientBehind && along > 0 ? 1.0 : (along < 0 ? 0.72 : 1.0);
+            pullX = along * alongScale * ux + latX * latScale;
+            pullY = along * alongScale * uy + latY * latScale;
           }
         } else if (!combatMode && (cruiseSpd > 2 || (vis.smoothSpeed || 0) > 2 || alongTrackBoost)) {
           // Moving but no dest: damp correction perpendicular to nose
@@ -20473,8 +20543,10 @@ function getPlanetTradeIncomePerMin(planet) {
         let tau;
         if (combatMode) {
           tau = err < 25 ? 0.07 : 0.12;
+        } else if (alongTrackBoost && clientBehind) {
+          // Heading agrees + client behind — close lag in ~0.5–1.5s not tens of seconds
+          tau = err < 50 ? 0.06 : (err < 120 ? 0.09 : (err < 250 ? 0.12 : 0.16));
         } else if (alongTrackBoost) {
-          // Heading agrees — recover lag faster without full snap
           tau = err < 60 ? 0.09 : (err < 160 ? 0.14 : 0.2);
         } else if (err < 10) {
           tau = 0.11;
@@ -20485,14 +20557,17 @@ function getPlanetTradeIncomePerMin(planet) {
         } else {
           tau = 0.45;
         }
-        tau = Math.max(0.055, tau / corrBoost);
+        tau = Math.max(0.045, tau / corrBoost);
         let alpha = 1 - Math.exp(-smoothDt / tau);
 
         // Per-frame travel cap — silk: no teleports mid-frame
         // Along-track boost raises the cap so freezes close in seconds not tens of seconds
         let maxCorr = Math.max(cruiseSpd, 10) * smoothDt * (combatMode ? 3.8 : 2.15)
           + (combatMode ? 2.5 : 1.75);
-        if (alongTrackBoost) {
+        if (alongTrackBoost && clientBehind) {
+          // Allow catch-up faster than cruise speed when lagging (logs: 100–500px same-heading)
+          maxCorr = Math.max(cruiseSpd, 14) * smoothDt * 6.5 + 5.5;
+        } else if (alongTrackBoost) {
           maxCorr = Math.max(cruiseSpd, 12) * smoothDt * 4.2 + 3.5;
         }
         if (err * alpha > maxCorr) alpha = maxCorr / err;
@@ -20518,7 +20593,9 @@ function getPlanetTradeIncomePerMin(planet) {
 
         // Heading: in combat always trust server (face-target). Out of combat, trust local
         // turn when mid-course / locked turn direction (avoids left/right flip-flops).
+        // Exception: client inverted vs dest while server is right → force correct (180° flips).
         let applyAngleCorr = true;
+        let forceHeadSnap = false;
         if (combatMode) {
           applyAngleCorr = true; // always pull nose toward server in dogfights
         } else if (vis.idleHoldHeading) {
@@ -20530,14 +20607,20 @@ function getPlanetTradeIncomePerMin(planet) {
           const desired = Math.atan2(destY - vis.y, destX - vis.x);
           const localErr = angleDiffAbs(vis.angle, desired);
           const serverErr = angleDiffAbs(serverPred.angle, desired);
-          // Actively turning toward dest — keep our arc
-          if (localErr > 12 * Math.PI / 180) {
+          if (localErr > 100 * Math.PI / 180 && serverErr < 45 * Math.PI / 180) {
+            // Client faces away from dest; server is aligned — snap to server/desired
+            applyAngleCorr = true;
+            forceHeadSnap = true;
+            vis.turnDir = 0;
+          } else if (localErr > 12 * Math.PI / 180) {
+            // Actively turning toward dest — keep our arc
             applyAngleCorr = false;
           } else if (localErr < serverErr - 0.02) {
+            // Client better aligned than server — keep local nose
             applyAngleCorr = false;
           }
           // If server is turning the opposite way from our lock, don't snap across
-          if (vis.turnDir && applyAngleCorr) {
+          if (vis.turnDir && applyAngleCorr && !forceHeadSnap) {
             const serverDiff = shortestAngleDiff(vis.angle, serverPred.angle);
             if (Math.sign(serverDiff) !== 0 && Math.sign(serverDiff) !== vis.turnDir && Math.abs(serverDiff) > 15 * Math.PI / 180) {
               applyAngleCorr = false;
@@ -20550,10 +20633,13 @@ function getPlanetTradeIncomePerMin(planet) {
           if (Math.abs(adiff) >= minAd * Math.PI / 180) {
             // Combat: strong, fast blend to server nose; cruise: gentler
             // Dogfight face-target: large heading errors settle in ~2–3 frames
+            // forceHeadSnap: client was inverted vs dest — settle quickly
             let angAlpha;
             if (combatMode) {
               const bigHead = Math.abs(adiff) > 35 * Math.PI / 180;
               angAlpha = Math.min(1, 1 - Math.exp(-smoothDt / (bigHead ? 0.04 : 0.055)));
+            } else if (forceHeadSnap) {
+              angAlpha = Math.min(1, 1 - Math.exp(-smoothDt / 0.05));
             } else {
               angAlpha = Math.min(1, alpha * 0.48);
             }
@@ -20781,6 +20867,22 @@ function getPlanetTradeIncomePerMin(planet) {
             } else {
               // Prefer live server speed; fall back to last auth / held cruise while en-route
               spd = s.currentSpeed || 0;
+              // Long cruise: if we are clearly behind the server along-track, match full
+              // cruise speed (not a smoothed under-shoot) so lag does not grow.
+              if (auth && destX != null && destY != null && (s.currentSpeed || 0) > 2
+                  && (s.flightTime || 0) > 1.5) {
+                const tdx = destX - vis.x;
+                const tdy = destY - vis.y;
+                const tlen = Math.hypot(tdx, tdy);
+                if (tlen > 40) {
+                  const ux = tdx / tlen;
+                  const uy = tdy / tlen;
+                  const behind = (s.x - vis.x) * ux + (s.y - vis.y) * uy;
+                  if (behind > 28) {
+                    spd = Math.max(spd, Math.min(predictedSpd, Math.max(s.currentSpeed || 0, auth.speed || 0)));
+                  }
+                }
+              }
               if (spd < 0.5 && auth && (auth.speed || 0) > 0.5 && (s.flightTime || 0) > 0.08) {
                 spd = auth.speed;
               }
