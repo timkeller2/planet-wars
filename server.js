@@ -985,18 +985,17 @@ async function bootstrap() {
             return;
           }
 
-          // Empire capacity: sum(maxShips)/200 must exceed current planetary upgrade count
-          // (including any upgrade still building) before buying another.
+          // Empire capacity: trade option soft capacity must exceed current planetary
+          // upgrade count (including any upgrade still building) before buying another.
+          // tradeCapacity = ceil(effective ships / 400) from the economy tick.
           const planetUpgradeProps = [
             'sensorarrays', 'labs', 'armor', 'shields', 'engine', 'munitions',
             'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel',
             'diplomat', 'marines', 'command'
           ];
           let ownedPlanetUpgrades = 0;
-          let totalMaxShips = 0;
           for (const p of game.planets) {
             if (!p.owner || p.owner.id !== player.id || p.dead) continue;
-            totalMaxShips += (p.maxShips || 0);
             for (const up of planetUpgradeProps) {
               ownedPlanetUpgrades += (p[up] || 0);
             }
@@ -1004,10 +1003,11 @@ async function bootstrap() {
               ownedPlanetUpgrades += 1;
             }
           }
-          if (!(totalMaxShips / 200 > ownedPlanetUpgrades)) {
+          const tradeCap = Math.max(0, player.tradeCapacity || 0);
+          if (!(tradeCap > ownedPlanetUpgrades)) {
             rejectPlanetUpgrade(
-              `need more empire capacity (total maxShips/200 must exceed planetary upgrades; ` +
-              `have ${totalMaxShips} maxShips → ${(totalMaxShips / 200).toFixed(2)}, upgrades ${ownedPlanetUpgrades}).`
+              `need more trade option capacity (trade capacity must exceed planetary upgrades; ` +
+              `trade capacity ${tradeCap}, upgrades ${ownedPlanetUpgrades}). Grow effective ships (Commerce) to raise capacity.`
             );
             return;
           }

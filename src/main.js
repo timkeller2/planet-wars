@@ -10915,25 +10915,28 @@ function getPlanetTradeIncomePerMin(planet) {
     return cruisers;
   }
 
-  /** Planet upgrades require totalMaxShips/200 > owned planetary upgrade count (incl. in-progress). */
+  /**
+   * Planet upgrades require trade option soft capacity > owned planetary upgrade count
+   * (incl. in-progress). tradeCapacity = ceil(effective ships / 400).
+   */
   function playerMeetsPlanetUpgradeCapacity(playerId) {
     if (!serverState || !serverState.planets || !playerId) return false;
+    const pl = serverState.players && serverState.players.find(p => p.id === playerId);
+    const tradeCap = Math.max(0, (pl && pl.tradeCapacity) || 0);
     const props = [
       'sensorarrays', 'labs', 'armor', 'shields', 'engine', 'munitions',
       'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel',
       'diplomat', 'marines', 'command'
     ];
     let ownedUpgrades = 0;
-    let totalMaxShips = 0;
     for (const p of serverState.planets) {
       if (p.ownerId !== playerId) continue;
-      totalMaxShips += (p.maxShips || 0);
       for (const prop of props) {
         ownedUpgrades += (p[prop] || 0);
       }
       if (p.upgradeTransition) ownedUpgrades += 1;
     }
-    return totalMaxShips / 200 > ownedUpgrades;
+    return tradeCap > ownedUpgrades;
   }
 
   /**
@@ -14609,6 +14612,7 @@ function getPlanetTradeIncomePerMin(planet) {
           ${row('Options (now)', `${tradeOptsFloor} / ${tradeCap} (max ${hardCap})`, tradeOptsFloor < 0 ? '#ff3333' : (tradeOptsFloor > tradeCap ? '#ffc107' : '#fff'))}
           ${tradeCap > 0 ? row('Eff. ships to next +1 soft cap', `~${fmt1(remainingToNext)} more`, remainingToNext < 50 ? '#8bc34a' : '#777') : ''}
           ${mismatchNote}
+          ${noteRow('Also caps planetary upgrades: your empire may hold as many planet modules as this soft capacity (need capacity &gt; current upgrade count to buy another).', '#aaa')}
 
           <div style="margin-top: 10px;"><span style="color: #ff9800; font-weight: bold;">Refresh rate</span></div>
           ${row('Full-rate interval (&lt; soft cap)', tradeCap > 0 ? `${fmt1(180 / tradeCap)}s (180÷cap)` : '180s', '#fff')}
@@ -16007,7 +16011,7 @@ function getPlanetTradeIncomePerMin(planet) {
           if (isPlanet && galaxyCapBlocked) {
             titleText = `${baseName}: ${galaxyPlanetUpgradeCapTitle(prop)}`;
           } else if (isPlanet && capacityBlocked) {
-            titleText = `${baseName}: Need more empire capacity (total maxShips/200 must exceed planetary upgrades)`;
+            titleText = `${baseName}: Need more trade option capacity (trade capacity must exceed planetary upgrades; grow Commerce / effective ships)`;
           } else if (isPlanet && entity.upgradeTransition) {
             titleText = `${baseName}: Upgrade already in progress on this planet`;
           }
