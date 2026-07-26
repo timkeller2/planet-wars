@@ -4677,7 +4677,11 @@ export class Game {
       
       const xpBonus = (typeof ship.getLocalXpBonus === 'function') ? ship.getLocalXpBonus() : 0;
       const xpMultiplier = 1 + (xpBonus * 3) / 100;
-      const knowledgeGained = (ship.labs * deltaTime * xpMultiplier * rateMultiplier) / 120000;
+      // Planets research slower than multi-lab cruisers if using the same 120s/lab divisor with 1 lab
+      // and 0 ship XP — use a faster base so Research focus actually moves the bar.
+      const isPlanetResearcher = !!(ship && ship._planetResearcher);
+      const baseDivisor = isPlanetResearcher ? 40000 : 120000; // ~40s per progress @ 1 lab vs ~120s
+      const knowledgeGained = (ship.labs * deltaTime * xpMultiplier * rateMultiplier) / baseDivisor;
       
       ship.accumulatedTech = (ship.accumulatedTech || 0) + knowledgeGained;
       
@@ -5551,27 +5555,53 @@ export class Game {
     }
 
     // Process research per-planet (planets acting like cruisers with labs)
+    // Anomaly research requires Research focus — 🔬 planet type alone must not keep scanning
+    // after the player switches focus (was: isResearch || focus research).
+    const anomalyListForPlanets = this.anomalyPlanets || this.planets;
     for (const p of this.planets) {
       if (p.dead || !p.owner || p.isDeepSpaceAnomaly) continue;
 
       const isFocusResearch = p.focusMode === 'research';
-      if (!isFocusResearch && !p.isResearch) continue;
+
+      // Leaving Research focus: cancel any anomaly this planet was completing/researching
+      if (!isFocusResearch) {
+        for (const targetP of anomalyListForPlanets) {
+          if (!targetP.anomaly || targetP.anomaly.researched) continue;
+          if (targetP.anomaly.completing && targetP.anomaly.completingShipId === p.id) {
+            targetP.anomaly.completing = false;
+            targetP.anomaly.completingTimeLeft = 0;
+            targetP.anomaly.completingShipId = null;
+            targetP.anomaly.completingPlayerId = null;
+          }
+          if (targetP.anomaly.researchingShipId === p.id) {
+            targetP.anomaly.researchingShipId = null;
+          }
+          if (targetP.anomaly.researchingShipIds && targetP.anomaly.researchingShipIds.length) {
+            targetP.anomaly.researchingShipIds = targetP.anomaly.researchingShipIds.filter(id => id !== p.id);
+          }
+        }
+        continue;
+      }
 
       const originalLabs = p.labs || 0;
+      // Research focus contributes base labs; 🔬 type planets get an extra lab
       const focusLabs = p.isResearch ? 2 : 1;
       
       // Duck-type the planet so it works in this.researchAnomaly
       p.labs = originalLabs + focusLabs;
-      p.expScore = 0; // Planets don't have xp natively
+      // Planets have no ship XP — use a modest player-exp stand-in so rate is not glacial
+      p.expScore = Math.sqrt((p.owner && p.owner.expScore) || 0);
       p.isActivelyResearching = false;
+      // Mark as planet researcher for researchAnomaly rate (see below)
+      p._planetResearcher = true;
       
       const gravityRadius = p.getGravityRadius();
+      // Own anomaly can sit just outside a tiny gravity well edge — always allow same-planet
       const searchRadiusSq = gravityRadius * gravityRadius;
       
       // 1. Check if completing an anomaly (anomaly index only)
       let completingPlanet = null;
-      const anomalyList = this.anomalyPlanets || this.planets;
-      for (const targetP of anomalyList) {
+      for (const targetP of anomalyListForPlanets) {
         if (targetP.anomaly && targetP.anomaly.completing && targetP.anomaly.completingShipId === p.id) {
           completingPlanet = targetP;
           break;
@@ -5583,7 +5613,8 @@ export class Game {
       if (completingPlanet) {
         const dx = p.x - completingPlanet.anomaly.x;
         const dy = p.y - completingPlanet.anomaly.y;
-        if (dx * dx + dy * dy <= searchRadiusSq) {
+        const onOwnAnomaly = completingPlanet.id === p.id;
+        if (onOwnAnomaly || dx * dx + dy * dy <= searchRadiusSq) {
           this.researchAnomaly(completingPlanet, p, deltaTime);
           
           completingPlanet.anomaly.completingTimeLeft = (completingPlanet.anomaly.completingTimeLeft || 0) - deltaTime;
@@ -5602,22 +5633,24 @@ export class Game {
       }
       
       if (!completedOrResearched) {
-        // Find best anomaly within gravity well (anomaly index only)
+        // Prefer this planet's own anomaly, else best progress within gravity well
         let targetAnomaly = null;
-        let highestProgress = -1;
-        for (const targetP of anomalyList) {
-          if (!targetP.anomaly || targetP.anomaly.completing || targetP.anomaly.researched) continue;
-          
-          const currentProgress = (targetP.anomaly.progress && typeof targetP.anomaly.progress === 'object')
-            ? (targetP.anomaly.progress[p.owner.id] || 0)
-            : (typeof targetP.anomaly.progress === 'number' ? targetP.anomaly.progress : 0);
-            
-          const dx = p.x - targetP.anomaly.x;
-          const dy = p.y - targetP.anomaly.y;
-          if (dx * dx + dy * dy <= searchRadiusSq) {
-            if (currentProgress > highestProgress || (currentProgress === highestProgress && (!targetAnomaly || targetP.id < targetAnomaly.id))) {
-              highestProgress = currentProgress;
-              targetAnomaly = targetP;
+        if (p.anomaly && !p.anomaly.researched && !p.anomaly.completing) {
+          targetAnomaly = p;
+        } else {
+          let highestProgress = -1;
+          for (const targetP of anomalyListForPlanets) {
+            if (!targetP.anomaly || targetP.anomaly.completing || targetP.anomaly.researched) continue;
+            const currentProgress = (targetP.anomaly.progress && typeof targetP.anomaly.progress === 'object')
+              ? (targetP.anomaly.progress[p.owner.id] || 0)
+              : (typeof targetP.anomaly.progress === 'number' ? targetP.anomaly.progress : 0);
+            const dx = p.x - targetP.anomaly.x;
+            const dy = p.y - targetP.anomaly.y;
+            if (dx * dx + dy * dy <= searchRadiusSq) {
+              if (currentProgress > highestProgress || (currentProgress === highestProgress && (!targetAnomaly || targetP.id < targetAnomaly.id))) {
+                highestProgress = currentProgress;
+                targetAnomaly = targetP;
+              }
             }
           }
         }
@@ -5669,6 +5702,7 @@ export class Game {
       }
       
       p.labs = originalLabs;
+      p._planetResearcher = false;
     }
 
     // Now process research per-ship

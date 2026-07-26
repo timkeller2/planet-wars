@@ -2845,6 +2845,25 @@ function getPlanetTradeIncomePerMin(planet) {
     }, 250);
   }
 
+  /** Normalize anomaly progress (number or per-player object) for UI/draw. */
+  function getAnomalyProgressValue(anomaly, playerId) {
+    if (!anomaly) return 0;
+    const prog = anomaly.progress;
+    if (typeof prog === 'number' && isFinite(prog)) return prog;
+    if (prog && typeof prog === 'object') {
+      const pid = playerId != null ? playerId : (localPlayer && localPlayer.id);
+      if (pid != null && prog[pid] != null) return prog[pid] || 0;
+      // Fallback: max across players if no local id
+      let max = 0;
+      for (const k of Object.keys(prog)) {
+        const v = prog[k];
+        if (typeof v === 'number' && v > max) max = v;
+      }
+      return max;
+    }
+    return 0;
+  }
+
   function getAnomalyColor(diff) {
     if (diff < 4) return '#00ff88';
     if (diff < 8) return '#ffcc00';
@@ -3406,7 +3425,8 @@ function getPlanetTradeIncomePerMin(planet) {
       } else {
         lines.push({ label: 'Location', value: p.name, color: '#fff' });
       }
-      lines.push({ label: 'Research Progress', value: `${p.anomaly.progress || 0} / ${p.anomaly.difficulty}`, color: '#ffb74d' });
+      const progShown = getAnomalyProgressValue(p.anomaly, localPlayer && localPlayer.id);
+      lines.push({ label: 'Research Progress', value: `${Math.floor(progShown)} / ${p.anomaly.difficulty}`, color: '#ffb74d' });
       lines.push({ label: 'Difficulty', value: `${p.anomaly.difficulty}`, color: anomalyColor });
       
       const trueType = p.anomaly.rewardType || null;
@@ -17689,13 +17709,7 @@ function getPlanetTradeIncomePerMin(planet) {
             
             ctx.restore();
             
-            // progress may be a number or per-player object when fully in sensor range
-            let dsaProgressVal = 0;
-            if (typeof p.anomaly.progress === 'number' && isFinite(p.anomaly.progress)) {
-              dsaProgressVal = p.anomaly.progress;
-            } else if (p.anomaly.progress && typeof p.anomaly.progress === 'object' && localPlayer) {
-              dsaProgressVal = p.anomaly.progress[localPlayer.id] || 0;
-            }
+            const dsaProgressVal = getAnomalyProgressValue(p.anomaly, localPlayer && localPlayer.id);
             if (p.anomaly.difficulty > 0 && dsaProgressVal > 0) {
               const progressRatio = Math.max(0, Math.min(1.0, dsaProgressVal / p.anomaly.difficulty));
               ctx.save();
@@ -18256,13 +18270,7 @@ function getPlanetTradeIncomePerMin(planet) {
           
           ctx.restore();
           
-          // progress may be a number or per-player object { playerId: n }
-          let progressVal = 0;
-          if (typeof p.anomaly.progress === 'number' && isFinite(p.anomaly.progress)) {
-            progressVal = p.anomaly.progress;
-          } else if (p.anomaly.progress && typeof p.anomaly.progress === 'object' && localPlayer) {
-            progressVal = p.anomaly.progress[localPlayer.id] || 0;
-          }
+          const progressVal = getAnomalyProgressValue(p.anomaly, localPlayer && localPlayer.id);
           if (diff > 0 && progressVal > 0) {
             const progressRatio = Math.max(0, Math.min(1.0, progressVal / diff));
             ctx.save();
