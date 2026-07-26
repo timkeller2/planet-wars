@@ -297,6 +297,14 @@ export class Game {
   }
 
   /**
+   * Tritanium launch / marine XP bonus from stockpile (before spend):
+   * 100 + √(tritanium stockpile) × 100.
+   */
+  static computeTritaniumXpBonus(stockpile) {
+    return 100 + Math.sqrt(Math.max(0, stockpile || 0)) * 100;
+  }
+
+  /**
    * Freeze the full anomaly payout at creation so tooltip/preview always matches
    * completion (type, amount factor, specific resource / discount categories).
    */
@@ -3071,14 +3079,17 @@ export class Game {
 
     const techScore = source.owner ? (source.owner.techScore || 0) : 0;
     const tritaniumCost = 0.01 * shipsToSend;
-    const payWithTritanium = !isReinforcing && source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0 && source.useResources;
+    const triStockBefore = source.owner && source.owner.resources ? (source.owner.resources.tritanium || 0) : 0;
+    const payWithTritanium = !isReinforcing && source.owner && source.owner.resources && triStockBefore >= tritaniumCost && shipsToSend > 0 && source.useResources;
 
     let finalShipsToSend = shipsToSend;
     let finalLaunchCost = 0;
     let isTritaniumPaid = false;
+    let tritaniumXpBonus = 0;
 
     if (payWithTritanium) {
       isTritaniumPaid = true;
+      tritaniumXpBonus = Game.computeTritaniumXpBonus(triStockBefore);
       source.owner.resources.tritanium -= tritaniumCost;
     } else {
       // Fee: max(0, 2√ships − √tech); credits offset 1:1 when enabled
@@ -3160,7 +3171,7 @@ export class Game {
       startingExp += (source.maxShips || 0) / 10;
     }
     if (isTritaniumPaid) {
-      startingExp += 400;
+      startingExp += tritaniumXpBonus;
     }
     ship.expScore = startingExp;
     ship.bomberOffsetMag = 0;
@@ -3384,14 +3395,17 @@ export class Game {
 
     const techScore = source.owner ? (source.owner.techScore || 0) : 0;
     const tritaniumCost = 0.01 * shipsToSend;
-    const payWithTritanium = source.owner && source.owner.resources && (source.owner.resources.tritanium || 0) >= tritaniumCost && shipsToSend > 0 && source.useResources;
+    const triStockBefore = source.owner && source.owner.resources ? (source.owner.resources.tritanium || 0) : 0;
+    const payWithTritanium = source.owner && source.owner.resources && triStockBefore >= tritaniumCost && shipsToSend > 0 && source.useResources;
 
     let finalShipsToSend = shipsToSend;
     let finalLaunchCost = 0;
     let isTritaniumPaid = false;
+    let tritaniumXpBonus = 0;
 
     if (payWithTritanium) {
       isTritaniumPaid = true;
+      tritaniumXpBonus = Game.computeTritaniumXpBonus(triStockBefore);
       source.owner.resources.tritanium -= tritaniumCost;
     } else {
       // Fee: max(0, 2√ships − √tech); credits offset 1:1 when enabled
@@ -3476,7 +3490,7 @@ export class Game {
       startingExp += (source.maxShips || 0) / 10;
     }
     if (isTritaniumPaid) {
-      startingExp += 400;
+      startingExp += tritaniumXpBonus;
     }
     ship.expScore = startingExp;
     ship.bomberOffsetMag = 0;
@@ -9314,9 +9328,10 @@ export class Game {
       const tritaniumCost = 0.01 * (batchSize / 3);
       const owner = ship.owner;
       const canUseRes = !!(ship.useResources || (owner && owner.tradeLimitToggle === true));
-      if (owner && owner.resources && (owner.resources.tritanium || 0) >= tritaniumCost && batchSize > 0 && canUseRes) {
+      const triStock = owner && owner.resources ? (owner.resources.tritanium || 0) : 0;
+      if (owner && owner.resources && triStock >= tritaniumCost && batchSize > 0 && canUseRes) {
+        startingExp = (ship.expScore || 0) + Game.computeTritaniumXpBonus(triStock);
         owner.resources.tritanium -= tritaniumCost;
-        startingExp = (ship.expScore || 0) + 400;
       }
       marineFleet.expScore = startingExp;
       this.ships.push(marineFleet);

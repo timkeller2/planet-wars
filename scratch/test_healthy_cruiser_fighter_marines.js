@@ -75,13 +75,13 @@ function runTest() {
   marineFleetWithTritanium.sourceShipId = attackerCruiser.id;
   marineFleetWithTritanium.speed = 35;
   marineFleetWithTritanium.targetShipId = defenderCruiser.id;
-  marineFleetWithTritanium.expScore = attackerCruiser.expScore + 400;
+  marineFleetWithTritanium.expScore = attackerCruiser.expScore + Game.computeTritaniumXpBonus(50);
   game.ships.push(marineFleetWithTritanium);
 
   // Verify manual fleets look correct
   assert.strictEqual(marineFleet.speed, 35, "Marine fleet speed should be 35");
   assert.strictEqual(marineFleet.expScore, attackerCruiser.expScore + 100, "Marine fleet starting XP should be ship XP + 100 without Tritanium");
-  assert.strictEqual(marineFleetWithTritanium.expScore, attackerCruiser.expScore + 400, "Marine fleet starting XP should be ship XP + 400 with Tritanium");
+  assert.strictEqual(marineFleetWithTritanium.expScore, attackerCruiser.expScore + Game.computeTritaniumXpBonus(50), "Marine fleet starting XP should use Tritanium stockpile formula");
 
   // 4. Test Fighter Squadron Damage Over Time (using the Tritanium boosted fleet)
   console.log("Testing: Fighter squadron dealing damage over time...");

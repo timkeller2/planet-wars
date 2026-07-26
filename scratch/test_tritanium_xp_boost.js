@@ -47,8 +47,16 @@ function runTest() {
   const boostedFleet = game.ships[game.ships.length - 1];
   assert.ok(boostedFleet && boostedFleet !== regularFleet, "A new fleet should have been launched");
   console.log(`Boosted Fleet startingExp: ${boostedFleet.expScore}, speed: ${boostedFleet.speed}`);
-  assert.strictEqual(boostedFleet.expScore, (friendlyPlanet.expScore || 0) + 400, "Boosted fleet should start with +400 XP");
+  // XP bonus = 100 + √(stockpile before spend) × 100; stock was 50 when paid
+  const expectedBonus = 100 + Math.sqrt(50) * 100;
+  assert.ok(Math.abs(boostedFleet.expScore - ((friendlyPlanet.expScore || 0) + expectedBonus)) < 1e-6,
+    `Boosted fleet should start with +${expectedBonus} XP (100+√stock×100), got ${boostedFleet.expScore}`);
   assert.strictEqual(boostedFleet.speed, 35, "Boosted fleet should have speed 35");
+
+  // Formula helper
+  assert.strictEqual(Game.computeTritaniumXpBonus(0), 100, "0 stock → 100 XP");
+  assert.strictEqual(Game.computeTritaniumXpBonus(1), 200, "1 stock → 200 XP");
+  assert.strictEqual(Game.computeTritaniumXpBonus(9), 400, "9 stock → 400 XP (old flat baseline)");
 
   console.log("All Tritanium XP Boost and Speed tests passed successfully!");
 }

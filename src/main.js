@@ -14444,41 +14444,19 @@ function getPlanetTradeIncomePerMin(planet) {
         `;
       }
 
-      let rawShips = 0;
       let effectiveShips = 0;
-      let ownedPlanets = 0;
-      let commerceWorlds = 0;
-      let commerceFull = 0;
-      let commercePartial = 0;
-      let mineralBoostedCommerce = 0;
-      let nonCommerceEff = 0;
-      let commerceEff = 0;
-
       if (serverState && serverState.planets) {
         for (const planet of serverState.planets) {
           if (planet.dead) continue;
           if (planet.ownerId !== myP.id) continue;
-          ownedPlanets++;
           const ships = planet.ships || 0;
-          rawShips += ships;
           let eff = ships;
           if (planet.focusMode === 'commerce') {
-            commerceWorlds++;
             const isFull = ships >= (planet.maxShips || 0);
-            if (isFull) {
-              commerceFull++;
-              eff = ships * 2;
-            } else {
-              commercePartial++;
-              eff = ships * 1.5;
-            }
+            eff = isFull ? ships * 2 : ships * 1.5;
             if (planet.minerals && planet.minerals > 4) {
-              mineralBoostedCommerce++;
               eff *= (planet.minerals / 4);
             }
-            commerceEff += eff;
-          } else {
-            nonCommerceEff += eff;
           }
           effectiveShips += eff;
         }
@@ -14528,31 +14506,30 @@ function getPlanetTradeIncomePerMin(planet) {
       const mismatchNote = (serverCap !== null && computedCap !== serverCap)
         ? `<div style="margin-top:6px; color:#ff9800; font-size:0.82rem;">Client capacity ${computedCap} vs server ${serverCap} (server wins; data may lag).</div>`
         : '';
-      // If server total differs from local factor sum, still show local factors as approximate
-      const factorNote = (serverEff !== null && Math.abs(serverEff - effectiveShips) > 0.5)
-        ? `<div style="font-size:0.78rem; color:#666; margin-top:2px;">Planet factors sum ${fmt1(effectiveShips)}; server total ${fmt1(serverEff)} used for capacity.</div>`
-        : '';
 
+      // Label wraps; value stays right-aligned so the panel can stay narrow
       const row = (label, val, color = '#ccc') =>
-        `<div style="display:flex; justify-content:space-between; gap:16px;"><span>${label}</span><span style="color:${color}; font-weight:bold;">${val}</span></div>`;
+        `<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin: 2px 0;">` +
+        `<span style="flex:1 1 auto; min-width:0; white-space:normal; overflow-wrap:anywhere; word-break:break-word; line-height:1.3;">${label}</span>` +
+        `<span style="flex:0 0 auto; max-width:42%; text-align:right; color:${color}; font-weight:bold; white-space:normal; overflow-wrap:anywhere; line-height:1.3;">${val}</span>` +
+        `</div>`;
+      // Full-width note row (no value column) for multi-line rule text
+      const noteRow = (text, color = '#ccc') =>
+        `<div style="margin: 3px 0; color:${color}; font-size: 0.85rem; line-height:1.3; white-space:normal; overflow-wrap:anywhere;">${text}</div>`;
 
       return `
         <div style="font-weight: bold; font-size: 0.85rem; color: #ff9800; border-bottom: 1px solid rgba(255, 152, 0, 0.3); padding-bottom: 6px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Trade Options</div>
-        <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.45; min-width: 290px;">
-          Market buy/sell charges (LMB buy / RMB sell on resource cards). Each trade costs <strong style="color:#fff;">1 option</strong>. Can go negative down to <strong style="color:#fff;">−capacity</strong> (worse prices while in debt). Options can bank up to <strong style="color:#ffc107;">2× capacity</strong> at reduced regen.<br><br>
+        <div style="font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #aaa; line-height: 1.4; width: 260px; max-width: min(260px, 86vw); box-sizing: border-box;">
+          Market buy/sell (LMB buy / RMB sell). Each trade costs <strong style="color:#fff;">1 option</strong>.
+          Can go negative to <strong style="color:#fff;">−capacity</strong> (worse prices).
+          Bank up to <strong style="color:#ffc107;">2× capacity</strong> at reduced regen.<br><br>
 
           <span style="color: #ff9800; font-weight: bold;">Capacity (effective ships)</span>
-          ${row('Owned planets', ownedPlanets, '#fff')}
-          ${row('Raw garrison ships', fmt1(rawShips), '#fff')}
-          ${row('Non-commerce effective', fmt1(nonCommerceEff), nonCommerceEff ? '#ccc' : '#666')}
-          ${row(`Commerce (${commerceWorlds}: ${commercePartial}×1.5 / ${commerceFull}×2)`, fmt1(commerceEff), commerceWorlds ? '#8bc34a' : '#666')}
-          ${mineralBoostedCommerce ? row(`Mineral-boosted commerce worlds (×minerals/4)`, mineralBoostedCommerce, '#ffeb3b') : ''}
+          ${noteRow('Commerce focus ×1.5 or ×2; Minerals &gt; Typical +25%/level', '#8bc34a')}
           ${row('Total effective ships', fmt1(displayEff), '#ff9800')}
-          ${factorNote}
-          ${row('Formula', 'ceil(effective / 400)', '#777')}
-          <div style="border-top: 1px solid rgba(255,152,0,0.25); margin-top: 6px; padding-top: 6px; display:flex; justify-content:space-between; gap:16px;">
-            <span style="color:#ff9800; font-weight:bold;">Soft capacity</span>
-            <span style="color:#ff9800; font-weight:bold;">${tradeCap}</span>
+          ${row('Formula', 'ceil(eff / 400)', '#777')}
+          <div style="border-top: 1px solid rgba(255,152,0,0.25); margin-top: 6px; padding-top: 6px;">
+            ${row('Soft capacity', tradeCap, '#ff9800')}
           </div>
           ${row('Hard bank cap (2×)', hardCap, '#ffc107')}
           ${row('Options (now)', `${tradeOptsFloor} / ${tradeCap} (max ${hardCap})`, tradeOptsFloor < 0 ? '#ff3333' : (tradeOptsFloor > tradeCap ? '#ffc107' : '#fff'))}
@@ -14560,18 +14537,18 @@ function getPlanetTradeIncomePerMin(planet) {
           ${mismatchNote}
 
           <div style="margin-top: 10px;"><span style="color: #ff9800; font-weight: bold;">Refresh rate</span></div>
-          ${row('Full-rate interval (&lt; soft cap)', tradeCap > 0 ? `${fmt1(tradeCap > 0 ? 180 / tradeCap : 180)}s  (180 ÷ capacity)` : '180s', '#fff')}
-          ${row('Over soft cap', '1/4 rate (interval ×4) up to 2×', overSoftCap ? '#ffc107' : '#666')}
-          ${debtOpts > 0 ? row(`Debt penalty (${fmt1(debtOpts)} neg. × 30s)`, `+${fmt1(penaltySeconds)}s`, '#ff3333') : row('Debt penalty', 'none', '#666')}
+          ${row('Full-rate interval (&lt; soft cap)', tradeCap > 0 ? `${fmt1(180 / tradeCap)}s (180÷cap)` : '180s', '#fff')}
+          ${row('Over soft cap', '¼ rate (×4 interval) to 2×', overSoftCap ? '#ffc107' : '#666')}
+          ${debtOpts > 0 ? row(`Debt penalty (${fmt1(debtOpts)} neg. ×30s)`, `+${fmt1(penaltySeconds)}s`, '#ff3333') : row('Debt penalty', 'none', '#666')}
           ${row('Current interval', atHardCap ? '—' : fmtSec(intervalSec), '#ff9800')}
-          ${row('Regen rate', atHardCap ? 'full hard cap (paused)' : `${fmt1(optionsPerMin)} / min${overSoftCap ? ' (¼)' : ''}`, atHardCap ? '#8bc34a' : (overSoftCap ? '#ffc107' : '#fff'))}
+          ${row('Regen rate', atHardCap ? 'hard cap (paused)' : `${fmt1(optionsPerMin)}/min${overSoftCap ? ' (¼)' : ''}`, atHardCap ? '#8bc34a' : (overSoftCap ? '#ffc107' : '#fff'))}
           ${progressPct !== null ? row('Progress to next option', `${progressPct}%${secsToNext !== null ? ` (~${fmtSec(secsToNext)})` : ''}`, '#ffeb3b') : ''}
 
-          <div style="margin-top: 10px; font-size: 0.82rem; color: #777; line-height: 1.35;">
-            <strong style="color:${autoOn ? '#ff9800' : '#888'};">Click:</strong> empire auto-resource usage is
+          <div style="margin-top: 10px; font-size: 0.82rem; color: #777; line-height: 1.35; white-space: normal; overflow-wrap: anywhere;">
+            <strong style="color:${autoOn ? '#ff9800' : '#888'};">Click:</strong> auto-resource usage
             <strong style="color:${autoOn ? '#ff9800' : '#888'};">${autoOn ? 'ON' : 'OFF'}</strong>
-            (special bombs/fuel/duranium &amp; related spends). Orange = ON; gold tint when options &gt; soft cap.<br>
-            At soft cap or above, auto-bundle sales can fire (4 Latinum + 1 of each other resource, −5 options) every 5 minutes when stocked.
+            (special bombs/fuel/duranium). Orange = ON; gold when options &gt; soft cap.<br>
+            At soft cap+, auto-bundle can fire (4 Latinum + 1 of each other, −5 options) every 5 min when stocked.
           </div>
         </div>
       `;
@@ -15011,7 +14988,7 @@ function getPlanetTradeIncomePerMin(planet) {
           <li><strong>Tritanium:</strong> opp armor −KR of <code>3+3√stockpile</code>.</li>
           <li><strong>Merculite:</strong> 25% grenade chance (+30 KR that attack).</li>
         </ul>
-        <p class="ut-note">Marine fleets travel at speed 35. Tritanium (0.01 per 3 marines) raises starting Exp from +100 to +400 when Use Resources is on.</p>
+        <p class="ut-note">Marine fleets travel at speed 35. Tritanium (0.01 per 3 marines) sets starting Exp to 100 + √(stockpile)×100 when Use Resources is on (else +100).</p>
       `
     },
     command: {

@@ -220,7 +220,7 @@
               </div>
 
               <!-- Tritanium 🔩 -->
-              <div id="res-card-tritanium" title="Tritanium — With Use Resources: fleet launches cost 0.01/ship for +400 Exp and speed 35; marine fleets cost 0.01 per 3 marines for +400 Exp (else +100). Boarding: silver armor reduces opponent kill rate by 3+3√(stockpile)." style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
+              <div id="res-card-tritanium" title="Tritanium — With Use Resources: fleet launches cost 0.01/ship for speed 35 and Exp 100+√(stock)×100; marine fleets cost 0.01 per 3 marines for that same Exp (else +100). Boarding: silver armor reduces opponent kill rate by 3+3√(stockpile)." style="display: flex; align-items: center; justify-content: center; background: rgba(0, 229, 255, 0.1); border: 1px solid #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); padding: 5px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 0.95rem;">
                 <span><span class="res-qty" id="res-qty-tritanium">0</span>🔩</span>
               </div>
 
@@ -575,8 +575,8 @@
               <li><strong>💎 Dilithium (Tholian / Lyran):</strong> Race bomb resource (same special-bomb formula). Powers the Engine <strong>Dilithium Reactor</strong> (charges inside friendly wells). Boarding: if stockpile covers units×0.01, heavy lasers add <code>3+3√(dilithium)</code> kill rate and spend that cost.</li>
               <li><strong>🔩 Tritanium:</strong>
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
-                  <li><strong>Fleet launches</strong> (Use Resources on): 0.01 per ship → fleet speed <strong>35</strong> and <strong>+400 Exp</strong>.</li>
-                  <li><strong>Marine fleets:</strong> 0.01 per 3 marines → <strong>+400 Exp</strong> (without Tritanium, marine fleets still get <strong>+100 Exp</strong>).</li>
+                  <li><strong>Fleet launches</strong> (Use Resources on): 0.01 per ship → fleet speed <strong>35</strong> and Exp <strong>100 + √(stockpile) × 100</strong> (stock before spend).</li>
+                  <li><strong>Marine fleets:</strong> 0.01 per 3 marines → same stockpile Exp formula (without Tritanium, marine fleets still get <strong>+100 Exp</strong>).</li>
                   <li><strong>Boarding:</strong> silver armor reduces the opponent’s kill rate by <code>3+3√(tritanium)</code> when you can afford units×0.01 (opponent KR floors at 5 while armor applies).</li>
                 </ul>
               </li>
@@ -590,7 +590,7 @@
           <!-- SHIPS & COMBAT -->
           <div id="help-topic-ships" class="help-page hidden">
             <ul>
-              <li><strong>Launch Cost:</strong> Each launch costs <strong>max(0, 2√ships launched − √Tech)</strong> ships. If you have credits and credits-pay is enabled (default), your credits will automatically be consumed to pay/offset this ship cost on a 1-to-1 basis! If <em>Use Resources</em> is enabled, launched fleets will consume Tritanium at <strong>0.01 Tritanium per ship</strong> if available; Tritanium-paid fleets travel at a flat speed of <strong>35</strong> and start with <strong>+400 Exp</strong>.</li>
+              <li><strong>Launch Cost:</strong> Each launch costs <strong>max(0, 2√ships launched − √Tech)</strong> ships. If you have credits and credits-pay is enabled (default), your credits will automatically be consumed to pay/offset this ship cost on a 1-to-1 basis! If <em>Use Resources</em> is enabled, launched fleets will consume Tritanium at <strong>0.01 Tritanium per ship</strong> if available; Tritanium-paid fleets travel at a flat speed of <strong>35</strong> and start with Exp <strong>100 + √(tritanium stockpile) × 100</strong> (stock before spend).</li>
               <li><strong>Smart Reinforcements:</strong> Friendly planet-to-planet reinforcement launches are automated:
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
                   <li>If the destination is already full, <strong>0 ships</strong> are launched, preventing wastage.</li>
