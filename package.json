@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server.js"
+    "start": "node server.js",
+    "pack:portable": "node scripts/pack-portable.mjs",
+    "pack:portable:win": "node scripts/pack-portable.mjs --platform win-x64",
+    "pack:portable:mac": "node scripts/pack-portable.mjs --platform darwin-arm64"
   },
   "devDependencies": {
     "vite": "^5.2.0"

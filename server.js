@@ -12,6 +12,7 @@ import * as dotenv from 'dotenv';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import zlib from 'zlib';
 import { promisify } from 'util';
+import { getPortableSourceStamp, isPortablePackageUpToDate } from './scripts/portable-source-stamp.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -210,6 +211,280 @@ async function bootstrap() {
     } catch (e) {
       console.error('[GameReplay] delete API error', e);
       res.status(500).json({ error: 'Failed to delete replay' });
+    }
+  });
+
+  // --- Portable local-host packages (Option 3: Node + start scripts) ---
+  const PORTABLE_PLATFORMS = ['win-x64', 'darwin-arm64', 'darwin-x64', 'linux-x64'];
+  const releasesDir = path.join(__dirname, 'releases');
+  /** @type {Map<string, { status: string, error?: string, startedAt: number, finishedAt?: number, fileName?: string, reason?: string }>} */
+  const portableBuildJobs = new Map();
+
+  function portableZipPath(platform) {
+    return path.join(releasesDir, `AmoebaWars-local-host-${platform}.zip`);
+  }
+
+  function portableManifestPath(platform) {
+    return path.join(releasesDir, `AmoebaWars-local-host-${platform}.json`);
+  }
+
+  /**
+   * Evaluate package freshness vs current game sources.
+   * downloadReady = zip exists, not stale, and not mid-rebuild.
+   */
+  function getPortablePackageInfo(platform) {
+    const zip = portableZipPath(platform);
+    const man = portableManifestPath(platform);
+    const stamp = getPortableSourceStamp(__dirname);
+    const job = portableBuildJobs.get(platform);
+    const building = !!(job && (job.status === 'building' || job.status === 'queued'));
+
+    if (!fs.existsSync(zip)) {
+      return {
+        platform,
+        exists: false,
+        ready: false,
+        downloadReady: false,
+        upToDate: false,
+        stale: false,
+        fileName: path.basename(zip),
+        building,
+        buildStatus: job ? job.status : 'idle',
+        buildError: job && job.status === 'error' ? job.error : undefined,
+        startedAt: job ? job.startedAt : undefined,
+        finishedAt: job ? job.finishedAt : undefined,
+        sourceLatestFile: stamp.latestFile,
+        sourceLatestMtimeMs: stamp.latestMtimeMs
+      };
+    }
+
+    let meta = {};
+    try {
+      if (fs.existsSync(man)) meta = JSON.parse(fs.readFileSync(man, 'utf8'));
+    } catch (_) { /* ignore */ }
+    const st = fs.statSync(zip);
+    const builtAt = meta.builtAt || st.mtime.toISOString();
+    // Prefer finished pack time; fall back to zip mtime
+    const upToDate = isPortablePackageUpToDate(builtAt, stamp);
+    const stale = !upToDate;
+    const downloadReady = upToDate && !building;
+
+    return {
+      platform,
+      exists: true,
+      ready: downloadReady,
+      downloadReady,
+      upToDate,
+      stale,
+      fileName: path.basename(zip),
+      sizeBytes: st.size,
+      builtAt,
+      nodeVersion: meta.nodeVersion || null,
+      building,
+      buildStatus: job ? job.status : (downloadReady ? 'ready' : (stale ? 'stale' : 'idle')),
+      buildError: job && job.status === 'error' ? job.error : undefined,
+      startedAt: job ? job.startedAt : undefined,
+      finishedAt: job ? job.finishedAt : undefined,
+      sourceLatestFile: stamp.latestFile,
+      sourceLatestMtimeMs: stamp.latestMtimeMs,
+      staleReason: stale
+        ? `Game sources newer than package (latest change: ${stamp.latestFile || 'unknown'})`
+        : undefined
+    };
+  }
+
+  function detectClientPortablePlatform(ua = '') {
+    const s = String(ua || '').toLowerCase();
+    if (s.includes('iphone') || s.includes('ipad') || s.includes('ipod') || (s.includes('mac') && s.includes('mobile'))) {
+      return null; // iOS/iPadOS cannot host
+    }
+    if (s.includes('win')) return 'win-x64';
+    if (s.includes('mac') || s.includes('macintosh')) {
+      // Apple Silicon Safari often still reports Intel in UA; default arm64 for modern Macs
+      if (s.includes('intel')) return 'darwin-x64';
+      return 'darwin-arm64';
+    }
+    if (s.includes('linux') && !s.includes('android')) return 'linux-x64';
+    return 'win-x64';
+  }
+
+  function startPortablePack(platform, reason = 'manual') {
+    const existing = portableBuildJobs.get(platform);
+    if (existing && (existing.status === 'building' || existing.status === 'queued')) {
+      return existing;
+    }
+    const job = { status: 'building', startedAt: Date.now(), platform, reason };
+    portableBuildJobs.set(platform, job);
+    console.log(`[PortableInstall] Building package for ${platform} (${reason})…`);
+
+    // Remove stale zip so nothing downloads the old package mid-build
+    try {
+      const zip = portableZipPath(platform);
+      const man = portableManifestPath(platform);
+      if (fs.existsSync(zip)) fs.unlinkSync(zip);
+      if (fs.existsSync(man)) fs.unlinkSync(man);
+    } catch (e) {
+      console.warn('[PortableInstall] Could not clear old package before rebuild:', e.message || e);
+    }
+
+    import('child_process').then(({ spawn }) => {
+      const script = path.join(__dirname, 'scripts', 'pack-portable.mjs');
+      const child = spawn(process.execPath, [script, '--platform', platform], {
+        cwd: __dirname,
+        env: { ...process.env },
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      let tail = '';
+      const onData = (buf) => {
+        const t = buf.toString();
+        process.stdout.write(t);
+        tail = (tail + t).slice(-4000);
+      };
+      child.stdout.on('data', onData);
+      child.stderr.on('data', onData);
+      child.on('error', (err) => {
+        job.status = 'error';
+        job.error = err.message || String(err);
+        job.finishedAt = Date.now();
+        console.error('[PortableInstall] spawn error', err);
+      });
+      child.on('close', (code) => {
+        job.finishedAt = Date.now();
+        if (code === 0 && fs.existsSync(portableZipPath(platform))) {
+          job.status = 'ready';
+          job.fileName = path.basename(portableZipPath(platform));
+          job.error = undefined;
+          console.log(`[PortableInstall] Ready: ${job.fileName}`);
+        } else {
+          job.status = 'error';
+          job.error = `Pack exited with code ${code}. ${tail.slice(-500)}`;
+          console.error(`[PortableInstall] Build failed for ${platform}:`, job.error);
+        }
+      });
+    }).catch((err) => {
+      job.status = 'error';
+      job.error = err.message || String(err);
+      job.finishedAt = Date.now();
+    });
+
+    return job;
+  }
+
+  /** Ensure package is current; starts rebuild if missing or stale. */
+  function ensurePortablePackageCurrent(platform, reason = 'ensure') {
+    const info = getPortablePackageInfo(platform);
+    if (info.downloadReady) return { action: 'ready', info, job: null };
+    if (info.building) return { action: 'building', info, job: portableBuildJobs.get(platform) };
+    const job = startPortablePack(platform, info.stale ? `stale-rebuild:${reason}` : `missing:${reason}`);
+    return { action: 'building', info: getPortablePackageInfo(platform), job };
+  }
+
+  app.get('/api/portable-install', (req, res) => {
+    try {
+      const suggested = detectClientPortablePlatform(req.headers['user-agent'] || '');
+      const packages = PORTABLE_PLATFORMS.map((p) => getPortablePackageInfo(p));
+      res.json({
+        ok: true,
+        suggestedPlatform: suggested,
+        iosUnsupported: suggested === null,
+        note: 'Portable host packages include Node + start scripts. Install always serves the latest game sources (rebuilds if the package is stale). PC/Mac only — not iPhone/iPad.',
+        packages
+      });
+    } catch (e) {
+      console.error('[PortableInstall] list error', e);
+      res.status(500).json({ error: 'Failed to list portable packages' });
+    }
+  });
+
+  app.post('/api/portable-install/build', express.json(), (req, res) => {
+    try {
+      const platform = String((req.body && req.body.platform) || req.query.platform || '').trim();
+      if (!PORTABLE_PLATFORMS.includes(platform)) {
+        return res.status(400).json({ error: `Invalid platform. Use one of: ${PORTABLE_PLATFORMS.join(', ')}` });
+      }
+      const force = !!(req.body && req.body.force);
+      if (force) {
+        const job = startPortablePack(platform, 'force');
+        return res.json({
+          ok: true,
+          status: job.status,
+          platform,
+          message: 'Forced rebuild started…'
+        });
+      }
+      const result = ensurePortablePackageCurrent(platform, 'build-api');
+      if (result.action === 'ready') {
+        return res.json({ ok: true, status: 'ready', package: result.info });
+      }
+      res.json({
+        ok: true,
+        status: 'building',
+        platform,
+        stale: !!(result.info && result.info.stale),
+        message: result.info && result.info.stale
+          ? 'Game was updated — rebuilding portable package with latest version…'
+          : 'Building portable package (first build may take several minutes)…'
+      });
+    } catch (e) {
+      console.error('[PortableInstall] build error', e);
+      res.status(500).json({ error: 'Failed to start portable package build' });
+    }
+  });
+
+  app.get('/api/portable-install/status/:platform', (req, res) => {
+    try {
+      const platform = String(req.params.platform || '').trim();
+      if (!PORTABLE_PLATFORMS.includes(platform)) {
+        return res.status(400).json({ error: 'Invalid platform' });
+      }
+      const info = getPortablePackageInfo(platform);
+      res.json({
+        ok: true,
+        platform,
+        ready: info.downloadReady,
+        downloadReady: info.downloadReady,
+        exists: info.exists,
+        upToDate: info.upToDate,
+        stale: info.stale,
+        staleReason: info.staleReason,
+        package: info.exists ? info : null,
+        buildStatus: info.buildStatus,
+        buildError: info.buildError,
+        startedAt: info.startedAt,
+        finishedAt: info.finishedAt,
+        sourceLatestFile: info.sourceLatestFile
+      });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to read build status' });
+    }
+  });
+
+  app.get('/api/portable-install/download/:platform', (req, res) => {
+    try {
+      const platform = String(req.params.platform || '').trim();
+      if (!PORTABLE_PLATFORMS.includes(platform)) {
+        return res.status(400).json({ error: 'Invalid platform' });
+      }
+      const result = ensurePortablePackageCurrent(platform, 'download');
+      if (!result.info.downloadReady) {
+        return res.status(404).json({
+          error: result.info.stale ? 'Package outdated — rebuild in progress' : 'Package not ready yet',
+          building: true,
+          stale: !!result.info.stale,
+          platform,
+          message: 'Build/rebuild started. Poll /api/portable-install/status/' + platform + ' then download again.'
+        });
+      }
+      const zip = portableZipPath(platform);
+      const fileName = path.basename(zip);
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Length', fs.statSync(zip).size);
+      res.setHeader('X-Portable-Built-At', result.info.builtAt || '');
+      fs.createReadStream(zip).pipe(res);
+    } catch (e) {
+      console.error('[PortableInstall] download error', e);
+      res.status(500).json({ error: 'Failed to download package' });
     }
   });
 

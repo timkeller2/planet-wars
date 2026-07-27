@@ -650,6 +650,12 @@ function getPlanetTradeIncomePerMin(planet) {
   let knownAnomaliesByPlanetId = new Map();
   /** Right-click press pending mouseup so a drag can set formation facing heading. */
   let pendingRightClickOrder = null;
+  /** Long right-click / extra-long touch → 10% deep-space planet launch (same fraction as scout). */
+  const DEEP_SPACE_SCOUT_HOLD_MS = 450;
+  const TOUCH_ORDER_HOLD_MS = 450;
+  const TOUCH_EXTRA_LONG_SCOUT_MS = 900;
+  /** Set for one order from touch extra-long hold. */
+  let forceDeepSpaceScoutNext = false;
 
 
   function resetClientModeFlags() {
@@ -3114,9 +3120,10 @@ function getPlanetTradeIncomePerMin(planet) {
             x: serverPos.x,
             y: serverPos.y,
             text: "COMMAND ISSUED",
+            type: 'enhance',
             color: "#0ff",
-            alpha: 1,
-            life: 1.0
+            age: 0,
+            duration: 1.0
           });
           handlePointerDown(canvasX, canvasY, false, true, 2);
         }
@@ -5069,7 +5076,185 @@ function getPlanetTradeIncomePerMin(planet) {
           aiInput.value = lastSuggestedAI;
         }
       }
+      refreshPortableInstallUi();
     });
+  }
+
+  // --- Portable local host install (Option 3) ---
+  const installLocalHostBtn = document.getElementById('install-local-host-btn');
+  const installLocalHostPlatform = document.getElementById('install-local-host-platform');
+  const installLocalHostStatus = document.getElementById('install-local-host-status');
+  let portableInstallPollTimer = null;
+
+  function setPortableInstallStatus(text, color = '#aaa') {
+    if (!installLocalHostStatus) return;
+    installLocalHostStatus.textContent = text || '';
+    installLocalHostStatus.style.color = color;
+  }
+
+  function guessLocalPortablePlatform() {
+    const ua = navigator.userAgent || '';
+    const platform = navigator.platform || '';
+    // iOS / iPadOS cannot host a Node server package
+    if (/iPhone|iPad|iPod/i.test(ua) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+      return null;
+    }
+    if (/Win/i.test(platform) || /Windows/i.test(ua)) return 'win-x64';
+    if (/Mac/i.test(platform) || /Macintosh/i.test(ua)) {
+      // Heuristic: Apple Silicon often reports MacIntel in UA; prefer arm64 package
+      if (/Intel/i.test(ua) && !/ARM|Apple/i.test(ua)) return 'darwin-x64';
+      return 'darwin-arm64';
+    }
+    if (/Linux/i.test(platform) && !/Android/i.test(ua)) return 'linux-x64';
+    return 'win-x64';
+  }
+
+  function formatMb(bytes) {
+    if (!bytes || bytes <= 0) return '';
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async function refreshPortableInstallUi() {
+    if (!installLocalHostPlatform) return;
+    try {
+      const res = await fetch('/api/portable-install');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.suggestedPlatform && installLocalHostPlatform.querySelector(`option[value="${data.suggestedPlatform}"]`)) {
+        if (!installLocalHostPlatform.dataset.userPicked) {
+          installLocalHostPlatform.value = data.suggestedPlatform;
+        }
+      } else if (data.iosUnsupported && !installLocalHostPlatform.dataset.userPicked) {
+        setPortableInstallStatus('iPhone/iPad cannot host — download on a PC or Mac host machine.', '#ff9800');
+      }
+      const selected = installLocalHostPlatform.value;
+      const pkg = (data.packages || []).find(p => p.platform === selected);
+      if (pkg && pkg.downloadReady) {
+        setPortableInstallStatus(`Latest ready: ${pkg.fileName} (${formatMb(pkg.sizeBytes)}). Click Install to download.`, '#0f8');
+      } else if (pkg && (pkg.building || pkg.buildStatus === 'building')) {
+        setPortableInstallStatus('Building latest package…', '#ffeb3b');
+      } else if (pkg && pkg.stale) {
+        setPortableInstallStatus('Game updated — Install will rebuild the latest package, then download.', '#ffeb3b');
+      } else if (pkg && pkg.buildStatus === 'error') {
+        setPortableInstallStatus(`Build failed: ${pkg.buildError || 'unknown error'}`, '#f66');
+      } else if (!data.iosUnsupported) {
+        setPortableInstallStatus('Click Install to build & download the latest portable host package.', '#aaa');
+      }
+    } catch (e) {
+      // ignore — server may be mid-restart
+    }
+  }
+
+  function stopPortableInstallPoll() {
+    if (portableInstallPollTimer) {
+      clearInterval(portableInstallPollTimer);
+      portableInstallPollTimer = null;
+    }
+  }
+
+  function startPortableInstallPoll(platform) {
+    stopPortableInstallPoll();
+    portableInstallPollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/portable-install/status/${encodeURIComponent(platform)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        // Only download when package is current (not a leftover stale zip)
+        if (data.downloadReady || data.ready) {
+          stopPortableInstallPoll();
+          setPortableInstallStatus('Latest package ready — starting download…', '#0f8');
+          triggerPortableDownload(platform);
+          if (installLocalHostBtn) installLocalHostBtn.disabled = false;
+          return;
+        }
+        if (data.buildStatus === 'error') {
+          stopPortableInstallPoll();
+          setPortableInstallStatus(`Build failed: ${data.buildError || 'see server log'}`, '#f66');
+          if (installLocalHostBtn) installLocalHostBtn.disabled = false;
+          return;
+        }
+        const elapsed = data.startedAt ? Math.round((Date.now() - data.startedAt) / 1000) : 0;
+        const label = data.stale
+          ? 'Updating package to latest game version'
+          : 'Building portable package';
+        setPortableInstallStatus(`${label}… ${elapsed}s`, '#ffeb3b');
+      } catch (_) { /* keep polling */ }
+    }, 2000);
+  }
+
+  function triggerPortableDownload(platform) {
+    // Navigate so the browser treats it as a file download
+    const a = document.createElement('a');
+    a.href = `/api/portable-install/download/${encodeURIComponent(platform)}`;
+    a.download = `AmoebaWars-local-host-${platform}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setPortableInstallStatus('Download started (latest). Unzip → double-click Start. Keep saves/ when updating.', '#0f8');
+  }
+
+  if (installLocalHostPlatform) {
+    const guessed = guessLocalPortablePlatform();
+    if (guessed && installLocalHostPlatform.querySelector(`option[value="${guessed}"]`)) {
+      installLocalHostPlatform.value = guessed;
+    }
+    installLocalHostPlatform.addEventListener('change', () => {
+      installLocalHostPlatform.dataset.userPicked = '1';
+      refreshPortableInstallUi();
+    });
+  }
+
+  if (installLocalHostBtn) {
+    bindActionClick(installLocalHostBtn, async () => {
+      const platform = installLocalHostPlatform ? installLocalHostPlatform.value : 'win-x64';
+      const guessed = guessLocalPortablePlatform();
+      if (guessed === null) {
+        setPortableInstallStatus('This device cannot run the local host (iOS). Pick Windows/Mac and download for a PC host.', '#ff9800');
+      }
+
+      installLocalHostBtn.disabled = true;
+      setPortableInstallStatus('Checking for latest package…', '#0ff');
+      try {
+        // Download only if package is current; otherwise rebuild first
+        const statusRes = await fetch(`/api/portable-install/status/${encodeURIComponent(platform)}`);
+        const status = statusRes.ok ? await statusRes.json() : null;
+        if (status && (status.downloadReady || status.ready)) {
+          triggerPortableDownload(platform);
+          installLocalHostBtn.disabled = false;
+          return;
+        }
+
+        const rebuilding = status && status.stale;
+        setPortableInstallStatus(
+          rebuilding
+            ? 'Game was updated — rebuilding latest package (may take a few minutes)…'
+            : 'Building portable package (first time may take several minutes)…',
+          '#ffeb3b'
+        );
+        const buildRes = await fetch('/api/portable-install/build', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platform })
+        });
+        const buildData = buildRes.ok ? await buildRes.json() : null;
+        if (buildData && buildData.status === 'ready') {
+          triggerPortableDownload(platform);
+          installLocalHostBtn.disabled = false;
+          return;
+        }
+        if (!buildRes.ok) {
+          setPortableInstallStatus(`Could not start build (${buildRes.status})`, '#f66');
+          installLocalHostBtn.disabled = false;
+          return;
+        }
+        startPortableInstallPoll(platform);
+      } catch (e) {
+        setPortableInstallStatus(`Install failed: ${e.message || e}`, '#f66');
+        installLocalHostBtn.disabled = false;
+      }
+    });
+    // Initial status when setup is already open
+    refreshPortableInstallUi();
   }
 
   const musicCheckboxEl = document.getElementById('music-checkbox');
@@ -5610,8 +5795,11 @@ function getPlanetTradeIncomePerMin(planet) {
   });
 
   socket.on('replayDataResponse', (replayData) => {
+    hideReplayLoadingOverlay();
     if (replayData) {
       playReplay(replayData);
+    } else {
+      alert('Failed to load battle recording.');
     }
   });
 
@@ -9064,7 +9252,18 @@ function getPlanetTradeIncomePerMin(planet) {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         document.getElementById('recordings-modal').classList.add('hidden');
+        showReplayLoadingOverlay({
+          message: 'Loading battle recording…',
+          indeterminate: true
+        });
         socket.emit('requestReplayData', r.id);
+        // Safety: don't leave the spinner up forever if the server never answers
+        setTimeout(() => {
+          const ov = document.getElementById('replay-loading-overlay');
+          if (ov && !ov.classList.contains('hidden') && !isReplayMode) {
+            hideReplayLoadingOverlay();
+          }
+        }, 20000);
       });
       
       btn.addEventListener('contextmenu', (e) => {
@@ -9134,6 +9333,103 @@ function getPlanetTradeIncomePerMin(planet) {
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  function showReplayLoadingOverlay({ message = 'Please wait…', progress = null, indeterminate = false } = {}) {
+    const ov = document.getElementById('replay-loading-overlay');
+    const msg = document.getElementById('replay-loading-message');
+    const fill = document.getElementById('replay-loading-bar-fill');
+    const pct = document.getElementById('replay-loading-pct');
+    if (!ov) return;
+    ov.classList.remove('hidden');
+    if (msg) msg.textContent = message;
+    if (fill) {
+      if (indeterminate || progress == null) {
+        fill.classList.add('indeterminate');
+        fill.style.width = '36%';
+      } else {
+        fill.classList.remove('indeterminate');
+        const p = Math.max(0, Math.min(1, progress));
+        fill.style.width = `${Math.round(p * 100)}%`;
+      }
+    }
+    if (pct) {
+      if (indeterminate || progress == null) {
+        pct.textContent = '';
+      } else {
+        pct.textContent = `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
+      }
+    }
+  }
+
+  function updateReplayLoadingProgress(progress, message) {
+    const fill = document.getElementById('replay-loading-bar-fill');
+    const pct = document.getElementById('replay-loading-pct');
+    const msg = document.getElementById('replay-loading-message');
+    if (message && msg) msg.textContent = message;
+    if (fill) {
+      fill.classList.remove('indeterminate');
+      const p = Math.max(0, Math.min(1, progress));
+      fill.style.width = `${Math.round(p * 100)}%`;
+    }
+    if (pct) {
+      pct.textContent = `${Math.round(Math.max(0, Math.min(1, progress || 0)) * 100)}%`;
+    }
+  }
+
+  function hideReplayLoadingOverlay() {
+    const ov = document.getElementById('replay-loading-overlay');
+    const fill = document.getElementById('replay-loading-bar-fill');
+    if (ov) ov.classList.add('hidden');
+    if (fill) {
+      fill.classList.remove('indeterminate');
+      fill.style.width = '0%';
+    }
+  }
+
+  /**
+   * Fetch JSON with optional download progress (Content-Length when available).
+   * Large full-game replays can take seconds; the loading bar tracks bytes.
+   */
+  async function fetchJsonWithProgress(url, onProgress) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const total = Number(res.headers.get('content-length') || 0);
+    // Prefer streaming so we can show a real bar while gunzipped JSON arrives
+    if (res.body && typeof res.body.getReader === 'function') {
+      const reader = res.body.getReader();
+      const chunks = [];
+      let received = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          received += value.byteLength || value.length || 0;
+          if (typeof onProgress === 'function') {
+            if (total > 0) onProgress(Math.min(0.97, received / total), received, total);
+            else onProgress(null, received, 0); // unknown total → indeterminate / byte count
+          }
+        }
+      }
+      let totalLen = 0;
+      for (const c of chunks) totalLen += c.byteLength || c.length || 0;
+      const merged = new Uint8Array(totalLen);
+      let offset = 0;
+      for (const c of chunks) {
+        merged.set(c, offset);
+        offset += c.byteLength || c.length || 0;
+      }
+      if (typeof onProgress === 'function') onProgress(0.98, received, total || received);
+      const text = new TextDecoder('utf-8').decode(merged);
+      if (typeof onProgress === 'function') onProgress(0.99, received, total || received);
+      return JSON.parse(text);
+    }
+
+    const doc = await res.json();
+    if (typeof onProgress === 'function') onProgress(1, 0, 0);
+    return doc;
   }
 
   async function fetchGameReplaysList() {
@@ -9275,17 +9571,45 @@ function getPlanetTradeIncomePerMin(planet) {
   }
 
   async function loadAndPlayGameReplay(fileName) {
+    showReplayLoadingOverlay({
+      message: 'Downloading full-game replay…',
+      progress: 0
+    });
     try {
-      const res = await fetch(`/api/game-replays/${encodeURIComponent(fileName)}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const doc = await res.json();
+      const doc = await fetchJsonWithProgress(
+        `/api/game-replays/${encodeURIComponent(fileName)}`,
+        (ratio, received, total) => {
+          if (ratio == null) {
+            // Content-Length unknown — keep bar moving with byte count text
+            const mb = received ? (received / (1024 * 1024)).toFixed(1) : '0.0';
+            showReplayLoadingOverlay({
+              message: `Downloading full-game replay… (${mb} MB)`,
+              indeterminate: true
+            });
+            return;
+          }
+          updateReplayLoadingProgress(
+            ratio * 0.85,
+            total > 0
+              ? `Downloading full-game replay… (${(received / (1024 * 1024)).toFixed(1)} / ${(total / (1024 * 1024)).toFixed(1)} MB)`
+              : 'Downloading full-game replay…'
+          );
+        }
+      );
       if (!doc || !doc.frames || !doc.frames.length) {
+        hideReplayLoadingOverlay();
         alert('Replay file is empty or invalid.');
         return;
       }
+      updateReplayLoadingProgress(0.9, 'Preparing replay…');
+      // Yield so the browser can paint the loading UI before heavy expand/parse work
+      await new Promise((r) => requestAnimationFrame(() => r()));
+      updateReplayLoadingProgress(0.95, 'Opening replay map…');
       startGameReplayPlayback(doc);
+      hideReplayLoadingOverlay();
     } catch (e) {
       console.error('[GameReplay] load failed', e);
+      hideReplayLoadingOverlay();
       alert('Failed to load game replay.');
     }
   }
@@ -9324,6 +9648,7 @@ function getPlanetTradeIncomePerMin(planet) {
     isGameReplayPlayback = false;
     gameReplayDoc = null;
     gameReplayPlaying = false;
+    hideReplayLoadingOverlay();
     const bar = document.getElementById('game-replay-bar');
     if (bar) bar.classList.add('hidden');
     // Resync live multiplayer state after ignoring packets during playback
@@ -11968,11 +12293,13 @@ function getPlanetTradeIncomePerMin(planet) {
           warp: warpOrderNext,
           speed: speedModifierNext,
           scout: scoutModeNext,
-          bomb: bombOrderNext
+          bomb: bombOrderNext,
+          downAt: Date.now()
         };
         return;
       }
-      issueRightClickOrder(x, y, isShift, null);
+      issueRightClickOrder(x, y, isShift, null, { forceDeepSpaceScout: forceDeepSpaceScoutNext });
+      forceDeepSpaceScoutNext = false;
       return;
     }
   }
@@ -11980,9 +12307,11 @@ function getPlanetTradeIncomePerMin(planet) {
   /**
    * Issue move/attack orders at canvas click (x,y).
    * formationHeading (radians, world space) is optional — applied after ships arrive.
+   * options.forceDeepSpaceScout: long-hold / extra-long touch → 10% planet→space launch.
    */
-  function issueRightClickOrder(x, y, isShift = false, formationHeading = null) {
+  function issueRightClickOrder(x, y, isShift = false, formationHeading = null, options = null) {
     if (!serverState || !localPlayer) return;
+    const forceDeepSpaceScout = !!(options && options.forceDeepSpaceScout);
     {
       // RIGHT CLICK: Issue Orders
       const clickPos = getMouseServerPos(x, y);
@@ -12196,9 +12525,11 @@ function getPlanetTradeIncomePerMin(planet) {
           }
 
           if (selectedPlanets.length > 0) {
+            // Deep-space destination: normal = 50%, long-hold / scout toggle = 10%
+            const useScoutFraction = !!(scoutModeNext || forceDeepSpaceScout);
             selectedPlanets.forEach(sourcePlanet => {
               const myPlayer = serverState.players.find(p => p.id === localPlayer.id);
-              const estShips = scoutModeNext
+              const estShips = useScoutFraction
                 ? Math.max(3, Math.floor(sourcePlanet.ships * 0.1))
                 : Math.floor(sourcePlanet.ships / 2);
               const shipsLaunched = Math.min(250, Math.max(0, Math.min(estShips, sourcePlanet.ships)));
@@ -12212,7 +12543,27 @@ function getPlanetTradeIncomePerMin(planet) {
               const shipLaunchCost = launchCost - creditsPaid;
 
               if (shipsLaunched > 0 && sourcePlanet.ships >= shipLaunchCost + shipsLaunched) {
-                socket.emit('sendShipsToSpace', { sourceId: sourcePlanet.id, targetX: targetPos.x, targetY: targetPos.y, isWarp: warpOrderNext, speedModifier: speedModifierNext, isBombing: bombOrderNext, scoutMode: scoutModeNext, isCruiser: false });
+                socket.emit('sendShipsToSpace', {
+                  sourceId: sourcePlanet.id,
+                  targetX: targetPos.x,
+                  targetY: targetPos.y,
+                  isWarp: warpOrderNext,
+                  speedModifier: speedModifierNext,
+                  isBombing: bombOrderNext,
+                  scoutMode: useScoutFraction,
+                  isCruiser: false
+                });
+                if (useScoutFraction && forceDeepSpaceScout && !scoutModeNext) {
+                  floatingAnimations.push({
+                    x: sourcePlanet.x,
+                    y: sourcePlanet.y - (sourcePlanet.radius || 20) - 12,
+                    text: '10% SCOUT',
+                    type: 'enhance',
+                    color: '#ffeb3b',
+                    age: 0,
+                    duration: 1.2
+                  });
+                }
                 if (creditsPaid > 0) {
                   floatingAnimations.push({
                     x: sourcePlanet.x,
@@ -12267,7 +12618,13 @@ function getPlanetTradeIncomePerMin(planet) {
     scoutModeNext = pending.scout;
     bombOrderNext = pending.bomb;
 
-    issueRightClickOrder(pending.canvasX, pending.canvasY, pending.isShift, formationHeading);
+    // Long right-click hold → 10% deep-space planet launch (same as scout fraction)
+    const holdMs = Date.now() - (pending.downAt || 0);
+    const forceDeepSpaceScout = holdMs >= DEEP_SPACE_SCOUT_HOLD_MS;
+
+    issueRightClickOrder(pending.canvasX, pending.canvasY, pending.isShift, formationHeading, {
+      forceDeepSpaceScout
+    });
   }
 
   function handlePointerMove(x, y, isTouchInput = false) {
@@ -12803,7 +13160,9 @@ function getPlanetTradeIncomePerMin(planet) {
   let touchStartY = 0;
   let touchStartActive = false;
   let touchLongPressed = false;
+  let touchExtraLongPressed = false;
   let touchTimeout = null;
+  let touchExtraLongTimeout = null;
   let lastTouchTime = 0;
   let lastTouchX = 0;
   let lastTouchY = 0;
@@ -12827,8 +13186,13 @@ function getPlanetTradeIncomePerMin(planet) {
         clearTimeout(touchTimeout);
         touchTimeout = null;
       }
+      if (touchExtraLongTimeout) {
+        clearTimeout(touchExtraLongTimeout);
+        touchExtraLongTimeout = null;
+      }
       touchStartActive = false;
       touchLongPressed = false;
+      touchExtraLongPressed = false;
       initialPinchDistance = getPinchDistance(event.touches);
       initialPinchZoom = cameraZoom;
       const mid = getPinchMidpoint(event.touches);
@@ -12859,6 +13223,11 @@ function getPlanetTradeIncomePerMin(planet) {
       touchStartY = ty;
       touchStartActive = true;
       touchLongPressed = false;
+      touchExtraLongPressed = false;
+      if (touchExtraLongTimeout) {
+        clearTimeout(touchExtraLongTimeout);
+        touchExtraLongTimeout = null;
+      }
       isDraggingCamera = false;
 
       // Keep track of touch position and time
@@ -12872,22 +13241,22 @@ function getPlanetTradeIncomePerMin(planet) {
       // Update hover tooltip immediately on touch down!
       handlePointerMove(cPos.x, cPos.y, true);
 
-      // Set hold timer for 450ms (simulates Right-Click Order event button=2)
+      // Hold 450ms: arm command (issues on release). Hold 900ms: arm 10% deep-space scout launch.
       touchTimeout = setTimeout(() => {
         if (!touchStartActive) return;
         touchLongPressed = true;
-        
+
         const cPosHold = getCanvasPos(tx, ty);
         const serverPos = getMouseServerPos(cPosHold.x, cPosHold.y);
+        const hasSelection = (selectedShips && selectedShips.length > 0) || (selectedPlanets && selectedPlanets.length > 0);
 
-        // Check if there is any entity under the long press
+        // Empty deep space with no selection still opens context menu immediately
         const clickedPlanet = getPlanetAt(cPosHold.x, cPosHold.y);
         const clickedShip = findShipAtServerPos(serverPos.x, serverPos.y, {
           fleetPad: 5,
           cruiserRadius: 15,
           fleetRadius: 15
         });
-
         let clickedAnomaly = null;
         if (serverState && serverState.planets) {
           for (const p of serverState.planets) {
@@ -12901,7 +13270,6 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
         }
-
         let clickedWreckage = null;
         if (serverState && serverState.wreckages) {
           for (const w of serverState.wreckages) {
@@ -12913,27 +13281,40 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
         }
-
         const isDeepSpace = !clickedPlanet && !clickedShip && !clickedAnomaly && !clickedWreckage;
-        const hasSelection = (selectedShips && selectedShips.length > 0) || (selectedPlanets && selectedPlanets.length > 0);
 
         if (isDeepSpace && !hasSelection) {
           openTouchContextMenu(tx, ty, cPosHold.x, cPosHold.y);
-        } else {
-          // Display beautiful cyber-haptic floating text at command location
+          touchStartActive = false;
+          return;
+        }
+
+        floatingAnimations.push({
+          x: serverPos.x,
+          y: serverPos.y,
+          text: "HOLD TO ORDER…",
+          type: 'enhance',
+          color: "#0ff",
+          age: 0,
+          duration: 0.8
+        });
+
+        // Extra-long hold → 10% deep-space planet launch
+        if (touchExtraLongTimeout) clearTimeout(touchExtraLongTimeout);
+        touchExtraLongTimeout = setTimeout(() => {
+          if (!touchStartActive || !touchLongPressed) return;
+          touchExtraLongPressed = true;
           floatingAnimations.push({
             x: serverPos.x,
             y: serverPos.y,
-            text: "COMMAND ISSUED",
-            color: "#0ff",
-            alpha: 1,
-            life: 1.0
+            text: "10% SCOUT READY",
+            type: 'enhance',
+            color: "#ffeb3b",
+            age: 0,
+            duration: 1.0
           });
-
-          // Trigger command orders (button === 2)
-          handlePointerDown(cPosHold.x, cPosHold.y, event.shiftKey, true, 2);
-        }
-      }, 450);
+        }, TOUCH_EXTRA_LONG_SCOUT_MS - TOUCH_ORDER_HOLD_MS);
+      }, TOUCH_ORDER_HOLD_MS);
     }
   });
 
@@ -12991,6 +13372,10 @@ function getPlanetTradeIncomePerMin(planet) {
         if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
           clearTimeout(touchTimeout);
           touchTimeout = null;
+          if (touchExtraLongTimeout) {
+            clearTimeout(touchExtraLongTimeout);
+            touchExtraLongTimeout = null;
+          }
           touchStartActive = false;
           isDraggingCamera = true;
           // Pan, not a tap — keep current selection
@@ -13028,6 +13413,32 @@ function getPlanetTradeIncomePerMin(planet) {
     if (touchTimeout) {
       clearTimeout(touchTimeout);
       touchTimeout = null;
+    }
+    if (touchExtraLongTimeout) {
+      clearTimeout(touchExtraLongTimeout);
+      touchExtraLongTimeout = null;
+    }
+
+    // Long-press order: issue on release (450ms+). Extra-long (900ms+) → 10% deep-space scout.
+    if (touchStartActive && touchLongPressed) {
+      const cPos = getCanvasPos(touchStartX, touchStartY);
+      const serverPos = getMouseServerPos(cPos.x, cPos.y);
+      forceDeepSpaceScoutNext = !!touchExtraLongPressed;
+      floatingAnimations.push({
+        x: serverPos.x,
+        y: serverPos.y,
+        text: forceDeepSpaceScoutNext ? "COMMAND ISSUED (10%)" : "COMMAND ISSUED",
+        type: 'enhance',
+        color: forceDeepSpaceScoutNext ? "#ffeb3b" : "#0ff",
+        age: 0,
+        duration: 1.0
+      });
+      handlePointerDown(cPos.x, cPos.y, event.shiftKey, true, 2);
+      forceDeepSpaceScoutNext = false;
+      touchStartActive = false;
+      touchLongPressed = false;
+      touchExtraLongPressed = false;
+      return;
     }
 
     // Quick tap: trigger selection (button 0 / left-click) only if hold was not fired
@@ -16786,12 +17197,22 @@ function getPlanetTradeIncomePerMin(planet) {
         const cdx = lastCanvasMouseX - pendingRightClickOrder.canvasX;
         const cdy = lastCanvasMouseY - pendingRightClickOrder.canvasY;
         const dragPx = Math.hypot(cdx, cdy);
+        const holdMs = Date.now() - (pendingRightClickOrder.downAt || 0);
+        // Long hold + planets selected → 10% deep-space scout (yellow ring)
+        const scoutArmed = holdMs >= DEEP_SPACE_SCOUT_HOLD_MS && selectedPlanets && selectedPlanets.length > 0;
         ctx.save();
         ctx.beginPath();
         ctx.arc(down.x, down.y, 8 / Math.max(0.001, finalScale), 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.85)';
+        ctx.strokeStyle = scoutArmed ? 'rgba(255, 235, 59, 0.95)' : 'rgba(0, 255, 255, 0.85)';
         ctx.lineWidth = 2 / Math.max(0.001, finalScale);
         ctx.stroke();
+        if (scoutArmed) {
+          ctx.font = `${Math.max(10, 12 / Math.max(0.001, finalScale))}px Orbitron`;
+          ctx.fillStyle = 'rgba(255, 235, 59, 0.95)';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText('10%', down.x, down.y - 10 / Math.max(0.001, finalScale));
+        }
         if (dragPx > 20) {
           ctx.beginPath();
           ctx.moveTo(down.x, down.y);
