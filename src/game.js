@@ -1701,40 +1701,11 @@ export class Game {
       
       let assignedCount = 1;
       let totalCapacity = targetPlanet.maxShips;
-      
-      if (player !== this.monsterPlayer && this.settings && this.settings.smallEmpires) {
-        const remainingNeutral = this.planets.filter(p => 
-          p !== targetPlanet && 
-          p.owner === null && 
-          !p.isSuperPlanet && 
-          !p.isResearch && 
-          !p.isMilitary && 
-          !p.isSpeedPlanet
-        );
-        remainingNeutral.sort((a, b) => a.maxShips - b.maxShips);
-        
-        const smallPlanetsCount = Math.max(1, Math.round(this.planets.length / 20));
-        const extraPlanets = remainingNeutral.slice(0, smallPlanetsCount);
-        for (const ep of extraPlanets) {
-          ep.owner = player;
-          ep.ships = ep.maxShips;
-          ep.justAssigned = true;
-          ep.justAssignedTimer = 0;
-          
-          // Clear hazards from newly assigned planet
-          for (const storm of this.ionStorms) {
-            if (storm.type === 'minefield' || storm.type === 'nebula') {
-              const dx = ep.x - storm.x;
-              const dy = ep.y - storm.y;
-              if (dx * dx + dy * dy <= storm.radius * storm.radius) {
-                storm.knowledge[player.id] = (storm.knowledge[player.id] || 0) + 20;
-              }
-            }
-          }
-          assignedCount++;
-          totalCapacity += ep.maxShips;
-        }
-      }
+
+      // Small Empires: grant nearby starter outposts (not random tiny worlds across the map)
+      const extras = this.assignSmallEmpireOutposts(player, targetPlanet);
+      assignedCount += extras.count;
+      totalCapacity += extras.capacity;
       
       player.planetCount = assignedCount;
       player.needsPlanet = false;
@@ -1746,6 +1717,107 @@ export class Game {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Small Empires setting: give the player a few extra neutral worlds near their homeworld.
+   * Prefer ordinary (non-special) neutrals closest to HW; fall back to any neutral if needed.
+   * Old behavior picked the globally smallest neutrals — often on the far side of the map
+   * under FoW, so players thought the option did nothing.
+   */
+  assignSmallEmpireOutposts(player, homePlanet) {
+    const result = { count: 0, capacity: 0, planets: [] };
+    if (!player || player === this.monsterPlayer || player.id === 'monsters') return result;
+    if (!homePlanet || !this.settings || !this.settings.smallEmpires) return result;
+
+    const want = Math.max(1, Math.round((this.planets.length || 0) / 20));
+    const hx = homePlanet.x;
+    const hy = homePlanet.y;
+    const mapDim = Math.min(this.width || 1920, this.height || 1920);
+
+    const scorePool = (filterFn) => {
+      const list = [];
+      for (const p of this.planets) {
+        if (!p || p === homePlanet || p.dead) continue;
+        if (p.owner != null) continue;
+        if (p.homeworldOf) continue;
+        if (p.isDeepSpaceAnomaly) continue;
+        if (p.isSuperPlanet) continue;
+        if (!filterFn(p)) continue;
+        const dx = p.x - hx;
+        const dy = p.y - hy;
+        list.push({ p, dist: Math.sqrt(dx * dx + dy * dy), maxShips: p.maxShips || 0 });
+      }
+      return list;
+    };
+
+    // Prefer plain neutrals; then allow specials (research/military/speed) if pool is thin
+    let pool = scorePool(p => !p.isResearch && !p.isMilitary && !p.isSpeedPlanet);
+    if (pool.length < want) {
+      const relaxed = scorePool(() => true);
+      const seen = new Set(pool.map(e => e.p.id));
+      for (const e of relaxed) {
+        if (!seen.has(e.p.id)) pool.push(e);
+      }
+    }
+    if (pool.length === 0) {
+      console.log(`[Small Empires] ${player.name || player.id}: no free neutrals near homeworld`);
+      return result;
+    }
+
+    // Expand search radius until we can fill the quota (or exhaust the pool)
+    const chosen = [];
+    const chosenIds = new Set();
+    let radius = Math.max(400, mapDim / 3);
+    while (chosen.length < want && radius < mapDim * 2.5) {
+      const inRange = pool
+        .filter(e => e.dist <= radius && !chosenIds.has(e.p.id))
+        .sort((a, b) => (a.maxShips - b.maxShips) || (a.dist - b.dist));
+      for (const e of inRange) {
+        if (chosen.length >= want) break;
+        chosen.push(e.p);
+        chosenIds.add(e.p.id);
+      }
+      radius *= 1.45;
+    }
+    if (chosen.length < want) {
+      pool.sort((a, b) => (a.dist - b.dist) || (a.maxShips - b.maxShips));
+      for (const e of pool) {
+        if (chosen.length >= want) break;
+        if (chosenIds.has(e.p.id)) continue;
+        chosen.push(e.p);
+        chosenIds.add(e.p.id);
+      }
+    }
+
+    for (const ep of chosen) {
+      ep.owner = player;
+      ep.ships = ep.maxShips;
+      ep.supplies = ep.maxShips;
+      ep.justAssigned = true;
+      ep.justAssignedTimer = 0;
+      if (!ep.focusMode) ep.focusMode = 'economy';
+      if (player.cruiserStyle) ep.racialAffinity = player.cruiserStyle;
+
+      for (const storm of this.ionStorms) {
+        if (storm.type === 'minefield' || storm.type === 'nebula') {
+          const dx = ep.x - storm.x;
+          const dy = ep.y - storm.y;
+          if (dx * dx + dy * dy <= storm.radius * storm.radius) {
+            storm.knowledge[player.id] = (storm.knowledge[player.id] || 0) + 20;
+          }
+        }
+      }
+      result.count++;
+      result.capacity += ep.maxShips || 0;
+      result.planets.push(ep);
+    }
+
+    console.log(
+      `[Small Empires] ${player.name || player.id}: +${result.count}/${want} outposts ` +
+      `(map ${this.planets.length} worlds, near HW ${Math.round(hx)},${Math.round(hy)})`
+    );
+    return result;
   }
 
   recalculateResourceRarities(options = {}) {

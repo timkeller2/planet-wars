@@ -2592,33 +2592,42 @@ async function bootstrap() {
     });
 
     socket.on('enterGame', (options) => {
+        // Always honor lobby options when settings are first created, or when options
+        // are sent and the player is joining before a formal restart locked a different set.
+        const buildSettingsFromOptions = (opts) => ({
+          fogOfWar: opts && opts.fogOfWar !== undefined ? !!opts.fogOfWar : true,
+          smallEmpires: opts && opts.smallEmpires !== undefined ? !!opts.smallEmpires : true,
+          noRampagers: opts && opts.noRampagers,
+          aiCount: opts && opts.aiCount !== undefined ? opts.aiCount : 5,
+          productionMultiple: opts && opts.productionMultiple !== undefined ? opts.productionMultiple : 1.0,
+          mapSize: opts && opts.mapSize !== undefined ? opts.mapSize : 1600,
+          planetCount: opts && opts.planetCount !== undefined ? opts.planetCount : (opts && opts.mapSize !== undefined ? Math.round(opts.mapSize / 40) : 40),
+          clusters: opts && opts.clusters !== undefined ? parseInt(opts.clusters, 10) : 0,
+          hazardMultiple: opts && opts.hazardMultiple !== undefined ? opts.hazardMultiple : 1.0,
+          timedGameLimit: opts && opts.timedGameLimit !== undefined ? opts.timedGameLimit : "3600",
+          homeworldSize: opts && opts.homeworldSize !== undefined ? opts.homeworldSize : "120",
+          startingCredits: opts && opts.startingCredits !== undefined ? parseInt(opts.startingCredits, 10) : 0,
+          financialVictoryTarget: opts && opts.financialVictoryTarget !== undefined ? opts.financialVictoryTarget : "none",
+          graphicalMode: opts && opts.graphicalMode !== undefined ? !!opts.graphicalMode : false,
+          enableCheats: opts && opts.enableCheats !== undefined ? !!opts.enableCheats : false,
+          recordGameReplay: opts && opts.recordGameReplay !== undefined ? !!opts.recordGameReplay : true,
+          aiEntry: opts && opts.aiEntry !== undefined ? opts.aiEntry : 'mid',
+          customAiEntryMin: opts && opts.customAiEntryMin !== undefined ? parseFloat(opts.customAiEntryMin) : 5
+        });
         if (!game.settings) {
-        game.settings = {
-          fogOfWar: options && options.fogOfWar !== undefined ? !!options.fogOfWar : true,
-          smallEmpires: options && options.smallEmpires !== undefined ? !!options.smallEmpires : true,
-          noRampagers: options && options.noRampagers,
-          aiCount: options && options.aiCount !== undefined ? options.aiCount : 5,
-          productionMultiple: options && options.productionMultiple !== undefined ? options.productionMultiple : 1.0,
-          mapSize: options && options.mapSize !== undefined ? options.mapSize : 1600,
-          planetCount: options && options.planetCount !== undefined ? options.planetCount : (options && options.mapSize !== undefined ? Math.round(options.mapSize / 40) : 40),
-          clusters: options && options.clusters !== undefined ? parseInt(options.clusters, 10) : 0,
-          hazardMultiple: options && options.hazardMultiple !== undefined ? options.hazardMultiple : 1.0,
-          timedGameLimit: options && options.timedGameLimit !== undefined ? options.timedGameLimit : "3600",
-          homeworldSize: options && options.homeworldSize !== undefined ? options.homeworldSize : "120",
-          startingCredits: options && options.startingCredits !== undefined ? parseInt(options.startingCredits, 10) : 0,
-          financialVictoryTarget: options && options.financialVictoryTarget !== undefined ? options.financialVictoryTarget : "none",
-          graphicalMode: options && options.graphicalMode !== undefined ? !!options.graphicalMode : false,
-          enableCheats: options && options.enableCheats !== undefined ? !!options.enableCheats : false,
-          recordGameReplay: options && options.recordGameReplay !== undefined ? !!options.recordGameReplay : true,
-          aiEntry: options && options.aiEntry !== undefined ? options.aiEntry : 'mid',
-          customAiEntryMin: options && options.customAiEntryMin !== undefined ? parseFloat(options.customAiEntryMin) : 5
-        };
-        if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
-          game.timeRemaining = parseFloat(game.settings.timedGameLimit);
-        } else {
-          game.timeRemaining = null;
+          game.settings = buildSettingsFromOptions(options);
+          if (game.settings.timedGameLimit && game.settings.timedGameLimit !== 'unlimited') {
+            game.timeRemaining = parseFloat(game.settings.timedGameLimit);
+          } else {
+            game.timeRemaining = null;
+          }
+        } else if (options && options.smallEmpires !== undefined) {
+          // Keep Small Empires (and other lobby flags) in sync when joining via ENTER GAME
+          // without a full restart — previously the first join locked settings forever.
+          game.settings.smallEmpires = !!options.smallEmpires;
+          if (options.fogOfWar !== undefined) game.settings.fogOfWar = !!options.fogOfWar;
+          if (options.noRampagers !== undefined) game.settings.noRampagers = !!options.noRampagers;
         }
-      }
 
       if (!game.isRunning) {
         game.initMap();

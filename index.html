@@ -739,7 +739,7 @@
               <li><strong>AI Aggression:</strong> Base decision interval = <strong>2.0 seconds</strong>, decreasing by <strong>0.2s per planet owned</strong> (min <strong>0.5s</strong>).</li>
               <li><strong>Defense Thresholds:</strong>
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
-                  <li><strong>Small Empires (&lt;4 planets):</strong> Won't attack unless garrison exceeds <strong>75% capacity</strong>.</li>
+                  <li><strong>Small AI empires (&lt;4 planets):</strong> Always (independent of the Small Empires checkbox) won't attack from a world unless its garrison exceeds <strong>75% capacity</strong>.</li>
                   <li><strong>Minimum Garrison:</strong> Never attacks with <strong>≤12 ships</strong>.</li>
                   <li><strong>Threat Reserves:</strong> Reserve ratio starts at <strong>70%</strong>, drops 5% per planet (min <strong>35%</strong>). Only 10% chance to attack if nearby threats (&gt;15 ships within 400px) detected.</li>
                 </ul>
@@ -772,7 +772,7 @@
                 <ul style="margin-top: 6px; list-style-type: circle; padding-left: 20px;">
                   <li><strong>AI Count:</strong> 0–50 AI players (default 5). Auto-scales with planet count.</li>
                   <li><strong>Fog of War:</strong> Toggle visibility restrictions.</li>
-                  <li><strong>Small Empires:</strong> When enabled, AI players with &lt;4 planets play more defensively.</li>
+                  <li><strong>Small Empires:</strong> When enabled at game start, each player (human and AI) receives a few extra <em>nearby</em> starter outposts in addition to their homeworld (~1 per 20 map planets, preferring smaller neutrals close to home). Note: AI empires with &lt;4 planets also play more defensively by default (always-on AI rule, not this checkbox).</li>
                   <li><strong>No Rampagers:</strong> Disables Rampage events entirely.</li>
                   <li><strong>Background Music:</strong> Toggle the soundtrack.</li>
                   <li><strong>Star Field:</strong> Toggle the cosmetic background star field.</li>
