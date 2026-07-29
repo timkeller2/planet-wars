@@ -474,12 +474,14 @@ export class Planet {
             this.sympathy[highestEnemyId] = Math.max(0, this.sympathy[highestEnemyId] - cycles);
             // Attribute pressure so if this drops their last foothold (>10 sympathy
             // with no planets/ships/pioneers), eliminatePlayer can credit the conqueror.
-            if (this.owner && this.owner.id !== highestEnemyId) {
-              const victim = game && game.allPlayers
-                ? game.allPlayers.find(p => p.id === highestEnemyId)
-                : null;
-              if (victim) {
-                victim.lastAttackerPlayerId = this.owner.id;
+            if (this.owner && this.owner.id !== highestEnemyId && game) {
+              if (typeof game.attributeLastAttacker === 'function') {
+                game.attributeLastAttacker(highestEnemyId, this.owner.id);
+              } else if (game.allPlayers) {
+                const victim = game.allPlayers.find(
+                  p => p && (p.id === highestEnemyId || String(p.id) === String(highestEnemyId))
+                );
+                if (victim) victim.lastAttackerPlayerId = this.owner.id;
               }
             }
             if (this.owner) {
@@ -752,7 +754,12 @@ export class Planet {
     }
   }
 
-  addSympathy(playerId, increaseAmt) {
+  /**
+   * @param {string} playerId  empire gaining sympathy
+   * @param {number} increaseAmt
+   * @param {object|null} game  optional game for last-attacker attribution when squeezing others
+   */
+  addSympathy(playerId, increaseAmt, game = null) {
     if (increaseAmt <= 0) return 0;
     this.sympathy = this.sympathy || {};
     const currentSym = this.sympathy[playerId] || 0;
@@ -799,6 +806,10 @@ export class Planet {
               if (currentEnemySym > 0) {
                 const toReduce = Math.min(1, currentEnemySym);
                 this.sympathy[enemy.id] = Math.max(0, currentEnemySym - toReduce);
+                // Squeezing out another empire's foothold counts as attacking them
+                if (toReduce > 0 && game && typeof game.attributeLastAttacker === 'function') {
+                  game.attributeLastAttacker(enemy.id, playerId);
+                }
                 steps -= toReduce;
                 distributedReduction += toReduce;
                 reducedAny = true;

@@ -4616,9 +4616,42 @@ export class Game {
     planet.revoltCompetitors = null;
   }
 
+  /**
+   * Stop research beams / completing state on a planet (destroyed world, out of range, etc.).
+   * Prevents orphaned anomalies from keeping researchingShipIds forever after the planet dies.
+   */
+  clearAnomalyResearchState(planet, { markResearched = false } = {}) {
+    if (!planet || !planet.anomaly) return;
+    const an = planet.anomaly;
+    an.beingResearched = false;
+    an.researchingShipId = null;
+    an.researchingShipIds = [];
+    an.completing = false;
+    an.completingTimeLeft = 0;
+    an.completingShipId = null;
+    an.completingPlayerId = null;
+    if (markResearched) an.researched = true;
+  }
+
+  /**
+   * True if `p` is still a live planet in this game (not dead, not spliced).
+   * ship.targetPlanet can keep a detached reference after maxShips&lt;5 destruction.
+   */
+  isLivePlanet(p) {
+    if (!p || p.dead) return false;
+    if (this.planetsById && this.planetsById.size > 0) {
+      const live = this.planetsById.get(p.id);
+      return !!(live && live === p);
+    }
+    return this.planets.includes(p);
+  }
+
   researchAnomaly(p, ship, deltaTime) {
-    if (!p.anomaly || p.anomaly.researched) return;
-    
+    if (!p || !p.anomaly || p.anomaly.researched || p.dead) return;
+    // Refuse orphaned targets (destroyed planet still held on ship.targetPlanet)
+    if (!this.isLivePlanet(p)) return;
+    if (!ship || (ship.active === false)) return;
+
     if (p.anomaly.completing) {
       p.anomaly.beingResearched = true;
       if (!p.anomaly.researchingShipIds) p.anomaly.researchingShipIds = [];
@@ -5508,6 +5541,7 @@ export class Game {
     if (!this.anomalyPlanets) this.anomalyPlanets = [];
     this.anomalyPlanets.length = 0;
     for (const p of this.planets) {
+      if (p.dead) continue;
       if (p.anomaly) {
         p.anomaly.beingResearched = false;
         p.anomaly.researchingShipId = null;
@@ -5716,6 +5750,7 @@ export class Game {
         // 1. Check if this ship is currently completing an anomaly
         let completingPlanet = null;
         for (const p of this.planets) {
+          if (p.dead) continue;
           if (p.anomaly && p.anomaly.completing && p.anomaly.completingShipId === ship.id) {
             completingPlanet = p;
             break;
@@ -5726,12 +5761,16 @@ export class Game {
         // Targeted anomaly within 50px check (research even if not idle / moving)
         if (!completedOrResearchedAnomalyOrWreckage) {
           let targetedAnomalyPlanet = null;
-          if (ship.targetPlanet && ship.targetPlanet.anomaly && !ship.targetPlanet.anomaly.researched && !ship.targetPlanet.anomaly.completing) {
+          if (ship.targetPlanet && this.isLivePlanet(ship.targetPlanet) &&
+              ship.targetPlanet.anomaly && !ship.targetPlanet.anomaly.researched &&
+              !ship.targetPlanet.anomaly.completing) {
             targetedAnomalyPlanet = ship.targetPlanet;
           }
           if (!targetedAnomalyPlanet && ship.cruiserTargetType === 'planet' && ship.cruiserTargetId !== null) {
-            const p = this.planets.find(pl => pl.id === ship.cruiserTargetId);
-            if (p && p.anomaly && !p.anomaly.researched && !p.anomaly.completing) {
+            const p = this.planetsById
+              ? (this.planetsById.get(ship.cruiserTargetId) || this.planetsById.get(Number(ship.cruiserTargetId)))
+              : this.planets.find(pl => pl.id === ship.cruiserTargetId);
+            if (p && !p.dead && p.anomaly && !p.anomaly.researched && !p.anomaly.completing) {
               targetedAnomalyPlanet = p;
             }
           }
@@ -5754,27 +5793,29 @@ export class Game {
         }
 
         if (completingPlanet) {
-          const dx = ship.x - completingPlanet.anomaly.x;
-          const dy = ship.y - completingPlanet.anomaly.y;
-          if (dx*dx + dy*dy <= effRadar * effRadar) {
-            completingPlanet.anomaly.beingResearched = true;
-            completingPlanet.anomaly.researchingShipId = ship.id;
-            if (!completingPlanet.anomaly.researchingShipIds) completingPlanet.anomaly.researchingShipIds = [];
-            if (!completingPlanet.anomaly.researchingShipIds.includes(ship.id)) completingPlanet.anomaly.researchingShipIds.push(ship.id);
-            ship.isActivelyResearching = true;
-
-            completingPlanet.anomaly.completingTimeLeft = (completingPlanet.anomaly.completingTimeLeft || 0) - deltaTime;
-            if (completingPlanet.anomaly.completingTimeLeft <= 0) {
-              completingPlanet.anomaly.researched = true;
-              completingPlanet.anomaly.completing = false;
-              this.triggerAnomalyCompletion(completingPlanet, ship.owner);
-            }
-            completedOrResearchedAnomalyOrWreckage = true;
+          if (completingPlanet.dead || !completingPlanet.anomaly) {
+            this.clearAnomalyResearchState(completingPlanet);
           } else {
-            completingPlanet.anomaly.completing = false;
-            completingPlanet.anomaly.completingTimeLeft = 0;
-            completingPlanet.anomaly.completingShipId = null;
-            completingPlanet.anomaly.completingPlayerId = null;
+            const dx = ship.x - completingPlanet.anomaly.x;
+            const dy = ship.y - completingPlanet.anomaly.y;
+            if (dx*dx + dy*dy <= effRadar * effRadar) {
+              completingPlanet.anomaly.beingResearched = true;
+              completingPlanet.anomaly.researchingShipId = ship.id;
+              if (!completingPlanet.anomaly.researchingShipIds) completingPlanet.anomaly.researchingShipIds = [];
+              if (!completingPlanet.anomaly.researchingShipIds.includes(ship.id)) completingPlanet.anomaly.researchingShipIds.push(ship.id);
+              ship.isActivelyResearching = true;
+
+              completingPlanet.anomaly.completingTimeLeft = (completingPlanet.anomaly.completingTimeLeft || 0) - deltaTime;
+              if (completingPlanet.anomaly.completingTimeLeft <= 0) {
+                completingPlanet.anomaly.researched = true;
+                completingPlanet.anomaly.completing = false;
+                this.triggerAnomalyCompletion(completingPlanet, ship.owner);
+              }
+              completedOrResearchedAnomalyOrWreckage = true;
+            } else {
+              // Out of sensor range — cancel completion so the beam does not stick forever
+              this.clearAnomalyResearchState(completingPlanet);
+            }
           }
         }
 
@@ -5812,19 +5853,18 @@ export class Game {
           let anomalyLow = null;
           let minLowDistSq = Infinity;
           for (const p of this.planets) {
-            if (p.anomaly && !p.anomaly.researched && !p.anomaly.completing) {
-              const currentProgress = (p.anomaly.progress && typeof p.anomaly.progress === 'object')
-                ? (p.anomaly.progress[ship.owner.id] || 0)
-                : (typeof p.anomaly.progress === 'number' ? p.anomaly.progress : 0);
-              const canResearch = p.anomaly.difficulty <= 0 || hasLabs || currentProgress >= p.anomaly.difficulty;
-              if (canResearch && p.anomaly.difficulty <= 3) {
-                const dx = p.anomaly.x - ship.x;
-                const dy = p.anomaly.y - ship.y;
-                const distSq = dx * dx + dy * dy;
-                if (distSq <= effRadar * effRadar && distSq < minLowDistSq) {
-                  minLowDistSq = distSq;
-                  anomalyLow = p;
-                }
+            if (p.dead || !p.anomaly || p.anomaly.researched || p.anomaly.completing) continue;
+            const currentProgress = (p.anomaly.progress && typeof p.anomaly.progress === 'object')
+              ? (p.anomaly.progress[ship.owner.id] || 0)
+              : (typeof p.anomaly.progress === 'number' ? p.anomaly.progress : 0);
+            const canResearch = p.anomaly.difficulty <= 0 || hasLabs || currentProgress >= p.anomaly.difficulty;
+            if (canResearch && p.anomaly.difficulty <= 3) {
+              const dx = p.anomaly.x - ship.x;
+              const dy = p.anomaly.y - ship.y;
+              const distSq = dx * dx + dy * dy;
+              if (distSq <= effRadar * effRadar && distSq < minLowDistSq) {
+                minLowDistSq = distSq;
+                anomalyLow = p;
               }
             }
           }
@@ -6001,22 +6041,21 @@ export class Game {
           let minHighDifficulty = Infinity;
           let minHighDistSq = Infinity;
           for (const p of this.planets) {
-            if (p.anomaly && !p.anomaly.researched && !p.anomaly.completing) {
-              const currentProgress = (p.anomaly.progress && typeof p.anomaly.progress === 'object')
-                ? (p.anomaly.progress[ship.owner.id] || 0)
-                : (typeof p.anomaly.progress === 'number' ? p.anomaly.progress : 0);
-              const canResearch = p.anomaly.difficulty <= 0 || hasLabs || currentProgress >= p.anomaly.difficulty;
-              if (canResearch && p.anomaly.difficulty > 3) {
-                const dx = p.anomaly.x - ship.x;
-                const dy = p.anomaly.y - ship.y;
-                const distSq = dx * dx + dy * dy;
-                if (distSq <= effRadar * effRadar) {
-                  if (p.anomaly.difficulty < minHighDifficulty || 
-                      (p.anomaly.difficulty === minHighDifficulty && distSq < minHighDistSq)) {
-                    minHighDifficulty = p.anomaly.difficulty;
-                    minHighDistSq = distSq;
-                    anomalyHigh = p;
-                  }
+            if (p.dead || !p.anomaly || p.anomaly.researched || p.anomaly.completing) continue;
+            const currentProgress = (p.anomaly.progress && typeof p.anomaly.progress === 'object')
+              ? (p.anomaly.progress[ship.owner.id] || 0)
+              : (typeof p.anomaly.progress === 'number' ? p.anomaly.progress : 0);
+            const canResearch = p.anomaly.difficulty <= 0 || hasLabs || currentProgress >= p.anomaly.difficulty;
+            if (canResearch && p.anomaly.difficulty > 3) {
+              const dx = p.anomaly.x - ship.x;
+              const dy = p.anomaly.y - ship.y;
+              const distSq = dx * dx + dy * dy;
+              if (distSq <= effRadar * effRadar) {
+                if (p.anomaly.difficulty < minHighDifficulty ||
+                    (p.anomaly.difficulty === minHighDifficulty && distSq < minHighDistSq)) {
+                  minHighDifficulty = p.anomaly.difficulty;
+                  minHighDistSq = distSq;
+                  anomalyHigh = p;
                 }
               }
             }
@@ -6864,7 +6903,7 @@ export class Game {
               const distSq = dx * dx + dy * dy;
               if (distSq <= gravityRadiusSq) {
                 if (targetPlanet.ships < sourcePlanet.ships) {
-                  targetPlanet.addSympathy(sourcePlanet.owner.id, deltaTime / 60000);
+                  targetPlanet.addSympathy(sourcePlanet.owner.id, deltaTime / 60000, this);
                 }
               }
             }
@@ -7353,6 +7392,51 @@ export class Game {
       if (this.planets[i].dead) {
         const deadPlanet = this.planets[i];
         const isMilitaryExplosion = !!deadPlanet.isMilitary;
+
+        // Kill anomaly research beams / completing state before the planet is removed.
+        // Otherwise ships keep targetPlanet → orphan anomaly, beams never finish, and
+        // clients can sticky-draw a ray across the map.
+        this.clearAnomalyResearchState(deadPlanet, { markResearched: true });
+        for (const ship of this.ships) {
+          if (!ship) continue;
+          if (ship.targetPlanet === deadPlanet) {
+            // Leave targetPlanet for the existing dead-planet retarget pass, but clear
+            // cruiser lock that would keep "research this anomaly" intent alive.
+          }
+          if (ship.cruiserTargetType === 'planet' &&
+              (ship.cruiserTargetId === deadPlanet.id || String(ship.cruiserTargetId) === String(deadPlanet.id))) {
+            ship.cruiserTargetType = null;
+            ship.cruiserTargetId = null;
+            ship.cruiserTargetClickX = null;
+            ship.cruiserTargetClickY = null;
+          }
+          if (ship.isActivelyResearching) {
+            // Will be reset next tick; force clear if this ship was only researching here
+            ship.isActivelyResearching = false;
+          }
+        }
+        // Drop sticky anomaly memory so FoW clients do not keep a ghost research target
+        if (this.allPlayers) {
+          for (const pl of this.allPlayers) {
+            if (!pl) continue;
+            if (pl.knownAnomalyPlanetIds) {
+              pl.knownAnomalyPlanetIds.delete(deadPlanet.id);
+              pl.knownAnomalyPlanetIds.delete(String(deadPlanet.id));
+            }
+            if (pl.lastKnownPlanets && pl.lastKnownPlanets[deadPlanet.id]) {
+              const lk = pl.lastKnownPlanets[deadPlanet.id];
+              if (lk.anomaly) {
+                pl.lastKnownPlanets[deadPlanet.id] = {
+                  ...lk,
+                  anomaly: { ...lk.anomaly, researched: true, beingResearched: false, completing: false }
+                };
+              }
+            }
+            if (pl._fogPlanetCache) pl._fogPlanetCache.delete(deadPlanet.id);
+            if (pl._visPlanetCache) pl._visPlanetCache.delete(deadPlanet.id);
+          }
+        }
+
         this.explosions.push({
           x: deadPlanet.x,
           y: deadPlanet.y,
@@ -7376,6 +7460,7 @@ export class Game {
         });
         
         this.planets.splice(i, 1);
+        if (this.planetsById) this.planetsById.delete(deadPlanet.id);
         planetDestroyed = true;
       }
     }
@@ -7566,7 +7651,7 @@ export class Game {
               });
 
               if (planet.focusMode === 'terraforming' && Math.random() < 0.5) {
-                planet.addSympathy(player.id, 1);
+                planet.addSympathy(player.id, 1, this);
               }
             }
           }
@@ -7830,6 +7915,20 @@ export class Game {
     }
   }
 
+  /**
+   * Credit who last hurt a player for elimination loot/XP.
+   * Used when stripping another empire's sympathy (root-out spies, diplomacy squeeze, etc.).
+   */
+  attributeLastAttacker(victimId, attackerId) {
+    if (victimId == null || attackerId == null) return;
+    if (victimId === attackerId || victimId === 'monsters' || attackerId === 'monsters') return;
+    if (!this.allPlayers) return;
+    const victim = this.allPlayers.find(
+      p => p && (p.id === victimId || String(p.id) === String(victimId))
+    );
+    if (victim) victim.lastAttackerPlayerId = attackerId;
+  }
+
    /**
     * Award player-conquer XP at most once per victim per game.
     * Returns XP actually granted (0 if already claimed).
@@ -7984,7 +8083,7 @@ export class Game {
         increaseAmt = Math.ceil(increaseAmt / 2);
       }
 
-      const actualIncrease = targetPlanet.addSympathy(ship.owner.id, increaseAmt);
+      const actualIncrease = targetPlanet.addSympathy(ship.owner.id, increaseAmt, this);
 
       let successXP = Math.floor(1 + actualIncrease / 2);
 

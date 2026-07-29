@@ -189,23 +189,36 @@ export class Ship {
     this.formation = 'arrow';
   }
 
+  /**
+   * Add ship experience. Client VFX only fires when the cruiser's XP *bonus level*
+   * increases (floor(√expScore)), not on every combat/explore tick.
+   */
   gainXp(amount, game, customX = null, customY = null) {
     if (amount <= 0) return;
-    this.expScore = (this.expScore || 0) + amount;
-    if (this.isCruiser && this.owner && !this.owner.isMonster && this.owner.id !== 'monsters') {
-      if (game) {
-        if (!game.pendingExplorationEvents) game.pendingExplorationEvents = [];
-        const startX = customX !== null ? customX : this.x;
-        const startY = customY !== null ? customY : this.y;
-        game.pendingExplorationEvents.push({
-          playerId: this.owner.id,
-          x: startX,
-          y: startY,
-          shipId: this.id,
-          xp: Math.round(amount * 100) / 100 // keep XP decimal formatting nice
-        });
-      }
-    }
+    const before = this.expScore || 0;
+    this.expScore = before + amount;
+    // Only human-owned cruisers get the level-up popup (not fleets / monsters)
+    if (!this.isCruiser || this.isAmoeba) return;
+    if (!this.owner || this.owner.isMonster || this.owner.id === 'monsters') return;
+    if (!game) return;
+
+    const oldLevel = Math.floor(Math.sqrt(Math.max(0, before)));
+    const newLevel = Math.floor(Math.sqrt(Math.max(0, this.expScore)));
+    if (newLevel <= oldLevel) return;
+
+    if (!game.pendingExplorationEvents) game.pendingExplorationEvents = [];
+    const startX = customX !== null ? customX : this.x;
+    const startY = customY !== null ? customY : this.y;
+    game.pendingExplorationEvents.push({
+      playerId: this.owner.id,
+      x: startX,
+      y: startY,
+      shipId: this.id,
+      // Level-up payload (xp amount no longer used for per-hit floaters)
+      xpLevel: newLevel,
+      levelsGained: newLevel - oldLevel,
+      kind: 'xp_level_up'
+    });
   }
 
   get cruiserStyle() {

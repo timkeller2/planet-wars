@@ -5707,15 +5707,22 @@ function getPlanetTradeIncomePerMin(planet) {
     afkWarningOverlay.classList.add('hidden');
   });
 
+  // Cruiser XP bonus level-up (floor(√expScore) increased). No longer fires on every
+  // damage/explore XP tick — only when the integer XP-bonus level rises.
   socket.on('tileExplored', (data) => {
+    if (!data) return;
+    const level = data.xpLevel != null ? data.xpLevel : null;
+    // Legacy packets with only `xp` amount: ignore (was spammy combat floaters)
+    if (level == null && data.kind !== 'xp_level_up') return;
     floatingAnimations.push({
       x: data.x,
       y: data.y,
       shipId: data.shipId,
-      text: `${data.xp}`,
-      type: 'exploration_xp',
+      text: level != null ? String(level) : 'UP',
+      type: 'xp_level_up',
       age: 0,
-      duration: 1.5
+      duration: 1.8,
+      levelsGained: data.levelsGained || 1
     });
   });
 
@@ -6200,30 +6207,92 @@ function getPlanetTradeIncomePerMin(planet) {
    * Logs showed jank when enemies approach: invent-cruise keeps sliding while the
    * server face-targets / slows, then soft-corr yanks nose 90°+ with good position.
    * Uses hysteresis so the mode does not flicker at the boundary.
+   *
+   * IMPORTANT: Late-game maps have hundreds of ships. A full O(n²) scan every frame
+   * (every on-screen ship × every ship) freezes iPads even when the viewport is quiet.
+   * We rebuild a coarse spatial hash once per generation and only query nearby cells.
    * @returns {{ minDist: number, inCombat: boolean, inApproach: boolean, intensity: number }}
    */
+  const COMBAT_PROX_RANGE = 400;
+  const COMBAT_SPATIAL_CELL = 200;
+  let combatSpatialGen = 0;
+  let combatSpatialBuiltGen = -1;
+  /** @type {Map<string, Array<{x:number,y:number,ownerId:*,id:*,isAmoeba:boolean}>>} */
+  let combatSpatialBuckets = new Map();
+
+  function bumpCombatSpatialGen() {
+    combatSpatialGen++;
+  }
+
+  function ensureCombatSpatialGrid() {
+    if (combatSpatialBuiltGen === combatSpatialGen) return;
+    combatSpatialBuiltGen = combatSpatialGen;
+    combatSpatialBuckets = new Map();
+    if (!serverState || !serverState.ships) return;
+    const ships = serverState.ships;
+    for (let i = 0; i < ships.length; i++) {
+      const o = ships[i];
+      if (!o || !o.active) continue;
+      // Prefer display pose when available (cheap Map lookup; avoids full getShipDisplayPos)
+      const vis = visualShips.get(o.id);
+      const ox = vis ? vis.x : o.x;
+      const oy = vis ? vis.y : o.y;
+      const cx = Math.floor(ox / COMBAT_SPATIAL_CELL);
+      const cy = Math.floor(oy / COMBAT_SPATIAL_CELL);
+      const key = cx + ',' + cy;
+      let arr = combatSpatialBuckets.get(key);
+      if (!arr) {
+        arr = [];
+        combatSpatialBuckets.set(key, arr);
+      }
+      arr.push({
+        x: ox,
+        y: oy,
+        ownerId: o.ownerId,
+        id: o.id,
+        isAmoeba: !!o.isAmoeba
+      });
+    }
+  }
+
   function getShipCombatProximity(ship, vis) {
     const out = { minDist: Infinity, inCombat: false, inApproach: false, intensity: 0 };
     if (!ship || !serverState || !serverState.ships) return out;
     const oid = ship.ownerId;
-    const ships = serverState.ships;
+    const sx = ship.x;
+    const sy = ship.y;
+    ensureCombatSpatialGrid();
+
     let minD = Infinity;
-    for (let i = 0; i < ships.length; i++) {
-      const o = ships[i];
-      if (!o || !o.active || o.id === ship.id) continue;
-      let isEnemy = false;
-      if (o.isAmoeba) isEnemy = true;
-      else if (oid && o.ownerId && o.ownerId !== oid) isEnemy = true;
-      else if (oid && !o.ownerId) isEnemy = true;
-      else if (!oid && o.ownerId) isEnemy = true;
-      if (!isEnemy) continue;
-      // Use display pos for enemies when available so approach triggers with what player sees
-      const op = getShipDisplayPos(o);
-      const dx = op.x - ship.x;
-      const dy = op.y - ship.y;
-      const d = Math.hypot(dx, dy);
-      if (d < minD) minD = d;
+    const cellR = Math.ceil(COMBAT_PROX_RANGE / COMBAT_SPATIAL_CELL);
+    const scx = Math.floor(sx / COMBAT_SPATIAL_CELL);
+    const scy = Math.floor(sy / COMBAT_SPATIAL_CELL);
+    const rangeSq = COMBAT_PROX_RANGE * COMBAT_PROX_RANGE;
+
+    for (let cy = scy - cellR; cy <= scy + cellR; cy++) {
+      for (let cx = scx - cellR; cx <= scx + cellR; cx++) {
+        const arr = combatSpatialBuckets.get(cx + ',' + cy);
+        if (!arr) continue;
+        for (let i = 0; i < arr.length; i++) {
+          const o = arr[i];
+          if (o.id === ship.id) continue;
+          let isEnemy = false;
+          if (o.isAmoeba) isEnemy = true;
+          else if (oid && o.ownerId && o.ownerId !== oid) isEnemy = true;
+          else if (oid && !o.ownerId) isEnemy = true;
+          else if (!oid && o.ownerId) isEnemy = true;
+          if (!isEnemy) continue;
+          const dx = o.x - sx;
+          const dy = o.y - sy;
+          const dSq = dx * dx + dy * dy;
+          if (dSq > rangeSq) continue;
+          if (dSq < minD) minD = dSq;
+        }
+      }
     }
+    if (Number.isFinite(minD) && minD !== Infinity) minD = Math.sqrt(minD);
+    else minD = Infinity;
+
     out.minDist = minD;
     // Hysteresis: enter combat @200, leave @270; approach enter @320, leave @400
     const wasCombat = !!(vis && vis._combatMode);
@@ -6273,7 +6342,9 @@ function getPlanetTradeIncomePerMin(planet) {
   // Logs when local client pose diverges from server authority in world space
   // (zoom-independent). Focus: real lag / inverted heading — not face-target noise.
   // Samples → logs/pred-desync.jsonl (+ window._predDesyncLog). Toggle: PRED_DESYNC_LOG=false
-  window.PRED_DESYNC_LOG = true;
+  // Off by default — desync logging walks combat proximity and can cost frames on mobile.
+  // Enable in console: window.PRED_DESYNC_LOG = true
+  window.PRED_DESYNC_LOG = false;
   window._predDesyncLog = [];
   const PRED_DESYNC_POS_PX = 22;              // move/cruise: meaningful position error
   const PRED_DESYNC_HEADING_DEG = 55;         // move/cruise: ignore mild turn lag
@@ -6900,6 +6971,97 @@ function getPlanetTradeIncomePerMin(planet) {
     }
   }
 
+  /** Combat lasers only — beams (terraform / refuel / resupply) use other SFX. */
+  function isCombatLaserSfx(laser) {
+    if (!laser) return false;
+    const c = laser.color;
+    return c !== 'terraform-beam' && c !== 'refuel-beam' && c !== 'resupply-beam';
+  }
+
+  let lastTerraformSoundTime = 0;
+  /**
+   * Soft musical / mystical pad for terraforming rays (not the combat laser zap).
+   * @param {boolean} pulse  true = habitability step tick; false = ambient while beaming
+   */
+  function playTerraformSound(pulse = false) {
+    if (document.hidden) return;
+    const nowTime = Date.now();
+    const interval = pulse ? 180 : 280;
+    if (nowTime - lastTerraformSoundTime < interval) return;
+    lastTerraformSoundTime = nowTime;
+
+    try {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      const now = audioCtx.currentTime;
+      const master = audioCtx.createGain();
+      // Gentle low-pass so it feels airy, not buzzy
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(pulse ? 2200 : 1400, now);
+      filter.Q.setValueAtTime(0.7, now);
+      master.connect(filter);
+      filter.connect(audioCtx.destination);
+
+      // Soft major chord root + fifth + high octave shimmer (pentatonic-ish float)
+      // Root drifts slowly for a "living" mystical bed
+      const root = pulse
+        ? 196 + Math.sin(nowTime / 180) * 8   // G3-ish
+        : 164.81 + Math.sin(nowTime / 400) * 6; // E3-ish
+      const intervals = pulse ? [1, 5 / 4, 3 / 2, 2] : [1, 6 / 5, 3 / 2, 2];
+      const vol = (pulse ? 0.055 : 0.028) * getSfxVolumeMultiplier();
+      const dur = pulse ? 0.55 : 0.42;
+
+      master.gain.setValueAtTime(0.0001, now);
+      master.gain.exponentialRampToValueAtTime(vol, now + 0.06);
+      master.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+      for (let i = 0; i < intervals.length; i++) {
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        // Sine + a touch of triangle for body without harshness
+        osc.type = i === 0 ? 'sine' : (i === intervals.length - 1 ? 'sine' : 'triangle');
+        const freq = root * intervals[i] * (1 + (i * 0.0015));
+        osc.frequency.setValueAtTime(freq, now);
+        // Slow celestial drift
+        osc.frequency.linearRampToValueAtTime(freq * (pulse ? 1.06 : 1.03), now + dur);
+        // Slight detune on upper partials
+        if (i > 0) {
+          osc.detune.setValueAtTime((i % 2 === 0 ? -6 : 5), now);
+        }
+        const partialVol = (i === 0 ? 0.55 : (i === intervals.length - 1 ? 0.2 : 0.28));
+        g.gain.setValueAtTime(partialVol, now);
+        osc.connect(g);
+        g.connect(master);
+        osc.start(now);
+        osc.stop(now + dur + 0.02);
+      }
+
+      // Tiny sparkle bell on habitability pulse
+      if (pulse) {
+        const bell = audioCtx.createOscillator();
+        const bg = audioCtx.createGain();
+        bell.type = 'sine';
+        bell.frequency.setValueAtTime(root * 3, now);
+        bell.frequency.exponentialRampToValueAtTime(root * 4.5, now + 0.35);
+        bg.gain.setValueAtTime(0.0001, now);
+        bg.gain.exponentialRampToValueAtTime(vol * 1.4, now + 0.02);
+        bg.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+        bell.connect(bg);
+        bg.connect(filter);
+        bell.start(now);
+        bell.stop(now + 0.42);
+      }
+    } catch (e) {
+      // ignore synthesis failures
+    }
+  }
+
   function playThudSound() {
     if (document.hidden) return;
     try {
@@ -7239,6 +7401,9 @@ function getPlanetTradeIncomePerMin(planet) {
       return;
     }
 
+    // New packet → rebuild combat spatial hash on next proximity query
+    bumpCombatSpatialGen();
+
     if (state.ships) {
       state.ships = state.ships.filter(s => !s._isFlatShip);
     }
@@ -7287,7 +7452,17 @@ function getPlanetTradeIncomePerMin(planet) {
         if (myPlayer.lastKnownPlanets) {
           // Merge — never replace wholesale. Server lastKnown only tracks currently
           // fully-visible worlds; replacing wiped anomaly memory for fogged planets.
-          lastKnownPlanets = { ...lastKnownPlanets, ...myPlayer.lastKnownPlanets };
+          // Also never let fog stubs (ships:0) clobber a remembered garrison.
+          for (const id of Object.keys(myPlayer.lastKnownPlanets)) {
+            const incoming = myPlayer.lastKnownPlanets[id];
+            if (!incoming) continue;
+            const prev = lastKnownPlanets[id];
+            if (prev && (incoming.ships == null || incoming.ships === 0) && (prev.ships > 0)) {
+              lastKnownPlanets[id] = { ...prev, ...incoming, ships: prev.ships };
+            } else {
+              lastKnownPlanets[id] = prev ? { ...prev, ...incoming } : { ...incoming };
+            }
+          }
         }
         if (myPlayer.lastBundleSaleTime !== undefined) {
           if (clientLastBundleSaleTime !== -1 && myPlayer.lastBundleSaleTime !== clientLastBundleSaleTime) {
@@ -7618,7 +7793,24 @@ function getPlanetTradeIncomePerMin(planet) {
       for (const p of state.planets) {
         if (!p) continue;
         if (!p.inFog || p.permanentlyTracked) {
+          // Full vision / permanent track: remember live intel (including ships)
           lastKnownPlanets[p.id] = { ...p };
+        } else if (p.inFog && lastKnownPlanets[p.id]) {
+          // Fog silhouette packets force ships:0 to hide live counts — keep prior garrison
+          const prev = lastKnownPlanets[p.id];
+          if ((p.ships == null || p.ships === 0) && prev.ships > 0) {
+            // Refresh non-fleet fields if useful, but pin remembered ships
+            lastKnownPlanets[p.id] = {
+              ...prev,
+              ownerId: p.ownerId != null ? p.ownerId : prev.ownerId,
+              maxShips: p.maxShips || prev.maxShips,
+              name: p.name || prev.name,
+              dead: p.dead != null ? p.dead : prev.dead,
+              anomaly: p.anomaly || prev.anomaly
+            };
+          } else if (p.ships > 0) {
+            lastKnownPlanets[p.id] = { ...prev, ...p };
+          }
         }
         // Remember unresearched anomalies; clear when researched/resolved
         if (p.anomaly && p.anomaly.researched) {
@@ -7630,6 +7822,9 @@ function getPlanetTradeIncomePerMin(planet) {
             };
           }
         } else if (p.anomaly && !p.anomaly.researched) {
+          // Never sticky-cache active research beam flags — if the planet dies or the
+          // cruiser leaves range, a stale beingResearched would draw a ghost ray.
+          const stickyAn = { ...p.anomaly, beingResearched: false, researchingShipId: null, researchingShipIds: [] };
           knownAnomaliesByPlanetId.set(String(p.id), {
             id: p.id,
             x: p.x,
@@ -7637,12 +7832,19 @@ function getPlanetTradeIncomePerMin(planet) {
             radius: p.radius || 0,
             name: p.name,
             isDeepSpaceAnomaly: !!p.isDeepSpaceAnomaly,
-            anomaly: { ...p.anomaly }
+            anomaly: stickyAn
           });
           if (p.inFog && !lastKnownPlanets[p.id]) {
-            lastKnownPlanets[p.id] = { ...p };
+            // First fog sighting only — may legitimately have unknown ships (0)
+            lastKnownPlanets[p.id] = { ...p, anomaly: stickyAn };
           } else if (p.inFog && lastKnownPlanets[p.id] && !lastKnownPlanets[p.id].anomaly) {
-            lastKnownPlanets[p.id] = { ...lastKnownPlanets[p.id], anomaly: { ...p.anomaly } };
+            const prev = lastKnownPlanets[p.id];
+            lastKnownPlanets[p.id] = {
+              ...prev,
+              anomaly: stickyAn,
+              // Do not adopt ships:0 from the fog stub
+              ships: (p.ships > 0) ? p.ships : prev.ships
+            };
           }
         }
       }
@@ -8414,30 +8616,41 @@ function getPlanetTradeIncomePerMin(planet) {
     if (!window.playedLaserKeys) {
       window.playedLaserKeys = new Set();
     }
+    let anyNewCombatLaser = false;
+    let anyNewTerraformLaser = false;
     if (state.lasers) {
       for (const laser of state.lasers) {
         const key = `${laser.startX.toFixed(1)},${laser.startY.toFixed(1)},${laser.endX.toFixed(1)},${laser.endY.toFixed(1)}`;
         currentLaserKeys.add(key);
         if (!window.playedLaserKeys.has(key)) {
           if (laser.age <= 0.15) {
-            recentAudioEvents.push({
-              x: (laser.startX + laser.endX) / 2,
-              y: (laser.startY + laser.endY) / 2,
-              timestamp: Date.now()
-            });
+            if (laser.color === 'terraform-beam') {
+              anyNewTerraformLaser = true;
+            } else if (isCombatLaserSfx(laser)) {
+              anyNewCombatLaser = true;
+              recentAudioEvents.push({
+                x: (laser.startX + laser.endX) / 2,
+                y: (laser.startY + laser.endY) / 2,
+                timestamp: Date.now()
+              });
+            }
           }
         }
       }
     }
     window.playedLaserKeys = currentLaserKeys;
 
-    if (state.lasers && state.lasers.length > 0) {
+    // Combat weapons only — terraform / refuel / resupply beams must not use the attack zap
+    if (state.lasers && state.lasers.some(isCombatLaserSfx)) {
       const delay = window.nextLaserDelay || 400;
       if (!window.lastLaserSoundTime || Date.now() - window.lastLaserSoundTime > delay) {
         playSound('laser');
         window.lastLaserSoundTime = Date.now();
         window.nextLaserDelay = 200 + Math.random() * 400;
       }
+    }
+    if (anyNewTerraformLaser) {
+      playTerraformSound(true);
     }
 
     if (state.isRunning) {
@@ -16977,6 +17190,15 @@ function getPlanetTradeIncomePerMin(planet) {
     const viewMinY = centerServerY - viewH / 2 - 50;
     const viewMaxY = centerServerY + viewH / 2 + 50;
 
+    // Touch / low-power clients: cheaper VFX (shadowBlur is very expensive on iOS GPUs)
+    const isTouchDeviceDraw = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    const laserCount = (serverState.lasers && serverState.lasers.length) || 0;
+    const explosionCount = (serverState.explosions && serverState.explosions.length) || 0;
+    const heavyFxScene = isTouchDeviceDraw || laserCount > 48 || explosionCount > 36;
+    // Disable canvas shadows under load — major iPad frame-time win
+    const allowFxShadows = !heavyFxScene;
+    const fxBlur = (n) => (allowFxShadows ? n : 0);
+
     // Level-of-detail for galactic / zoomed-out views (screen pixels per world unit)
     // finalScale ~0.02 on a fully-visible 50k map — use extreme LOD
     // Thresholds raised vs older builds: 750-planet maps stay in LOD longer when zoomed out.
@@ -17408,6 +17630,21 @@ function getPlanetTradeIncomePerMin(planet) {
               if (![sx, sy, tx, ty].every(v => typeof v === 'number' && isFinite(v))) {
                 continue; // incomplete packet / removed deep-space anomaly
               }
+              // Never draw map-spanning ghost beams (stale FoW / out-of-range research)
+              const beamDist = Math.hypot(tx - sx, ty - sy);
+              let maxBeam = 520;
+              if (source.isCruiser || source.isAmoeba) {
+                // Allow slightly past weapon/sensor scale; hard-cap so a flying cruiser
+                // cannot keep a ray stretched across the galaxy.
+                const radar = (typeof source.radarRange === 'number' && source.radarRange > 0)
+                  ? source.radarRange
+                  : (source.sensorarrays ? (25 + (source.sensorarrays || 0) * 25) : 200);
+                maxBeam = Math.min(900, Math.max(120, radar * 1.15 + 40));
+              } else if (source.maxShips != null) {
+                // Planet researcher: gravity-well scale
+                maxBeam = Math.min(700, Math.max(80, (source.radius || 20) * 12 + 80));
+              }
+              if (beamDist > maxBeam) continue;
               anyBeingResearched = true;
               if (p.anomaly.completing) {
                 anyCompleting = true;
@@ -17547,12 +17784,14 @@ function getPlanetTradeIncomePerMin(planet) {
       }
 
       // Draw purple resupply rays, orange fuel sharing rays, and green terraform rays
+      let anyTerraformingBeam = false;
       if (serverState.ships) {
         for (const ship of serverState.ships) {
           // Continuous dark-green terraforming beam (diplomacy-ray style) while parked
           if (ship.activeTerraformPlanetId != null && (ship.terraforming || 0) > 0) {
             const tPlanet = findServerPlanet(ship.activeTerraformPlanetId);
             if (tPlanet) {
+              anyTerraformingBeam = true;
               const sx = ship.x;
               const sy = ship.y;
               const tx = tPlanet.x;
@@ -17809,6 +18048,10 @@ function getPlanetTradeIncomePerMin(planet) {
             }
           }
         }
+      }
+      // Ambient mystical pad while any cruiser is actively terraforming
+      if (anyTerraformingBeam) {
+        playTerraformSound(false);
       }
 
       // Draw wreckages (skip galactic — multi-piece art is invisible and expensive)
@@ -21084,6 +21327,8 @@ function getPlanetTradeIncomePerMin(planet) {
       // Combat proximity: damp prediction when dogfighting / enemies approach
       const COMBAT_OPT_MAX_MS = 250; // allow only a brief optimistic click near enemies
       const combatProxCache = new Map(); // shipId -> proximity result this frame
+      // One spatial rebuild for all proximity queries this draw frame
+      bumpCombatSpatialGen();
 
       function isShipNearEnemy(ship, vis) {
         if (!ship || !ship.active) return false;
@@ -22924,12 +23169,24 @@ function getPlanetTradeIncomePerMin(planet) {
         const laserExtrapSec = lastNetworkUpdateMs
           ? Math.max(0, Math.min(0.25, (laserNow - lastNetworkUpdateMs) / 1000))
           : 0;
+        // Cap track bookkeeping — late-game galaxy-wide volleys were storing every shot
+        const maxProjectileTracks = isTouchDeviceDraw ? 80 : 160;
+        const laserFxBuffer = isTouchDeviceDraw ? 80 : 150;
 
         for (const laser of serverState.lasers) {
           if (!isBallisticLaser(laser)) continue;
           const key = getLaserVisualKey(laser);
           let track = visualProjectiles.get(key);
           if (!track) {
+            const ends = resolveLaserEndpoints(laser);
+            // Skip creating tracks for shots that never cross the viewport (big late-game win)
+            const startOff = ends.startPtX < viewMinX - laserFxBuffer || ends.startPtX > viewMaxX + laserFxBuffer
+              || ends.startPtY < viewMinY - laserFxBuffer || ends.startPtY > viewMaxY + laserFxBuffer;
+            const endOff = ends.endPtX < viewMinX - laserFxBuffer || ends.endPtX > viewMaxX + laserFxBuffer
+              || ends.endPtY < viewMinY - laserFxBuffer || ends.endPtY > viewMaxY + laserFxBuffer;
+            if (startOff && endOff) continue;
+            if (visualProjectiles.size >= maxProjectileTracks) continue;
+
             const travel = getBallisticTravelSec(laser);
             const delay = getBallisticDelaySec(laser);
             const serverAge = laser.age || 0;
@@ -22939,7 +23196,6 @@ function getPlanetTradeIncomePerMin(planet) {
             if (serverAge < delay + travel * 0.35) {
               localAge0 = serverAge; // only adopt early server age
             }
-            const ends = resolveLaserEndpoints(laser);
             track = {
               key,
               ballistic: true,
@@ -22993,7 +23249,7 @@ function getPlanetTradeIncomePerMin(planet) {
           const progress = t * t * (3 - 2 * t);
 
           if (track.isAmoeba) {
-            const numParticles = 8;
+            const numParticles = heavyFxScene ? 3 : 8;
             const angle = Math.atan2(track.endY - track.startY, track.endX - track.startX);
             const dist = Math.hypot(track.endX - track.startX, track.endY - track.startY);
             const perpAngle = angle + Math.PI / 2;
@@ -23055,28 +23311,28 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
               ctx.fillStyle = '#ffff00';
               ctx.shadowColor = '#ffff00';
-              ctx.shadowBlur = 8;
+              ctx.shadowBlur = fxBlur(8);
               ctx.fill();
             } else if (style === 'Tholian') {
               ctx.beginPath();
               ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
               ctx.fillStyle = '#ff0000';
               ctx.shadowColor = '#ff0000';
-              ctx.shadowBlur = 8;
+              ctx.shadowBlur = fxBlur(8);
               ctx.fill();
             } else if (style === 'Gorn') {
               ctx.beginPath();
               ctx.arc(0, 0, 4.0, 0, Math.PI * 2);
               ctx.fillStyle = '#ff3300';
               ctx.shadowColor = '#ff3300';
-              ctx.shadowBlur = 10;
+              ctx.shadowBlur = fxBlur(10);
               ctx.fill();
             } else if (style === 'Romulan') {
               ctx.beginPath();
               ctx.arc(0, 0, 6.0, 0, Math.PI * 2);
               ctx.fillStyle = '#ff0000';
               ctx.shadowColor = '#ff0000';
-              ctx.shadowBlur = 12;
+              ctx.shadowBlur = fxBlur(12);
               ctx.fill();
             } else {
               // Klingon / default plasma-style bolt + flame (deterministic flicker)
@@ -23093,7 +23349,7 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.closePath();
               ctx.fillStyle = '#ff1100';
               ctx.shadowColor = '#ff1100';
-              ctx.shadowBlur = 6;
+              ctx.shadowBlur = fxBlur(6);
               ctx.fill();
               // Time-stable flame (age-based, not Math.random)
               const flameSeed = Math.sin(track.startX * 9.1 + track.startY * 4.7 + track.index * 3.1 + age * 18) * 43758.5453;
@@ -23303,14 +23559,14 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.stroke();
             }
           } else if (exp.isFirework) {
-            const particleCount = 12;
+            const particleCount = heavyFxScene ? 5 : 12;
             const alpha = Math.max(0, 1 - exp.age);
             const radius = exp.age * (exp.size || 25);
             ctx.save();
             ctx.strokeStyle = `rgba(255, 51, 51, ${alpha})`;
             ctx.lineWidth = 2.5;
             ctx.shadowColor = '#ff3333';
-            ctx.shadowBlur = 8;
+            ctx.shadowBlur = fxBlur(8);
             for (let p = 0; p < particleCount; p++) {
               const angle = (p / particleCount) * Math.PI * 2 + (exp.age * 0.5);
               const startX = exp.x + Math.cos(angle) * (radius * 0.4);
@@ -23332,7 +23588,7 @@ function getPlanetTradeIncomePerMin(planet) {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.shadowColor = '#39ff14';
-            ctx.shadowBlur = 4;
+            ctx.shadowBlur = fxBlur(4);
             const numDollarSigns = Math.max(1, Math.round(Math.sqrt(exp.amount || 1)));
             const text = '$'.repeat(numDollarSigns);
             const yOffset = exp.age * 10;
@@ -23376,12 +23632,14 @@ function getPlanetTradeIncomePerMin(planet) {
               ctx.strokeStyle = exp.color;
               ctx.lineWidth = 4 + (exp.maxHealth || 30) * 0.03 * alpha;
               ctx.shadowColor = exp.color;
-              ctx.shadowBlur = 10 * alpha;
+              ctx.shadowBlur = fxBlur(10 * alpha);
               ctx.stroke();
 
               // 3. Shrapnel particles flying outwards
               const seed = Math.floor(exp.x + exp.y); // stable seed based on coords
-              const shardCount = 8 + Math.floor((exp.maxHealth || 30) * 0.08); // more shards for larger ships
+              const shardCount = heavyFxScene
+                ? 4 + Math.floor((exp.maxHealth || 30) * 0.03)
+                : 8 + Math.floor((exp.maxHealth || 30) * 0.08); // more shards for larger ships
               ctx.strokeStyle = '#ffb74d';
               ctx.lineWidth = 2;
               for (let s = 0; s < shardCount; s++) {
@@ -23474,6 +23732,13 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       }
 
+      // Hard cap floating texts — late-game economy/combat popups from the whole map
+      // were aging+drawing hundreds of labels every frame on iPad.
+      const MAX_FLOATING_ANIMS = isTouchDeviceDraw ? 48 : 90;
+      if (floatingAnimations.length > MAX_FLOATING_ANIMS) {
+        floatingAnimations.splice(0, floatingAnimations.length - MAX_FLOATING_ANIMS);
+      }
+
       for (let i = floatingAnimations.length - 1; i >= 0; i--) {
         const anim = floatingAnimations[i];
         anim.age += 1 / 20; // 20 FPs update rate
@@ -23502,53 +23767,68 @@ function getPlanetTradeIncomePerMin(planet) {
           drawY = anim.startY + Math.sin(anim.driftAngle) * driftDist;
         }
         if (anim.shipId && anim.type !== 'diplomacy_success' && serverState && serverState.ships) {
-          const ship = findServerShip(anim.shipId);
-          if (ship) {
-            drawX = ship.x;
-            drawY = ship.y;
-            anim.x = ship.x;
-            anim.y = ship.y;
+          // Only resolve ship follow when near the camera — off-map text still ages out
+          const roughX = anim.x;
+          const roughY = anim.y;
+          const nearView = roughX > viewMinX - 200 && roughX < viewMaxX + 200
+            && roughY > viewMinY - 200 && roughY < viewMaxY + 200;
+          if (nearView) {
+            const ship = findServerShip(anim.shipId);
+            if (ship) {
+              drawX = ship.x;
+              drawY = ship.y;
+              anim.x = ship.x;
+              anim.y = ship.y;
+            }
           }
         }
 
-        if (anim.type === 'exploration_xp') {
-          // Draw a bright, very small starburst
-          const radius = 5 * Math.sin(progress * Math.PI); // very small starburst (max radius 5px)
-          const alpha = Math.max(0, 1 - progress);
-          
-          ctx.save();
-          // Draw central glow
-          ctx.beginPath();
-          ctx.arc(drawX, drawY, radius * 0.4, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.95})`;
-          ctx.shadowColor = '#ffd700'; // gold glow
-          ctx.shadowBlur = 4;
-          ctx.fill();
-          
-          // Draw starburst rays
-          ctx.strokeStyle = `rgba(255, 235, 59, ${alpha})`; // bright yellow
-          ctx.lineWidth = 1.0;
-          const rayCount = 8;
-          for (let r = 0; r < rayCount; r++) {
-            const angle = (r / rayCount) * Math.PI * 2 + (progress * 0.6); // rotates as it expands
-            const startLen = radius * 0.3;
-            const endLen = radius;
-            ctx.beginPath();
-            ctx.moveTo(drawX + Math.cos(angle) * startLen, drawY + Math.sin(angle) * startLen);
-            ctx.lineTo(drawX + Math.cos(angle) * endLen, drawY + Math.sin(angle) * endLen);
-            ctx.stroke();
+        // Frustum cull floating texts (still age them above so they expire)
+        {
+          const ab = 80;
+          if (drawX < viewMinX - ab || drawX > viewMaxX + ab || drawY < viewMinY - ab || drawY > viewMaxY + ab) {
+            continue;
           }
-          
-          // Float the XP text above
-          ctx.font = 'bold 9px Orbitron';
-          ctx.fillStyle = `rgba(0, 229, 255, ${alpha})`; // bright cyan
-          ctx.shadowColor = `rgba(0, 229, 255, ${alpha * 0.5})`;
-          ctx.shadowBlur = 3;
+        }
+
+        if (anim.type === 'xp_level_up' || anim.type === 'exploration_xp') {
+          // Cruiser XP bonus level-up: rising XP icon (not per-hit +0.05 spam)
+          const alpha = Math.max(0, 1 - progress);
+          const lift = progress * 22;
+          const pop = 1 + Math.sin(Math.min(1, progress * 2.2) * Math.PI) * 0.35;
+          ctx.save();
+          ctx.translate(drawX, drawY - lift);
+          ctx.scale(pop, pop);
+          ctx.globalAlpha = alpha;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          const textYOffset = progress * 16;
-          ctx.fillText(`+${anim.text} XP`, drawX, drawY - 6 - textYOffset);
-          
+
+          // Soft gold burst behind the icon
+          const burstR = 7 + progress * 6;
+          ctx.beginPath();
+          ctx.arc(0, 0, burstR, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 215, 0, ${alpha * 0.22})`;
+          ctx.fill();
+          ctx.strokeStyle = `rgba(0, 229, 255, ${alpha * 0.55})`;
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+
+          // XP icon (emoji is readable at map scale; falls back to text badge)
+          ctx.font = 'bold 14px Orbitron, sans-serif';
+          ctx.shadowColor = 'rgba(0, 229, 255, 0.85)';
+          ctx.shadowBlur = 6;
+          ctx.fillText('🎯', 0, -2);
+
+          ctx.shadowBlur = 3;
+          ctx.font = 'bold 8px Orbitron, sans-serif';
+          ctx.fillStyle = `rgba(0, 229, 255, ${alpha})`;
+          const lvlLabel = anim.text ? `XP ${anim.text}` : 'XP';
+          ctx.fillText(lvlLabel, 0, 12);
+          if ((anim.levelsGained || 1) > 1) {
+            ctx.fillStyle = `rgba(255, 235, 59, ${alpha})`;
+            ctx.fillText(`+${anim.levelsGained}`, 0, 21);
+          }
+
           ctx.restore();
           continue;
         }

@@ -2977,16 +2977,19 @@ async function bootstrap() {
         game.pendingTimedGameWarnings = [];
       }
 
-      // Process pending exploration events
+      // Process pending cruiser XP level-up VFX (floor(√expScore) increased)
       if (game.pendingExplorationEvents && game.pendingExplorationEvents.length > 0) {
         for (const ev of game.pendingExplorationEvents) {
           for (const [socketId, player] of connectedClients.entries()) {
             if (player.id === ev.playerId) {
+              // Keep legacy event name for older clients; payload is now level-up focused
               io.to(socketId).emit('tileExplored', {
                 x: ev.x,
                 y: ev.y,
                 shipId: ev.shipId,
-                xp: ev.xp
+                kind: ev.kind || 'xp_level_up',
+                xpLevel: ev.xpLevel,
+                levelsGained: ev.levelsGained || 1
               });
             }
           }
@@ -4038,11 +4041,22 @@ async function bootstrap() {
           }
           // Keep last-known (including anomalies) for anything permanently discovered in fog
           // so clients/reconnects do not lose anomaly icons when sensors leave.
+          // IMPORTANT: fog silhouettes intentionally send ships:0 (hide live intel). Never
+          // overwrite a previously remembered fleet size with that zero stub.
           const fogKept = player._fogPlanetCache.get(p.id);
           if (fogKept && fogKept.obj) {
             player.lastKnownPlanets = player.lastKnownPlanets || {};
             if (fogKept.obj.anomaly || fogKept.obj.isDeepSpaceAnomaly) {
-              player.lastKnownPlanets[p.id] = fogKept.obj;
+              const prevLk = player.lastKnownPlanets[p.id];
+              const merged = Object.assign({}, prevLk || {}, fogKept.obj);
+              if ((fogKept.obj.ships == null || fogKept.obj.ships === 0) && prevLk && (prevLk.ships > 0)) {
+                merged.ships = prevLk.ships;
+              }
+              if (!merged.name && prevLk && prevLk.name) merged.name = prevLk.name;
+              if ((merged.maxShips == null || merged.maxShips === 0) && prevLk && prevLk.maxShips > 0) {
+                merged.maxShips = prevLk.maxShips;
+              }
+              player.lastKnownPlanets[p.id] = merged;
             }
           }
         }
@@ -4125,22 +4139,30 @@ async function bootstrap() {
               existing.anomaly.researched = false;
             }
             if (p.isDeepSpaceAnomaly) existing.isDeepSpaceAnomaly = true;
+            // Fog stubs use ships:0 — preserve remembered garrison if we already had one
+            const prevLk = player.lastKnownPlanets[p.id];
+            if ((existing.ships == null || existing.ships === 0) && prevLk && prevLk.ships > 0) {
+              existing.ships = prevLk.ships;
+            }
+            if (!existing.name && prevLk && prevLk.name) existing.name = prevLk.name;
             player.lastKnownPlanets[p.id] = existing;
             continue;
           }
 
+          const prevLk = player.lastKnownPlanets[p.id];
           const stickyObj = {
             id: p.id,
             x: p.x,
             y: p.y,
             radius: p.radius,
             ownerId: p.owner ? p.owner.id : null,
-            ships: 0,
-            maxShips: Math.round(p.maxShips || 0),
+            // Prefer last remembered fleet size; fog hide is ships:0 only when never fully seen
+            ships: (prevLk && prevLk.ships > 0) ? prevLk.ships : 0,
+            maxShips: Math.round(p.maxShips || 0) || (prevLk && prevLk.maxShips) || 0,
             inFog: true,
             dead: p.dead || false,
             isDeepSpaceAnomaly: p.isDeepSpaceAnomaly || false,
-            name: p.name,
+            name: p.name || (prevLk && prevLk.name) || undefined,
             anomaly: mapStickyAnomaly(an, anProg)
           };
           visiblePlanets.push(stickyObj);
