@@ -12766,17 +12766,6 @@ function getPlanetTradeIncomePerMin(planet) {
                   scoutMode: useScoutFraction,
                   isCruiser: false
                 });
-                if (useScoutFraction && forceDeepSpaceScout && !scoutModeNext) {
-                  floatingAnimations.push({
-                    x: sourcePlanet.x,
-                    y: sourcePlanet.y - (sourcePlanet.radius || 20) - 12,
-                    text: '10% SCOUT',
-                    type: 'enhance',
-                    color: '#ffeb3b',
-                    age: 0,
-                    duration: 1.2
-                  });
-                }
                 if (creditsPaid > 0) {
                   floatingAnimations.push({
                     x: sourcePlanet.x,
@@ -13502,30 +13491,11 @@ function getPlanetTradeIncomePerMin(planet) {
           return;
         }
 
-        floatingAnimations.push({
-          x: serverPos.x,
-          y: serverPos.y,
-          text: "HOLD TO ORDER…",
-          type: 'enhance',
-          color: "#0ff",
-          age: 0,
-          duration: 0.8
-        });
-
         // Extra-long hold → 10% deep-space planet launch
         if (touchExtraLongTimeout) clearTimeout(touchExtraLongTimeout);
         touchExtraLongTimeout = setTimeout(() => {
           if (!touchStartActive || !touchLongPressed) return;
           touchExtraLongPressed = true;
-          floatingAnimations.push({
-            x: serverPos.x,
-            y: serverPos.y,
-            text: "10% SCOUT READY",
-            type: 'enhance',
-            color: "#ffeb3b",
-            age: 0,
-            duration: 1.0
-          });
         }, TOUCH_EXTRA_LONG_SCOUT_MS - TOUCH_ORDER_HOLD_MS);
       }, TOUCH_ORDER_HOLD_MS);
     }
@@ -13635,17 +13605,7 @@ function getPlanetTradeIncomePerMin(planet) {
     // Long-press order: issue on release (450ms+). Extra-long (900ms+) → 10% deep-space scout.
     if (touchStartActive && touchLongPressed) {
       const cPos = getCanvasPos(touchStartX, touchStartY);
-      const serverPos = getMouseServerPos(cPos.x, cPos.y);
       forceDeepSpaceScoutNext = !!touchExtraLongPressed;
-      floatingAnimations.push({
-        x: serverPos.x,
-        y: serverPos.y,
-        text: forceDeepSpaceScoutNext ? "COMMAND ISSUED (10%)" : "COMMAND ISSUED",
-        type: 'enhance',
-        color: forceDeepSpaceScoutNext ? "#ffeb3b" : "#0ff",
-        age: 0,
-        duration: 1.0
-      });
       handlePointerDown(cPos.x, cPos.y, event.shiftKey, true, 2);
       forceDeepSpaceScoutNext = false;
       touchStartActive = false;
@@ -17428,13 +17388,6 @@ function getPlanetTradeIncomePerMin(planet) {
         ctx.strokeStyle = scoutArmed ? 'rgba(255, 235, 59, 0.95)' : 'rgba(0, 255, 255, 0.85)';
         ctx.lineWidth = 2 / Math.max(0.001, finalScale);
         ctx.stroke();
-        if (scoutArmed) {
-          ctx.font = `${Math.max(10, 12 / Math.max(0.001, finalScale))}px Orbitron`;
-          ctx.fillStyle = 'rgba(255, 235, 59, 0.95)';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'bottom';
-          ctx.fillText('10%', down.x, down.y - 10 / Math.max(0.001, finalScale));
-        }
         if (dragPx > 20) {
           ctx.beginPath();
           ctx.moveTo(down.x, down.y);
