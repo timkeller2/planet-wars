@@ -563,6 +563,7 @@ function getPlanetTradeIncomePerMin(planet) {
   let startingDefenderCount = 0;
   let startingAttackerCount = 0;
   let serverSavedConfigs = [];
+  let serverSavedGames = [];
   let lastGameStartTime = null;
   let lastSelectedCruiserId = null;
   let selectedPlanets = [];
@@ -3051,11 +3052,114 @@ function getPlanetTradeIncomePerMin(planet) {
   window.getCameraPan = () => ({ x: cameraPanX, y: cameraPanY });
   window.setCameraPan = (x, y) => { cameraPanX = x; cameraPanY = y; };
 
+  let lastTouchContextClientX = 0;
+  let lastTouchContextClientY = 0;
+  let lastTouchContextCanvasX = 0;
+  let lastTouchContextCanvasY = 0;
+
+  function suggestSaveGameName() {
+    const base = (localPlayer && localPlayer.name) ? String(localPlayer.name) : 'Save';
+    const cleaned = base.replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 20) || 'Save';
+    const d = new Date();
+    const stamp =
+      String(d.getFullYear()) +
+      String(d.getMonth() + 1).padStart(2, '0') +
+      String(d.getDate()).padStart(2, '0') +
+      '-' +
+      String(d.getHours()).padStart(2, '0') +
+      String(d.getMinutes()).padStart(2, '0');
+    return `${cleaned}-${stamp}`;
+  }
+
+  function promptAndSaveGame() {
+    const suggested = suggestSaveGameName();
+    const entered = window.prompt('Save game as (letters, numbers, _ and - only):', suggested);
+    if (entered == null) return;
+    const name = entered.trim();
+    if (!name) return;
+    if (/[^a-zA-Z0-9_\-]/.test(name)) {
+      window.alert('Save name must contain only letters, numbers, underscores, and hyphens.');
+      return;
+    }
+    if (serverSavedGames.includes(name)) {
+      const overwrite = window.confirm(`A save named "${name}" already exists. Overwrite it?`);
+      if (!overwrite) return;
+    }
+    socket.emit('saveSaveGame', name);
+  }
+
+  function renderTouchContextMenu(options, clientX, clientY, headerText) {
+    if (!touchContextMenu || !touchContextOptions) return;
+    const header = touchContextMenu.querySelector('.touch-context-header');
+    if (header) header.textContent = headerText || 'DEEP SPACE CONTROLS';
+    touchContextOptions.innerHTML = '';
+    options.forEach(opt => {
+      const btn = document.createElement('div');
+      btn.className = opt.class ? `touch-context-option ${opt.class}` : 'touch-context-option';
+      btn.textContent = opt.text;
+      bindActionClick(btn, () => {
+        opt.action();
+        if (!opt.keepOpen) closeTouchContextMenu();
+      });
+      touchContextOptions.appendChild(btn);
+    });
+
+    touchContextMenu.style.display = 'block';
+    touchContextMenu.classList.remove('hidden');
+
+    const rect = touchContextMenu.getBoundingClientRect();
+    let left = clientX;
+    let top = clientY;
+    if (left + rect.width > window.innerWidth) {
+      left = window.innerWidth - rect.width - 10;
+    }
+    if (top + rect.height > window.innerHeight) {
+      top = window.innerHeight - rect.height - 10;
+    }
+    left = Math.max(10, left);
+    top = Math.max(10, top);
+    touchContextMenu.style.left = `${left + window.scrollX}px`;
+    touchContextMenu.style.top = `${top + window.scrollY}px`;
+  }
+
+  function openTouchContextLoadMenu(clientX, clientY) {
+    const saves = Array.isArray(serverSavedGames) ? serverSavedGames.slice() : [];
+    const options = [
+      {
+        text: '◀ BACK',
+        keepOpen: true,
+        action: () => {
+          openTouchContextMenu(lastTouchContextClientX, lastTouchContextClientY, lastTouchContextCanvasX, lastTouchContextCanvasY);
+        }
+      }
+    ];
+    if (saves.length === 0) {
+      options.push({
+        text: 'No saved missions',
+        action: () => {}
+      });
+    } else {
+      for (const save of saves) {
+        options.push({
+          text: `📂 ${save}`,
+          action: () => {
+            const confirmed = window.confirm(`Load "${save}"? This replaces the current game.`);
+            if (!confirmed) return;
+            socket.emit('loadSaveGame', save);
+          }
+        });
+      }
+    }
+    renderTouchContextMenu(options, clientX, clientY, 'SAVED MISSIONS');
+  }
+
   function openTouchContextMenu(clientX, clientY, canvasX, canvasY) {
     if (!touchContextMenu || !touchContextOptions) return;
 
-    // Clear previous options
-    touchContextOptions.innerHTML = '';
+    lastTouchContextClientX = clientX;
+    lastTouchContextClientY = clientY;
+    lastTouchContextCanvasX = canvasX;
+    lastTouchContextCanvasY = canvasY;
 
     // Determine current pause state
     const isPaused = serverState && serverState.isPaused;
@@ -3082,6 +3186,20 @@ function getPlanetTradeIncomePerMin(planet) {
         }
       });
     }
+
+    options.push({
+      text: '💾 SAVE GAME',
+      action: () => {
+        promptAndSaveGame();
+      }
+    });
+    options.push({
+      text: '📂 LOAD GAME',
+      keepOpen: true,
+      action: () => {
+        openTouchContextLoadMenu(lastTouchContextClientX, lastTouchContextClientY);
+      }
+    });
 
     // Open Recordings option
     options.push({
@@ -3212,38 +3330,7 @@ function getPlanetTradeIncomePerMin(planet) {
 
 
 
-    // Build DOM elements
-    options.forEach(opt => {
-      const btn = document.createElement('div');
-      btn.className = opt.class ? `touch-context-option ${opt.class}` : 'touch-context-option';
-      btn.textContent = opt.text;
-      bindActionClick(btn, () => {
-        opt.action();
-        closeTouchContextMenu();
-      });
-      touchContextOptions.appendChild(btn);
-    });
-
-    // Position the menu
-    touchContextMenu.style.display = 'block';
-    touchContextMenu.classList.remove('hidden');
-
-    // Make sure menu doesn't overflow screen boundaries
-    const rect = touchContextMenu.getBoundingClientRect();
-    let left = clientX;
-    let top = clientY;
-
-    if (left + rect.width > window.innerWidth) {
-      left = window.innerWidth - rect.width - 10;
-    }
-    if (top + rect.height > window.innerHeight) {
-      top = window.innerHeight - rect.height - 10;
-    }
-    left = Math.max(10, left);
-    top = Math.max(10, top);
-
-    touchContextMenu.style.left = `${left + window.scrollX}px`;
-    touchContextMenu.style.top = `${top + window.scrollY}px`;
+    renderTouchContextMenu(options, clientX, clientY);
   }
   window.openTouchContextMenu = openTouchContextMenu;
 
@@ -5629,6 +5716,7 @@ function getPlanetTradeIncomePerMin(planet) {
   });
 
   socket.on('saveGamesList', (saves) => {
+    serverSavedGames = Array.isArray(saves) ? saves : [];
     const savesList = document.getElementById('saves-list');
     if (!savesList) return;
     
@@ -6047,6 +6135,7 @@ function getPlanetTradeIncomePerMin(planet) {
     const headMatch = Math.abs(headErr) < 18 * Math.PI / 180;
     // Large lag with matching heading = freeze/skip-sim, not a turn disagreement
     if (pe > 90 && headMatch) {
+      maybeLogPredDesync(s, vis, s.x, s.y, s.angle || 0, 'catch_up_snap');
       vis.x = s.x;
       vis.y = s.y;
       vis.angle = s.angle || 0;
@@ -6339,22 +6428,34 @@ function getPlanetTradeIncomePerMin(planet) {
   window.getPredictionStress = () => predictionStressSmoothed;
 
   // ── Prediction desync diagnostics ───────────────────────────────────────
-  // Logs when local client pose diverges from server authority in world space
-  // (zoom-independent). Focus: real lag / inverted heading — not face-target noise.
-  // Samples → logs/pred-desync.jsonl (+ window._predDesyncLog). Toggle: PRED_DESYNC_LOG=false
-  // Off by default — desync logging walks combat proximity and can cost frames on mobile.
-  // Enable in console: window.PRED_DESYNC_LOG = true
+  // World-space client vs server pose. Large rubber-bands (40px+) are ALWAYS
+  // written to logs/pred-desync.jsonl — that is the "quite a bit off" signal.
+  // Verbose (mild combat/heading) stays opt-in: window.PRED_DESYNC_LOG = true
+  // Console: dumpPredDesyncLog() / dumpPredDesyncSummary()
+  //          PRED_DESYNC_CONSOLE = true to print every accepted sample
   window.PRED_DESYNC_LOG = false;
   window._predDesyncLog = [];
-  const PRED_DESYNC_POS_PX = 22;              // move/cruise: meaningful position error
-  const PRED_DESYNC_HEADING_DEG = 55;         // move/cruise: ignore mild turn lag
-  const PRED_DESYNC_COMBAT_POS_PX = 14;       // combat position drift
-  const PRED_DESYNC_COMBAT_HEADING_DEG = 120; // combat: face-target heading is noisy
-  const PRED_DESYNC_LOG_COOLDOWN_MS = 900;    // per-ship rate limit (position samples)
-  const PRED_DESYNC_HEAD_ONLY_COOLDOWN_MS = 1800; // heading-only is cheaper but spammier
-  const PRED_DESYNC_MAX_SAMPLES = 200;
-  const PRED_DESYNC_MAX_PACKET_GAP_MS = 380;  // skip after long gaps (FoW / tab)
+  window._predDesyncStats = {
+    samples: 0,
+    large: 0,
+    huge: 0,
+    maxPosErr: 0,
+    maxPosErrId: null,
+    lastLarge: null
+  };
+  const PRED_DESYNC_POS_PX = 22;              // verbose: move/cruise position
+  const PRED_DESYNC_HEADING_DEG = 55;         // verbose: ignore mild turn lag
+  const PRED_DESYNC_COMBAT_POS_PX = 14;       // verbose: combat position
+  const PRED_DESYNC_COMBAT_HEADING_DEG = 120; // verbose: combat heading is noisy
+  const PRED_DESYNC_LARGE_POS_PX = 40;        // always-on: visible rubber-band
+  const PRED_DESYNC_HUGE_POS_PX = 80;         // always-on: obvious pop
+  const PRED_DESYNC_LOG_COOLDOWN_MS = 900;
+  const PRED_DESYNC_HEAD_ONLY_COOLDOWN_MS = 1800;
+  const PRED_DESYNC_LARGE_COOLDOWN_MS = 400;  // large events: keep more of the burst
+  const PRED_DESYNC_MAX_SAMPLES = 250;
+  const PRED_DESYNC_MAX_PACKET_GAP_MS = 380;
   const predDesyncLastLogMs = new Map();
+  let predDesyncLastLargeConsoleMs = 0;
 
   function angleDiffDeg(a, b) {
     // Prefer shared shortestAngleDiff when available (defined later in this scope
@@ -6375,53 +6476,48 @@ function getPlanetTradeIncomePerMin(planet) {
 
   /**
    * Compare client visual pose to server authority and log meaningful desyncs.
+   * Large/huge position errors always log (debug rubber-bands). Mild samples
+   * require window.PRED_DESYNC_LOG = true.
    * @param {object} ship live server ship
    * @param {object} vis visualShips entry (client prediction)
    * @param {number} authX server x
    * @param {number} authY server y
    * @param {number} authAngle server heading
-   * @param {string} source 'packet' | 'soft_snap' | 'soft_frame'
+   * @param {string} source 'packet' | 'soft_snap' | 'catch_up_snap'
    */
   function maybeLogPredDesync(ship, vis, authX, authY, authAngle, source) {
-    if (window.PRED_DESYNC_LOG === false) return;
     if (!ship || !vis || !ship.active) return;
-    // Cruisers / capital ships only (not green fleets, not pure amoebas)
     if (!ship.isCruiser || ship.isAmoeba) return;
-    // Own units — move orders + own battles are what we want to tune
     if (localPlayer && ship.ownerId != null && ship.ownerId !== localPlayer.id) return;
 
     const now = performance.now();
-    // Skip FoW re-entry / tab-suspend gaps (not prediction quality)
     if (source === 'packet' && vis.netTime && (now - vis.netTime) > PRED_DESYNC_MAX_PACKET_GAP_MS) return;
     if (vis._predDesyncSkipUntil && now < vis._predDesyncSkipUntil) return;
-
-    // Metric cleanup: only score ships that were actually simulated recently.
-    // Unsimulated freezes (old frustum skip / galactic pin) are not prediction quality.
-    const simAge = vis._predSimulatedAt != null ? (now - vis._predSimulatedAt) : Infinity;
-    const simulated = Number.isFinite(simAge) && simAge < 220;
-    if (!simulated) {
-      // Allow rare catastrophic unsimulated samples for debugging freezes, tagged clearly
-      const peQuick = Math.hypot((vis.x || 0) - authX, (vis.y || 0) - authY);
-      if (peQuick < 100) return;
-    }
 
     const clientX = vis.x;
     const clientY = vis.y;
     const clientAngle = vis.angle || 0;
     const posErr = Math.hypot(clientX - authX, clientY - authY);
     const headErr = angleDiffDeg(clientAngle, authAngle || 0);
+    const verbose = window.PRED_DESYNC_LOG === true;
+    const huge = posErr >= PRED_DESYNC_HUGE_POS_PX;
+    const large = huge || posErr >= PRED_DESYNC_LARGE_POS_PX
+      || (posErr >= 25 && headErr >= 120);
+    if (!verbose && !large) return;
+
+    const simAge = vis._predSimulatedAt != null ? (now - vis._predSimulatedAt) : Infinity;
+    const simulated = Number.isFinite(simAge) && simAge < 220;
+    if (!simulated && posErr < 100) return;
 
     const inCombat = isShipNearEnemyForPredLog(ship);
-    // Split thresholds: combat face-target makes moderate heading error expected
     const posThresh = inCombat ? PRED_DESYNC_COMBAT_POS_PX : PRED_DESYNC_POS_PX;
     const headThresh = inCombat ? PRED_DESYNC_COMBAT_HEADING_DEG : PRED_DESYNC_HEADING_DEG;
-    if (posErr < posThresh && headErr < headThresh) return;
-    // Combat with good position + sub-100° head is face-target noise — drop it
-    if (inCombat && posErr < 10 && headErr < 100) return;
-
-    // Arrived / idle-hold: skip mild heading-only noise (arrival latch handles this)
-    if (vis.arrivedLatch || vis.idleHoldHeading) {
-      if (posErr < 28 && headErr < 70) return;
+    if (!large) {
+      if (posErr < posThresh && headErr < headThresh) return;
+      if (inCombat && posErr < 10 && headErr < 100) return;
+      if (vis.arrivedLatch || vis.idleHoldHeading) {
+        if (posErr < 28 && headErr < 70) return;
+      }
     }
 
     const opt = vis.opt;
@@ -6434,21 +6530,17 @@ function getPlanetTradeIncomePerMin(planet) {
       heldLive;
     const recentMove = !!(vis._predContextUntil && now < vis._predContextUntil);
 
-    // Focus: combat, move orders, active cruise — skip boring idle noise
     let context = 'other';
     if (inCombat) context = 'combat';
     else if (optLive || heldLive || recentMove || vis._predContext === 'move_order') context = 'move_order';
     else if (hasDest && (ship.currentSpeed || 0) > 0.5) context = 'cruise';
     else if ((ship.currentSpeed || 0) < 0.5 && posErr < 40 && headErr < 45) {
-      // Idle with mild heading drift after stop — not interesting
-      return;
+      if (!large) return;
     } else if ((ship.currentSpeed || 0) < 0.5) {
       context = 'idle';
     }
-
-    // Idle desync only if large (possible bug); mild idle skip above
-    if (context === 'idle' && posErr < 50) return;
-    if (context === 'other' && !inCombat && !hasDest && posErr < 60) return;
+    if (!large && context === 'idle' && posErr < 50) return;
+    if (!large && context === 'other' && !inCombat && !hasDest && posErr < 60) return;
 
     const destX = optLive ? opt.targetX
       : (vis.heldCruise && vis.heldCruise.destX != null ? vis.heldCruise.destX
@@ -6460,8 +6552,15 @@ function getPlanetTradeIncomePerMin(planet) {
         : (vis.auth && vis.auth.destY != null ? vis.auth.destY
           : (ship.targetY != null ? ship.targetY
             : (ship.targetPlanet ? ship.targetPlanet.y : null))));
+    const serverDestX = ship.targetX != null ? ship.targetX
+      : (ship.targetPlanet ? ship.targetPlanet.x : null);
+    const serverDestY = ship.targetY != null ? ship.targetY
+      : (ship.targetPlanet ? ship.targetPlanet.y : null);
+    let destMismatchPx = null;
+    if (destX != null && destY != null && serverDestX != null && serverDestY != null) {
+      destMismatchPx = Math.round(Math.hypot(destX - serverDestX, destY - serverDestY) * 10) / 10;
+    }
 
-    // Dest-relative diagnostics (also used to drop "client is better than server" heading noise)
     let serverTurnDir = 0;
     let headingToDestDeg = null;
     let clientHeadingToDestDeg = null;
@@ -6491,16 +6590,12 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
 
-    // Pure heading sample where client faces dest better than server = prediction win, not a bug
-    if (posErr < 18 && headErr >= headThresh && clientBetterToDest) return;
-    // Heading-only without a destination is rarely actionable
-    if (posErr < posThresh && destX == null && headErr < 140) return;
+    if (!large && posErr < 18 && headErr >= headThresh && clientBetterToDest) return;
+    if (!large && posErr < posThresh && destX == null && headErr < 140) return;
 
-    // Along-track / lateral error for diagnosis
-    // alongTrackErr > 0 ⇒ server is further toward dest than client ⇒ client behind
     let alongTrackErr = null;
     let lateralErr = null;
-    let trackRole = null; // 'behind' | 'ahead' | 'lateral'
+    let trackRole = null;
     if (destX != null && destY != null) {
       const tdx = destX - clientX;
       const tdy = destY - clientY;
@@ -6520,27 +6615,26 @@ function getPlanetTradeIncomePerMin(planet) {
       }
     }
 
-    // Heading-only samples: require inverted/large error relative to dest, not mild lag
     const headingOnly = posErr < posThresh && headErr >= headThresh;
-    if (headingOnly) {
-      if (inCombat) return; // combat nose noise — never log heading-only
-      if (clientHeadingToDestDeg != null && clientHeadingToDestDeg < 45 && headErr > 90) {
-        // Client on-track, server elsewhere — skip
-        return;
-      }
+    if (headingOnly && !large) {
+      if (inCombat) return;
+      if (clientHeadingToDestDeg != null && clientHeadingToDestDeg < 45 && headErr > 90) return;
       if (headErr < 100 && (clientHeadingToDestDeg == null || clientHeadingToDestDeg < 90)) return;
     }
 
-    // Rate limit: heading-only less frequent; position issues keep normal cadence
     const last = predDesyncLastLogMs.get(ship.id) || 0;
-    const cd = headingOnly ? PRED_DESYNC_HEAD_ONLY_COOLDOWN_MS : PRED_DESYNC_LOG_COOLDOWN_MS;
+    const cd = large
+      ? PRED_DESYNC_LARGE_COOLDOWN_MS
+      : (headingOnly ? PRED_DESYNC_HEAD_ONLY_COOLDOWN_MS : PRED_DESYNC_LOG_COOLDOWN_MS);
     if (now - last < cd) return;
     predDesyncLastLogMs.set(ship.id, now);
 
+    const severity = huge ? 'huge' : (large ? 'large' : 'mild');
     const sample = {
       t: Date.now(),
       source,
       context,
+      severity,
       id: ship.id,
       name: ship.name || null,
       classType: ship.classType || null,
@@ -6557,28 +6651,43 @@ function getPlanetTradeIncomePerMin(planet) {
       lateralErr,
       headingToDestDeg,
       clientHeadingToDestDeg,
+      destMismatchPx,
       client: {
         x: Math.round(clientX * 10) / 10,
         y: Math.round(clientY * 10) / 10,
         angleDeg: Math.round((clientAngle * 180 / Math.PI) * 10) / 10,
-        smoothSpeed: vis.smoothSpeed != null ? Math.round(vis.smoothSpeed * 10) / 10 : null
+        smoothSpeed: vis.smoothSpeed != null ? Math.round(vis.smoothSpeed * 10) / 10 : null,
+        lastCruise: vis.lastCruiseSpeed != null ? Math.round(vis.lastCruiseSpeed * 10) / 10 : null
       },
       server: {
         x: Math.round(authX * 10) / 10,
         y: Math.round(authY * 10) / 10,
         angleDeg: Math.round(((authAngle || 0) * 180 / Math.PI) * 10) / 10,
         speed: Math.round((ship.currentSpeed || 0) * 10) / 10,
-        maxSpeed: ship.speed != null ? Math.round(ship.speed * 10) / 10 : null
+        maxSpeed: ship.speed != null ? Math.round(ship.speed * 10) / 10 : null,
+        dest: (serverDestX != null && serverDestY != null)
+          ? { x: Math.round(serverDestX * 10) / 10, y: Math.round(serverDestY * 10) / 10 }
+          : null
       },
       dest: (destX != null && destY != null)
         ? { x: Math.round(destX * 10) / 10, y: Math.round(destY * 10) / 10 }
         : null,
       optLive,
+      optTtlMs: optLive ? Math.round(opt.expiresAt - now) : 0,
+      inventCruise: !!vis._inventedAuthSpeed,
       inCombat,
+      combatDist: vis._combatMinDist != null && Number.isFinite(vis._combatMinDist)
+        ? Math.round(vis._combatMinDist)
+        : null,
+      approach: !!vis._approachMode,
+      isWarp: !!ship.isWarp,
+      speedMod: ship.speedModifier != null ? ship.speedModifier : null,
+      selected: !!(selectedShips && selectedShips.some(ss => ss && ss.id === ship.id)),
       clientTurnDir: vis.turnDir || (opt && opt.turnDir) || (vis.heldCruise && vis.heldCruise.turnDir) || 0,
       serverTurnDir,
       predStrength: Math.round(predictionStrength * 100) / 100,
       predStress: Math.round(predictionStressSmoothed * 100) / 100,
+      meanPktMs: Math.round(getMeanPacketIntervalMs()),
       packetGapMs: vis.netTime ? Math.round(now - vis.netTime) : null,
       flightTime: ship.flightTime != null ? Math.round(ship.flightTime * 100) / 100 : null
     };
@@ -6587,50 +6696,97 @@ function getPlanetTradeIncomePerMin(planet) {
     if (window._predDesyncLog.length > PRED_DESYNC_MAX_SAMPLES) {
       window._predDesyncLog.shift();
     }
-    // Write to server file logs/pred-desync.jsonl (accessible to tooling)
+    const stats = window._predDesyncStats;
+    stats.samples++;
+    if (large) stats.large++;
+    if (huge) stats.huge++;
+    if (posErr > stats.maxPosErr) {
+      stats.maxPosErr = Math.round(posErr * 10) / 10;
+      stats.maxPosErrId = ship.id;
+    }
+    if (large) stats.lastLarge = sample;
+
     try {
       if (socket && socket.connected) {
         socket.emit('predDesyncLog', sample);
       }
     } catch (_) { /* ignore */ }
-    // Quiet console by default — file is the primary sink. Set PRED_DESYNC_CONSOLE=true to spam.
-    if (window.PRED_DESYNC_CONSOLE) {
-      console.log(
-        `[PRED DESYNC] ${context}/${source} id=${sample.id}` +
-        (sample.name ? ` "${sample.name}"` : '') +
-        ` posErr=${sample.posErr} headErr=${sample.headErrDeg}°` +
-        ` spd=${sample.server.speed}/${sample.client.smoothSpeed ?? '—'} pred=${sample.predStrength}`,
-        sample
-      );
+
+    const line =
+      `[PRED DESYNC ${severity}] ${context}/${source} id=${sample.id}` +
+      (sample.name ? ` "${sample.name}"` : '') +
+      ` posErr=${sample.posErr} headErr=${sample.headErrDeg}°` +
+      (trackRole ? ` ${trackRole}` : '') +
+      ` spd=${sample.server.speed}/${sample.client.smoothSpeed ?? '—'}` +
+      ` pred=${sample.predStrength}`;
+    if (huge) {
+      console.warn(line, sample);
+    } else if (large && (now - predDesyncLastLargeConsoleMs) > 2000) {
+      predDesyncLastLargeConsoleMs = now;
+      console.warn(line);
+    } else if (window.PRED_DESYNC_CONSOLE) {
+      console.log(line, sample);
     }
   }
 
   window.dumpPredDesyncLog = () => {
     console.table(window._predDesyncLog.map(s => ({
       t: new Date(s.t).toISOString().slice(11, 23),
+      sev: s.severity,
       context: s.context,
       source: s.source,
       id: s.id,
       name: s.name,
       posErr: s.posErr,
       headErr: s.headErrDeg,
-      headOnly: s.headingOnly,
       track: s.trackRole,
-      betterHead: s.clientBetterToDest,
-      sim: s.simulated,
-      held: s.heldCruise,
+      invent: s.inventCruise,
+      warp: s.isWarp,
+      destΔ: s.destMismatchPx,
       along: s.alongTrackErr,
       lat: s.lateralErr,
       inCombat: s.inCombat,
       optLive: s.optLive,
       pred: s.predStrength
     })));
+    console.log('[PRED DESYNC] stats', window._predDesyncStats);
     console.log('[PRED DESYNC] Also written server-side to logs/pred-desync.jsonl');
     return window._predDesyncLog;
+  };
+  window.dumpPredDesyncSummary = () => {
+    const stats = window._predDesyncStats;
+    const last = stats.lastLarge;
+    console.log('[PRED DESYNC SUMMARY]', {
+      samples: stats.samples,
+      large: stats.large,
+      huge: stats.huge,
+      maxPosErr: stats.maxPosErr,
+      maxPosErrId: stats.maxPosErrId,
+      lastLarge: last ? {
+        t: new Date(last.t).toISOString().slice(11, 23),
+        id: last.id,
+        name: last.name,
+        posErr: last.posErr,
+        context: last.context,
+        source: last.source,
+        track: last.trackRole,
+        invent: last.inventCruise,
+        warp: last.isWarp
+      } : null
+    });
+    return stats;
   };
   window.clearPredDesyncLog = () => {
     window._predDesyncLog.length = 0;
     predDesyncLastLogMs.clear();
+    window._predDesyncStats = {
+      samples: 0,
+      large: 0,
+      huge: 0,
+      maxPosErr: 0,
+      maxPosErrId: null,
+      lastLarge: null
+    };
   };
 
   /** Prefer predicted/visual pose for hit-tests so clicks match what the player sees. */
@@ -8343,6 +8499,7 @@ function getPlanetTradeIncomePerMin(planet) {
         }
 
         let authSpeed = s.currentSpeed || 0;
+        vis._inventedAuthSpeed = false;
         if (arrivedAuth) {
           authSpeed = Math.min(authSpeed, s.currentSpeed || 0);
           if ((s.currentSpeed || 0) < 2) authSpeed = s.currentSpeed || 0;
@@ -8373,6 +8530,7 @@ function getPlanetTradeIncomePerMin(planet) {
             // Scale invent by stress so healthy traffic barely invents
             invented *= (0.35 + 0.65 * predictionStrength);
             authSpeed = invented;
+            vis._inventedAuthSpeed = true;
           }
         }
         if (authSpeed > 0.5 && !arrivedAuth) {
@@ -10998,19 +11156,30 @@ function getPlanetTradeIncomePerMin(planet) {
 
     const resHud = document.getElementById('resources-hud');
     if (resHud) {
-      resHud.style.display = 'flex';
-      
       const resourcesList = ['dilithium', 'merculite', 'duranium', 'tritanium', 'antimatter', 'deuterium', 'latinum'];
       
       const wantedResources = new Set();
+      const knownMarketResources = new Set();
       if (serverState && serverState.planets && localPlayer) {
         for (const p of serverState.planets) {
           if (p.ownerId === localPlayer.id && p.preferredResource && p.maxShips >= 150) {
             wantedResources.add(p.preferredResource);
           }
+          if (p.resources) {
+            for (const r of p.resources) knownMarketResources.add(r);
+          }
+        }
+      }
+      if (lastKnownPlanets) {
+        for (const id in lastKnownPlanets) {
+          const p = lastKnownPlanets[id];
+          if (p && p.resources) {
+            for (const r of p.resources) knownMarketResources.add(r);
+          }
         }
       }
 
+      let anyResCardVisible = false;
       for (const res of resourcesList) {
         const qtySpan = document.getElementById(`res-qty-${res}`);
         const rawQty = myPlayer.resources?.[res] || 0;
@@ -11020,6 +11189,18 @@ function getPlanetTradeIncomePerMin(planet) {
         
         const card = document.getElementById(`res-card-${res}`);
         if (card) {
+          const knowsResource = knownMarketResources.has(res);
+          const hasStock = rawQty > 0;
+          if (!knowsResource && !hasStock) {
+            card.style.display = 'none';
+            card._canTrade = false;
+            continue;
+          }
+          anyResCardVisible = true;
+          card.style.display = 'flex';
+          card._canTrade = knowsResource;
+          card.style.cursor = knowsResource ? 'pointer' : 'default';
+
           let wantedIndicator = card.querySelector('.res-wanted-indicator');
           if (!wantedIndicator) {
             wantedIndicator = document.createElement('span');
@@ -11068,7 +11249,7 @@ function getPlanetTradeIncomePerMin(planet) {
               card.appendChild(priceIndicator);
             }
           }
-          if (serverState && serverState.marketPrices && serverState.marketPrices[res]) {
+          if (knowsResource && serverState && serverState.marketPrices && serverState.marketPrices[res]) {
             const myTradeOptions = myPlayer ? (myPlayer.tradeOptions || 0) : 0;
             const penalty = myTradeOptions < 0 ? Math.abs(myTradeOptions) : 0;
             const basePrice = serverState.marketPrices[res];
@@ -11080,11 +11261,13 @@ function getPlanetTradeIncomePerMin(planet) {
             const sellSub = priceIndicator.querySelector('.res-sell-price');
             if (buySup) buySup.textContent = `${buyPrice}`;
             if (sellSub) sellSub.textContent = `${sellPrice}`;
+            priceIndicator.style.display = 'inline-flex';
           } else {
             const buySup = priceIndicator.querySelector('.res-buy-price');
             const sellSub = priceIndicator.querySelector('.res-sell-price');
             if (buySup) buySup.textContent = '';
             if (sellSub) sellSub.textContent = '';
+            priceIndicator.style.display = 'none';
           }
 
           if (res === 'latinum' && serverState && serverState.bundleValue) {
@@ -11098,11 +11281,13 @@ function getPlanetTradeIncomePerMin(planet) {
             card.addEventListener('click', (e) => {
               if (card._touchActive) return; // Prevent double fire on mobile
               e.stopPropagation();
+              if (!card._canTrade) return;
               socket.emit('buyResource', { resource: res });
             });
             card.addEventListener('contextmenu', (e) => {
               e.preventDefault();
               e.stopPropagation();
+              if (!card._canTrade) return;
               socket.emit('sellResource', { resource: res });
             });
 
@@ -11125,8 +11310,10 @@ function getPlanetTradeIncomePerMin(planet) {
               if (pressTimer) clearTimeout(pressTimer);
               pressTimer = setTimeout(() => {
                 hasTriggeredLongPress = true;
-                socket.emit('sellResource', { resource: res });
-                if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback for sell
+                if (card._canTrade) {
+                  socket.emit('sellResource', { resource: res });
+                  if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback for sell
+                }
               }, 500);
             }, { passive: false });
 
@@ -11148,7 +11335,7 @@ function getPlanetTradeIncomePerMin(planet) {
                 clearTimeout(pressTimer);
                 pressTimer = null;
               }
-              if (!hasTriggeredLongPress) {
+              if (!hasTriggeredLongPress && card._canTrade) {
                 // Short tap -> Buy
                 socket.emit('buyResource', { resource: res });
               }
@@ -11187,6 +11374,7 @@ function getPlanetTradeIncomePerMin(planet) {
           }
         }
       }
+      resHud.style.display = anyResCardVisible ? 'flex' : 'none';
     }
 
     const pCount = myPlayer.planetCount || 0;

@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { Game } from './src/game.js';
+import { Game, playerKnowsPlanetWithResource } from './src/game.js';
 import { Ship } from './src/entities/Ship.js';
 import { GameReplayRecorder } from './src/systems/GameReplayRecorder.js';
 import path from 'path';
@@ -98,6 +98,40 @@ const GAME_VERSION = "1.0.0";
 const savesDir = path.join(__dirname, 'saves');
 if (!fs.existsSync(savesDir)) {
   fs.mkdirSync(savesDir, { recursive: true });
+}
+
+function listSaveGameNames() {
+  if (!fs.existsSync(savesDir)) return [];
+  return fs.readdirSync(savesDir)
+    .filter(file => file.endsWith('.json'))
+    .map(file => file.slice(0, -5));
+}
+
+function sanitizeSaveGameName(saveName) {
+  if (!saveName || typeof saveName !== 'string') return null;
+  const trimmed = saveName.trim();
+  const sanitized = trimmed.replace(/[^a-zA-Z0-9_\-]/g, '');
+  if (!sanitized || sanitized !== trimmed) return null;
+  return sanitized;
+}
+
+function persistCurrentGameSave(gameInstance, saveName) {
+  const sanitized = sanitizeSaveGameName(saveName);
+  if (!sanitized) {
+    throw new Error('Save name must contain only letters, numbers, underscores, and hyphens.');
+  }
+  const state = gameInstance.saveState();
+  const filePath = path.join(savesDir, `${sanitized}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf-8');
+  return sanitized;
+}
+
+function broadcastSaveGamesList(ioServer) {
+  try {
+    ioServer.emit('saveGamesList', listSaveGameNames());
+  } catch (e) {
+    console.error('[Save Broadcast Error]', e);
+  }
 }
 
 const shipConfigsDir = path.join(savesDir, 'ship_configs');
@@ -993,14 +1027,7 @@ async function bootstrap() {
     
     // Send initial list of save games on connection
     try {
-      if (fs.existsSync(savesDir)) {
-        const initialSaves = fs.readdirSync(savesDir)
-          .filter(file => file.endsWith('.json'))
-          .map(file => file.slice(0, -5));
-        socket.emit('saveGamesList', initialSaves);
-      } else {
-        socket.emit('saveGamesList', []);
-      }
+      socket.emit('saveGamesList', listSaveGameNames());
     } catch (e) {
       console.error('[Save Games List Error]', e);
     }
@@ -1605,10 +1632,14 @@ async function bootstrap() {
     socket.on('predDesyncLog', (sample) => {
       try {
         if (!sample || typeof sample !== 'object') return;
-        // Drop combat heading-only noise if an old client still sends it
-        if (sample.headingOnly && sample.inCombat) return;
-        if (sample.posErr != null && sample.posErr < 12 && sample.headErrDeg != null
-            && sample.headErrDeg < 55 && !sample.trackRole) return;
+        // Keep large rubber-bands; drop tiny combat/heading noise (old clients included)
+        const posErr = sample.posErr != null ? sample.posErr : 0;
+        const severity = sample.severity;
+        const keepLarge = severity === 'large' || severity === 'huge' || posErr >= 40;
+        if (!keepLarge) {
+          if (sample.headingOnly && sample.inCombat) return;
+          if (posErr < 18) return;
+        }
 
         const player = connectedClients.get(socket.id);
         const logsDir = path.join(__dirname, 'logs');
@@ -1648,6 +1679,12 @@ async function bootstrap() {
         }) + '\n';
         fs.appendFileSync(logPath, line, 'utf8');
         predDesyncLineCount++;
+        if (sample.severity === 'huge' || (sample.posErr || 0) >= 80) {
+          console.warn(
+            `[PRED DESYNC huge] ${player ? (player.name || player.id) : '?'} ` +
+            `id=${sample.id} posErr=${sample.posErr} ${sample.context}/${sample.source}`
+          );
+        }
       } catch (e) {
         // Never break the game for logging failures
         if (!(socket._predLogErrLogged)) {
@@ -1683,32 +1720,14 @@ async function bootstrap() {
             });
             return;
           }
-          const sanitized = saveName.replace(/[^a-zA-Z0-9_\-]/g, '');
-          if (!sanitized || sanitized !== saveName) {
-            socket.emit('chatMessage', {
-              sender: 'System',
-              color: '#ff3333',
-              text: 'Save name must contain only letters, numbers, underscores, and hyphens.'
-            });
-            return;
-          }
           try {
-            const state = game.saveState();
-            const filePath = path.join(savesDir, `${sanitized}.json`);
-            fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf-8');
+            const sanitized = persistCurrentGameSave(game, saveName);
             socket.emit('chatMessage', {
               sender: 'System',
               color: '#00ff00',
               text: `Game successfully saved as '${sanitized}'.`
             });
-            try {
-              const updatedSaves = fs.readdirSync(savesDir)
-                .filter(file => file.endsWith('.json'))
-                .map(file => file.slice(0, -5));
-              io.emit('saveGamesList', updatedSaves);
-            } catch (e) {
-              console.error('[Save Broadcast Error]', e);
-            }
+            broadcastSaveGamesList(io);
             console.log(`[Save Game] Game successfully saved as '${sanitized}' by player ${player.name} (${player.id})`);
           } catch (err) {
             console.error('[Save Game Error]', err);
@@ -2245,6 +2264,7 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (player && game && game.isRunning && data && data.resource) {
         const resource = data.resource;
+        if (!playerKnowsPlanetWithResource(game, player, resource)) return;
         const basePrice = game.marketPrices ? game.marketPrices[resource] : null;
         if (!basePrice) return;
         
@@ -2280,6 +2300,7 @@ async function bootstrap() {
       const player = connectedClients.get(socket.id);
       if (player && game && game.isRunning && data && data.resource) {
         const resource = data.resource;
+        if (!playerKnowsPlanetWithResource(game, player, resource)) return;
         const basePrice = game.marketPrices ? game.marketPrices[resource] : null;
         if (!basePrice) return;
         
@@ -2446,19 +2467,38 @@ async function bootstrap() {
       }
     });
 
+    socket.on('saveSaveGame', (saveName) => {
+      const player = connectedClients.get(socket.id);
+      if (!player || !game) return;
+      try {
+        const sanitized = persistCurrentGameSave(game, saveName);
+        socket.emit('chatMessage', {
+          sender: 'System',
+          color: '#00ff00',
+          text: `Game successfully saved as '${sanitized}'.`
+        });
+        broadcastSaveGamesList(io);
+        console.log(`[Save Game] Game successfully saved as '${sanitized}' by player ${player.name} (${player.id})`);
+      } catch (err) {
+        console.error('[Save Game Error]', err);
+        socket.emit('chatMessage', {
+          sender: 'System',
+          color: '#ff3333',
+          text: `Failed to save game: ${err.message}`
+        });
+      }
+    });
+
     socket.on('deleteSaveGame', (saveName) => {
       if (!saveName || typeof saveName !== 'string') return;
-      const sanitized = saveName.replace(/[^a-zA-Z0-9_\-]/g, '');
+      const sanitized = sanitizeSaveGameName(saveName);
+      if (!sanitized) return;
       const filePath = path.join(savesDir, `${sanitized}.json`);
       if (fs.existsSync(filePath)) {
         try {
           fs.unlinkSync(filePath);
           console.log(`[Delete Save] File '${sanitized}.json' deleted by client request.`);
-          // Broadcast updated list to all clients
-          const updatedSaves = fs.readdirSync(savesDir)
-            .filter(file => file.endsWith('.json'))
-            .map(file => file.slice(0, -5));
-          io.emit('saveGamesList', updatedSaves);
+          broadcastSaveGamesList(io);
         } catch (e) {
           console.error('[Delete Save Error]', e);
         }

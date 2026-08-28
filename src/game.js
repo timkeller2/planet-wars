@@ -68,6 +68,20 @@ export function getEffectiveSympathy(planet, playerId, allShips, player = null, 
   return baseSympathy + finalExtraSympathy;
 }
 
+/** True if the player has knowledge of at least one planet that produces `resource`. */
+export function playerKnowsPlanetWithResource(game, player, resource) {
+  if (!game || !player || !resource || !game.planets) return false;
+  const fogOff = !game.settings || game.settings.fogOfWar === false;
+  const discovered = player.discoveredPlanets;
+  for (const planet of game.planets) {
+    if (!planet.resources || !planet.resources.includes(resource)) continue;
+    if (fogOff) return true;
+    if (planet.owner && planet.owner.id === player.id) return true;
+    if (discovered && discovered.has(planet.id)) return true;
+  }
+  return false;
+}
+
 const SHIP_CLASSES = {
   corvette: { name: 'Corvette', key: 's', hp: 15, costShips: 50, costCap: 2 },
   destroyer: { name: 'Destroyer', key: 'd', hp: 25, costShips: 100, costCap: 4 },
@@ -1337,22 +1351,6 @@ export class Game {
       // Assign race if needed (never overwrites locked player selection)
       this.assignPlayerRace(player);
 
-      // Pioneer starting stockpile: 1 primary bomb resource, 0.2 of each other
-      if (player.id !== 'monsters') {
-        const bombResource = (player.cruiserStyle === 'Romulan' || player.cruiserStyle === 'Gorn') ? 'antimatter' :
-                             ((player.cruiserStyle === 'Tholian' || player.cruiserStyle === 'Lyran') ? 'dilithium' : 'merculite');
-        player.resources = {
-          dilithium: 0.2,
-          merculite: 0.2,
-          duranium: 0.2,
-          tritanium: 0.2,
-          antimatter: 0.2,
-          deuterium: 0.2,
-          latinum: 0.2
-        };
-        player.resources[bombResource] = 1;
-      }
-
       const potentialUpgrades = ['sensorarrays', 'armor', 'shields', 'engine', 'munitions', 'targeting', 'damagecontrol', 'supply_ship', 'extended_fuel', 'marines', 'command', 'labs', 'diplomat'];
 
       if (hwSizeSetting === 'pioneers-corvettes') {
@@ -1662,32 +1660,6 @@ export class Game {
         targetPlanet.preferredResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
       }
 
-      // Ensure homeworld has a random starting resource
-      const startingResource = resourcesList[Math.floor(Math.random() * resourcesList.length)];
-      targetPlanet.resources = [startingResource];
-
-      // Ensure preferred resource is not the same as the mined starting resource
-      if (targetPlanet.preferredResource === startingResource) {
-        const otherPreferredList = resourcesList.filter(r => r !== startingResource);
-        targetPlanet.preferredResource = otherPreferredList[Math.floor(Math.random() * otherPreferredList.length)];
-      }
-
-      // Give each player 3 of their bomb resource in their stockpile starting out
-      if (player.id !== 'monsters') {
-        const bombResource = (player.cruiserStyle === 'Romulan' || player.cruiserStyle === 'Gorn') ? 'antimatter' :
-                             ((player.cruiserStyle === 'Tholian' || player.cruiserStyle === 'Lyran') ? 'dilithium' : 'merculite');
-        player.resources = player.resources || {
-          dilithium: 0,
-          merculite: 0,
-          duranium: 0,
-          tritanium: 0,
-          antimatter: 0,
-          deuterium: 0,
-          latinum: 0
-        };
-        player.resources[bombResource] = 3;
-      }
-      
       // Clear hazards from newly assigned planet
       for (const storm of this.ionStorms) {
         if (storm.type === 'minefield' || storm.type === 'nebula') {
