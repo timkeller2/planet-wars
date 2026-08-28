@@ -1956,7 +1956,12 @@ export class Game {
         attackedPlanets: p.attackedPlanets ? Array.from(p.attackedPlanets.entries()) : [],
         spyRootedEvents: p.spyRootedEvents ? Array.from(p.spyRootedEvents) : [],
         lastKnownPlanets: p.lastKnownPlanets || {},
-        lastBundleSaleTime: p.lastBundleSaleTime
+        lastBundleSaleTime: p.lastBundleSaleTime,
+        isAlive: p.isAlive !== false,
+        hasOwnedPlanet: !!p.hasOwnedPlanet,
+        planetCount: p.planetCount || 0,
+        aiPhantomShipBank: p.aiPhantomShipBank || 0,
+        aiPhantomBuyTimer: p.aiPhantomBuyTimer || 0
       })),
       planets: this.planets.map(p => ({
         id: p.id,
@@ -1992,6 +1997,12 @@ export class Game {
         isCapitalShipyard: p.isCapitalShipyard,
         preferredResource: p.preferredResource,
         resources: p.resources,
+        minerals: p.minerals,
+        useResources: !!p.useResources,
+        productionProgress: p.productionProgress || 0,
+        capacityProgress: p.capacityProgress || 0,
+        focusTransition: p.focusTransition || null,
+        upgradeTransition: p.upgradeTransition || null,
         sympathy: p.sympathy,
         garrisonFocusTriggered: p.garrisonFocusTriggered,
         retainedShips: p.retainedShips,
@@ -2067,6 +2078,9 @@ export class Game {
         scanningShipId: w.scanningShipId,
         scanningPlayerId: w.scanningPlayerId,
       })),
+      pendingPioneerSpawns: this.pendingPioneerSpawns ? this.pendingPioneerSpawns.map(ps => ({ ...ps })) : [],
+      isPaused: !!this.isPaused,
+      gameOverMessage: this.gameOverMessage || null,
       chunks: []
     };
     return state;
@@ -2165,6 +2179,16 @@ export class Game {
       p.spyRootedEvents = new Set(pData.spyRootedEvents || []);
       p.lastKnownPlanets = pData.lastKnownPlanets || {};
       p.lastBundleSaleTime = pData.lastBundleSaleTime !== undefined ? pData.lastBundleSaleTime : null;
+      p.autoBuyOrders = pData.autoBuyOrders || p.autoBuyOrders;
+      p.isAlive = pData.isAlive !== undefined ? pData.isAlive : true;
+      p.hasOwnedPlanet = !!pData.hasOwnedPlanet;
+      p.planetCount = pData.planetCount || 0;
+      p.aiPhantomShipBank = pData.aiPhantomShipBank || 0;
+      p.aiPhantomBuyTimer = pData.aiPhantomBuyTimer || 0;
+      p._exploredCellsForceRebuild = true;
+      p._exploredCellsCache = null;
+      p._visPlanetCache = null;
+      p._fogPlanetCache = null;
 
       if (p.id === 'p1') this.humanPlayer = p;
       if (p.id === 'monsters') this.monsterPlayer = p;
@@ -2197,6 +2221,23 @@ export class Game {
       p.isCapitalShipyard = pData.isCapitalShipyard;
       p.preferredResource = pData.preferredResource;
       p.resources = pData.resources || [];
+      p.minerals = pData.minerals != null ? pData.minerals : p.minerals;
+      p.useResources = !!pData.useResources;
+      p.sensorarrays = pData.sensorarrays || 0;
+      p.labs = pData.labs || 0;
+      p.armor = pData.armor || 0;
+      p.shields = pData.shields || 0;
+      p.engine = pData.engine || 0;
+      p.munitions = pData.munitions || 0;
+      p.targeting = pData.targeting || 0;
+      p.damagecontrol = pData.damagecontrol || 0;
+      p.supply_ship = pData.supply_ship || 0;
+      p.extended_fuel = pData.extended_fuel || 0;
+      p.diplomat = pData.diplomat || 0;
+      p.marines = pData.marines || 0;
+      p.command = pData.command || 0;
+      p.focusTransition = pData.focusTransition || null;
+      p.upgradeTransition = pData.upgradeTransition || null;
       p.sympathy = pData.sympathy || {};
       p.garrisonFocusTriggered = pData.garrisonFocusTriggered;
       p.retainedShips = pData.retainedShips;
@@ -2351,6 +2392,18 @@ export class Game {
       }
     }
     this.chunks = [];
+    this.pendingPioneerSpawns = Array.isArray(state.pendingPioneerSpawns)
+      ? state.pendingPioneerSpawns.map(ps => ({ ...ps }))
+      : [];
+    this.isPaused = !!state.isPaused;
+    this.gameOverMessage = state.gameOverMessage || null;
+    this.isRunning = state.isRunning !== undefined ? !!state.isRunning : true;
+    // Wall-clock start so elapsed minutes match saved gameTime, and clients treat this as a new session
+    this.gameStartTime = Date.now() - (this.gameTime || 0);
+
+    this.planetGrid = new PlanetGrid();
+    this.planetGrid.populate(this.planets);
+    this.planetGridPopulated = true;
 
     // Old saves without resourceRarities: recompute and force base prices to match
     if (this._needsMarketRarityResync) {

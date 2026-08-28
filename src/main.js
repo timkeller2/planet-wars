@@ -5773,11 +5773,16 @@ function getPlanetTradeIncomePerMin(planet) {
     hasCenteredOnHomeworld = false;
     resetClientModeFlags();
     serverState = null;
+    lastGameStartTime = null;
     clearServerStateMaps();
     lastKnownPlanets = {};
     lastKnownHazards = {};
     knownAnomaliesByPlanetId = new Map();
     visualProjectiles.clear();
+    visualShips.clear();
+    clientPlanetOwners = {};
+    clientLastBundleSaleTime = -1;
+    bumpCombatSpatialGen();
   });
 
   socket.on('spectator', () => {

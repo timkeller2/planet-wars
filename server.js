@@ -681,6 +681,33 @@ async function bootstrap() {
     }
   }
 
+  function remapSocketsAfterLoad() {
+    for (const [socketId, oldPlayer] of connectedClients.entries()) {
+      const newPlayer = game.allPlayers.find(p => p.id === oldPlayer.id);
+      if (newPlayer) {
+        newPlayer.clientPlayerId = oldPlayer.clientPlayerId;
+        if (oldPlayer.name) newPlayer.name = oldPlayer.name;
+        newPlayer._exploredCellsForceRebuild = true;
+        newPlayer._exploredCellsCache = null;
+        connectedClients.set(socketId, newPlayer);
+      }
+    }
+    for (const [socketId, activePlayer] of connectedClients.entries()) {
+      io.to(socketId).emit('assignedPlayer', activePlayer);
+    }
+  }
+
+  function finishLoadedSave(saveName) {
+    remapSocketsAfterLoad();
+    invalidateClientGameStates();
+    io.emit('gameLoadedAndStarted', saveName);
+    io.emit('chatMessage', {
+      sender: 'System',
+      color: '#00ff00',
+      text: `Game state '${saveName}' loaded successfully.`
+    });
+  }
+
   /** Priority state sync after player commands so builds/moves appear without waiting for the next rate-limited emit. */
   function markSocketNeedsState(socket) {
     if (!socket) return;
@@ -1775,24 +1802,7 @@ async function bootstrap() {
             }
 
             game.loadState(state);
-
-            for (const [socketId, oldPlayer] of connectedClients.entries()) {
-              const newPlayer = game.allPlayers.find(p => p.id === oldPlayer.id);
-              if (newPlayer) {
-                newPlayer.clientPlayerId = oldPlayer.clientPlayerId;
-                connectedClients.set(socketId, newPlayer);
-              }
-            }
-
-            for (const [socketId, activePlayer] of connectedClients.entries()) {
-              io.to(socketId).emit('assignedPlayer', activePlayer);
-            }
-
-            io.emit('chatMessage', {
-              sender: 'System',
-              color: '#00ff00',
-              text: `Game state '${sanitized}' loaded successfully.`
-            });
+            finishLoadedSave(sanitized);
             console.log(`[Load Game] Game successfully loaded '${sanitized}' by player ${player.name} (${player.id})`);
           } catch (err) {
             console.error('[Load Game Error]', err);
@@ -2594,32 +2604,7 @@ async function bootstrap() {
         }
 
         game.loadState(state);
-
-        // Assign current sockets to players in the loaded state
-        for (const [socketId, oldPlayer] of connectedClients.entries()) {
-          const newPlayer = game.allPlayers.find(p => p.id === oldPlayer.id);
-          if (newPlayer) {
-            newPlayer.clientPlayerId = oldPlayer.clientPlayerId;
-            if (oldPlayer.name) {
-              newPlayer.name = oldPlayer.name;
-            }
-            connectedClients.set(socketId, newPlayer);
-          }
-        }
-
-        for (const [socketId, activePlayer] of connectedClients.entries()) {
-          io.to(socketId).emit('assignedPlayer', activePlayer);
-        }
-        invalidateClientGameStates();
-
-        // Notify all clients that a game has successfully loaded
-        io.emit('gameLoadedAndStarted', sanitized);
-        
-        io.emit('chatMessage', {
-          sender: 'System',
-          color: '#00ff00',
-          text: `Game state '${sanitized}' loaded successfully.`
-        });
+        finishLoadedSave(sanitized);
         console.log(`[Load Game Event] Game successfully loaded '${sanitized}'`);
       } catch (err) {
         console.error('[Load Game Event Error]', err);
